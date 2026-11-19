@@ -1,11 +1,13 @@
 // Key test cases of the Aliases and Quickmarks sections and the new tab links row on the settings page: a bad alias shows its problems and stores nothing, a saved alias runs from the command line,
-// a saved quickmark opens with `gn`, the links row saves and shows on the new tab page, and the export carries the layers.
-// Stored layers survive across cases, so the teardown clears them: the aliases layer in storage with two publishes, the quickmark, and the saved links through the settings message.
+// a saved quickmark opens with `gn`, the links row writes settings.toml and shows on the new tab page, and the export carries the layers.
+// Stored layers and the shard's settings.toml survive across cases, so the teardown clears them: the aliases layer in storage with two publishes, the quickmark, and the links through the settings page's Reset.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["help", "config", "keys", "newtab"];
 
-export async function run_cases({ run_case, open_page, press_keys, poll_until, rdp, extension_id, expect, on_teardown, wait_event, events, run_line }) {
+export async function run_cases({ run_case, open_page, press_keys, poll_until, rdp, extension_id, expect, on_teardown, wait_event, events, run_line, config_dir }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#/settings"))`;
   const in_page = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
@@ -24,7 +26,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   on_teardown(async () => {
     await open_settings();
     await in_page(`return view.browser.storage.local.remove("desertfox_quickmarks");`);
-    await in_page(`return view.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_links", action: "reset" });`);
+    await in_page(`return view.browser.runtime.sendMessage({ type: "change_setting", name: "newtab_links", action: "reset", layer: "file" });`);
     if (Object.keys(await stored("desertfox_alias_edits")).length > 0) {
       const answers = await in_page(`return view.browser.storage.local.set({ desertfox_alias_edits: {} }).then(async () => [await view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: true }), await view.browser.runtime.sendMessage({ type: "toolbar_set_disabled", disabled: false })]);`);
       expect(answers.every((answer) => answer.ok), `the toolbar switch answered ${JSON.stringify(answers)}`);
@@ -82,24 +84,25 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await in_page(`return view.browser.runtime.sendMessage({ type: "change_quickmarks", action: "set", key: "y", url: "https://y.test/" });`);
   });
 
-  await run_case("new tab links row: a link saves as a saved setting and shows on the new tab page, and the export carries every layer", async () => {
+  await run_case("new tab links row: a link goes into settings.toml and shows on the new tab page, and the export carries every layer", async () => {
+    const settings_toml = () => readFileSync(join(config_dir, "settings.toml"), "utf8");
+    const file_labels = () => [...settings_toml().matchAll(/^label = "(.*)"$/gm)].map((match) => match[1]).join(",");
     await open_settings();
     await in_page(`${button_in("desertfox-settings", "Add link")}.click();`);
     await type_field("desertfox-settings", "newtab_links label", "P38 mail");
     await type_field("desertfox-settings", "newtab_links address", "https://mail.p38.test/");
     await in_page(`view.document.querySelector('.desertfox-settings [aria-label="newtab_links address"]').dispatchEvent(new view.Event("change"));`);
-    await poll_until("the link to be saved", async () => (await stored("desertfox_saved_settings")).newtab_links?.[0]?.label === "P38 mail");
+    await poll_until("the link to be written", async () => file_labels() === "P38 mail");
     await in_page(`${button_in("desertfox-settings", "Add link")}.click();`);
     await in_page(`const label = [...view.document.querySelectorAll('.desertfox-settings [aria-label="newtab_links label"]')][1]; label.value = "P38 two"; label.dispatchEvent(new view.Event("input"));`);
     await in_page(`const address = [...view.document.querySelectorAll('.desertfox-settings [aria-label="newtab_links address"]')][1]; address.value = "https://two.p38.test/"; address.dispatchEvent(new view.Event("change"));`);
-    const saved_labels = async () => ((await stored("desertfox_saved_settings")).newtab_links ?? []).map((link) => link.label).join(",");
-    await poll_until("the second link to be saved", async () => (await saved_labels()) === "P38 mail,P38 two");
+    await poll_until("the second link to be written", async () => file_labels() === "P38 mail,P38 two");
     await in_page(`view.document.querySelector('[aria-label="Move up P38 two"]').click();`);
-    await poll_until("Up to save the new order", async () => (await saved_labels()) === "P38 two,P38 mail");
+    await poll_until("Up to write the new order", async () => file_labels() === "P38 two,P38 mail");
     await in_page(`view.document.querySelector('[aria-label="Move down P38 two"]').click();`);
-    await poll_until("Down to save the old order", async () => (await saved_labels()) === "P38 mail,P38 two");
-    const exported = await in_page(`return view.browser.runtime.sendMessage({ type: "export_config" }).then((answer) => ({ ok: answer.ok, aliases: answer.config_files?.["command_aliases.d/zz-saved-edits.toml"], quickmarks: answer.config_files?.["quickmarks.d/zz-saved-edits.toml"], saved: answer.config_files?.["settings.d/zz-saved-edits.toml"] }));`);
-    expect(exported.ok && /p38dup/.test(exported.aliases ?? "") && /y\s*=/.test(exported.quickmarks ?? "") && /P38 mail/.test(exported.saved ?? ""), `the export held ${JSON.stringify(exported)}`);
+    await poll_until("Down to write the old order", async () => file_labels() === "P38 mail,P38 two");
+    const exported = await in_page(`return view.browser.runtime.sendMessage({ type: "export_config" }).then((answer) => ({ ok: answer.ok, aliases: answer.config_files?.["command_aliases.d/zz-saved-edits.toml"], quickmarks: answer.config_files?.["quickmarks.d/zz-saved-edits.toml"], settings: answer.config_files?.["settings.toml"] }));`);
+    expect(exported.ok && /p38dup/.test(exported.aliases ?? "") && /y\s*=/.test(exported.quickmarks ?? "") && /P38 mail/.test(exported.settings ?? ""), `the export held ${JSON.stringify(exported)}`);
     await close_extension_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("newtab.html") })`);
     await poll_until("the new tab page to list the link", () => in_background(`!!(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/newtab.html"))?.document.body.textContent.includes("P38 mail")`).catch(() => false), { timeout_ms: 10000 });

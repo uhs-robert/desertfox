@@ -69,10 +69,12 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, set_in_settings_file, unset_in_settings_file, read_settings_layers, read_engine_state, read_keymap_state, read_theme_edits, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, change_site_rule_in_file, set_in_settings_file, unset_in_settings_file, read_settings_layers, read_engine_state, read_keymap_state, read_theme_edits, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
-import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
+import { outcome_note } from "./settings_file.ts";
+import type { FileWriteOutcome } from "./settings_file.ts";
+import { load_edits, load_files_source } from "./config_load.ts";
 import { answer_config_transfer } from "./config_transfer.ts";
 import { answer_config_files } from "./config_files.ts";
 import { browser_timing_log } from "./timing_browser.ts";
@@ -296,6 +298,8 @@ browser.permissions.onAdded.addListener(refresh_font_names);
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
 refresh_font_names();
+// What became of settings.toml after a popup site change, as the end of its notice.
+const site_rule_note = (outcome: FileWriteOutcome | { kind: "unchanged" }): string => (outcome.kind === "unchanged" ? "" : outcome_note(outcome));
 const settings_messages = create_settings_messages({ change_edits, read_layers: read_settings_layers, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort(), set_in_file: set_in_settings_file, unset_in_file: unset_in_settings_file });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
@@ -377,7 +381,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (page_request?.type === "toolbar_set_disabled" || page_request?.type === "toolbar_site" || page_request?.type === "toolbar_reload_config") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
-    return answer_toolbar_request(page_request, { toolbar, change_edits, read_file_site_rules: async () => (await load_effective_config()).config_settings.site_rules ?? [], reload_config });
+    return answer_toolbar_request(page_request, { toolbar, change_site_rule: async (pattern, action) => site_rule_note(await change_site_rule_in_file(pattern, action)), reload_config });
   }
   if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
     const tab = sender.tab;

@@ -24,7 +24,8 @@ import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
-import { OFF_KEYMAP } from "./toolbar.ts";
+import { OFF_KEYMAP, saved_popup_rows, site_rows_after } from "./toolbar.ts";
+import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
@@ -47,7 +48,7 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { clear_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, text_sha256, with_setting_in_files, without_setting, without_setting_in_files } from "./settings_file.ts";
+import { clear_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, text_sha256, with_setting_in_files, without_setting, without_setting_in_files } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, NamedKind, UnsyncedSettingsFile } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
@@ -436,6 +437,20 @@ export function unset_in_settings_file(name: keyof Settings): Promise<UnsetResul
     }
     if (winning_file !== undefined) throw held_in_settings_d(winning_file, name);
     return { done: { kind: "not_set" } };
+  });
+}
+
+// The popup's Disable or Enable on this site: appends its off row to the `[[site_rules]]` of settings.toml, or removes its rows for the pattern there.
+// A list the popup saved in the browser before it wrote the file is dropped, and its own rows go into the file with this change.
+// `unchanged`: the site already was as asked, so nothing is written.
+export function change_site_rule_in_file(pattern: string, action: "disable" | "enable"): Promise<FileWriteOutcome | { kind: "unchanged" }> {
+  return change_setting_in_file<{ kind: "unchanged" }>("site_rules", async (files) => {
+    // Checked before the rows: a popup row held in that file would otherwise read as already gone.
+    const winning_file = settings_d_file_that_sets(files, "site_rules");
+    if (winning_file !== undefined) throw held_in_settings_d(winning_file, "site_rules");
+    const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
+    const next = site_rows_after([...file_rows, ...saved_popup_rows(file_rows, (await load_edits()).saved.site_rules)], pattern, action);
+    return next === undefined ? { done: { kind: "unchanged" } } : { files: with_setting_in_files(files, "site_rules", next as TomlValue) };
   });
 }
 

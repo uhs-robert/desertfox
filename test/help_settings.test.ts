@@ -93,7 +93,7 @@ test("a list of links commits as a whole, and a link with a bad address stays a 
   const links = [{ label: "Mail", url: "https://mail.test/", group: "Work" }, { label: "News", url: "https://news.test/" }];
   await session.commit("newtab_links", links);
   assert.deepEqual(session.field("newtab_links")!.row.value, links);
-  assert.equal(session.field("newtab_links")!.row.top_layer, "saved");
+  assert.equal(session.field("newtab_links")!.row.top_layer, "settings.toml");
   await session.commit("newtab_links", [...links, { label: "Bad", url: "javascript:alert(1)" }]);
   assert.match(session.field("newtab_links")!.error!, /newtab_links: expected a list of tables/);
   assert.deepEqual(session.field("newtab_links")!.row.value, links);

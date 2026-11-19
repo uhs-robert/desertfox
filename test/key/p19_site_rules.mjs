@@ -1,10 +1,12 @@
 // Site rules: a pass rule frees a key, an only rule frees all but the listed keys, an all-off rule starts the page in ignore mode,
 // each column resolves on its own, and a rule edit reaches an open page at once. The rows sit in config/settings.toml, one pattern per page id.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["keys", "config", "toolbar"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep, config_dir }) {
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   // A passed `/` or `'` opens Firefox's Quick Find, which takes the keys after it, so the bar is closed before the next wait.
   const page_sees = async (page_id, key, what) => {
@@ -101,10 +103,15 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       await poll_until("NORMAL before the edit", async () => badge_of("rule_live") === "NORMAL");
       const stored_rule_count = () => in_background(`browser.storage.local.get("desertfox_compiled_keymap").then((got) => got.desertfox_compiled_keymap?.site_rules?.length ?? 0)`);
       const config_rule_count = await stored_rule_count();
-      await site_request("rule_live", "disable");
+      const settings_toml = () => readFileSync(join(config_dir, "settings.toml"), "utf8");
+      const file_before = settings_toml();
+      const disabled = await site_request("rule_live", "disable");
+      expect(disabled.message === "Disabled on this site, saved to settings.toml", `disable answered ${JSON.stringify(disabled)}`);
+      expect(settings_toml() === `${file_before}\n[[site_rules]]\nsite = "*://*.127.0.0.1/*"\noff = true\n`, `settings.toml after disable ends with: ${settings_toml().slice(-120)}`);
       await poll_until("IGNORE after the rule is added", async () => badge_of("rule_live") === "IGNORE");
       const answer = await site_request("rule_live", "enable");
       expect(answer.ok, `enable answered ${JSON.stringify(answer)}`);
+      expect(settings_toml() === file_before, "enable did not give settings.toml back as it was");
       await poll_until("the rule to leave", async () => (await stored_rule_count()) === config_rule_count);
       await poll_until("NORMAL once the rule that turned the page off is gone", async () => badge_of("rule_live") === "NORMAL");
       expect((await scroll_delta_by_press("rule_live", ["j"])) > 0, "j did not scroll after the all-off rule left");
@@ -119,9 +126,8 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       expect(badge_of("rule_live") === "NORMAL", "an unrelated change put the page back in ignore mode");
     } finally {
       await send_from_popup({ type: "change_setting", name: "newtab_date", action: "reset" });
+      // The popup's rows go into the shard's settings.toml, and Enable takes them out again, so later pieces on this shard get the file as it was.
       await site_request("rule_live", "enable");
-      // The popup's edits save a whole site_rules list, which would hide the file rows from later pieces on this shard.
-      await send_from_popup({ type: "change_setting", name: "site_rules", action: "reset" });
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });
@@ -141,7 +147,6 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       expect((await scroll_delta_by_press("rule_pass_fresh", ["G"])) > 0, "G did not scroll after the off row left");
     } finally {
       await site_request("rule_pass_live", "enable");
-      await send_from_popup({ type: "change_setting", name: "site_rules", action: "reset" });
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });
