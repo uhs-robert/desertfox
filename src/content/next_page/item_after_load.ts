@@ -31,9 +31,11 @@ const holds_item = (added: Element, selector: string): boolean => added.matches(
 
 // Call it before the click or scroll, with the cursor read then. It waits up to the load wait for an item to follow the old last one, which can come after a spinner or other first additions.
 // Only a batch that adds an item reads the whole list, because each read forces a layout and some pages change all the time. An item that fades in after its batch is found by one more look at the end of the wait.
-// It leaves the box where it is when the user moved it to another item, left normal or item mode, left the page (hid the tab, pressed a key, used the wheel or pressed a pointer) or no item came.
+// It leaves the box where it is when the user moved it to another item, left the mode of the press (normal or item mode), left the page (hid the tab, pressed a key, used the wheel or pressed a pointer) or no item came.
 export async function move_box_after_load(before: ItemCursor | undefined, deps: ItemAfterLoadDeps): Promise<void> {
   if (!before?.shown_ || !before.item_) return;
+  // Another frame can end item mode during the wait with no input here, so the landing needs the mode of the press.
+  const pressed_in = deps.mode_();
   const user = deps.watch_user_left_();
   try {
     const selector = before.selector_;
@@ -44,7 +46,7 @@ export async function move_box_after_load(before: ItemCursor | undefined, deps: 
     const target = first_new();
     if (!target) return;
     const now = await deps.cursor_();
-    if (now?.item_ === before.item_ && ["normal", "item"].includes(deps.mode_()) && !user.left_()) now.land_(target);
+    if (now?.item_ === before.item_ && ["normal", "item"].includes(pressed_in) && deps.mode_() === pressed_in && !user.left_()) now.land_(target);
   } finally {
     user.stop_();
   }
