@@ -9,7 +9,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import { parse_base16, theme_name_problem, theme_name_shape_problem } from "../shared/theme/base16.ts";
 import { derive_roles } from "../shared/theme/derive.ts";
 import type { GivenColors } from "../shared/theme/derive.ts";
-import { ROLES } from "../shared/theme/roles.ts";
+import { REQUIRED_ROLES, ROLES } from "../shared/theme/roles.ts";
 import type { RoleColors, Theme } from "../shared/theme/roles.ts";
 import { local_theme_problem, parse_color } from "../shared/theme/theme_file.ts";
 import { failure } from "./config_reload.ts";
@@ -94,7 +94,6 @@ const is_record = (value: unknown): value is Record<string, unknown> => typeof v
 
 // A stored table from before `mode_item` and `mode_media` lacks those two, so they derive from the rest. Any other missing role leaves the table for the check to refuse.
 const ROLES_ADDED_LATER = ["mode_item", "mode_media"] as const;
-const REQUIRED_ROLES = ["bg_core", "fg_core", "primary", "accent"];
 
 function with_derived_roles(theme: unknown): unknown {
   if (!is_record(theme)) return theme;
