@@ -269,6 +269,9 @@ function show_preview(preview: HTMLElement, name: string, value: unknown): void 
   if (family !== undefined) preview.style.fontFamily = family || (name === "font_family_mono" ? "monospace" : "");
 }
 
+const RESET_TITLE_FILE_WRITTEN = "Remove the setting from settings.toml and drop your browser changes. A value set in a settings.d file stays: Reset drops only your browser changes, or with none it changes nothing and names the file. Change that value in the file.";
+const RESET_TITLE_BROWSER_ONLY = "Drop your browser changes. This setting is kept in the browser, and settings.toml stays as it is. The setting goes back to its default, or to the value in your config files.";
+
 function build_row(field: Field, session: SettingsSession, reload_key: string): Row {
   const name = field.row.name;
   const tag = el("span", "desertfox-help-badge");
@@ -276,7 +279,8 @@ function build_row(field: Field, session: SettingsSession, reload_key: string): 
   message.setAttribute("role", "status");
   const reset = el("button", "desertfox-settings-reset", "Reset") as HTMLButtonElement;
   reset.type = "button";
-  reset.title = FILE_WRITTEN_SETTINGS.has(name) ? "Remove the setting from settings.toml and drop your browser changes. A value set in a settings.d file stays." : "Undo your change. The setting goes back to its default, or to the value in your settings file.";
+  // The row does not know which config file sets its value, so the file-written title covers settings.toml and settings.d alike, as `unset_in_settings_file` does.
+  reset.title = FILE_WRITTEN_SETTINGS.has(name) ? RESET_TITLE_FILE_WRITTEN : RESET_TITLE_BROWSER_ONLY;
   reset.addEventListener("click", () => void session.reset(name).then(() => keep_focus_after_reset(node)));
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
   const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.summary);
