@@ -208,6 +208,7 @@ const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
   "src/background/browser_deps.ts": { count: 1, why: "the page's refusal to add a bundle tag, turned into the could-not-load refusal by the bundle loader, not a command handler" },
   "src/background/favicon_saver.ts": { count: 1, why: "a redrawn icon that is too large, turned into a skipped save by the saver, not a command handler" },
   "src/background/rank_index.ts": { count: 1, why: "a question to the background that failed, which the history cache turns into a fill to try again, not a command handler" },
+  "src/background/native_client.ts": { count: 1, why: "a write of a path the host's kind table has no row for: a caller bug, never a state of the folder" },
   "src/background/keymap_message.ts": { count: 1, why: "a message reply for the keys page, turned into { ok: false } by `failure`, not a command handler" },
   "src/background/snippets.ts": { count: 1, why: "inside the snippet code that runs in the page, where RuntimeRefusal does not exist" },
   "src/shared/key_docs.ts": { count: 1, why: "a settings doc that names an action missing from the binding table: a typo in our own prose, caught by the doc scan test, not a command handler" },

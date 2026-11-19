@@ -48,8 +48,8 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { clear_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, text_sha256, with_setting_in_files, without_setting, without_setting_in_files } from "./settings_file.ts";
-import type { CopyReplacedBy, FileWriteOutcome, NamedKind, UnsyncedSettingsFile } from "./settings_file.ts";
+import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
+import type { CopyReplacedBy, FileWriteOutcome, NamedKind, UnsyncedFiles } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
 
@@ -310,9 +310,9 @@ export function republish(): Promise<void> {
 
 // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
 // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
-// A setting write passes `setting`: the edits that replace the setting edits, and the record of the folder's base text (none when no file is written).
+// A setting write passes `setting`: the edits that replace the setting edits, and the record of the folder's base texts (none when no file is written).
 // They go into the same storage write as the files, so a stop between writes never leaves one without the other, and a failure restores them all.
-async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedSettingsFile | undefined }): Promise<{ warnings: number }> {
+async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedFiles | undefined }): Promise<{ warnings: number }> {
   const { files, dir_label } = source;
   await get_config();
   const current_step = await (load_step as Promise<LoadStep>);
@@ -341,7 +341,7 @@ async function apply_files(source: FilesSource, action: ApplyAction, setting?: {
     await browser.storage.local.set({
       [FILES_CONFIG_STORAGE_KEY]: stored,
       [FILES_SOURCE_STORAGE_KEY]: source satisfies FilesSource,
-      [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: unsynced_after ?? null,
+      [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: stored_unsynced(unsynced_after),
       ...(setting && { [SAVED_SETTINGS_STORAGE_KEY]: setting.edits_after.saved }),
     });
     // Temp edits live in session storage, which no `set` of local storage covers.
@@ -351,7 +351,10 @@ async function apply_files(source: FilesSource, action: ApplyAction, setting?: {
     load_step = Promise.resolve(step);
     commit(published.config);
     swap_count += 1;
-    if (!setting && unsynced_after === undefined && local_before[SETTINGS_FILE_UNSYNCED_STORAGE_KEY]) note_record_dropped(action === "import" || action === "edit" ? action : "reload");
+    if (!setting) {
+      const dropped = Object.keys(unsynced_of_stored(local_before[SETTINGS_FILE_UNSYNCED_STORAGE_KEY]) ?? {}).filter((path) => !unsynced_after || !Object.hasOwn(unsynced_after, path));
+      for (const path of dropped) note_record_dropped(path, action === "import" || action === "edit" ? action : "reload");
+    }
     return { warnings: published.warnings.length };
   } catch (error) {
     // The failed publish may have written the new keymap and status already.
@@ -377,14 +380,15 @@ async function restore_local(keys: string[], before: Record<string, unknown>): P
   await browser.storage.local.remove(keys.filter((key) => !Object.hasOwn(before, key)));
 }
 
-// The record of a setting the folder has not got survives an editor save or a snippet change that leaves settings.toml as it was: the setting is still the only change to that file.
-// A reload or an import that replaces the config brings the copy from elsewhere, and a save of settings.toml itself changes what the folder would get, so those drop it.
-async function unsynced_kept_by(action: ApplyAction, source: FilesSource): Promise<UnsyncedSettingsFile | undefined> {
+// The record of a file the folder has not got survives an editor save or a snippet change that leaves that file as it was: the browser's edit is still the only change to it.
+// A reload or an import that replaces the config brings the copy from elsewhere, and a save of the file itself changes what the folder would get, so those drop its path.
+async function unsynced_kept_by(action: ApplyAction, source: FilesSource): Promise<UnsyncedFiles | undefined> {
   // An import of snippets alone keeps the config files, so it is a snippet change too.
   const keeps_config = action === "edit" || action === "remove" || (action === "import" && !source.imported);
-  if (!keeps_config) return undefined;
-  const settings_unchanged = (await load_files_source()).files[SETTINGS_FILE] === source.files[SETTINGS_FILE];
-  return settings_unchanged ? read_unsynced() : undefined;
+  const unsynced = keeps_config ? await read_unsynced() : undefined;
+  if (!unsynced) return undefined;
+  const stored = (await load_files_source()).files;
+  return stored_unsynced(Object.fromEntries(Object.entries(unsynced).filter(([path]) => stored[path] === source.files[path]))) ?? undefined;
 }
 
 function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
@@ -473,7 +477,8 @@ async function change_setting_in_file<R>(name: keyof Settings, plan: (files: Con
     const planned = await plan(current.files);
     if ("done" in planned) return planned;
     // An earlier edit the folder never got keeps its base: the folder still holds that text.
-    const unsynced = (await came_from_folder(current)) ? ((await read_unsynced()) ?? { base: current.files[SETTINGS_FILE] ?? null }) : undefined;
+    const from_folder = await came_from_folder(current);
+    const unsynced = from_folder ? with_unsynced_path(await read_unsynced(), SETTINGS_FILE, current.files[SETTINGS_FILE] ?? null) : undefined;
     const edits = await load_edits();
     const edits_after = without_setting(edits, name);
     const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
@@ -484,13 +489,14 @@ async function change_setting_in_file<R>(name: keyof Settings, plan: (files: Con
       throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
     }
     if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
-    if (!unsynced) return { done: { kind: "browser_copy" } };
-    picks_made += 1;
-    return { question_was_pending, pick: { seq: picks_made, drops: record_drops } };
+    if (!from_folder) return { done: { kind: "browser_copy" } };
+    const writes = writes_of(SETTINGS_FILE);
+    writes.picks_made += 1;
+    return { question_was_pending, pick: { path: SETTINGS_FILE, seq: writes.picks_made, drops: writes.drops } };
   });
   if ("done" in committed) return committed.done;
   // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
-  const outcome = (await write_waiting_settings_file(in_change_queue, committed.pick)) ?? { kind: "written" };
+  const outcome = (await write_waiting_file(in_change_queue, SETTINGS_FILE, committed.pick)) ?? { kind: "written" };
   // The question was made against the copy before the pick. The folder may still differ in other files, so it is asked again or settled.
   if (outcome.kind === "written" && committed.question_was_pending) {
     const folder = await read_folder_after_write();
@@ -539,47 +545,67 @@ async function commit_setting_edits(before: SettingEdits, next: SettingEdits): P
 type HostWriteReply = { ok: true } | { ok: false; error: unknown };
 // `superseded`: the record moved to a newer base during the write, so the write loop goes on from it.
 type SettledWrite = FileWriteOutcome | { kind: "superseded" };
-// A settings.toml write sent to the host. The change queue starts it and settles its reply once, and the host call runs between the two, outside the queue.
-// `covers` and `drops` are `picks_made` and `record_drops` at the start: the text holds every pick up to `covers` made since that many drops.
-type HostWrite = { base: string | null; text: string; covers: number; drops: number; reply: Promise<HostWriteReply>; outcome?: Promise<SettledWrite> };
-// The write out now. One at a time: a second write against the same base would find the first one's text and be refused.
-let host_write: HostWrite | undefined;
+// A write of the file at `path` sent to the host (`text` null deletes it). The change queue starts it and settles its reply once, and the host call runs between the two, outside the queue.
+// `covers` and `drops` are the path's `picks_made` and `drops` at the start: the text holds every pick of the path up to `covers` made since that many drops.
+type HostWrite = { path: string; base: string | null; text: string | null; covers: number; drops: number; reply: Promise<HostWriteReply>; outcome?: Promise<SettledWrite> };
 
-// What a pick's reply needs to say what became of it. They live in memory only, as the reply that reads them does.
-// A pick is numbered when it stores the record, and a swap that drops the record counts as a drop, so a pick can tell a write that holds it from one that does not.
-type PickMark = { seq: number; drops: number };
-let picks_made = 0;
-let record_drops = 0;
-// The swap behind each drop: entry n dropped the record of the picks made after n drops.
-const drop_causes: CopyReplacedBy[] = [];
-// How the record last ended, for a pick whose write another caller settled before the pick's own turn.
-let record_end: FileWriteOutcome | undefined;
-// Refused writes in a row whose edits went onto the folder's new text, counted per write loop. A tool that rewrites settings.toml all the time would otherwise keep the loop going.
-let replays_in_a_row = 0;
+// What the write loop keeps for one path of the record. Each path has its own, so a refusal, a drop or a write out on one file never decides another file's outcome.
+// It lives in memory only, as the replies that read it do.
+// A pick is numbered when it stores the record, and a swap that drops the path counts as a drop, so a pick can tell a write that holds it from one that does not.
+type PathWrites = {
+  // The write out now. One at a time per path: a second write against the same base would find the first one's text and be refused.
+  out?: HostWrite;
+  picks_made: number;
+  drops: number;
+  // The swap behind each drop: entry n dropped the record of the picks made after n drops.
+  drop_causes: CopyReplacedBy[];
+  // How the path's record last ended, for a pick whose write another caller settled before the pick's own turn.
+  end?: FileWriteOutcome;
+  // Refused writes in a row whose edits went onto the folder's new text, counted per write loop. A tool that rewrites the file all the time would otherwise keep the loop going.
+  replays_in_a_row: number;
+};
+const path_writes = new Map<string, PathWrites>();
 const MAX_REPLAYS_IN_A_ROW = 3;
 
-function note_record_dropped(by: CopyReplacedBy): void {
-  drop_causes[record_drops] = by;
-  record_drops += 1;
-  record_end = { kind: "replaced", by, written: false };
+function writes_of(path: string): PathWrites {
+  let writes = path_writes.get(path);
+  if (!writes) path_writes.set(path, (writes = { picks_made: 0, drops: 0, drop_causes: [], replays_in_a_row: 0 }));
+  return writes;
+}
+
+// What a pick's reply needs to say what became of it.
+type PickMark = { path: string; seq: number; drops: number };
+
+function note_record_dropped(path: string, by: CopyReplacedBy): void {
+  const writes = writes_of(path);
+  writes.drop_causes[writes.drops] = by;
+  writes.drops += 1;
+  writes.end = { kind: "replaced", by, written: false };
 }
 
 // Runs `start` and `settle` in the change queue, or inline for a caller already in it.
 type QueueRunner = <T>(work: () => Promise<T>) => Promise<T>;
 const already_in_queue: QueueRunner = (work) => work();
 
-// Writes the browser copy of settings.toml to the folder while the folder lags it, and again for a pick made during a write. Undefined when nothing waited.
+// Writes every file the folder lags, one path after the other. A path that ends refused or waiting leaves the next one to its own write.
+async function write_waiting_files(in_queue: QueueRunner): Promise<void> {
+  const unsynced = await in_queue(read_unsynced);
+  for (const path of Object.keys(unsynced ?? {})) await write_waiting_file(in_queue, path);
+}
+
+// Writes the browser copy of the file at `path` to the folder while the folder lags it, and again for a pick made during a write. Undefined when nothing waited.
 // With `pick` it stops at the outcome of that pick: the write that holds it, or the swap that replaced it.
-async function write_waiting_settings_file(in_queue: QueueRunner, pick?: PickMark): Promise<FileWriteOutcome | undefined> {
+async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: PickMark): Promise<FileWriteOutcome | undefined> {
+  const writes = writes_of(path);
   let outcome: FileWriteOutcome | undefined;
-  replays_in_a_row = 0;
+  writes.replays_in_a_row = 0;
   // Whether a write that held the pick reached the folder before a swap replaced the copy.
   let pick_written = false;
-  const replaced = (): FileWriteOutcome | undefined => (pick && record_drops !== pick.drops ? { kind: "replaced", by: drop_causes[pick.drops]!, written: pick_written } : undefined);
+  const replaced = (): FileWriteOutcome | undefined => (pick && writes.drops !== pick.drops ? { kind: "replaced", by: writes.drop_causes[pick.drops]!, written: pick_written } : undefined);
   const holds_pick = (write: HostWrite) => pick !== undefined && write.covers >= pick.seq && write.drops === pick.drops;
   for (;;) {
-    const started = await in_queue(async () => replaced() ?? (await start_host_write()));
-    if (started === undefined) return outcome ?? (pick && record_end);
+    const started = await in_queue(async () => replaced() ?? (await start_host_write(path)));
+    if (started === undefined) return outcome ?? (pick && writes.end);
     if ("kind" in started) return started;
     const reply = await started.reply;
     const folder = changed_on_disk(reply) ? await read_folder_after_write() : undefined;
@@ -594,88 +620,105 @@ async function write_waiting_settings_file(in_queue: QueueRunner, pick?: PickMar
   }
 }
 
-// In the change queue. Sends the browser copy of settings.toml when the folder lags it, or hands back the write already out.
-async function start_host_write(): Promise<HostWrite | FileWriteOutcome | undefined> {
-  if (host_write) return host_write;
+// In the change queue. Sends the browser copy of the file at `path` when the folder lags it, or hands back the write already out.
+// A file the copy no longer has is deleted from the folder, through the same base check.
+async function start_host_write(path: string): Promise<HostWrite | FileWriteOutcome | undefined> {
+  const writes = writes_of(path);
+  if (writes.out) return writes.out;
   const unsynced = await read_unsynced();
-  if (!unsynced) return undefined;
-  const text = (await load_files_source()).files[SETTINGS_FILE];
-  if (text === undefined) {
-    await clear_unsynced();
-    return (record_end = { kind: "browser_copy" });
+  if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
+  const base = unsynced[path] as string | null;
+  const text = (await load_files_source()).files[path] ?? null;
+  if (text === null && base === null) {
+    // Neither side has the file, so there is nothing to write.
+    await store_unsynced(without_unsynced_path(unsynced, path));
+    return (writes.end = { kind: "written" });
   }
-  const base_sha256 = unsynced.base === null ? null : await text_sha256(unsynced.base);
-  const reply = native_host.write_settings(text, base_sha256).then((): HostWriteReply => ({ ok: true }), (error: unknown): HostWriteReply => ({ ok: false, error }));
-  host_write = { base: unsynced.base, text, covers: picks_made, drops: record_drops, reply };
-  return host_write;
+  const base_sha256 = base === null ? null : await text_sha256(base);
+  const reply = native_host.write_config_file(path, text, base_sha256).then((): HostWriteReply => ({ ok: true }), (error: unknown): HostWriteReply => ({ ok: false, error }));
+  writes.out = { path, base, text, covers: writes.picks_made, drops: writes.drops, reply };
+  return writes.out;
 }
 
 const changed_on_disk = (reply: HostWriteReply) => !reply.ok && reply.error instanceof NativeHostError && reply.error.failure === "file_changed";
 
-const read_folder_after_write = () => native_host.read_config().catch(warn_and_go("read the folder after a settings.toml write"));
+const read_folder_after_write = () => native_host.read_config().catch(warn_and_go("read the folder after a config file write"));
 
 // In the change queue. Applies the host's reply to the record once, however many callers waited on the write. `folder` is the folder read after a refusal, undefined when it could not be read.
 function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: ConfigFilesReply | undefined): Promise<SettledWrite> {
-  if (host_write === write) host_write = undefined;
-  if (reply.ok) replays_in_a_row = 0;
+  const writes = writes_of(write.path);
+  if (writes.out === write) delete writes.out;
+  if (reply.ok) writes.replays_in_a_row = 0;
   write.outcome ??= outcome_of_host_write(write, reply, folder);
   return write.outcome;
 }
 
 async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, folder: ConfigFilesReply | undefined): Promise<SettledWrite> {
   if (!reply.ok && !(reply.error instanceof NativeHostError)) throw reply.error;
+  const { path } = write;
+  const writes = writes_of(path);
   const unsynced = await read_unsynced();
-  // A swap replaced the browser copy during the write and dropped the record. On success the folder holds this text, and the copy is the swap's.
-  if (!unsynced) return { kind: "replaced", by: drop_causes[write.drops]!, written: reply.ok };
+  // A swap replaced the browser copy during the write and dropped the path. On success the folder holds this text, and the copy is the swap's.
+  if (!unsynced || !Object.hasOwn(unsynced, path)) return { kind: "replaced", by: writes.drop_causes[write.drops]!, written: reply.ok };
   // A later pick started a new record after a swap: its own write goes next, from its own base.
-  if (unsynced.base !== write.base) return { kind: "superseded" };
+  if (unsynced[path] !== write.base) return { kind: "superseded" };
   if (!reply.ok) {
     // The new record can share the dropped one's base, and this refusal and its folder read are older than it.
-    if (write.drops !== record_drops) return { kind: "superseded" };
+    if (write.drops !== writes.drops) return { kind: "superseded" };
     const error = reply.error as NativeHostError;
     if (error.failure === "file_changed") {
       // Both sides changed. The record stays for a retry when the folder cannot be read.
-      if (!folder) return { kind: "failed", reason: `${SETTINGS_FILE} changed on disk, and the config folder could not be read again` };
-      if (replays_in_a_row < MAX_REPLAYS_IN_A_ROW && (await replay_edits_onto_folder(unsynced, folder))) {
-        replays_in_a_row += 1;
+      if (!folder) return { kind: "failed", reason: `${path} changed on disk, and the config folder could not be read again` };
+      if (writes.replays_in_a_row < MAX_REPLAYS_IN_A_ROW && (await replay_edits_onto_folder(path, unsynced, folder))) {
+        writes.replays_in_a_row += 1;
         return { kind: "superseded" };
       }
-      replays_in_a_row = 0;
-      // Only the user can choose. The record goes once the folder is classified.
+      writes.replays_in_a_row = 0;
+      // Only the user can choose. The path goes once the folder is classified, and the other paths keep their writes.
       const asked = await ask_when_folder_differs(folder, { clear_when_settled: false });
-      await clear_unsynced();
-      return (record_end = { kind: asked === "asked" ? "conflict" : "conflict_kept" });
+      await store_unsynced(without_unsynced_path(unsynced, path));
+      return (writes.end = { kind: asked === "asked" ? "conflict" : "conflict_kept" });
     }
     if (error.failure === "host_outdated") return { kind: "waiting", host_outdated: true };
     if (error.failure === "no_permission" || error.failure === "host_missing") return { kind: "waiting" };
     return { kind: "failed", reason: error.message };
   }
   const { files } = await load_files_source();
-  const folder_now: UnsyncedSettingsFile = { base: write.text };
+  const folder_now: UnsyncedFiles = { ...unsynced, [path]: write.text };
   // The folder now matches the copy wherever it matched before the edit, so a copy that held no other browser change still holds none, and the next start does not ask.
-  if ((await files_digest(before_unsynced_edit(files, unsynced))) === (await read_host_memory()).applied) await remember_applied(before_unsynced_edit(files, folder_now));
+  if ((await files_digest(files_before_unsynced(files, unsynced))) === (await read_host_memory()).applied) await remember_applied(files_before_unsynced(files, folder_now));
   // A pick during the write is still ahead of the folder, and its write starts from this text.
-  if (files[SETTINGS_FILE] !== write.text) {
+  if ((files[path] ?? null) !== write.text) {
     await store_unsynced(folder_now);
     return { kind: "written" };
   }
-  await clear_unsynced();
-  return (record_end = { kind: "written" });
+  await store_unsynced(without_unsynced_path(unsynced, path));
+  return (writes.end = { kind: "written" });
 }
 
-// After a refused write: swaps in the folder's files with the browser's edits set again on its new settings.toml, and moves the record to that text, so a hand edit saved during the write and the pick both stay.
+// After a refused write of settings.toml: swaps in the folder's files with the browser's edits set again on its new settings.toml, and moves the record to that text, so a hand edit saved during the write and the pick both stay.
 // Only for a copy that held no other browser change: the folder's files then replace it without losing one. False leaves everything as it was.
-async function replay_edits_onto_folder(unsynced: UnsyncedSettingsFile, folder: ConfigFilesReply): Promise<boolean> {
+// A whole file such as a theme has no keys to set again, so its refusal goes to the question.
+async function replay_edits_onto_folder(path: string, unsynced: UnsyncedFiles, folder: ConfigFilesReply): Promise<boolean> {
+  if (path !== SETTINGS_FILE) return false;
   // The swap below is a setting write, which skips the checks of a folder read, so the folder's files pass them here: a `,r` of this folder would refuse it too.
   if (!folder.config_dir_exists || !has_config_files(folder.files) || css_limit_breaches(folder.files).length > 0) return false;
   const current = await load_files_source();
-  if ((await files_digest(before_unsynced_edit(current.files, unsynced))) !== (await read_host_memory()).applied) return false;
-  const folder_text = folder.files[SETTINGS_FILE] ?? null;
-  const text = replayed_on_folder(unsynced.base, current.files[SETTINGS_FILE] ?? "", folder_text);
+  if ((await files_digest(files_before_unsynced(current.files, unsynced))) !== (await read_host_memory()).applied) return false;
+  // The other files of the record keep the copy's text and their own write. The folder must still hold each at its base, or at the copy's text when that write landed before the read: anything else is a hand edit for the question.
+  const others = Object.keys(unsynced).filter((other) => other !== path);
+  if (others.some((other) => (folder.files[other] ?? null) !== unsynced[other] && folder.files[other] !== current.files[other])) return false;
+  const folder_text = folder.files[path] ?? null;
+  const text = replayed_on_folder(unsynced[path] as string | null, current.files[path] ?? "", folder_text);
   if (text === undefined) return false;
   // The folder's other files too, as a start would adopt them: an edit saved to keymap.toml beside settings.toml applies now, not at some later reload.
-  const files = { ...folder.files, [SETTINGS_FILE]: text };
-  const replayed: UnsyncedSettingsFile = { base: folder_text };
+  const files: ConfigFiles = { ...folder.files, [path]: text };
+  for (const other of others) {
+    const copy_text = current.files[other];
+    if (copy_text === undefined) delete files[other];
+    else files[other] = copy_text;
+  }
+  const replayed: UnsyncedFiles = { ...unsynced, [path]: folder_text };
   try {
     await apply_files({ files, dir_label: folder.config_dir, imported: false }, "setting", { edits_after: await load_edits(), unsynced: replayed });
   } catch (error) {
@@ -683,7 +726,7 @@ async function replay_edits_onto_folder(unsynced: UnsyncedSettingsFile, folder: 
     throw error;
   }
   // The copy now matches the folder outside the edits again, as after a folder read.
-  await remember_applied(before_unsynced_edit(files, replayed));
+  await remember_applied(files_before_unsynced(files, replayed));
   return true;
 }
 
@@ -704,7 +747,7 @@ async function ask_when_folder_differs(folder: ConfigFilesReply, { clear_when_se
 export function reload_config(): Promise<{ config_dir: string; warnings: number }> {
   return in_change_queue(async () => {
     // `,r` holds the queue for its own host read, so it waits on a write that is out and writes in its turn.
-    await write_waiting_settings_file(already_in_queue);
+    await write_waiting_files(already_in_queue);
     const reply = await native_host.read_config().catch((error: unknown) => {
       throw error instanceof NativeHostError ? new ConfigRefusal(`${KEPT_CURRENT.reload} ${error.message}`) : error;
     });
@@ -722,7 +765,7 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
 // A broken file keeps the stored config too, and a toast names the problem so the user learns the edit failed.
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
-  await write_waiting_settings_file(in_change_queue).catch(warn_and_go("write the waiting settings.toml at start"));
+  await write_waiting_files(in_change_queue).catch(warn_and_go("write the waiting config files at start"));
   const swaps_before = swap_count;
   let reply;
   try {
@@ -739,7 +782,7 @@ export async function reload_config_at_start(): Promise<void> {
     const browser_files = (await load_files_source()).files;
     // A setting the host could not write yet (an older host) is the copy's only change while the folder still holds the base text: no question, the write comes later.
     const unsynced = await read_unsynced();
-    const only_unwritten_edit_differs = unsynced !== undefined && same_files(compared_files(reply.files), compared_files(before_unsynced_edit(browser_files, unsynced)));
+    const only_unwritten_edit_differs = unsynced !== undefined && same_files(compared_files(reply.files), compared_files(files_before_unsynced(browser_files, unsynced)));
     if (only_unwritten_edit_differs) return;
     const plan = await classify_host_start(reply, browser_files, await read_host_memory());
     if (plan.kind === "ask") {
@@ -761,12 +804,6 @@ export async function reload_config_at_start(): Promise<void> {
       await toast_start(error.message, "error");
     }
   }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
-}
-
-// The browser copy as it was before the edit the folder never got: settings.toml back at its base text.
-function before_unsynced_edit(files: ConfigFiles, unsynced: UnsyncedSettingsFile): ConfigFiles {
-  const { [SETTINGS_FILE]: _edited, ...others } = files;
-  return unsynced.base === null ? others : { ...others, [SETTINGS_FILE]: unsynced.base };
 }
 
 const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";

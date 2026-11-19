@@ -4,19 +4,24 @@ import { createHash } from "node:crypto";
 
 export type Files = Record<string, string>;
 
-// What the real host's `write_settings` does to the folder: replace settings.toml only while it still has the base digest.
-// `old_host` answers as a host from before the verb.
-function write_settings(host: { files: Files; old_host?: boolean }, message: { text?: string; base_sha256?: string | null }) {
-  if (host.old_host) return { ok: false, error: "unknown cmd: 'write_settings'" };
-  const on_disk = host.files["settings.toml"];
+type WriteMessage = { cmd: string; kind?: string; name?: string; text?: string | null; base_sha256?: string | null };
+
+// What the real host's `write_config_file` does to the folder: replace or delete the file the kind and name give, only while it still has the base digest.
+// `old_host` answers as a host from before the write verbs. `refuse` refuses a write of the paths it names, as a host that cannot write that file.
+function write_config_file(host: { files: Files; old_host?: boolean; refuse?: string[] }, message: WriteMessage) {
+  if (host.old_host) return { ok: false, error: `unknown cmd: '${message.cmd}'` };
+  const path = message.cmd === "write_settings" || message.kind === "settings" ? "settings.toml" : `themes/${message.name}.toml`;
+  if (host.refuse?.includes(path)) return { ok: false, error: `cannot write /home/u/.config/desertfox/${path}: Permission denied` };
+  const on_disk = host.files[path];
   const digest = on_disk === undefined ? null : createHash("sha256").update(on_disk, "utf8").digest("hex");
-  if (digest !== message.base_sha256) return { ok: false, error: "/home/u/.config/desertfox/settings.toml changed on disk since DesertFox last read it, so it was not written" };
-  host.files = { ...host.files, "settings.toml": message.text! };
-  return { ok: true, path: "/home/u/.config/desertfox/settings.toml" };
+  if (digest !== message.base_sha256) return { ok: false, error: `/home/u/.config/desertfox/${path} changed on disk since DesertFox last read it, so it was not written` };
+  const { [path]: _old, ...others } = host.files;
+  host.files = message.text === null || message.text === undefined ? others : { ...host.files, [path]: message.text };
+  return { ok: true, path: `/home/u/.config/desertfox/${path}` };
 }
 
 // A browser that keeps storage in memory and answers the native host from `host`. A test rewrites `host.files` between reloads.
-export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; old_host?: boolean }) {
+export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; old_host?: boolean; refuse?: string[] }) {
   const local: Record<string, unknown> = {};
   const session: Record<string, unknown> = {};
   const area = (store: Record<string, unknown>) => ({
@@ -33,17 +38,17 @@ export function install_fake_browser(host: { files: Files; reply?: () => Promise
   });
   const tabs: { id: number }[] = [];
   const told: number[] = [];
-  const sent: { cmd: string; toml?: string; text?: string; base_sha256?: string | null }[] = [];
+  const sent: (WriteMessage & { toml?: string })[] = [];
   const fake = {
     runtime: {
       id: "test@desertfox",
       // Not a release version, so the host updater has nothing to match a host to.
       getManifest: () => ({ version: "test" }),
-      sendNativeMessage: async (_name: string, message: { cmd: string; toml?: string; text?: string; base_sha256?: string | null }) => {
+      sendNativeMessage: async (_name: string, message: WriteMessage & { toml?: string }) => {
         sent.push(message);
         if (host.reply) return host.reply();
         if (message.cmd === "write_autoconfig") return { ok: true };
-        if (message.cmd === "write_settings") return write_settings(host, message);
+        if (message.cmd === "write_config_file" || message.cmd === "write_settings") return write_config_file(host, message);
         return { ok: true, config_dir: "/home/u/.config/desertfox", config_dir_exists: true, files: host.files };
       },
     },
