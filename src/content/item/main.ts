@@ -17,8 +17,7 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const watch_user_ = () => watch_user_left(document, window, host.pressed_keys_);
-  // Item mode shows the box. Normal mode keeps it for a row of the user's that binds j and k there, and for the focus mark.
-  const overlay = create_item_overlay(() => ["normal", "item"].includes(host.get_mode()), watch_user_, follow_item);
+  const overlay = create_item_overlay(host.get_mode, watch_user_, follow_item);
   const page = {
     doc: document,
     view: window,

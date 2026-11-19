@@ -7,7 +7,7 @@ import { best_effort, keep_chain } from "../shared/swallow.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
-// `rejoined` are frames that a join reply put back in the mode: their new document has not reported it yet, and the report that a load makes first says normal.
+// `rejoined` are frames of the hold whose new document has not reported item mode yet: the report that a load makes first says normal. A frame goes in when its new document commits or when a join reply puts it back in the mode, whichever comes first.
 export type ItemHold = { frames: number[]; rejoined?: number[] };
 
 export type TabItemDeps = {
@@ -66,6 +66,13 @@ export function create_tab_item(deps: TabItemDeps) {
         const reloaded = hold.frames.includes(frame_id);
         await deps.storage.set({ [key_of(tab_id)]: { frames: reloaded ? hold.frames : [...hold.frames, frame_id], rejoined: [...new Set([...(hold.rejoined ?? []), frame_id])] } satisfies ItemHold });
         return true;
+      }),
+    // A child frame of the hold that reloads or navigates keeps the tab in the mode. The commit comes before the new document's first report, which says normal before the keymap read rejoins it. The top frame's load ends the hold instead (`navigated`).
+    committed: (tab_id: number, frame_id: number): Promise<void> =>
+      in_turn(async () => {
+        const hold = await read(tab_id);
+        if (frame_id === 0 || !hold?.frames.includes(frame_id) || hold.rejoined?.includes(frame_id)) return;
+        await deps.storage.set({ [key_of(tab_id)]: { ...hold, rejoined: [...(hold.rejoined ?? []), frame_id] } satisfies ItemHold });
       }),
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps it.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>

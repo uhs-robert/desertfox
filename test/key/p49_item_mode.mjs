@@ -1,4 +1,4 @@
-// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a load of the page ends it, a pushState keeps it, a field that takes the focus ends it, and the command line opens and closes inside it.
+// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a load of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -43,6 +43,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
   await run_case("I after Escape goes on from the same current item, and I inside the mode lands on it again", async () => {
     await open_list("im_same");
     await press_keys("I");
+    await expect_badge("ITEM");
     await press_keys("jj");
     await expect_focus("c1");
     await press_keys("-k", "Escape");
@@ -64,6 +65,21 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
     await press_keys("x");
     await poll_until("the page to see x", async () => (await in_active_tab("window.__keys")).includes("x"));
     await expect_badge("ITEM");
+  });
+
+  await run_case("f labels the page and Escape returns to item mode, and gi focuses the field and leaves the mode", async () => {
+    await open_list("im_keys_field");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await press_keys("f");
+    await poll_until("hint mode", async () => (await badge()) !== "ITEM");
+    await press_keys("-k", "Escape");
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await expect_focus("c0");
+    await press_keys("gi");
+    await expect_focus("q");
+    await expect_badge("INSERT");
   });
 
   await run_case("the command line opens and closes inside item mode", async () => {
@@ -107,22 +123,27 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
     await expect_frame_focus("f0");
   });
 
+  // The frame takes I itself, so it is in the hold when it reloads.
   await run_case("a frame that reloads while the mode is held joins again and the tab keeps the mode", async () => {
-    await open_list("im_reload_frame");
-    await in_active_tab(`(() => { const frame = document.createElement("iframe"); frame.id = "inner"; frame.src = "/item_frame?id=im_reload_frame_inner"; frame.style.cssText = "display:block;width:560px;height:300px"; document.body.prepend(frame); return 0; })()`);
+    await open_list("im_reload_frame_frame");
     await poll_until("the frame to load", async () => (await in_active_tab(`document.getElementById("inner").contentDocument?.readyState`)) === "complete");
-    await press_keys("I");
-    await expect_badge("ITEM");
-    await in_active_tab(`document.getElementById("inner").contentWindow.location.reload(); 0`);
-    await sleep(1000);
-    await poll_until("the frame to load again", async () => (await in_active_tab(`document.getElementById("inner").contentDocument?.readyState`)) === "complete");
-    await sleep(500);
-    await expect_badge("ITEM");
     await focus_frame();
-    await sleep(300);
+    await expect_badge("FRAME");
+    await press_keys("I");
     await expect_badge("ITEM");
     await press_keys("j");
     await expect_frame_focus("f0");
+    await in_active_tab(`(() => { const inner = document.getElementById("inner").contentWindow; inner.old_document = true; inner.location.reload(); return 0; })()`);
+    await poll_until("the frame to load again", async () => (await in_active_tab(`(() => { const inner = document.getElementById("inner").contentWindow; return !inner.old_document && inner.document.readyState; })()`)) === "complete");
+    await focus_frame();
+    await sleep(500);
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await expect_frame_focus("f0");
+    await in_active_tab(`window.focus(); document.activeElement?.blur(); 0`);
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await expect_focus("c0");
   });
 
   await run_case("a load of the page ends item mode, and a pushState keeps it", async () => {

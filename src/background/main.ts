@@ -219,6 +219,7 @@ const frame_cue = create_frame_cue({
 });
 // A frame that navigates is a new document: the line opened for the old one must not aim at it.
 browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdline.forget_target_frame(tabId, frameId).catch(warn_and_go("cmdline.forget_target_frame")));
+browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void tab_item.committed(tabId, frameId).catch(warn_and_go("tab_item.committed")));
 
 const previous_tabs = shared_previous_tabs();
 const last_used_tabs = shared_last_used_tabs();
