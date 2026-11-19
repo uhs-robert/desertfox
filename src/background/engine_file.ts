@@ -6,7 +6,7 @@ import { stringify } from "smol-toml";
 import { with_fallback_engines } from "../shared/config.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { parse_toml_text } from "../shared/config_build/source_files.ts";
-import { nodes_of_file } from "../shared/engines/resolve.ts";
+import { nodes_of_file, resolve_engines } from "../shared/engines/resolve.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 
 // The host's `engines` kind writes this path and no other. It sorts after the usual numbered search_engines.d files. A hand file named to sort after it cannot hide a page engine, because the page refuses every name a hand file defines.
@@ -37,18 +37,9 @@ export function engines_in_text(text: string | null): EngineTables {
   return Object.fromEntries(Object.entries(parsed ?? {}).filter(([, table]) => is_table(table))) as EngineTables;
 }
 
-// Whether `tables` define the engine of the dotted full name `name` (`gh.repo` is the `repo` table inside `gh`).
-// A child that a param generates has no table of its own, so a missing step counts when the table above it declares `params`.
-export function holds_engine(tables: Record<string, unknown>, name: string): boolean {
-  let node: Record<string, unknown> = tables;
-  for (const [index, step] of name.split(".").entries()) {
-    if (step === "params") return false;
-    const next = node[step];
-    if (!is_table(next)) return index > 0 && is_table(node.params);
-    node = next;
-  }
-  return true;
-}
+// Whether `tables` define the engine of the dotted full name `name` (`gh.repo` is the `repo` table inside `gh`, and a child a param generates counts only for the values it lists).
+// The page's tables are all top level, so they resolve without the other files.
+export const holds_engine = (tables: Record<string, unknown>, name: string): boolean => Object.hasOwn(resolve_engines(nodes_of_file(ENGINE_FILE, tables, [])).engines, name);
 
 export const hand_file_at_page_path = () => new ConfigRefusal(`${ENGINE_FILE} was not written by the Engines page, so the page does not change it. Rename it, or move its engines to another search_engines.d file.`);
 
