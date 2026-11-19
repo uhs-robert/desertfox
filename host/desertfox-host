@@ -8,7 +8,8 @@ in the same framing to stdout and exits. It has nine verbs and no others:
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
   {"cmd": "write_autoconfig", "toml": "<text>"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "..."}
-  {"cmd": "write_config_file", "kind": "settings" or "theme", "name": "<theme name>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
+  {"cmd": "write_config_file", "kind": "settings", "text": "<text>" or null, "base_sha256": "<hex>" or null}
+  {"cmd": "write_config_file", "kind": "theme", "name": "<theme name>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "...", "sha256": "<hex of text>"}  or, for a null text, "deleted": true
   {"cmd": "write_settings", "text": "<text>", "base_sha256": "<hex>" or null}
       -> the reply of write_config_file with kind settings, which it is under its older name
@@ -203,10 +204,6 @@ SETTINGS_NAME = "settings.toml"
 CHANGED_ON_DISK = "changed on disk"
 # The old file could not be read back after the rename, so the host cannot tell an edit saved into it from none.
 NOT_READ_BACK = "could not be read back"
-
-
-def text_sha256(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def file_digest(path, label):
@@ -406,17 +403,13 @@ def replace_config_file(path, data, base):
 def delete_config_file(path, base):
     """Under the lock: the delete half of `write_config_file`.
 
-    A link goes and its target stays, so a delete never reaches into a dotfiles repository, and a link pointed elsewhere
-    after the check loses nothing either. A file is renamed aside first and checked there, so an edit an editor saved
-    into it after the check goes back and the delete refuses as changed on disk."""
+    A link goes and its target stays, so a delete never reaches into a dotfiles repository. The entry is renamed aside
+    first and checked there, a link as a link: an edit saved into the file, a link pointed elsewhere or a save renamed
+    over the link after the check goes back, and the delete refuses as changed on disk."""
     changed = HostError(f"{path} {CHANGED_ON_DISK} since DesertFox last read it, so it was not deleted")
+    was_link = os.path.islink(path)
     try:
-        if os.path.islink(path):
-            if file_digest(os.path.realpath(path), path)[0] != base:
-                raise changed
-            os.unlink(path)
-            return {"path": path, "deleted": True}
-        digest, base_size = file_digest(path, path)
+        digest, base_size = file_digest(os.path.realpath(path) if was_link else path, path)
         if digest != base:
             raise changed
         aside = os.path.join(os.path.dirname(path), f"{aside_prefix(path)}{secrets.token_hex(8)}.old")
@@ -424,14 +417,14 @@ def delete_config_file(path, base):
     except OSError as error:
         raise HostError(f"cannot delete {path}: {error.strerror or error}") from error
     try:
-        unchanged, read_error = holds_digest(aside, base, base_size), None
+        unchanged, read_error = os.path.islink(aside) == was_link and holds_digest(os.path.realpath(aside), base, base_size), None
     except OSError as error:
         unchanged, read_error = False, error
     if unchanged:
         with contextlib.suppress(OSError):
             os.unlink(aside)
         return {"path": path, "deleted": True}
-    # No inode was written, so any file now at the name is a newer save: it stays, and the old file stays aside.
+    # No inode was written, so any file now at the name is a newer save: it stays, and the old entry stays aside.
     if read_error is None:
         put_back_edit(path, path, aside, None, "was edited during the delete")
         raise changed
@@ -460,7 +453,8 @@ def put_back_edit(path, target, edit, written_inode, why):
     if current_inode is None:
         # Removed since the rename. link() refuses a name created since, so a newer file stays.
         try:
-            os.link(edit, target)
+            # A link aside goes back as the link itself, not as a second name of its target.
+            os.link(edit, target, follow_symlinks=False)
         except OSError as error:
             raise HostError(f"{path} {why} and then removed, and could not be put back ({error.strerror or error}). The old file is in {edit}.") from error
         with contextlib.suppress(OSError):
