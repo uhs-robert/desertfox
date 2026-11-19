@@ -1,4 +1,4 @@
-// i enters insert mode with no field focused, in every frame of the tab, so the page gets every unbound key until Escape. I focuses the first field like gi.
+// i enters insert mode with no field focused, in every frame of the tab, so the page gets every unbound key until Escape. gi focuses the first field.
 // The mode badge shows on the top frame only, so a child frame's mode shows in whether j scrolls it.
 
 import { CTRL } from "./harness.mjs";
@@ -86,13 +86,13 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
     await poll_until("the navigation to clear the hold", async () => (await holds()) === 0);
   });
 
-  await run_case("I focuses the first field and enters insert mode", async () => {
+  await run_case("gi focuses the first field and enters insert mode", async () => {
     await open_page("page", "p22_field", { new_tab: true });
     await in_active_tab(`document.body.insertAdjacentHTML("afterbegin", '<input id="p22_input">'); 0`);
     const mark = events.length;
-    await press_keys("I");
+    await press_keys("gi");
     await wait_badge(mark, "p22_field", "INSERT");
-    expect((await in_active_tab(`document.activeElement.id`)) === "p22_input", "I did not focus the first field");
+    expect((await in_active_tab(`document.activeElement.id`)) === "p22_input", "gi did not focus the first field");
   });
 
   await run_case("i in a child frame shows INSERT on the badge and Escape in the frame returns every frame to normal", async () => {

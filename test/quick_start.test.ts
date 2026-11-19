@@ -207,7 +207,7 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
   for (const [slug, wanted] of Object.entries(expected)) for (const key of wanted) assert.ok(keys(slug).includes(key), `${slug} lacks ${key}: ${keys(slug).join(" ")}`);
   // The tab lesson teaches the tab list, and names Find anything only as the wider search.
   assert.ok(keys("tabs").indexOf("T") < keys("tabs").indexOf(",,"));
-  const rebound = practice_lessons(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "gi" && key !== "I" && key !== ";fe")), "<A-i>": { id: "page.focus_input" } } } as never), all_commands);
+  const rebound = practice_lessons(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "gi" && key !== ";fe")), "<A-i>": { id: "page.focus_input" } } } as never), all_commands);
   assert.ok(rebound.find((lesson) => lesson.slug === "form")!.steps.flat().some((inline) => inline.kind === "keys" && inline.text === "<A-i>"));
   // The which-key step names the first key of the zoom keys in use, not a fixed z.
   const zoom_step = (keymap: unknown) => practice_lessons(compile(keymap as never), all_commands).find((lesson) => lesson.slug === "which-key")!.steps[1]![1];

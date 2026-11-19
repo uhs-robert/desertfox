@@ -750,7 +750,7 @@ export async function create_session({ name: session_name, timings, sweep = true
     return new URL(target.url).searchParams.get("id");
   }
 
-  // Saved edits count too: they beat the config file and outlive a piece, as a `,j` toggle or a `:set` leaves them.
+  // Saved edits count too: they beat the config file and outlive a piece, as a `I` toggle or a `:set` leaves them.
   const setting_edits_pending = async () => {
     const status = await read_config_status();
     return status?.temp?.length > 0 || status?.saved?.length > 0;
