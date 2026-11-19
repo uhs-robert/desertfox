@@ -42,7 +42,7 @@ function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
   const send = fake.runtime.sendNativeMessage;
   const held: (() => void)[] = [];
   fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_settings") return send(name, message);
+    if (message.cmd !== "write_config_file") return send(name, message);
     return new Promise((resolve) => held.push(() => resolve(send(name, message))));
   };
   return held;
@@ -90,7 +90,7 @@ test(":set --temp and :toggle --temp never touch settings.toml, and send nothing
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { newtab_date: false });
   assert.equal(host.files["settings.toml"], MINE);
   assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
 });
 
 test(":set over a temp and a saved edit drops both, so the file value shows", async () => {
@@ -140,7 +140,7 @@ test(":unset of a key only the browser edits set drops them and writes nothing, 
   assert.deepEqual(toasts, ["success Unset newtab_date", "info newtab_date is not set"]);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.equal(host.files["settings.toml"], MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
 });
 
 test(":unset all drops the browser edits only, and settings.toml keeps every key", async () => {
@@ -177,7 +177,7 @@ test("without a host, or with one that lacks the verb, the change applies and th
     assert.equal(host.files["settings.toml"], MINE);
     assert.ok(toasts.every((toast) => !toast.includes("saved to")), toasts.join("\n"));
     assert.match(toasts[0]!, "granted" in host ? /updates when the native host connects$/ : /updates once the native host is updated$/);
-    assert.deepEqual(unsynced_of(local), { base: MINE });
+    assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
   }
 });
 
@@ -195,7 +195,7 @@ test("a set and an unset of other keys while a write is out land in one later wr
   await writes_held(held, 1);
   held.shift()!();
   assert.deepEqual(await Promise.all([first, second, third]), [{ kind: "written" }, { kind: "written" }, { kind: "written" }]);
-  assert.equal(sent.filter((message) => message.cmd === "write_settings").length, 2);
+  assert.equal(sent.filter((message) => message.cmd === "write_config_file").length, 2);
   const expected = MINE.replace('hint_letters = "abc" # home row\n', "").replace('next_patterns = [\n  "next",\n  "more",\n]', 'next_patterns = ["on"]').replace("toast_ms = 2000", "toast_ms = 1500");
   assert.equal(host.files["settings.toml"], expected);
   assert.equal(unsynced_of(local), undefined);
@@ -259,7 +259,7 @@ test("a theme or engine name that matches nothing is refused by name, and nothin
   await assert.rejects(startup.set_in_settings_file("default_engine", "nowhere"), (error: unknown) => error instanceof RuntimeRefusal && error.message === 'default_engine not changed: no search engine named "nowhere"');
   await assert.rejects(startup.set_in_settings_file("theme", "nowhere"), (error: unknown) => error instanceof RuntimeRefusal && error.message === 'theme not changed: no theme named "nowhere"');
   assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
 });
 
 test("the edits of lists and removals are put onto the folder's text where the folder kept the base value", () => {
@@ -297,7 +297,7 @@ test("an engine added in the browser saves as the default in the browser, and an
   await handlers.set(ctx, { name: "default_engine", value: "browser_one" });
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { default_engine: "browser_one" });
   assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
   assert.equal((await startup.get_config()).settings.default_engine, "browser_one");
 
   await handlers.set(ctx, { name: "default_engine", value: "files_one" });
@@ -314,7 +314,7 @@ test("a default engine that needs the current page is refused by name before any
     await assert.rejects(startup.set_in_settings_file("default_engine", engine), (error: unknown) => error instanceof RuntimeRefusal && error.message === `default_engine not changed: ${engine} needs the current page, so it cannot be the default engine`);
   }
   assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
   const offered = default_engine_names((await startup.get_config()).search_engines);
   assert.ok(offered.includes("plain") && offered.includes("duck"), offered.join(" "));
   assert.ok(!offered.includes("site") && !offered.includes("repo_one"), offered.join(" "));

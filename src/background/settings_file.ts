@@ -1,5 +1,5 @@
-// A setting written into, or removed from, settings.toml: the edit of the browser copy, and the record of a copy the folder has not caught up with.
-// `startup.ts` runs both in the change queue and sends the text to the native host (`write_settings`).
+// A setting written into, or removed from, settings.toml: the edit of the browser copy, and the record of the files the folder has not caught up with.
+// `startup.ts` runs both in the change queue and sends each file's text to the native host (`write_config_file`).
 
 import { parse, TomlError } from "smol-toml";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
@@ -11,6 +11,7 @@ import type { TomlValue } from "./toml_key_edit.ts";
 import { remove_table_rows, set_table_rows } from "./toml_table_edit.ts";
 import type { TomlRow } from "./toml_table_edit.ts";
 import { SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "./storage_keys.ts";
+import { host_file_of } from "./native_client.ts";
 
 export const SETTINGS_FILE = "settings.toml";
 
@@ -58,8 +59,9 @@ export function without_setting(edits: SettingEdits, name: keyof Settings): Sett
   return { saved, temp };
 }
 
-// Stored while the browser copy of settings.toml is ahead of the folder. `base` is the folder's text the first unwritten edit started from (null: no file), so the host can tell a hand edit since.
-export type UnsyncedSettingsFile = { base: string | null };
+// Stored while the browser copy of a config file the host writes (`host_file_of`) is ahead of the folder, by path.
+// Each base is the folder's text the first unwritten edit of that file started from (null: no file), so the host can tell a hand edit since.
+export type UnsyncedFiles = Record<string, string | null>;
 
 // The keys the browser copy changed over `base`, set the same way on `folder`, the folder's new text (null: no file).
 // The record needs no list of its edits: while it stands, the copy's settings.toml is `base` plus those edits, so a parse of both gives them back.
@@ -89,19 +91,47 @@ export function replayed_on_folder(base: string | null, edited: string, folder: 
 const is_toml_value = (value: unknown): value is TomlValue =>
   typeof value === "string" || typeof value === "number" || typeof value === "boolean" || (Array.isArray(value) ? value.every(is_toml_value) : typeof value === "object" && value !== null && !(value instanceof Date) && Object.values(value).every(is_toml_value));
 
-export async function read_unsynced(): Promise<UnsyncedSettingsFile | undefined> {
-  // `null` is a dropped record: `apply_files` drops it inside its one storage write.
-  const stored = (await browser.storage.local.get(SETTINGS_FILE_UNSYNCED_STORAGE_KEY))[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] as { base?: unknown } | null | undefined;
-  if (typeof stored !== "object" || stored === null || !(typeof stored.base === "string" || stored.base === null)) return undefined;
-  return { base: stored.base };
+// The record as stored, or undefined for none. A record from before theme files were written held settings.toml alone as `{ base }`.
+// It reads as that one path, and the next store writes the map, so the old shape is read only until then.
+export function unsynced_of_stored(stored: unknown): UnsyncedFiles | undefined {
+  if (typeof stored !== "object" || stored === null) return undefined;
+  const entries: [string, unknown][] = Object.hasOwn(stored, "base") ? [[SETTINGS_FILE, (stored as { base: unknown }).base]] : Object.entries(stored);
+  const kept = entries.filter((entry): entry is [string, string | null] => host_file_of(entry[0]) !== undefined && (typeof entry[1] === "string" || entry[1] === null));
+  return kept.length === 0 ? undefined : Object.fromEntries(kept);
 }
 
-export async function store_unsynced(unsynced: UnsyncedSettingsFile): Promise<void> {
-  await browser.storage.local.set({ [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: unsynced });
+// What `apply_files` stores in its one storage write: `null` drops the record.
+export const stored_unsynced = (unsynced: UnsyncedFiles | undefined): UnsyncedFiles | null => (unsynced && Object.keys(unsynced).length > 0 ? unsynced : null);
+
+export async function read_unsynced(): Promise<UnsyncedFiles | undefined> {
+  return unsynced_of_stored((await browser.storage.local.get(SETTINGS_FILE_UNSYNCED_STORAGE_KEY))[SETTINGS_FILE_UNSYNCED_STORAGE_KEY]);
 }
 
-export async function clear_unsynced(): Promise<void> {
-  await browser.storage.local.remove(SETTINGS_FILE_UNSYNCED_STORAGE_KEY);
+export async function store_unsynced(unsynced: UnsyncedFiles | undefined): Promise<void> {
+  const stored = stored_unsynced(unsynced);
+  if (stored === null) await browser.storage.local.remove(SETTINGS_FILE_UNSYNCED_STORAGE_KEY);
+  else await browser.storage.local.set({ [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: stored });
+}
+
+// The record with `path` added at `base`. A path already in it keeps its base: the folder still holds that text.
+export function with_unsynced_path(unsynced: UnsyncedFiles | undefined, path: string, base: string | null): UnsyncedFiles {
+  return unsynced && Object.hasOwn(unsynced, path) ? unsynced : { ...unsynced, [path]: base };
+}
+
+export function without_unsynced_path(unsynced: UnsyncedFiles | undefined, path: string): UnsyncedFiles | undefined {
+  if (!unsynced) return undefined;
+  const { [path]: _gone, ...others } = unsynced;
+  return stored_unsynced(others) ?? undefined;
+}
+
+// The browser copy as it was before the edits the folder never got: every file of the record back at its base text.
+export function files_before_unsynced(files: ConfigFiles, unsynced: UnsyncedFiles): ConfigFiles {
+  const before = { ...files };
+  for (const [path, base] of Object.entries(unsynced)) {
+    if (base === null) delete before[path];
+    else before[path] = base;
+  }
+  return before;
 }
 
 export async function text_sha256(text: string): Promise<string> {
@@ -110,7 +140,7 @@ export async function text_sha256(text: string): Promise<string> {
 }
 
 // What became of the file after a setting changed in the browser copy.
-// `waiting`: no host, no permission or a host without `write_settings` (`host_outdated`), so the next start or `,r` writes it.
+// `waiting`: no host, no permission or a host without the write verb (`host_outdated`), so the next start or `,r` writes it.
 // `conflict`: the file changed on disk, so the copies-differ question took over. `conflict_kept`: it changed on disk, and no question was stored (the user kept the browser copy over that folder before), so the change stays in the browser copy only.
 // `failed`: the host could not write, or the folder could not be read after a refusal, and the next start tries again.
 // `replaced`: a swap replaced the browser copy after the change and dropped the record. `written` says whether the folder got the change before that.

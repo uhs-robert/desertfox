@@ -194,7 +194,7 @@ test("two quick picks while the host is old: the later write starts from the fol
   const host = { files: { "settings.toml": MINE }, old_host: true };
   const { local, startup } = await reloaded(host);
   await Promise.all([startup.set_in_settings_file("theme", "nord"), startup.set_in_settings_file("theme", "oasis_night")]);
-  assert.deepEqual(unsynced_of(local), { base: MINE });
+  assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
   host.old_host = false;
   await (await fresh_startup()).reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
@@ -266,7 +266,7 @@ test("an imported theme, which the files cannot name, goes to the saved edits an
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { theme: "my_import" });
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], {});
   assert.equal(unsynced_of(local), undefined);
-  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
   assert.equal((await startup.get_config()).settings.theme, "my_import");
 
   // A theme the files know goes to the file again and drops that saved edit.
@@ -337,7 +337,7 @@ test("a refused write whose folder cannot be read again keeps the record and say
   };
   const outcome = await startup.set_in_settings_file("theme", "oasis_night");
   assert.equal(outcome.kind, "failed");
-  assert.deepEqual(unsynced_of(local), { base: MINE });
+  assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
   assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
 });
 
@@ -346,7 +346,7 @@ test("an editor save of another file keeps the record, and a save of settings.to
   const { local, startup } = await reloaded(host);
   await startup.set_in_settings_file("theme", "oasis_night");
   await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
-  assert.deepEqual(unsynced_of(local), { base: MINE });
+  assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
   await startup.save_config_file("settings.toml", 'theme = "nord"\n', with_theme("oasis_night"));
   assert.equal(unsynced_of(local), undefined);
 });
@@ -372,7 +372,7 @@ test("a browser copy that did not come from the folder changes alone, and nothin
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
   sent.length = 0;
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
-  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
   assert.equal(unsynced_of(local), undefined);
   assert.equal(host.files["settings.toml"], MINE);
 });
@@ -395,7 +395,7 @@ test("an edited import never reaches the folder: a pick after an editor save cha
   await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
   sent.length = 0;
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
-  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
   assert.equal(host.files["settings.toml"], undefined);
   assert.equal(unsynced_of(local), undefined);
 
@@ -410,7 +410,7 @@ function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
   const send = fake.runtime.sendNativeMessage;
   const held: (() => void)[] = [];
   fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_settings") return send(name, message);
+    if (message.cmd !== "write_config_file") return send(name, message);
     return new Promise((resolve) => held.push(() => resolve(send(name, message))));
   };
   return held;
@@ -479,7 +479,7 @@ test("an import of a snippet alone keeps the record of a waiting pick, and an im
   const snippet = "// id: mine.one\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\nglobalThis.ran_mine = true;\n";
   const result = await startup.import_config({ kind: "folder", entries: [{ path: "snippets/one.js", text: snippet }] }, { "snippets/one.js": snippet });
   assert.equal(result.replaces_config, false);
-  assert.deepEqual(unsynced_of(local), { base: MINE });
+  assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
 
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
   assert.equal(unsynced_of(local), undefined);
@@ -565,7 +565,7 @@ test("an import that runs between a pick and its write: nothing is written, and 
   const outcome = await pick;
   assert.deepEqual(outcome, { kind: "replaced", by: "import", written: false });
   assert.equal(outcome_note(outcome), ". A config import replaced the browser copy before the write, so settings.toml was not written");
-  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
   assert.equal(host.files["settings.toml"], MINE);
   assert.equal(unsynced_of(local), undefined);
 });
@@ -651,7 +651,7 @@ test("a folder that changes on every write is merged three times, then the quest
   const send = fake.runtime.sendNativeMessage;
   let writes = 0;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
-    if (message.cmd === "write_settings") {
+    if (message.cmd === "write_config_file") {
       writes += 1;
       host.files = { "settings.toml": `${host.files["settings.toml"]}# stamped ${writes}\n` };
     }
@@ -687,7 +687,7 @@ test("each write loop gets its own three merges, whatever an earlier loop used",
   const send = fake.runtime.sendNativeMessage;
   let writes = 0;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_settings") return send(name, message);
+    if (message.cmd !== "write_config_file") return send(name, message);
     writes += 1;
     // The first loop merges twice and then meets an older host. The second loop merges three times and then writes.
     host.old_host = writes === 3;

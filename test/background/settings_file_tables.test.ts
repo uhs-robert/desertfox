@@ -63,7 +63,7 @@ function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
   const send = fake.runtime.sendNativeMessage;
   const held: (() => void)[] = [];
   fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_settings") return send(name, message);
+    if (message.cmd !== "write_config_file") return send(name, message);
     return new Promise((resolve) => held.push(() => resolve(send(name, message))));
   };
   return held;
@@ -104,7 +104,7 @@ test("site_rules in a settings.d file refuses both clicks and names the file, an
     await assert.rejects(startup.change_site_rule_in_file(NEWS_PAGE, action), (error: unknown) => error instanceof RuntimeRefusal && error.message === "settings.d/10-sites.toml sets site_rules, and it wins over settings.toml. Change it there.");
   }
   assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
 });
 
 test("a site_rules list saved in the browser goes away on the next click, and only its popup rows join the file", async () => {
@@ -145,7 +145,7 @@ test("a click a file rule still overrules once the saved list goes is refused, a
   await assert.rejects(off_startup.change_site_rule_in_file(NEWS_PAGE, "enable"), (error: unknown) => error instanceof RuntimeRefusal && /^Not enabled/.test(error.message));
   assert.equal(host.files["settings.toml"], keep_on);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { site_rules: [] });
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
 });
 
 test("a bare row for the site already turns it off, so Disable changes nothing and says so truly", async () => {
@@ -169,7 +169,7 @@ test("without a host, or with one that lacks the verb, the click applies and its
     assert.ok(!outcome_note(outcome).includes("saved to"), outcome_note(outcome));
     assert.equal(host.files["settings.toml"], MINE);
     assert.equal(stored_settings(local), WITH_NEWS);
-    assert.deepEqual(unsynced_of(local), { base: MINE });
+    assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
     assert.ok((await site_rules_in_force(startup)).length > 0);
   }
 });
@@ -188,7 +188,7 @@ test("two quick clicks on two sites and a disable then enable of one land in ord
   await writes_held(held, 1);
   held.shift()!();
   assert.deepEqual(await Promise.all([first, second, third]), [{ kind: "written" }, { kind: "written" }, { kind: "written" }]);
-  assert.equal(sent.filter((message) => message.cmd === "write_settings").length, 2);
+  assert.equal(sent.filter((message) => message.cmd === "write_config_file").length, 2);
   assert.equal(host.files["settings.toml"], MINE.replace("pass = \"j k\" # their own keys\n", 'pass = "j k" # their own keys\n\n[[site_rules]]\nsite = "*://*.blog.test/*"\noff = true\n'));
 });
 

@@ -4,8 +4,8 @@
 import { NATIVE_HOST_NAME, NATIVE_PERMISSION } from "../shared/native_host.ts";
 
 // "host_outdated": the host answered with an error and is older than the extension. The message says whether it is updating.
-// "file_changed": `write_settings` found settings.toml changed on disk since the extension read it, and wrote nothing.
-// "file_not_read_back": `write_settings` could not read the old file back after its rename, so it put that file back and wrote nothing. No edit is known, so a later write can try again.
+// "file_changed": `write_config_file` found the file changed on disk since the extension read it, and wrote nothing.
+// "file_not_read_back": `write_config_file` could not read the old file back after its rename, so it put that file back and wrote nothing. No edit is known, so a later write can try again.
 export type NativeFailure = "no_permission" | "host_missing" | "host_failed" | "bad_reply" | "host_outdated" | "file_changed" | "file_not_read_back";
 
 export class NativeHostError extends Error {
@@ -36,6 +36,17 @@ export type SelfUpdateReply = { updated: boolean; version: string };
 export type EditorStartRequest = { text: string; ext?: string; insert?: boolean; private?: boolean };
 // `pending` while the editor runs. `done` with `changed` and, only when changed, the edited `text`.
 export type EditorCollectReply = { pending: true } | { done: true; changed: false } | { done: true; changed: true; text: string };
+
+// How the host's `write_config_file` names each file the extension writes: its kind table builds the path from these, so the request carries none.
+// The theme name pattern is the host's check and `theme_name_shape_problem`'s (src/shared/theme/base16.ts).
+export type HostFile = { kind: "settings" } | { kind: "theme"; name: string };
+const THEME_FILE_PATTERN = /^themes\/([a-z0-9][a-z0-9_-]{0,47})\.toml$/;
+
+export function host_file_of(path: string): HostFile | undefined {
+  if (path === "settings.toml") return { kind: "settings" };
+  const theme = THEME_FILE_PATTERN.exec(path);
+  return theme ? { kind: "theme", name: theme[1]! } : undefined;
+}
 
 export type ConfigFilesReply = { config_dir: string; config_dir_exists: boolean; files: Record<string, string> };
 
@@ -84,6 +95,19 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     return { config_dir: String(reply.config_dir ?? ""), config_dir_exists: reply.config_dir_exists !== false, files: files as Record<string, string> };
   }
 
+  // A write's refusals by their words: a hand edit since the read, an old file the host could not read back, and a host from before the verb.
+  async function write_call(request: { cmd: string } & Record<string, unknown>): Promise<void> {
+    try {
+      await call(request);
+    } catch (error) {
+      if (!(error instanceof NativeHostError)) throw error;
+      if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
+      if (/could not be read back/.test(error.message)) throw new NativeHostError("file_not_read_back", error.message);
+      if (/unknown cmd/.test(error.message)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
+      throw error;
+    }
+  }
+
   return {
     // Raw text of every config file, keyed by path relative to the config folder. The extension's config build parses it. Sends nothing without the permission.
     read_config,
@@ -130,16 +154,16 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     write_autoconfig: async (toml: string): Promise<void> => {
       await call({ cmd: "write_autoconfig", toml });
     },
-    // Replaces settings.toml with `text` while the file on disk still has the digest `base_sha256` (null: no file). A host from before the verb answers `unknown cmd`, which reads as outdated, so the caller waits for an update.
-    write_settings: async (text: string, base_sha256: string | null): Promise<void> => {
+    // Replaces the file at `path` with `text`, or deletes it for null, while the file on disk still has the digest `base_sha256` (null: no file).
+    // The request names the file by the host's kind and name, never by path. A host from before the verb answers `unknown cmd`: settings.toml then goes through its older `write_settings`, and any other file reads as outdated, so the caller waits for an update.
+    write_config_file: async (path: string, text: string | null, base_sha256: string | null): Promise<void> => {
+      const file = host_file_of(path);
+      if (file === undefined) throw new Error(`The native host writes no file at ${path}`);
       try {
-        await call({ cmd: "write_settings", text, base_sha256 });
+        await write_call({ cmd: "write_config_file", ...file, text, base_sha256 });
       } catch (error) {
-        if (!(error instanceof NativeHostError)) throw error;
-        if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
-        if (/could not be read back/.test(error.message)) throw new NativeHostError("file_not_read_back", error.message);
-        if (error.failure === "host_failed" && /unknown cmd/.test(error.message)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
-        throw error;
+        if (!(error instanceof NativeHostError && /unknown cmd/.test(error.message) && file.kind === "settings" && text !== null)) throw error;
+        await write_call({ cmd: "write_settings", text, base_sha256 });
       }
     },
   };
