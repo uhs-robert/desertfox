@@ -158,7 +158,7 @@ function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: n
     box_shown: () => false,
     highlight: (item: unknown, selector: string) => (shown.push(String(items.indexOf(item as (typeof items)[number]))), selectors.push(selector)),
   } as unknown as ItemPage;
-  return { page, log, shown, toasts, scrolls, selectors, add: (rect: Box) => items.push(make(rect, items.length)) };
+  return { page, items, log, shown, toasts, scrolls, selectors, add: (rect: Box) => items.push(make(rect, items.length)) };
 }
 
 test("move_item focuses the link inside the next item, reveals it only when it is not fully in view, and highlights it", () => {
@@ -169,6 +169,37 @@ test("move_item focuses the link inside the next item, reveals it only when it i
   const off = fake_page(list, false);
   move_item(off.page, { selector: "li", link: "a.t", direction: "down" });
   assert.deepEqual(off.log, ["focus link 0", "scroll 0 center"]);
+});
+
+// The two layouts of the saved Kagi pages. Tiles of a flex row share a height and differ in width, with a row below. Tiles of the column masonry have the heights of their grid-row spans and no shared row lines, and the DOM order fills the holes.
+test("the Kagi flex rows walk by row: right along a row, down to the tile that overlaps most", () => {
+  const rows = [box(0, 0, 200, 150), box(205, 0, 300, 150), box(510, 0, 150, 150), box(0, 155, 320, 160), box(325, 155, 180, 160), box(510, 155, 250, 160)];
+  assert.equal(step_from(rows, 0, "right"), 1);
+  assert.equal(step_from(rows, 2, "right"), undefined);
+  assert.equal(step_from(rows, 1, "down"), 4);
+  assert.equal(step_from(rows, 2, "down"), 5);
+  assert.equal(step_from(rows, 4, "up"), 1);
+});
+
+test("the Kagi column masonry walks by position, not by DOM order", () => {
+  // DOM order 0..6 fills the shortest column first, so it zigzags across the columns.
+  const columns = [box(0, 0, 200, 320), box(205, 0, 200, 180), box(410, 0, 200, 240), box(205, 185, 200, 300), box(410, 245, 200, 100), box(0, 325, 200, 150), box(410, 350, 200, 200)];
+  assert.equal(step_from(columns, 0, "down"), 5);
+  assert.equal(step_from(columns, 1, "down"), 3);
+  assert.equal(step_from(columns, 2, "down"), 4);
+  assert.equal(step_from(columns, 4, "down"), 6);
+  assert.equal(step_from(columns, 6, "up"), 4);
+  assert.equal(step_from(columns, 3, "right"), 6);
+  assert.equal(step_from(columns, 3, "left"), 5);
+});
+
+test("the brave_images row focuses the button tile itself, with no tabindex change", () => {
+  const row = DEFAULT_SITE_ROWS.find((entry) => entry.name === "brave_images")!.row;
+  const args = (row.keymap!.item!.j as unknown as { args: { selector: string; link?: string; direction: "down" } }).args;
+  const { page, items, log } = fake_page(list);
+  for (const item of items) item.tabIndex = 0;
+  move_item(page, args);
+  assert.deepEqual(log, ["focus item 0"]);
 });
 
 test("move_item gives an item with no link of its own tabindex -1 before it focuses it", () => {
