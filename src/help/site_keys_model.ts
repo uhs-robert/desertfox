@@ -56,28 +56,34 @@ export function create_site_keys_session(deps: SiteKeysDeps) {
     rules = await deps.read_rules();
   }
 
-  // The site is set before the reads, so a key pressed while they run joins the chips and is not lost to the stored row.
-  async function load(prefill: string | undefined): Promise<void> {
-    if (prefill !== undefined) site = prefill;
-    await read_rules();
+  async function read_bindings(): Promise<void> {
     const answer = (await deps.send({ type: "list_bindings" })) as ListBindingsAnswer;
     const seen = new Set<string>();
     bindings = answer.ok ? answer.bindings.filter((row: BindingRow) => row.mode === "normal" && row.text !== "" && !seen.has(row.keys) && seen.add(row.keys)).map((row) => ({ keys: row.keys, command: row.text })) : [];
-    if (chips.length === 0) set_chips(words_of(existing()));
+  }
+
+  // The site is set before the reads, so a key pressed while they run joins the stored keys of the row and is not lost to them.
+  async function load(prefill: string | undefined): Promise<void> {
+    if (prefill !== undefined) site = prefill;
+    const loading_site = site;
+    await Promise.all([read_rules(), read_bindings()]);
+    if (site === loading_site) set_chips([...words_of(existing()), ...chips]);
+    else if (chips.length === 0) set_chips(words_of(existing()));
     changed();
   }
 
-  // Another tab or a file write changed the rules. The form keeps what the reader typed unless the row it shows is the one that changed.
+  const differs_from = (row: SiteRuleRow | undefined): boolean => joined() !== words_of(row).join(" ");
+  const is_dirty = (): boolean => differs_from(existing());
+
+  // Another tab or a file write changed the rules, or a binding moved. The form keeps what the reader typed unless the row it shows is the one that changed.
   async function refresh(): Promise<void> {
-    const before = JSON.stringify(existing());
-    await read_rules();
-    if (JSON.stringify(existing()) !== before && !is_dirty(before)) set_chips(words_of(existing()));
+    const before_site = site;
+    const before = existing();
+    await Promise.all([read_rules(), read_bindings()]);
+    const after = existing();
+    // A site picked during the reads has its own row, which the baseline says nothing about.
+    if (site === before_site && JSON.stringify(after) !== JSON.stringify(before) && !differs_from(before)) set_chips(words_of(after));
     changed();
-  }
-
-  function is_dirty(stored_json?: string): boolean {
-    const stored = stored_json === undefined ? existing() : (JSON.parse(stored_json) as SiteRuleRow | undefined);
-    return joined() !== words_of(stored).join(" ");
   }
 
   const edit = (change: () => void): void => {
@@ -110,15 +116,19 @@ export function create_site_keys_session(deps: SiteKeysDeps) {
     };
   };
 
+  // Busy holds until the rules are read again, so no edit lands between the answer and the form following it.
   async function send_change(keys: string | null): Promise<void> {
     busy = true;
     changed();
-    const answer = (await deps.send({ type: "site_keys", pattern: site, keys })) as ToolbarAnswer;
-    busy = false;
-    await read_rules();
-    if (answer.ok && keys === null) set_chips([]);
-    message = { ok: answer.ok, text: answer.message };
-    changed();
+    try {
+      const answer = (await deps.send({ type: "site_keys", pattern: site, keys })) as ToolbarAnswer;
+      await read_rules();
+      if (answer.ok && keys === null) set_chips([]);
+      message = { ok: answer.ok, text: answer.message };
+    } finally {
+      busy = false;
+      changed();
+    }
   }
 
   return {

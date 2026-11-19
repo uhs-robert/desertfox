@@ -15,12 +15,19 @@ function make(rules: SiteRuleRow[] = []) {
   const sent: unknown[] = [];
   let current = rules;
   let reply: unknown = { ok: true, message: "Keys kept" };
+  let bindings: unknown[] = BINDINGS;
+  let failing = false;
   const session = create_site_keys_session({
-    send: async (message) => (sent.push(message), message.type === "list_bindings" ? { ok: true, bindings: BINDINGS } : reply),
+    send: async (message) => {
+      sent.push(message);
+      if (message.type === "list_bindings") return { ok: true, bindings };
+      if (failing) throw new Error("port closed");
+      return reply;
+    },
     read_rules: async () => current,
     on_change: () => undefined,
   });
-  return { session, sent, set_rules: (next: SiteRuleRow[]) => void (current = next), set_reply: (next: unknown) => void (reply = next) };
+  return { session, sent, set_rules: (next: SiteRuleRow[]) => void (current = next), set_reply: (next: unknown) => void (reply = next), set_bindings: (next: unknown[]) => void (bindings = next), fail_next: () => void (failing = true) };
 }
 
 test("the popup's site fills the form, and captured keys become chips that Save sends as one pass string", async () => {
@@ -132,4 +139,50 @@ test("a key pressed while the form loads stays among the chips", async () => {
   await loading;
   assert.equal(session.view().site, MAIL);
   assert.deepEqual(session.view().chips, ["j"]);
+});
+
+test("a key pressed during the load joins the stored keys of the row and Save sends both", async () => {
+  const { session, sent } = make([{ site: MAIL, pass: "q" }]);
+  const loading = session.load(MAIL);
+  session.capture("j");
+  await loading;
+  assert.deepEqual(session.view().chips, ["q", "j"]);
+  await session.save();
+  assert.deepEqual(sent.at(-1), { type: "site_keys", pattern: MAIL, keys: "q j" });
+});
+
+test("a refresh takes a row another tab created into a clean empty form", async () => {
+  const { session, set_rules } = make();
+  await session.load(MAIL);
+  set_rules([{ site: MAIL, pass: "j" }]);
+  await session.refresh();
+  assert.deepEqual(session.view().chips, ["j"]);
+});
+
+test("a refresh leaves the form alone when the site changed during its reads", async () => {
+  const { session, set_rules } = make([{ site: MAIL, pass: "j" }, { site: "*://*.b.test/*", pass: "q" }]);
+  await session.load(MAIL);
+  set_rules([{ site: MAIL, pass: "j k" }, { site: "*://*.b.test/*", pass: "q" }]);
+  const refreshing = session.refresh();
+  session.set_site("*://*.b.test/*");
+  session.toggle_pick("j");
+  await refreshing;
+  assert.deepEqual(session.view().chips, ["q", "j"]);
+});
+
+test("a refresh reloads the pick list", async () => {
+  const { session, set_bindings } = make();
+  await session.load(MAIL);
+  set_bindings([{ mode: "normal", keys: "x", text: "scroll.down", origin: "edit" }]);
+  await session.refresh();
+  assert.deepEqual(session.view().picks.map((row) => row.keys), ["x"]);
+});
+
+test("a send that fails frees the form, and Remove holds it until the rules are read again", async () => {
+  const { session, fail_next } = make([{ site: MAIL, pass: "j" }]);
+  await session.load(MAIL);
+  fail_next();
+  await assert.rejects(session.remove());
+  assert.equal(session.view().busy, false);
+  assert.equal(session.view().can_remove, true);
 });

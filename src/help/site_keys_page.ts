@@ -78,6 +78,8 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
 
   function draw(): void {
     const view = session.view();
+    // The controls below are rebuilt, so the one that had focus is found again by its keys.
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.siteKeysFocus : undefined;
     if (site.value !== view.site) site.value = view.site;
     site_note.textContent = view.site_problem ?? "";
     capture_box.replaceChildren(...(view.chips.length === 0 ? [el("span", "desertfox-help-muted", "Press the keys")] : [el("span", "desertfox-help-muted", "Press more keys")]));
@@ -87,6 +89,7 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
         const drop = button("x", () => session.remove_chip(keys));
         drop.className = "desertfox-site-keys-drop";
         drop.setAttribute("aria-label", `Stop keeping ${keys}`);
+        drop.dataset.siteKeysFocus = `drop:${keys}`;
         chip.append(drop);
         return chip;
       }),
@@ -101,6 +104,7 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
             const box = el("input", undefined) as HTMLInputElement;
             box.type = "checkbox";
             box.checked = view.chips.includes(row.keys);
+            box.dataset.siteKeysFocus = `pick:${row.keys}`;
             box.addEventListener("change", () => session.toggle_pick(row.keys));
             return el("label", "desertfox-site-keys-pick", box, " ", el("kbd", undefined, row.keys), " ", el("span", "desertfox-help-muted", row.command));
           })),
@@ -112,6 +116,7 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
     save.disabled = !view.can_save;
     remove.disabled = !view.can_remove;
     remove.hidden = !view.has_row;
+    if (focused !== undefined) container.querySelector<HTMLElement>(`[data-site-keys-focus="${CSS.escape(focused)}"]`)?.focus();
   }
 
   session = create_site_keys_session({ ...deps, on_change: draw });
