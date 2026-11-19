@@ -12,7 +12,6 @@ const page_hash = (id: (typeof PAGES)[number]["id"]) => PAGES.find((page) => pag
 export const HOME_HASH = page_hash("home");
 export const SETTINGS_HASH = page_hash("settings");
 export const COMMANDS_HASH = page_hash("commands");
-// The file editor under the settings page's Advanced section. A test keeps the slug in step with the page, which this file cannot import.
 // The settings page draws an empty anchor with the id `settings-site-rules` at the top of the General rows, because the rows load after the route lands. A test keeps the slug in step with the page, which this file cannot import.
 export const SITE_RULES_HASH = "#section=settings/site-rules";
 // The Warnings heading on Home, where the count points.
@@ -25,8 +24,6 @@ export function release_url(version: string): string {
   const releases = `https://github.com/${REPO}/releases`;
   return /^\d+\.\d+\.\d+$/.test(version) ? `${releases}/tag/v${version}` : releases;
 }
-
-// The rule the copy button puts on the clipboard: a `site_rules` row for the pattern with `pass` empty, for the user to fill in.
 
 // `desktop` (follow the desktop's pushed theme), the built-in, local and imported themes, once each and sorted, plus the one in force so the list never lacks it.
 export function theme_options(current: string, extra_names: readonly string[]): string[] {
