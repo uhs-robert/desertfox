@@ -115,7 +115,7 @@ function find_candidates(filter: HintFilter, custom_selector: string | undefined
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
 
-const none_message = (text: string | undefined): string => (text === undefined ? "No hints on this page" : `No link matches ${text}`);
+const none_message = (text: string | undefined, filter?: string): string => (text !== undefined ? `No link matches ${text}` : filter === "lists" ? "No list on this page" : "No hints on this page");
 
 // The collect step: what a person can see of the candidates, narrowed by `text`.
 async function shown_of(current: Pick<Session, "filter" | "action" | "lower_text_">, candidates: Found[]): Promise<Found[]> {
@@ -248,19 +248,20 @@ let picking = false;
 const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
   // A list's pick makes the list active and focuses what j focuses, the title link, so Enter opens it.
   const region = current.args.filter === "lists" ? (list_targets.get(element) as { links: Map<Element, HTMLElement | undefined> } | undefined) : undefined;
-  if (region) (void page.desertfox_host.run_command_("item.lists", "item", { region }), (element = region.links.get(element) ?? element));
+  // For `enter_item` the bundle also focuses the link of the first item shown, when the pick makes another list active: the landing that follows starts from the focus, so it never takes an item a scroll box clips.
+  if (region) (void page.desertfox_host.run_command_("item.lists", "item", { region, focus: region.links.get(element) ?? element }), (element = region.links.get(element) ?? element));
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
   // A pick right after a jump is the user's own move, so the address change it makes records.
   arm_leave_watch(page.desertfox_host).quiet_(false);
   picking = true;
   let result;
   try {
-    result = perform(current.action, element, hand_over ? { ...deps, copy: hand_over } : pick_deps(current), current.with_background_);
+    result = current.action === "enter_item" ? undefined : perform(current.action, element, hand_over ? { ...deps, copy: hand_over } : pick_deps(current), current.with_background_);
   } finally {
     picking = false;
   }
   // The hint mode has ended, so the frame is in the mode the hint began in. A refused pick leaves it there.
-  if (current.action === "enter_media" && !result) page.desertfox_host.set_mode_("media");
+  if ((current.action === "enter_media" || current.action === "enter_item") && !result) page.desertfox_host.set_mode_(current.action === "enter_item" ? "item" : "media");
   return result;
 };
 
@@ -278,9 +279,9 @@ const shows = (item: Element): boolean => {
 };
 
 // Each frame fills its own map from its own item bundle, before it collects.
-const fill_list_targets = async (): Promise<void> => {
+const fill_list_targets = async (selector: unknown): Promise<void> => {
   list_targets.clear();
-  await page.desertfox_host.run_command_("item.lists", "item", { take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
+  await page.desertfox_host.run_command_("item.lists", "item", { selector, take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
 };
 
 const texts_of = (found: Found[]): string[] => found.map((item) => text_of(item.element));
@@ -420,7 +421,7 @@ function register(host: PageHostApi): void {
     }
     const { labels, own_of_, found } = labeled;
     if (labels.length === 0) {
-      const message = none_message(current.text);
+      const message = none_message(current.text, current.filter);
       current.finish({ ok: false, message });
       leave_with_keys(current);
       // Only a rapid rebuild gets here with its promise already settled, so nobody else shows the message.
@@ -428,7 +429,7 @@ function register(host: PageHostApi): void {
       return;
     }
     // One match needs no label. Only the first build does this, so rapid mode cannot repeat the same pick.
-    if (first_build && current.lower_text_ !== undefined && labels.length === 1) {
+    if (first_build && (current.lower_text_ !== undefined || current.action === "enter_item") && labels.length === 1) {
       const { run, left } = pick_run(current, labeled, 0, true);
       const performed = begin_pick(current);
       leave_with_keys(current, () => performed(run), left);
@@ -578,7 +579,7 @@ function register(host: PageHostApi): void {
     args = plain_args;
     let filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
-    if (filter === "lists") await fill_list_targets();
+    if (filter === "lists") await fill_list_targets(args.items);
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
@@ -596,7 +597,7 @@ function register(host: PageHostApi): void {
     // With nothing to label the mode never changes, so keys held during the load run as normal keys. A page with candidates only out of view still flips it, as before the view cut.
     const text = (args.text as string | undefined) || undefined;
     // Across frames the other frames can still have hints, and the build gives the notice when no frame has one.
-    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_, false).length === 0) return { ok: false, message: none_message(text) };
+    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_, false).length === 0) return { ok: false, message: none_message(text, filter) };
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
@@ -647,7 +648,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     const filter = args.filter as HintFilter;
     const text = (args.text as string | undefined) || undefined;
     let found: Found[] = [];
-    if (filter === "lists") await fill_list_targets();
+    if (filter === "lists") await fill_list_targets(args.items);
     const [site_selectors, patterns] = await Promise.all([read_site_selectors(() => {}), read_strip_patterns(window.location.href)]);
     strip_patterns = patterns;
     // A parent labels its readable child only when it is asked itself, which only `all_frames` does. A lone parked frame labels its own targets.

@@ -145,7 +145,10 @@ export function page_mode_trees_for(keymap: CompiledKeymap, columns: PageSiteCol
   const trees = keymap_mode_trees_for(keymap.modes, columns);
   const item = trees.item ?? keymap.modes.item;
   const arrows = frame_site_values_for(keymap, frame_address, ITEM_SELECT_SITE_SETTINGS)?.item_select === "arrows";
-  return item && keymap.item_select_keys && arrows ? { ...trees, item: with_item_select(item, keymap.item_select_keys) } : trees;
+  if (!arrows || !keymap.item_select_keys) return trees;
+  // The normal tree too: a row's `I` lands on its items from normal mode, and the landing selects there as well.
+  const normal = normal_tree_for(keymap.modes.normal, columns).tree;
+  return { ...trees, ...(item && { item: with_item_select(item, keymap.item_select_keys) }), ...(normal && { normal: with_item_select(normal, keymap.item_select_keys) }) };
 }
 
 // Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a mode bind survives a key rule. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.

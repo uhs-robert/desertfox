@@ -7,10 +7,10 @@ export const areas = ["keys", "config", "bundles"];
 
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until }) {
-  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until }) {
+  // The command line enters item mode on any page, with or without a list. The key after it lands in item mode once the badge says ITEM.
   const enter_item_mode = async () => {
-    await press_keys("I");
+    await run_line("mode item");
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
   };
   await setup("load the shipped amazon row for the amazon_ pages", async () => {

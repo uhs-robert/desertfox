@@ -4,10 +4,10 @@ export const areas = ["keys", "config", "bundles"];
 
 const CARDS = 500;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+export async function run_cases({ run_line, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  // The command line enters item mode on any page, with or without a list. The key after it lands in item mode once the badge says ITEM.
   const enter_item_mode = async () => {
-    await press_keys("I");
+    await run_line("mode item");
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
   };
   await run_case("on a long list a press of j focuses the title link of the first card", async () => {

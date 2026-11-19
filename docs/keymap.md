@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 559 (normal 265, media 58, item 63, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 562 (normal 264, media 58, item 67, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -170,7 +170,7 @@ bound: 559 (normal 265, media 58, item 63, grab 11, hint 8, cmdline 19, caret 36
 | `]c` | `url.increment --up` | Change URL number |
 | `[c` | `url.increment --down` | Change URL number |
 | `gi` | `page.focus_input` | Focus input |
-| `I` | `mode item` | Item mode |
+| `I` | `hint --lists ; page.item --current` | Pick a list for item mode |
 | `i` | `mode.insert` | Insert mode |
 | `pp` | `paste` | Open clipboard |
 | `pt` | `paste --tab` | Open clipboard |
@@ -274,7 +274,6 @@ bound: 559 (normal 265, media 58, item 63, grab 11, hint 8, cmdline 19, caret 36
 | `;fF` | `frame.exit` | Focus top page |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |
 | `;fe` | `page.focus_input` | Main input |
-| `;j` | `hint --focus --lists` | Pick the list for j and k |
 | `;fh` | `hint --focus --headings` | Focus heading |
 | `;m` | `hint --media` | Play or pause media |
 | `;M` | `hint --enter-media --media` | Start media mode at a video |
@@ -397,6 +396,8 @@ Which-key group names:
 | `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
 | `<C-f>` | `scroll.pages` | Scroll page down |
 | `<C-b>` | `scroll.pages --fraction=-1` | Scroll page up |
+| `H` | `page.back` | Back |
+| `L` | `page.forward` | Forward |
 | `<C-o>` | `page.jump --older` | Jump back |
 | `<C-i>` | `page.jump --newer` | Jump forward |
 | `]]` | `page.follow --next` | Next page |
@@ -436,7 +437,6 @@ Which-key group names:
 | `;fF` | `frame.exit` | Focus top page |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |
 | `;fe` | `page.focus_input` | Main input |
-| `;j` | `hint --focus --lists` | Pick the list for j and k |
 | `;fh` | `hint --focus --headings` | Focus heading |
 | `;m` | `hint --media` | Play or pause media |
 | `;M` | `hint --enter-media --media` | Start media mode at a video |
@@ -449,7 +449,10 @@ Which-key group names:
 | `<C-[>` | `mode.escape` | Escape |
 | `?` | `help.whichkey` | Show the keys |
 | `<A-?>` | `help.whichkey` | Show the keys |
-| `I` | `page.item --current` | Back to the current item |
+| `I` | `hint --lists ; page.item --current` | Pick a list for item mode |
+| `zt` | `page.item --current ; scroll.align --top` | Back to the current item, at the top |
+| `zz` | `page.item --current ; scroll.align` | Back to the current item, in the middle |
+| `zb` | `page.item --current ; scroll.align --bottom` | Back to the current item, at the bottom |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
 | `h` | `page.item --left --hover` | Item to the left, or scroll left |

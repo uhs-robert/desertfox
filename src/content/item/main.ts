@@ -5,8 +5,10 @@ import { follow_item, move_item, read_cursor } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
+import type { DerivedRow } from "./derived.ts";
 import { watch_user_left } from "../user_left.ts";
 import { create_item_start } from "./start.ts";
+import type { Region } from "./finder.ts";
 import { is_shown } from "../shown.ts";
 
 type ItemWindow = { desertfox_host?: PageHostApi; desertfox_item_ready?: true };
@@ -54,7 +56,22 @@ if (!item_window.desertfox_item_ready && host) {
     // With no row selector the box is the focus mark.
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
-  host.register_handler_("item.lists", (args) => void (args.region ? page.derived.pick_(args.region as never) : (args.take as (regions: unknown) => void)(page.derived.lists_())));
+  host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined) : (args.take as (regions: unknown) => void)(lists_with_row(page.derived.lists_(), args.selector as string | undefined))));
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
+}
+
+// A site row's items are one more list, and the finder lists that hold any of them drop out, so the row's own list is the one candidate for its items. The finder finds nothing on some rows (Drive's files hold no title link).
+function lists_with_row(lists: Region<Element>[], selector: string | undefined): Region<Element>[] {
+  const items = selector ? Array.from(document.querySelectorAll(selector)).filter(is_shown) : [];
+  if (!items[0]) return lists;
+  const overlaps = (region: Region<Element>) => region.items.some((own) => items.some((item) => item.contains(own) || own.contains(item)));
+  return [{ kind: "list", items, links: new Map() }, ...lists.filter((region) => !overlaps(region))];
+}
+
+// Making another list active puts the focus on the first item the pick showed. Picking the list that is active already leaves the focus and the last move alone, so the landing goes on from the current item.
+function pick_list(derived: DerivedRow, region: Region<Element>, focus: HTMLElement | undefined): void {
+  const was = derived.active_()?.items[0] === region.items[0];
+  derived.pick_(region);
+  if (!was) focus?.focus({ preventScroll: true });
 }

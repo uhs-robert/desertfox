@@ -82,11 +82,23 @@ for (const [name, label] of Object.entries(labels).filter(([, entry]) => entry.f
   });
 }
 
-// A label with no `regions` says the page has one list, or none when it answers none. The others name the lists the finder keeps besides the first, which the derived row switches between.
+// A label with no `regions` says the page has one list, or none when it answers none. The others name the lists the finder keeps besides the first, which the derived row switches between. Lists under 60% of the view are `short_`: only a pick makes one active, so the labels leave them out and `SHORT_LISTS` counts them.
+const SHORT_LISTS: Record<string, number> = { bing: 2, ddg: 2, ddg_news: 1, gh_repo: 1, guardian_world: 1, ikea_chairs: 1, ja_rakuten: 1, ru_ria: 2, stackoverflow_list: 2 };
+const long_regions = (name: string) => finder_on(name).regions.filter((region) => !region.short_);
+
 test("the finder keeps the lists that the labels count, the largest first", () => {
-  const counts = Object.entries(labels).filter(([, label]) => label.finder).map(([name, label]) => [name, finder_on(name).regions.length, label.finder!.regions ?? (label.finder!.kind === "none" ? 0 : 1)]);
+  const counts = Object.entries(labels).filter(([, label]) => label.finder).map(([name, label]) => [name, long_regions(name).length, label.finder!.regions ?? (label.finder!.kind === "none" ? 0 : 1)]);
   assert.deepEqual(counts.filter(([, found, label]) => found !== label), []);
-  for (const name of saved) assert.deepEqual(finder_on(name).regions[0]?.items ?? [], finder_on(name).items);
+  for (const name of saved) assert.deepEqual(long_regions(name)[0]?.items ?? [], finder_on(name).items);
+});
+
+test("the finder also keeps the lists under 60% of the view, after the long ones", () => {
+  const shorts = Object.fromEntries(saved.map((name) => [name, finder_on(name).regions.filter((region) => region.short_).length]).filter(([, count]) => count !== 0));
+  assert.deepEqual(shorts, SHORT_LISTS);
+  for (const name of saved) {
+    const { regions } = finder_on(name);
+    assert.equal(regions.findIndex((region) => region.short_) === -1 || regions.slice(regions.findIndex((region) => region.short_)).every((region) => region.short_), true, `${name}: short lists come last`);
+  }
 });
 
 test("a finder that picks every link covers the marks but fails the precision check", () => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 export const areas = ["keys", "tabs", "bundles"];
 
-export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ run_line, config_dir, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
@@ -20,10 +20,12 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
     await expect_badge("NORMAL");
     await press_keys("I");
     await expect_badge("ITEM");
-    await press_keys("j");
+    // The pick starts the walk and lands on the current item, the first one in view.
     await expect_focus("c0");
+    await press_keys("j");
+    await expect_focus("c1");
     await press_keys("3j");
-    await expect_focus("c3");
+    await expect_focus("c4");
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
     await press_keys("j");
@@ -40,17 +42,21 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
     expect(!readFileSync(join(config_dir, "settings.toml"), "utf8").includes("item_navigator"), "I wrote item_navigator to settings.toml");
   });
 
-  await run_case("I after Escape goes on from the same current item, and I inside the mode lands on it again", async () => {
+  await run_case("I after Escape goes on from the same current item, and zz inside the mode lands on it again", async () => {
     await open_list("im_same");
     await press_keys("I");
     await expect_badge("ITEM");
-    await press_keys("jj");
+    await press_keys("j");
     await expect_focus("c1");
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
     await press_keys("I");
     await expect_badge("ITEM");
+    await expect_focus("c1");
     await press_keys("j");
+    await expect_focus("c2");
+    await in_active_tab("document.activeElement.blur(); 0");
+    await press_keys("zz");
     await expect_focus("c2");
     await in_active_tab("document.activeElement.blur(); 0");
     await press_keys("I");
@@ -59,7 +65,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
 
   await run_case("a key that item mode does not bind goes to the page", async () => {
     await open_list("im_pass");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await in_active_tab(`window.__keys = []; addEventListener("keydown", (event) => window.__keys.push(event.key)); 0`);
     await press_keys("x");
@@ -69,7 +75,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
 
   await run_case("f labels the page and Escape returns to item mode, and gi focuses the field and leaves the mode", async () => {
     await open_list("im_keys_field");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await press_keys("f");
     await poll_until("hint mode", async () => (await badge()) !== "ITEM");
@@ -84,7 +90,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
 
   await run_case("the command line opens and closes inside item mode", async () => {
     await open_list("im_cmdline");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await open_cmdline();
     await poll_until("the mode to leave item", async () => (await badge()) !== "ITEM");
@@ -97,7 +103,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
   await run_case("a frame of the page is in item mode with the tab, and Escape in the frame ends it for the top page too", async () => {
     await open_list("im_frame_join_frame");
     await poll_until("the frame to load", async () => (await in_active_tab(`document.getElementById("inner").contentDocument.readyState`)) === "complete");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await focus_frame();
     await expect_badge("ITEM");
@@ -113,7 +119,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
 
   await run_case("a frame that loads while the mode is held joins it", async () => {
     await open_list("im_late_frame");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await in_active_tab(`(() => { const frame = document.createElement("iframe"); frame.id = "inner"; frame.src = "/item_frame?id=im_late_frame_inner"; frame.style.cssText = "display:block;width:560px;height:300px"; document.body.prepend(frame); return 0; })()`);
     await poll_until("the frame to load", async () => (await in_active_tab(`document.getElementById("inner").contentDocument?.readyState`)) === "complete");
@@ -129,7 +135,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
     await poll_until("the frame to load", async () => (await in_active_tab(`document.getElementById("inner").contentDocument?.readyState`)) === "complete");
     await focus_frame();
     await expect_badge("FRAME");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await press_keys("j");
     await expect_frame_focus("f0");
@@ -148,7 +154,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
 
   await run_case("a load of the page ends item mode, and a pushState keeps it", async () => {
     await open_list("im_nav");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await in_active_tab(`history.pushState({}, "", location.pathname + "?id=im_nav_pushed"); 0`);
     await sleep(500);
@@ -166,7 +172,7 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
 
   await run_case("a field that takes the focus ends item mode, and leaving the field does not bring it back", async () => {
     await open_list("im_field_field");
-    await press_keys("I");
+    await run_line("mode item");
     await expect_badge("ITEM");
     await in_active_tab("document.getElementById('q').focus(); 0");
     await expect_badge("INSERT");
@@ -175,5 +181,35 @@ export async function run_cases({ config_dir, open_cmdline, close_cmdline, run_c
     await press_keys("j");
     await poll_until("the page to scroll", scrolled);
     expect((await focused()) === "", "j walked the cards after the field left item mode");
+  });
+
+  await run_case("I on a page with no list stays in normal mode", async () => {
+    await open_page("controls", "im_no_list", { new_tab: true });
+    await press_keys("I");
+    await sleep(700);
+    await expect_badge("NORMAL");
+  });
+
+  await run_case("H in item mode goes back in the tab history", async () => {
+    await open_list("im_hist_a");
+    await in_active_tab(`location.href = "/item_list?id=im_hist_b"; 0`);
+    await poll_until("the second page", async () => (await in_active_tab("location.search")) === "?id=im_hist_b" && (await in_active_tab("document.readyState")) === "complete");
+    await sleep(800);
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await press_keys("H");
+    await poll_until("the first page again", async () => (await in_active_tab("location.search")) === "?id=im_hist_a" && (await in_active_tab("document.readyState")) === "complete");
+  });
+
+  await run_case("zz in item mode goes back to the current item and centers it", async () => {
+    await open_list("im_align");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await press_keys("6j");
+    await expect_focus("c6");
+    await in_active_tab("window.scrollTo(0, 0); document.activeElement.blur(); 0");
+    await press_keys("zz");
+    await expect_focus("c6");
+    await poll_until("the item centered", async () => (await in_active_tab(`(() => { const box = document.activeElement.getBoundingClientRect(); return Math.abs((box.top + box.bottom) / 2 - innerHeight / 2) < 80; })()`)) === true);
   });
 }

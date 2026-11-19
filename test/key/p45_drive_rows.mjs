@@ -8,10 +8,10 @@ export const areas = ["keys", "config", "bundles", "hints"];
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 const FILES = 60;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  // The command line enters item mode on any page, with or without a list. The key after it lands in item mode once the badge says ITEM.
   const enter_item_mode = async () => {
-    await press_keys("I");
+    await run_line("mode item");
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
   };
   await setup("load the shipped drive row on the drive_ test pages", async () => {
@@ -113,6 +113,18 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("k");
     await expect_focus("f1");
     expect((await selected_file()) === 1, `j and k selected ${await selected_file()}`);
+  });
+
+  await run_case("list view: I from normal mode lands on a file, selects it with Drive's own arrows and starts item mode", async () => {
+    await open_drive("list_pick", "list");
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "NORMAL");
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+    await poll_until("a selected file", async () => (await selected_file()) >= 0);
+    expect((await arrows_sent()) > 0, "the landing sent no arrow key");
+    await press_keys("j");
+    await poll_until("the next file selected", async () => (await selected_file()) >= 1);
   });
 
   await run_case("list view: j walks past the drawn rows, and the panel scrolls to draw more", async () => {

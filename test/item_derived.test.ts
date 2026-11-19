@@ -611,3 +611,38 @@ test("a picked list stays active while the old list still shows, and the old lis
   leave(comments);
   assert.deepEqual(names(row.items_()), ["r1", "r2"]);
 });
+
+// A page with a long list and a short one beside it, as the finder reports them: the short region comes last and carries `short_`.
+function with_short_list(long_items: Fake[], short_items: Fake[]) {
+  const state = { clock: 0, finds: 0 };
+  const region_of = (entries: Fake[], short: boolean) => ({ kind: "list", items: entries, links: new Map(), ...(short ? { short_: true } : {}) });
+  const row = create_derived_row({
+    find_: () => (state.finds++, { ...region_of(long_items, false), regions: [region_of(long_items, false), region_of(short_items, true)] } as unknown as Found<Element>),
+    url_: () => "https://a.test/",
+    now_: () => state.clock,
+    is_shown_: (element) => (element as unknown as Fake).shown,
+    in_view_: (element) => ((element as unknown as Fake).shown ? 1 : 0),
+    tail_: () => [],
+  });
+  return { state, row };
+}
+
+test("a short list is never the first choice, and a long list that leaves the view does not hand over to it", () => {
+  const long_items = [item("l1"), item("l2")];
+  const short_items = [item("s1"), item("s2")];
+  const { state, row } = with_short_list(long_items, short_items);
+  assert.deepEqual(names(row.items_()), ["l1", "l2"]);
+  long_items.forEach((entry) => (entry.shown = false));
+  state.clock += NONE_RECHECK_MS;
+  assert.deepEqual(names(row.items_()), [], "the long list stays active with nothing in view");
+});
+
+test("a picked short list stays active through a read of the page", () => {
+  const long_items = [item("l1"), item("l2")];
+  const short_items = [item("s1"), item("s2")];
+  const { row } = with_short_list(long_items, short_items);
+  row.pick_(row.lists_()[1]!);
+  assert.deepEqual(names(row.items_()), ["s1", "s2"]);
+  long_items.forEach((entry) => (entry.shown = false));
+  assert.deepEqual(names(row.items_()), ["s1", "s2"]);
+});

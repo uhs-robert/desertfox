@@ -12,13 +12,13 @@ const GRABBABLE = [...NON_LINK_FILTERS, "draggable"];
 define("hint.run", {
   name: "hint",
   label: "Hint",
-  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Prompt opens the command line with a command and the address of the element, to edit before Enter runs it. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Rapid with copy or copy text collects the picks into one deduplicated list on the clipboard. Grab drags one element to another: it picks the element, then the target, and drops it there. The target pass labels the places the element can likely go (the other cards and the columns of a board, marked drop zones), or every visible element when it finds few. Tab in it labels every element. Grab move picks the element and moves it with h j k l, Enter drops it and Escape cancels. Swipe picks a carousel or snap box and flings it with h j k l until Escape, and l shows the next slide. A page that ignores synthetic events ignores the drag. Prompt, the grabs and swipe ignore rapid. Text keeps only the links whose text holds it.",
+  intent: "Pick a page element by key and act on it. It labels the elements on the page with keys, then acts on the one you pick: open it here, in a tab, in a background tab or in a window, copy its address, its text, its picture, its CSS selector or its HTML, select it in the DevTools Inspector, download it, delete it, focus it, hover it or double-click it. Hover sends the pointer events a mouse sends on entering, so menus, tooltips and previews that a script opens appear. A menu that only a CSS :hover rule opens does not. Escape or the next hover ends it. Caret and visual start caret mode or visual mode at the element. Prompt opens the command line with a command and the address of the element, to edit before Enter runs it. Rapid keeps hint mode open for more picks, and opens links in background tabs unless the action says otherwise. Rapid with copy or copy text collects the picks into one deduplicated list on the clipboard. Grab drags one element to another: it picks the element, then the target, and drops it there. The target pass labels the places the element can likely go (the other cards and the columns of a board, marked drop zones), or every visible element when it finds few. Tab in it labels every element. Grab move picks the element and moves it with h j k l, Enter drops it and Escape cancels. Swipe picks a carousel or snap box and flings it with h j k l until Escape, and l shows the next slide. A page that ignores synthetic events ignores the drag. Prompt, the grabs and swipe ignore rapid. Lists labels every list and grid and starts item mode on the one you pick, at once when the page has one. Text keeps only the links whose text holds it.",
   params: [
     {
       name: "action",
       type: "enum",
-      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "prompt", "grab", "grab_move", "grab_swipe"],
-      default: [{ value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
+      values: [...WHERE, "caret", "visual", "copy", "copy_text", "copy_image", "copy_selector", "copy_html", "inspect", "download", "delete", "focus", "hover", "double_click", "play_pause", "mute", "fullscreen", "enter_media", "enter_item", "prompt", "grab", "grab_move", "grab_swipe"],
+      default: [{ value: "enter_item", when: { filter: ["lists"], frames: ["same_origin"] } }, { value: "play_pause", when: { filter: ["media"] } }, { value: "background", when: { filter: ["links"], rapid: [true] } }, { value: "tab", when: { filter: ["images"] } }, { value: "focus", when: { filter: ["frames"] } }, "here"],
       value_when: {
         prompt: { filter: HAS_ADDRESS },
         tab: { filter: HAS_ADDRESS },
@@ -37,6 +37,8 @@ define("hint.run", {
         grab_swipe: { filter: ["swipeable", "every"] },
         // The pin and the media keys are not shown to follow focus into a frame of another site, unlike the caret.
         enter_media: { filter: ["media"], frames: ["same_origin"] },
+        // The pick starts item mode in this frame, which holds the list.
+        enter_item: { filter: ["lists"], frames: ["same_origin"] },
         double_click: { filter: NON_LINK_FILTERS },
         // The devtools eval runs in the top window, so a pick in another frame cannot reach the Inspector.
         inspect: { frames: ["same_origin"] },
@@ -64,6 +66,7 @@ define("hint.run", {
         mute: "to mute or unmute",
         fullscreen: "to toggle fullscreen",
         enter_media: "to start media mode",
+        enter_item: "to start item mode",
         prompt: "to edit in the command line",
         grab: "to grab and drop",
         grab_move: "to grab and move",
@@ -91,6 +94,7 @@ define("hint.run", {
         mute: "Mute the media, or unmute it when it is muted.",
         fullscreen: "Show the player in fullscreen, or leave fullscreen.",
         enter_media: "Start media mode on the video, and pin it.",
+        enter_item: "Start item mode on the list, so j and k walk it.",
         prompt: "Put the address of the element in the command line.",
         grab: "Grab the element and drop it on a target you pick.",
         grab_move: "Grab the element and move it with the keys.",
@@ -102,6 +106,8 @@ define("hint.run", {
       type: "enum",
       values: ["all", "every", "clickable", "buttons", "inputs", "links", "prose", "scrollable", "draggable", "swipeable", "media", "images", "frames", "headings", "lists", "custom"],
       default: "clickable",
+      // A list is picked only to start item mode there.
+      value_when: { lists: { action: ["enter_item"] } },
       short: { all: "a", every: "e", buttons: "B", inputs: "i", links: "l", prose: "p", scrollable: "s", media: "m", images: "I", frames: "E", headings: "T", lists: "n", custom: "u" },
       value_labels: { all: "for all elements", every: "for every visible element", buttons: "for buttons", inputs: "for inputs", links: "for links", prose: "for text", scrollable: "for scroll boxes", draggable: "for draggable elements", swipeable: "for swipeable elements", media: "for video and audio", images: "for images", frames: "for frames", headings: "for headings", lists: "for lists", custom: "for a selector" },
       description: {
@@ -118,11 +124,12 @@ define("hint.run", {
         images: "Label the pictures of at least 24 px, even as backgrounds.",
         frames: "Label the frames of at least 24 px, to focus one.",
         headings: "Label the headings, to focus one.",
-        lists: "Label the lists, to make one the list for j and k.",
+        lists: "Label every list and grid, to start item mode on one.",
         custom: "Label the elements that match a selector.",
       },
     },
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
+    { name: "items", type: "string", default: "", when: { filter: ["lists"] }, description: "With lists: a site row's items, as one more list." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "command", type: "string", default: "open", pattern: "^[a-z][a-z0-9_.-]*( --?[a-z][a-z0-9-]*)*$", when: { action: ["prompt"] }, description: "Type this command and its flags before the address." },
     // `all` is a value of `filter`, and an enum value is a flag of its own, so the word must differ.
