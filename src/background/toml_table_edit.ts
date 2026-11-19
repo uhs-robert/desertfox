@@ -94,7 +94,7 @@ function with_values_of(block: readonly Line[], old_row: Record<string, TomlValu
   for (const [field, value] of Object.entries(next_row)) {
     if (same_value(old_row[field], value)) continue;
     const name = toml_key(field).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const line_pattern = new RegExp(`^(\\s*${name}\\s*=\\s*)"(?:[^"\\\\]|\\\\.)*"(.*)$`);
+    const line_pattern = new RegExp(`^(\\s*${name}\\s*=\\s*)"(?!"")(?:[^"\\\\]|\\\\.)*"(.*)$`);
     const at = bodies.findIndex((body) => line_pattern.test(body));
     if (typeof value !== "string" || at < 0) return undefined;
     bodies[at] = bodies[at]!.replace(line_pattern, (_whole, head: string, tail: string) => `${head}${toml_value(value)}${tail}`);

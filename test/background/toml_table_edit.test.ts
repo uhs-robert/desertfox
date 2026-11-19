@@ -164,3 +164,9 @@ test("two new rows above a replaced first row are each followed by one blank lin
   const next = [{ label: "x" }, { label: "y" }, { label: "a2" }, { label: "b" }];
   assert.equal(set_table_rows(text, "links", next as never), '# c\n[[links]]\nlabel = "x"\n\n[[links]]\nlabel = "y"\n\n[[links]]\nlabel = "a2"\n\n[[links]]\nlabel = "b"\n');
 });
+
+test("a pass written as a multiline string is replaced by generated lines, never half-rewritten", () => {
+  const text = '[[site_rules]]\nsite = "*://a.test/*"\npass = """j k"""\n';
+  const out = set_table_rows(text, "site_rules", [{ site: "*://a.test/*", pass: "q" }] as never);
+  assert.deepEqual(rows_of(out), [{ site: "*://a.test/*", pass: "q" }]);
+});
