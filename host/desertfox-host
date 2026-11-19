@@ -23,9 +23,9 @@ in the same framing to stdout and exits. It has eight verbs and no others:
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "fonts": ["Cantarell", "DejaVu Sans", ...]}
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
-The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes two files
-there: autoconfig.toml, and settings.toml through `write_settings`, which replaces the file only while it is still the text
-the extension edited (see `write_settings`). It parses no config of the extension: the extension owns that TOML and makes
+The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes there:
+autoconfig.toml, and settings.toml through `write_settings`, which replaces the file only while it is still the text the
+extension edited and takes the lock file .settings.lock beside it, which stays (see `write_settings`). It parses no config of the extension: the extension owns that TOML and makes
 the edit. Only editor.toml, which the extension never sees, is parsed here.
 `self_update` replaces the installed hosts, the command line and their four manifests with a GitHub release (see
 `self_update`). `editor_start` and `editor_collect` run the editor named in editor.toml (see `load_editor_config`), which no
@@ -34,6 +34,7 @@ reply ever carries. `open_firefox_page` asks the Firefox that started the host t
 `list_fonts`). Stdout carries only protocol bytes.
 """
 import contextlib
+import errno
 import fcntl
 import hashlib
 import http.client
@@ -228,7 +229,10 @@ def settings_lock(directory):
     except OSError as error:
         raise HostError(f"cannot lock {directory}: {error.strerror or error}") from error
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        except OSError as error:
+            raise HostError(f"cannot lock {directory}, so settings.toml was not written: {error.strerror or error}") from error
         yield
     finally:
         os.close(descriptor)
@@ -242,9 +246,10 @@ def write_settings(request):
     that links into a dotfiles repository stays a link, and the target keeps its mode. The folder must exist: a write
     never creates a config folder that read_config would then find with only this file in it.
 
-    Host writers take a lock. An editor takes none, so the old file is linked aside before the rename and checked after
-    it: an edit saved into it in the meantime puts it back and refuses. An editor that saves by renaming a new file over
-    settings.toml in the microseconds between the last check and the rename is not caught."""
+    Host writers take a lock. An editor takes none, so the old file is hard-linked aside before the rename and checked
+    after it: an edit saved into it in the meantime, or an old file that cannot be read, puts it back and refuses. A
+    filesystem without hard links refuses every write. An editor that saves by renaming a new file over settings.toml in
+    the microseconds between the last check and the rename is not caught."""
     checked_fields(request, {"text", "base_sha256"}, "write_settings")
     text, base = request.get("text"), request.get("base_sha256")
     if not isinstance(text, str):
@@ -284,12 +289,25 @@ def write_settings(request):
                     os.link(temporary, target)
                 except FileExistsError:
                     raise changed from None
+                except OSError as error:
+                    refuse_without_hard_links(path, error)
+                    raise
                 return {"path": path, "sha256": text_sha256(text)}
-            aside = keep_aside(target)
+            aside = os.path.join(os.path.dirname(target), f".settings-{secrets.token_hex(8)}.old")
+            try:
+                os.link(target, aside)
+            except OSError as error:
+                aside = None
+                refuse_without_hard_links(path, error)
+                raise
             os.replace(temporary, target)
             # The aside link shares the old file, so an editor that wrote into it after the check shows here.
-            if settings_digest(aside, path) != base:
-                os.replace(aside, target)
+            if not holds_digest(aside, base):
+                try:
+                    os.replace(aside, target)
+                except OSError as error:
+                    kept, aside = aside, None
+                    raise HostError(f"{path} was edited during the write and could not be put back ({error.strerror or error}). The edit is in {kept}.") from error
                 aside = None
                 raise changed
             return {"path": path, "sha256": text_sha256(text)}
@@ -302,15 +320,23 @@ def write_settings(request):
                         os.unlink(leftover)
 
 
-def keep_aside(target):
-    """A second name for the file at `target`, beside it: a hard link, or a copy where the filesystem has none."""
-    aside = os.path.join(os.path.dirname(target), f".settings-{secrets.token_hex(8)}.old")
+def holds_digest(path, digest):
+    """Whether the file's raw bytes have `digest`. Any failure to read counts as no: the caller then keeps the file."""
     try:
-        os.link(target, aside)
-    except OSError:
-        with open(target, "rb") as source, open(aside, "xb") as copy:
-            copy.write(source.read())
-    return aside
+        return hashlib.sha256(read_bytes(path)).hexdigest() == digest
+    except Exception:
+        return False
+
+
+# What link() answers on a filesystem without hard links (FAT, exFAT, some FUSE and network mounts).
+NO_HARD_LINK_ERRNOS = {errno.EPERM, errno.EOPNOTSUPP, errno.ENOTSUP, errno.ENOSYS}
+
+
+def refuse_without_hard_links(path, error):
+    if error.errno not in NO_HARD_LINK_ERRNOS:
+        return
+    # A copy in place of the link could not see an edit saved into the old file after the copy, so the write refuses.
+    raise HostError(f"cannot write {path}: its filesystem has no hard links, which DesertFox needs to keep an edit saved during the write ({error.strerror or error}). Edit settings.toml by hand") from error
 
 
 # The updater. The caller (the extension, over Firefox's native port) names a version and the hashes its signed build
