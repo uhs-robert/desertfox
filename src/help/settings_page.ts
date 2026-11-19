@@ -276,7 +276,7 @@ function build_row(field: Field, session: SettingsSession, reload_key: string): 
   message.setAttribute("role", "status");
   const reset = el("button", "desertfox-settings-reset", "Reset") as HTMLButtonElement;
   reset.type = "button";
-  reset.title = FILE_WRITTEN_SETTINGS.has(name) ? "Remove the setting from settings.toml and drop your browser changes. The setting goes back to its default." : "Undo your change. The setting goes back to its default, or to the value in your settings file.";
+  reset.title = FILE_WRITTEN_SETTINGS.has(name) ? "Remove the setting from settings.toml and drop your browser changes. A value set in a settings.d file stays." : "Undo your change. The setting goes back to its default, or to the value in your settings file.";
   reset.addEventListener("click", () => void session.reset(name).then(() => keep_focus_after_reset(node)));
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
   const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.summary);
