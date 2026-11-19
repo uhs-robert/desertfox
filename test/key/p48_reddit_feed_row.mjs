@@ -23,6 +23,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const post = (id) => `<article><shreddit-post style="display:block;height:60px;margin-bottom:40px"><a slot="full-post-link" id="${id}" href="#${id}" style="display:block;height:60px">post ${id}</a></shreddit-post></article>`;
   const open_feed = async (id) => {
     await open_page("controls", `reddit_${id}`, { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const feed = document.createElement("shreddit-feed");
       feed.innerHTML = ${JSON.stringify(post("p0") + post("p1") + '<shreddit-ad-post class="promotedlink" style="display:block;height:60px;margin-bottom:40px"><a slot="full-post-link" id="ad" href="#ad">ad</a></shreddit-ad-post>' + post("p2") + '<faceplate-batch>' + post("p3") + post("p4") + '</faceplate-batch>')};
@@ -59,6 +60,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // A user overview page: posts and comments in one feed. A comment holds a permalink overlay, and a post with a later /comment/ link keeps its full-post link.
   await run_case("on a user page, j walks posts and comments, a comment focuses its permalink and a post keeps its full-post link", async () => {
     await open_page("controls", "reddit_profile", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const comment = (id) => '<article><shreddit-profile-comment id="' + id + '" style="display:block;height:60px;margin-bottom:40px"><a id="link_' + id + '" href="/r/x/comments/1/comment/' + id + '/" style="display:block;height:60px">a comment</a></shreddit-profile-comment></article>';
       const feed = document.createElement("shreddit-feed");
@@ -81,6 +83,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("on a thread page with no shreddit-feed, j scrolls", async () => {
     await open_page("controls", "reddit_thread", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const post = document.createElement("shreddit-post");
       post.innerHTML = '<a slot="full-post-link" id="solo" href="#solo">the thread</a>';
