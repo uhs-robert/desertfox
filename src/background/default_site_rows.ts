@@ -136,11 +136,11 @@ const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
 const drive_move = (guard: string, direction: "down" | "up" | "left" | "right", intent: string): BoundInvocation => ({ ...item_step(guard, undefined, direction), when_present: guard, intent });
 // A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
 const DRIVE_BIND: BindingTable = {
-  j: drive_move(DRIVE_ANY_ITEM, "down", "Move to the file below with Drive's own ArrowDown key (scrolls the page when no file shows)"),
-  k: drive_move(DRIVE_ANY_ITEM, "up", "Move to the file above with Drive's own ArrowUp key (scrolls the page when no file shows)"),
+  j: drive_move(DRIVE_ANY_ITEM, "down", "Move to the file below (scrolls the page when no file shows)"),
+  k: drive_move(DRIVE_ANY_ITEM, "up", "Move to the file above (scrolls the page when no file shows)"),
   ...end_binds(DRIVE_ANY_ITEM, undefined),
-  h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view)"),
-  l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view)"),
+  h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left (scrolls sideways in the list view)"),
+  l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right (scrolls sideways in the list view)"),
 };
 
 // Each row that names its items in the `item` column marks its sites with `item_navigator = "shipped"`, so they start in item mode under the default global value `shipped` and under true, and not under false. A user row with its own value comes first in the table and decides the site.

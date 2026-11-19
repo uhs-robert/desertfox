@@ -4,6 +4,7 @@ import { CONFIG_STATUS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { create_media_quality } from "../src/background/media_quality.ts";
 import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, page_keymap_for, page_mode_trees_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
+import { list_keys } from "../src/background/list_keys.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
@@ -828,4 +829,10 @@ test("which-key and the page reply read the same rewritten item tree", async () 
   assert.deepEqual(shared, (await ask(compiled, drive))!.keymap.modes.item);
   const j = shared?.children["j"] as TreeLeaf;
   assert.deepEqual(j.steps.map((step) => step.invocation.id), ["page.item", "page.send_key"]);
+  // The panel row carries the first step's label only, so a step the page cannot run shows the rewrite: j drops out of the panel exactly where the address selects with arrows.
+  const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
+  const availability = { page: { url: drive }, requirement_of: (invocation: { id: string }) => (invocation.id === "page.send_key" ? ["no_such_slot"] : []) } as never;
+  const has_j = async (address: string) => (await list_keys(storage, (id) => registry.get(id), { mode: "item", prefix: [] }, { availability, addresses: [address] })).rows.some((row) => row.keys === "j");
+  assert.equal(await has_j(drive), false);
+  assert.equal(await has_j("https://example.test/"), true);
 });
