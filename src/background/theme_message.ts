@@ -37,6 +37,13 @@ export type ThemeMessageDeps = {
   set_theme_file: (name: string, text: string | null, replace: boolean) => Promise<ThemeFileChange>;
 };
 
+// The end of a remove's reply about the theme file. A delete that reached the folder or only the browser copy saved nothing, so those two read apart from `outcome_note`.
+function removal_note(outcome: FileWriteOutcome, path: string): string {
+  if (outcome.kind === "written") return `, and ${path} is deleted from the config folder`;
+  if (outcome.kind === "browser_copy") return " from the browser copy. It did not come from a config folder, so no file there changes";
+  return outcome_note(outcome, path);
+}
+
 export function create_theme_messages(deps: ThemeMessageDeps) {
   async function list(): Promise<ListImportedThemesAnswer> {
     try {
@@ -60,8 +67,9 @@ export function create_theme_messages(deps: ThemeMessageDeps) {
   async function remove(name: string): Promise<string> {
     const change = await deps.set_theme_file(name, null, true);
     if (change.kind !== "changed") throw new RuntimeRefusal(`the theme ${name} was not removed`);
-    const setting = change.settings ? ` The theme setting goes back to the default${outcome_note(change.settings)}.` : "";
-    return `Removed the theme ${name}${outcome_note(change.file, theme_file_path(name))}.${setting}`;
+    // The browser-copy note says where both changes went, so the setting's line does not repeat it.
+    const setting = change.settings ? ` The theme setting goes back to the default${change.settings.kind === "browser_copy" ? "" : outcome_note(change.settings)}.` : "";
+    return `Removed the theme ${name}${removal_note(change.file, theme_file_path(name))}.${setting}`;
   }
 
   async function change(request: ChangeImportedThemes): Promise<ChangeImportedThemesAnswer> {

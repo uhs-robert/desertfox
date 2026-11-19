@@ -31,7 +31,7 @@ import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, 
 import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_snippets } from "./snippets.ts";
-import { browser_native_deps, create_native_client, NativeHostError } from "./native_client.ts";
+import { browser_native_deps, create_native_client, host_file_of, NativeHostError } from "./native_client.ts";
 import type { ConfigFilesReply } from "./native_client.ts";
 import { create_host_update } from "./host_update.ts";
 import { browser_host_update_deps } from "./host_update_browser.ts";
@@ -49,7 +49,7 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
+import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
@@ -570,11 +570,13 @@ export async function set_theme_file(name: string, text: string | null, replace:
     if (naming_file !== undefined) throw new RuntimeRefusal(`${naming_file} sets theme = "${name}". Change it there before you remove the theme.`);
     const { [path]: _removed, ...others } = files;
     const edits_after = { saved: without_theme_named(edits.saved, name), temp: without_theme_named(edits.temp, name) };
-    return settings_file_naming(files, "theme", name) ? { files: without_setting_in_files(others, "theme"), edits_after, paths: [path, SETTINGS_FILE] } : { files: others, edits_after, paths: [path] };
+    // settings.toml goes first, so the folder never names a theme file it no longer has.
+    return settings_file_naming(files, "theme", name) ? { files: without_setting_in_files(others, "theme"), edits_after, paths: [SETTINGS_FILE, path] } : { files: others, edits_after, paths: [path] };
   });
   if ("done" in changed) return { kind: changed.done };
-  const [file, settings] = changed.outcomes;
-  return { kind: "changed", replaced, file: file!, ...(settings && { settings }) };
+  const file = changed.outcomes.at(-1)!;
+  const settings = changed.outcomes.length > 1 ? changed.outcomes[0] : undefined;
+  return { kind: "changed", replaced, file, ...(settings && { settings }) };
 }
 
 const without_theme_named = (layer: SettingOverrides, theme: string): SettingOverrides => (layer.theme === theme ? Object.fromEntries(Object.entries(layer).filter(([setting]) => setting !== "theme")) : layer);
@@ -678,7 +680,17 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
   let pick_written = false;
   const replaced = (): FileWriteOutcome | undefined => (pick && writes.drops !== pick.drops ? { kind: "replaced", by: writes.drop_causes[pick.drops]!, written: pick_written } : undefined);
   const holds_pick = (write: HostWrite) => pick !== undefined && write.covers >= pick.seq && write.drops === pick.drops;
+  // The outcome of the one write this loop makes of a path that must land first. A path still behind it after that waits for a later loop, so two files never chase each other.
+  let first_outcome: FileWriteOutcome | undefined;
+  let wrote_first = false;
   for (;;) {
+    const first = await in_queue(() => path_to_write_first(path));
+    if (first !== undefined) {
+      if (wrote_first) return replaced() ?? (first_outcome?.kind === "waiting" ? first_outcome : { kind: "waiting" });
+      wrote_first = true;
+      first_outcome = await write_waiting_file(in_queue, first);
+      continue;
+    }
     const started = await in_queue(async () => replaced() ?? (await start_host_write(path)));
     if (started === undefined) return outcome ?? (pick && writes.end);
     if ("kind" in started) return started;
@@ -694,6 +706,22 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
     outcome = settled;
     if (outcome.kind !== "written" || (pick && started.covers >= pick.seq)) return outcome;
   }
+}
+
+// A settings.toml `theme` and the theme file it names reach the folder in the order that keeps the folder building: the file before a settings.toml that names it, and a settings.toml that names it no more before the file's delete.
+// The path of the record whose write goes before the one at `path`, or undefined. In the change queue.
+async function path_to_write_first(path: string): Promise<string | undefined> {
+  const unsynced = await read_unsynced();
+  if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
+  const { files } = await load_files_source();
+  if (path === SETTINGS_FILE) {
+    const named = theme_named_in(files[SETTINGS_FILE] ?? null);
+    const named_path = named === undefined ? undefined : theme_file_path(named);
+    return named_path !== undefined && Object.hasOwn(unsynced, named_path) && files[named_path] !== undefined ? named_path : undefined;
+  }
+  const deleted_theme = files[path] === undefined ? theme_name_of_file(path) : undefined;
+  if (deleted_theme === undefined || !Object.hasOwn(unsynced, SETTINGS_FILE)) return undefined;
+  return theme_named_in(unsynced[SETTINGS_FILE] ?? null) === deleted_theme ? SETTINGS_FILE : undefined;
 }
 
 // In the change queue. Sends the browser copy of the file at `path` when the folder lags it, or hands back the write already out.
@@ -715,6 +743,11 @@ async function start_host_write(path: string): Promise<HostWrite | FileWriteOutc
   writes.out = { path, base, text, covers: writes.picks_made, drops: writes.drops, reply };
   return writes.out;
 }
+
+const theme_name_of_file = (path: string): string | undefined => {
+  const file = host_file_of(path);
+  return file?.kind === "theme" ? file.name : undefined;
+};
 
 const changed_on_disk = (reply: HostWriteReply) => !reply.ok && reply.error instanceof NativeHostError && reply.error.failure === "file_changed";
 
@@ -757,8 +790,20 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
       writes.replays_in_a_row = 0;
       // Only the user can choose. The path goes once the folder is classified, and the other paths keep their writes.
       const asked = await ask_when_folder_differs(folder, { clear_when_settled: false });
-      await store_unsynced(without_unsynced_path(unsynced, path));
-      return (writes.end = { kind: asked === "asked" ? "conflict" : "conflict_kept" });
+      const end: FileWriteOutcome = { kind: asked === "asked" ? "conflict" : "conflict_kept" };
+      let kept = without_unsynced_path(unsynced, path);
+      // A theme delete waits behind this write. The folder's settings.toml still names that theme, so the delete goes to the question too, and the folder keeps building.
+      if (path === SETTINGS_FILE) {
+        const still_named = theme_named_in(folder.files[SETTINGS_FILE] ?? null);
+        const { files } = await load_files_source();
+        for (const other of Object.keys(kept ?? {})) {
+          if (files[other] !== undefined || still_named === undefined || theme_name_of_file(other) !== still_named) continue;
+          kept = without_unsynced_path(kept, other);
+          writes_of(other).end = end;
+        }
+      }
+      await store_unsynced(kept);
+      return (writes.end = end);
     }
     if (error.failure === "host_outdated") return { kind: "waiting", host_outdated: true };
     if (error.failure === "no_permission" || error.failure === "host_missing") return { kind: "waiting" };
