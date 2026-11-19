@@ -81,7 +81,8 @@ function lab_of(hex: string): [number, number, number] {
 }
 
 const BADGE_ROLES = ["mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"] as const;
-// Older pairs (such as normal and caret in a few Oasis themes) sit below the floor and are out of scope here.
+// Only pairs with item or media are checked. Older pairs sit below the floor already: normal vs caret in oasis_abyss, desert, dune and midnight, insert vs caret in oasis_sol, normal vs visual in oasis_canyon light.
+const ITEM_OR_MEDIA = new Set<string>(["mode_item", "mode_media"]);
 const MIN_BADGE_DISTANCE = 12;
 
 test("every built-in theme keeps the item and media badge colors a CIE76 distance of 12 from every other badge", () => {
@@ -90,10 +91,10 @@ test("every built-in theme keeps the item and media badge colors a CIE76 distanc
     for (const variant of ["dark", "light"] as const) {
       for (const [at, first] of BADGE_ROLES.entries()) {
         for (const second of BADGE_ROLES.slice(at + 1)) {
+          if (!ITEM_OR_MEDIA.has(first) && !ITEM_OR_MEDIA.has(second)) continue;
           const [l1, a1, b1] = lab_of(theme[variant][first]);
           const [l2, a2, b2] = lab_of(theme[variant][second]);
           const distance = Math.hypot(l1 - l2, a1 - a2, b1 - b2);
-          if (first !== "mode_item" && first !== "mode_media" && second !== "mode_item" && second !== "mode_media") continue;
           assert.ok(distance >= MIN_BADGE_DISTANCE, `${name} ${variant} ${first} vs ${second}: ${distance.toFixed(1)}`);
         }
       }
