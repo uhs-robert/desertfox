@@ -472,3 +472,11 @@ test("a start with no config folder never writes autoconfig.toml, which would cr
   assert.deepEqual(mirror_writes(sent), []);
   assert.equal(local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY], undefined);
 });
+
+test("a start whose saved layer is empty writes no autoconfig.toml, and sets the mark so later starts skip the check", async () => {
+  const { local, sent } = install_fake_browser({ files: settings_file('hint_letters = "ab"\n') });
+  await stored_run("no_old_mirror");
+  await (await fresh_startup("no_old_mirror_start")).reload_config_at_start();
+  await until(() => local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] === true, "the mark without a write");
+  assert.deepEqual(mirror_writes(sent), []);
+});
