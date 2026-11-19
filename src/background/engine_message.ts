@@ -1,6 +1,6 @@
 // The Search engines section's messages: the engines the page added, and one change of them (add, remove, the starter set).
 // A change goes through `change_engine_file` in `startup.ts`: the page's engines live in `search_engines.d/zz-desertfox.toml` (`engine_file.ts`) and their key letters in `keymap.d/zz-desertfox.toml` (`engine_keys_file.ts`), which the copy holds and the native host writes, as a `:set` writes settings.toml.
-// The engines and letters an older version added to the browser's engines layer stay there until a save moves one into the files.
+// The engines and letters an older version added to the browser's engines layer move into the files at the first start (`engine_layer_move.ts`). A piece that cannot move stays in the layer until a start or a save moves it.
 
 import type { MergedConfig } from "../shared/config.ts";
 import { field_problems } from "../shared/engine_fields.ts";
@@ -14,6 +14,7 @@ import type { EngineTables } from "./engine_file.ts";
 import { KEYS_FILE, keys_file_after_setting, owned_letters, with_owned_letters } from "./engine_keys_file.ts";
 import type { Letters } from "./engine_keys_file.ts";
 import { dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
+import { merged_by_path } from "./engine_layer_move.ts";
 import type { DroppedPiece, LayeredBuild } from "./engine_layer.ts";
 import { outcome_note } from "./settings_file.ts";
 import type { FileWriteOutcome } from "./settings_file.ts";
@@ -124,7 +125,9 @@ export function create_engine_messages(deps: EngineMessageDeps) {
       const later_keys_file = letter === undefined ? undefined : keys_file_after_setting(turn.files, letter, name);
       if (later_keys_file !== undefined) throw new ConfigRefusal(`${later_keys_file} sets the key letter ${letter} in [search_keys], and it wins over ${KEYS_FILE}. Change it there, or pick another letter.`);
       const owned = owned_engines(turn.files);
-      const { keyword: _old_keyword, ...kept } = turn.layer.engines?.[name] ?? owned[name] ?? {};
+      const layer_table = turn.layer.engines?.[name];
+      // A layer table over a page engine of the same name keeps the page's children it lacks, as the build merged them.
+      const { keyword: _old_keyword, ...kept } = layer_table ? merged_by_path(owned[name], layer_table) : (owned[name] ?? {});
       const table = { ...kept, url: request.url, ...(keyword !== undefined && { keyword }) };
       const { [name]: _moved, ...layer_engines } = turn.layer.engines ?? {};
       // This engine's own letter goes first, so a new one replaces it. Another engine's letter is replaced because a letter searches one engine.

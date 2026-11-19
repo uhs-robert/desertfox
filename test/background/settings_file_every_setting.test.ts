@@ -7,6 +7,7 @@ import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTING
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { replayed_on_folder } from "../../src/background/settings_file.ts";
+import { PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
 import { default_engine_names } from "../../src/shared/config.ts";
 import { parse } from "smol-toml";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
@@ -288,22 +289,17 @@ test("a :set while the copies-differ question waits is written, the question sta
   }
 });
 
-test("an engine added in the browser saves as the default in the browser, and an engine in the files goes to the file", async () => {
-  const host = { files: { "settings.toml": MINE, "search_engines.toml": 'files_one = { url = "https://f.test/?q={query}" }\n' } };
-  const { local, sent, startup } = await reloaded(host);
-  await startup.change_layers("engines", () => ({ engines: { browser_one: { url: "https://b.test/?q={query}" } } }));
-  sent.length = 0;
+test("a default engine of the Engines page's file goes to settings.toml, and an unknown name is refused", async () => {
+  const page_file = `${PAGE_FILE_MARKER}\n\n[page_one]\nurl = "https://p.test/?q={query}"\n`;
+  const host = { files: { "settings.toml": MINE, "search_engines.d/zz-desertfox.toml": page_file } };
+  const { local, startup } = await reloaded(host);
   const { handlers, toasts } = commands(startup);
-  await handlers.set(ctx, { name: "default_engine", value: "browser_one" });
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { default_engine: "browser_one" });
-  assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
-  assert.equal((await startup.get_config()).settings.default_engine, "browser_one");
-
-  await handlers.set(ctx, { name: "default_engine", value: "files_one" });
+  await handlers.set(ctx, { name: "default_engine", value: "page_one" });
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
-  assert.match(host.files["settings.toml"]!, /^default_engine = "files_one"$/m);
-  assert.deepEqual(toasts, ['success default_engine = "browser_one", saved in the browser because the search engine is not in your files', 'success default_engine = "files_one", saved to settings.toml']);
+  assert.match(host.files["settings.toml"]!, /^default_engine = "page_one"$/m);
+  assert.equal((await startup.get_config()).settings.default_engine, "page_one");
+  await assert.rejects(handlers.set(ctx, { name: "default_engine", value: "nowhere" }), /no search engine named "nowhere"/);
+  assert.deepEqual(toasts, ['success default_engine = "page_one", saved to settings.toml']);
 });
 
 test("a default engine that needs the current page is refused by name before any build, and the dropdown leaves it out", async () => {

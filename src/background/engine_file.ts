@@ -45,7 +45,7 @@ export const holds_engine = (tables: Record<string, unknown>, name: string): boo
 export const hand_file_at_page_path = () => new ConfigRefusal(`${ENGINE_FILE} was not written by the Engines page, so the page does not change it. Rename it, or move its engines to another search_engines.d file.`);
 
 // The files with the page's file holding `engines`, or without it when none is left.
-// A table the TOML writer refuses (an array holding `null`, from an old browser layer) refuses the change.
+// A table the TOML writer refuses (an array holding `null`, from the engines layer an older version kept) refuses the change.
 export function with_owned_engines(files: ConfigFiles, engines: EngineTables): ConfigFiles {
   if (page_path_is_hand_file(files)) throw hand_file_at_page_path();
   const { [ENGINE_FILE]: _old, ...others } = files;
@@ -68,6 +68,14 @@ export function hand_file_defining(files: ConfigFiles, name: string): string | u
     .filter((path) => is_engine_file(path) && (path !== ENGINE_FILE || page_path_is_hand_file(files)))
     .sort()
     .find((path) => nodes_of_file(path, parse_toml_text(path, files[path]!, []) ?? {}, []).some((node) => node.path === name));
+}
+
+// The first search_engines.d file that loads after the page's and has a table at the dotted engine path `path` (`github.repo`), or undefined. Its table wins over the page's.
+export function later_file_defining(files: ConfigFiles, path: string): string | undefined {
+  return Object.keys(files)
+    .filter((file) => file.startsWith("search_engines.d/") && is_engine_file(file) && file > ENGINE_FILE)
+    .sort()
+    .find((file) => nodes_of_file(file, parse_toml_text(file, files[file]!, []) ?? {}, []).some((node) => node.path === path));
 }
 
 // Whether `name` still names an engine once the page's file lacks it: a hand file or a built-in engine has it.
