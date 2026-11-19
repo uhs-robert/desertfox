@@ -179,8 +179,8 @@ test("a site_rules list saved in the browser goes away on the next click, and on
   const host = { files: { "settings.toml": MINE } };
   const { local, startup } = await reloaded(host);
   const mine = { site: "*://*.mine.test/*", off: true };
-  // The list the popup used to save: a copy of the file's rows, here one since edited in the file, and its own row.
-  await startup.change_edits(() => ({ saved: { site_rules: [{ site: FORUM, pass: "j" }, mine], newtab_date: false }, temp: {} }));
+  // The list the popup used to save: an unedited copy of the file's row and its own row.
+  await startup.change_edits(() => ({ saved: { site_rules: [{ site: FORUM, pass: "j k" }, mine], newtab_date: false }, temp: {} }));
   assert.deepEqual(await startup.change_site_rule_in_file(NEWS_PAGE, "disable"), { kind: "written" });
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_date: false });
   assert.deepEqual(await site_rules_in_force(startup), [{ site: FORUM, pass: "j k" }, mine, { site: NEWS, off: true }]);
