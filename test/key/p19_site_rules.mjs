@@ -1,6 +1,6 @@
 // Site rules: a pass rule frees a key, an only rule frees all but the listed keys, an all-off rule starts the page in ignore mode,
 // each column resolves on its own, and a rule edit reaches an open page at once. The rows sit in config/settings.toml, one pattern per page id.
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SHIFT_ESCAPE } from "./harness.mjs";
 
@@ -128,6 +128,38 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       await send_from_popup({ type: "change_setting", name: "newtab_date", action: "reset" });
       // The popup's rows go into the shard's settings.toml, and Enable takes them out again, so later pieces on this shard get the file as it was.
       await site_request("rule_live", "enable");
+      await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
+    }
+  });
+
+  await run_case("the popup disables a page while a settings.d file sets site_rules, writes only settings.toml, and Enable is refused by name when that file turns the page off", async () => {
+    const settings_toml = () => readFileSync(join(config_dir, "settings.toml"), "utf8");
+    const d_path = join(config_dir, "settings.d", "50-popup-test.toml");
+    const file_before = settings_toml();
+    const reload = async () => expect((await send_from_popup({ type: "toolbar_reload_config" })).ok, "the reload failed");
+    await open_page("page", "rule_d", { new_tab: true });
+    try {
+      await poll_until("NORMAL before the edit", async () => badge_of("rule_d") === "NORMAL");
+      const pattern = "*://*.127.0.0.1/*";
+      // A settings.d row for another page: it used to hide settings.toml's rows and refuse the popup.
+      mkdirSync(join(config_dir, "settings.d"), { recursive: true });
+      writeFileSync(d_path, '[[site_rules]]\nsite = "*://127.0.0.1/page?id=rule_d_other*"\npass = "q"\n');
+      await reload();
+      const disabled = await site_request("rule_d", "disable");
+      expect(disabled.ok, `disable answered ${JSON.stringify(disabled)}`);
+      expect(settings_toml() === `${file_before}\n[[site_rules]]\nsite = "${pattern}"\noff = true\n`, `settings.toml after disable ends with: ${settings_toml().slice(-120)}`);
+      expect(readFileSync(d_path, "utf8").includes("rule_d_other"), "the settings.d file changed");
+      await poll_until("IGNORE once the popup row decides the page", async () => badge_of("rule_d") === "IGNORE");
+      // A settings.d row that also turns the page off still decides after Enable, so Enable is refused and names the file.
+      writeFileSync(d_path, `[[site_rules]]\nsite = "${pattern}"\noff = true\n`);
+      await reload();
+      const refused = await site_request("rule_d", "enable");
+      expect(refused.ok === false && refused.message.includes("50-popup-test.toml"), `enable answered ${JSON.stringify(refused)}`);
+      expect(settings_toml().includes('off = true'), "the refused Enable changed settings.toml");
+    } finally {
+      rmSync(d_path, { force: true });
+      await reload();
+      await site_request("rule_d", "enable");
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });

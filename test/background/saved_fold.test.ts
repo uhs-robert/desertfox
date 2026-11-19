@@ -124,6 +124,28 @@ test("a saved site_rules list adds only the popup's off rows and kept-keys rows 
   assert.deepEqual(nothing_new.moved, ["site_rules"]);
 });
 
+test("a saved site_rules list folds into settings.toml under a settings.d site_rules file, skipping rows any file has", () => {
+  const d_file = '[[site_rules]]\nsite = "*://b.test/*"\noff = true\n\n[[site_rules]]\nsite = "*://e.test/*"\npass = "x"\n';
+  const files = { "settings.toml": '[[site_rules]]\nsite = "*://a.test/*"\noff = true\n', "settings.d/60-knack.toml": d_file };
+  const saved = { site_rules: [{ site: "*://a.test/*", off: true }, { site: "*://b.test/*", off: true }, { site: "*://c.test/*", off: true }, { site: "*://e.test/*", pass: "x" }] };
+  const fold = saved_layer_folded(saved, files, problems_of, nothing_stays);
+  assert.deepEqual(fold.held, []);
+  assert.deepEqual(fold.saved, {});
+  assert.deepEqual(fold.moved, ["site_rules"]);
+  assert.deepEqual(settings_of(fold.files).site_rules, [{ site: "*://a.test/*", off: true }, { site: "*://c.test/*", off: true }]);
+  assert.equal(fold.files["settings.d/60-knack.toml"], d_file);
+  assert.deepEqual(fold_kept_notes(fold), []);
+});
+
+test("running the fold again over its own result, as after a stop before the layer shrank, adds no row", () => {
+  const files = { "settings.toml": "", "settings.d/60-knack.toml": '[[site_rules]]\nsite = "*://b.test/*"\noff = true\n' };
+  const saved = { site_rules: [{ site: "*://b.test/*", off: true }, { site: "*://c.test/*", off: true }, { site: "*://d.test/*", pass: "j" }] };
+  const once = saved_layer_folded(saved, files, problems_of, nothing_stays);
+  const twice = saved_layer_folded(saved, once.files, problems_of, nothing_stays);
+  assert.deepEqual(settings_of(once.files).site_rules, [{ site: "*://c.test/*", off: true }, { site: "*://d.test/*", pass: "j" }]);
+  assert.deepEqual(twice.files, once.files);
+});
+
 function watch_toasts(fake: ReturnType<typeof install_fake_browser>["fake"]): string[] {
   const toasts: string[] = [];
   fake.tabs.query = async () => [{ id: 7 }];
@@ -336,4 +358,21 @@ test("a saved value the build refuses stays, warns and moves at the start after 
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.equal(settings_of(host.files).theme, "dusk");
   assert.ok(!warnings_of(local).some((warning) => warning.includes("saved in the browser stays there")));
+});
+
+test("a saved site_rules list under a settings.d site_rules file folds once: a second start leaves settings.toml as the first made it", async () => {
+  const knack = '[[site_rules]]\nsite = "*://b.test/*"\noff = true\n';
+  const { host, local, toasts } = await old_profile({ site_rules: [{ site: "*://b.test/*", off: true }, { site: "*://c.test/*", off: true }] }, { "settings.toml": "", "settings.d/60-knack.toml": knack });
+  const startup = await first_start();
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
+  assert.deepEqual(settings_of(host.files).site_rules, [{ site: "*://c.test/*", off: true }]);
+  assert.deepEqual(toasts, ["1 setting saved in the browser moved into settings.toml: site_rules."]);
+  assert.deepEqual(JSON.parse(JSON.stringify((await startup.get_config()).settings.site_rules)), [{ site: "*://c.test/*", off: true }, { site: "*://b.test/*", off: true }]);
+  assert.ok(!warnings_of(local).some((warning) => warning.includes("stay there") || warning.includes("stays there")));
+  const after_first = host.files["settings.toml"];
+
+  toasts.length = 0;
+  await first_start();
+  assert.equal(host.files["settings.toml"], after_first);
+  assert.deepEqual(toasts, []);
 });

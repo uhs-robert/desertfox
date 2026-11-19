@@ -61,7 +61,7 @@ export function parse_toml_text(label: string, text: string, problems: string[])
   }
 }
 
-function parse_data_layers(files: ConfigFiles, dir_label: string, kind: DataKind, problems: string[]): DataLayer[] {
+export function parse_data_layers(files: ConfigFiles, dir_label: string, kind: DataKind, problems: string[]): DataLayer[] {
   const paths: string[] = [];
   const main_path = `${kind}.toml`;
   if (is_file_entry(files, "", main_path)) paths.push(main_path);
