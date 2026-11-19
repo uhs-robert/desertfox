@@ -26,6 +26,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // Google shaped result blocks above the controls page's tall filler, so the page scrolls well past the last result. `style` hides every block when given.
   const open_results = async (id, style = "") => {
     await open_page("controls", `ends_${id}`, { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const search = document.createElement("div");
       search.id = "search";
@@ -54,12 +55,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("gg");
     await expect_focus("r0");
     await poll_until("gg to bring the first result into view", async () => (await in_active_tab("scrollY")) < 3000);
+    // The jump keys belong to normal mode.
+    await press_keys("-k", "Escape");
     await press_keys("-M", "ctrl", "o", "-m", "ctrl");
     await poll_until("<C-o> to go back to where gg left", async () => (await in_active_tab("scrollY")) === 3000);
   });
 
   await run_case("on a matched page with no result, G and gg scroll to the bottom and the top", async () => {
     await open_page("controls", "ends_empty", { new_tab: true });
+    await press_keys("I");
     await press_keys("G");
     await poll_until("G scrolled to the bottom", async () => (await in_active_tab("scrollY")) > 1000);
     await press_keys("gg");
