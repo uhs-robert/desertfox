@@ -193,8 +193,9 @@ export async function run_cases({ config_copy, load_config_dir, config_dir, take
     // The theme pick writes settings.toml, so the case runs on a copy of the config: later pieces start from config_dir as it was.
     // The copy loads with ,r, which needs this page active, so it loads here and config_dir comes back after the popup closes.
     const picked_dir = config_copy();
-    await load_config_dir(picked_dir);
     try {
+      // Inside the try: a load that switches the folder and then fails still gets config_dir back.
+      await load_config_dir(picked_dir);
       await close_popup();
       await in_background(`browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: true })`);
       await poll_until("the popup page to draw", () => in_background(`${POPUP_VIEW}?.document.querySelector(".desertfox-popup-card") !== null`).catch(() => false));
@@ -254,16 +255,18 @@ export async function run_cases({ config_copy, load_config_dir, config_dir, take
       // A saved theme from before is dropped by the pick, so it no longer hides the file.
       await ask({ type: "change_setting", name: "theme", action: "set", value: "nord" });
       await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "catppuccin"; select.dispatchEvent(new Event("change")); return true; })()`);
-      await poll_until("the pick to reach settings.toml", () => settings_text().includes('theme = "catppuccin"'), { timeout_ms: 8000 });
+      const notice = () => popup_eval(`document.querySelector(".desertfox-popup-notice")?.textContent`);
+      // The notice comes with the answer, after the file write and the edits clear, so the checks below see the finished pick.
+      await poll_until("the pick to finish and say where it went", async () => (await notice()) === 'theme = "catppuccin", saved to settings.toml', { timeout_ms: 8000 });
       const written = settings_text();
       expect(written.replace('theme = "catppuccin"\n', "") === file_before, "the write changed more of settings.toml than the theme line");
       expect((await edits()) === "[null,null]", `the pick left a browser edit of the theme: ${await edits()}`);
       await poll_until("the popup select to show the pick", async () => (await popup_eval(`document.querySelector(".desertfox-popup-theme-select")?.value`)) === "catppuccin");
-      await poll_until("the notice to say where the pick went", async () => (await popup_eval(`document.querySelector(".desertfox-popup-notice")?.textContent`)) === 'theme = "catppuccin", saved to settings.toml');
       await shoot("theme");
       // Back to the desktop entry, which the dropdown always offers. The last pick wins in the file.
       await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "desktop"; select.dispatchEvent(new Event("change")); return true; })()`);
-      await poll_until("desktop to reach settings.toml", () => settings_text().includes('theme = "desktop"') && !settings_text().includes("catppuccin"), { timeout_ms: 8000 });
+      await poll_until("the desktop pick to finish", async () => (await notice()) === 'theme = "desktop", saved to settings.toml', { timeout_ms: 8000 });
+      expect(settings_text().includes('theme = "desktop"') && !settings_text().includes("catppuccin"), `settings.toml after the desktop pick: ${settings_text()}`);
       // Stub the tab creation so the click proves the URL without opening the Sponsors page. The click closes the popup, so the record lives in the background.
       await popup_eval(`(globalThis.support_tabs = [], popup_browser.tabs.create = async (options) => { globalThis.support_tabs.push(options.url); }, true)`);
       const support = `[...document.querySelectorAll(".desertfox-popup-row")].find((button) => button.textContent === "Support DesertFox")`;
