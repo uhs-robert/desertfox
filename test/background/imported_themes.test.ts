@@ -406,6 +406,12 @@ test("a stored import from before mode_item and mode_media gets both from the de
   assert.equal(kept.old!.dark.mode_media, kept.old!.dark.error);
 });
 
+test("a stored table missing another role, such as search_bg, stays dropped", () => {
+  const good = mapped(SCHEME);
+  const { search_bg: _gone, ...no_search } = good.dark;
+  assert.deepEqual(stored_imports_of({ broken: { dark: no_search, light: good.light } }), {});
+});
+
 test("the picker lists the theme file names after the built-in ones, without repeating a built-in name", () => {
   const status = { settings: DEFAULT_SETTINGS, saved: [], temp: [], configured: [] };
   const allowed = build_setting_list(status, ["dusk_one", "oasis_cactus"]).find((row) => row.name === "theme")?.allowed ?? [];

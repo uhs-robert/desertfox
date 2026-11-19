@@ -92,19 +92,18 @@ export function create_theme_messages(deps: ThemeMessageDeps) {
 
 const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// A stored table from before a role was added lacks it, so the missing roles derive from the rest. A table with no valid required roles is left as it is for the check to refuse.
+// A stored table from before `mode_item` and `mode_media` lacks those two, so they derive from the rest. Any other missing role leaves the table for the check to refuse.
+const ROLES_ADDED_LATER = ["mode_item", "mode_media"] as const;
+const REQUIRED_ROLES = ["bg_core", "fg_core", "primary", "accent"];
+
 function with_derived_roles(theme: unknown): unknown {
   if (!is_record(theme)) return theme;
   const filled: Record<string, unknown> = { ...theme };
   for (const variant of ["dark", "light"] as const) {
     const table = theme[variant];
-    if (!is_record(table)) continue;
-    const given = Object.fromEntries(Object.entries(table).filter(([, value]) => parse_color(value) !== undefined));
-    try {
-      filled[variant] = { ...derive_roles(given as GivenColors, variant), ...table };
-    } catch {
-      continue;
-    }
+    if (!is_record(table) || !REQUIRED_ROLES.every((role) => parse_color(table[role]) !== undefined)) continue;
+    const derived = derive_roles(Object.fromEntries(Object.entries(table).filter(([, value]) => parse_color(value) !== undefined)) as GivenColors, variant);
+    filled[variant] = { ...table, ...Object.fromEntries(ROLES_ADDED_LATER.filter((role) => table[role] === undefined).map((role) => [role, derived[role]])) };
   }
   return filled;
 }
