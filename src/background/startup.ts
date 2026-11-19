@@ -73,11 +73,17 @@ async function mirror_key_edits(): Promise<void> {
 
 // Older versions mirrored the saved settings too, consent values included, and a profile that changes no saved setting or key edit after the update would keep them in the file.
 // So the first start whose host finds the folder writes the file once. The mark waits for a write the host confirmed, so a failed one is tried again at the next start.
+// An empty saved layer left no setting in the file, and the write would create the file for a user who never had one, so that start only sets the mark.
 // A missing folder writes nothing: the host would create the folder for this file alone.
 async function rewrite_old_mirror(folder_exists: boolean): Promise<void> {
   if (!folder_exists || (await browser.storage.local.get(AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY))[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] === true) return;
   // Queued in the change queue, so a key edit that commits after it writes after it too. The host write itself waits outside the queue.
-  const { written } = await in_change_queue(async () => ({ written: autoconfig.mirror((await load_layers()).keymap) }));
+  const { written } = await in_change_queue(async () => {
+    // The stored layer, not the checked one: a value the checks now drop still sat in the old file.
+    const stored_saved = (await browser.storage.local.get(SAVED_SETTINGS_STORAGE_KEY))[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown> | undefined;
+    if (stored_saved === undefined || Object.keys(stored_saved).length === 0) return { written: Promise.resolve(true) };
+    return { written: autoconfig.mirror((await load_layers()).keymap) };
+  });
   if (await written) await browser.storage.local.set({ [AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY]: true });
 }
 
