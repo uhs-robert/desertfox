@@ -99,7 +99,8 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await close_tabs_with("/home.html");
     const tab_id = await evaluate(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/practice"), active: true }).then((tab) => tab.id)`);
     await poll_until("the page to load", async () => await in_page(`return !!view && !!${by_id("practice-end")};`).catch(() => false), { timeout_ms: 10000 });
-    await in_page(`return view.browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "reset" });`);
+    // The lesson's :set wrote the theme into settings.toml, which every later piece reads, so the reset removes it there.
+    await in_page(`return view.browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "reset", layer: "file" });`);
     await evaluate(`browser.tabs.setZoom(${tab_id}, 1).then(() => browser.tabs.remove(${tab_id})).then(() => true)`);
     await close_tabs_with("/home.html");
   });

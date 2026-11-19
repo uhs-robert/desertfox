@@ -369,7 +369,7 @@ export type DevtoolsPick = {
 };
 
 // From an extension page (the settings page, the popup): sets or resets one setting. `value` is the typed value, checked by the setting's own check. `layer` defaults to `saved`. A reset drops the saved and the temp edit.
-// `file` writes the value into settings.toml (the browser copy, then the folder through the native host) and drops the saved and temp edits of it. Only the names in `FILE_WRITTEN_SETTINGS` take it.
+// `file` writes the value into settings.toml (the browser copy, then the folder through the native host), or for a reset removes the key there, and drops the saved and temp edits of it. Only the names in `FILE_WRITTEN_SETTINGS` take it.
 // The answer is a ChangeSettingAnswer. The background refuses any sender that is not an extension page.
 export type ChangeSetting = {
   type: "change_setting";

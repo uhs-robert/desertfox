@@ -55,7 +55,8 @@ test("a key inside a table and a dotted key are refused", () => {
 
 test("a value this editor does not rewrite is refused and the text is never half changed", () => {
   refused(() => set_top_level_key('theme = """\nx"""\n', "theme", "c"), /does not rewrite/);
-  refused(() => set_top_level_key("theme = [\n1]\n", "theme", "c"), /does not rewrite/);
+  refused(() => set_top_level_key("theme = {a = 1}\n", "theme", "c"), /does not rewrite/);
+  refused(() => set_top_level_key('theme = ["""a""", "b"]\n', "theme", "c"), /does not rewrite/);
 });
 
 test("a key line inside a multi-line string is never taken for the key", () => {
@@ -83,4 +84,34 @@ test("a remove drops the one line and keeps the rest byte for byte", () => {
   assert.equal(remove_top_level_key(text, "theme"), "# top\r\n\r\nb = 1\r\n");
   assert.equal(remove_top_level_key("b = 1\n# theme = \"x\"\n", "theme"), "b = 1\n# theme = \"x\"\n");
   assert.equal(remove_top_level_key('b = 1\ntheme = "x"', "theme"), "b = 1\n");
+});
+
+test("a list goes in as a one-line array of strings, escaped as a basic string is", () => {
+  assert.equal(set_top_level_key("a = 1\n", "next_patterns", ["next", 'say "hi"', "»"]), 'a = 1\nnext_patterns = ["next", "say \\"hi\\"", "»"]\n');
+  assert.equal(set_top_level_key("a = 1\n", "hint_add", []), "a = 1\nhint_add = []\n");
+});
+
+test("a one-line array is replaced in place and keeps its trailing comment", () => {
+  const text = '# Lists\nnext_patterns = ["next", "more"] # mine\nb = 2\n';
+  assert.equal(set_top_level_key(text, "next_patterns", ["on"]), '# Lists\nnext_patterns = ["on"] # mine\nb = 2\n');
+  assert.equal(set_top_level_key('hint_add = ["a]b", \'c]\']\n', "hint_add", ["x"]), 'hint_add = ["x"]\n');
+});
+
+test("an array over several lines becomes one line, and one with a comment inside is refused", () => {
+  const text = 'a = 1\nnext_patterns = [\n  "next",\n  "more",\n]\nb = 2\n';
+  assert.equal(set_top_level_key(text, "next_patterns", ["on"]), 'a = 1\nnext_patterns = ["on"]\nb = 2\n');
+  refused(() => set_top_level_key('next_patterns = [\n  "next", # the usual\n  "more",\n]\n', "next_patterns", ["on"]), /does not rewrite/);
+  refused(() => set_top_level_key('next_patterns = [\n  "next",\n', "next_patterns", ["on"]), /does not parse/);
+});
+
+test("a scalar can replace a list and a list a scalar, as a hand edit would", () => {
+  assert.equal(set_top_level_key('theme = ["a"]\n', "theme", "nord"), 'theme = "nord"\n');
+  assert.equal(set_top_level_key("hint_add = 3 # odd\n", "hint_add", ["a"]), 'hint_add = ["a"] # odd\n');
+});
+
+test("a remove drops a whole array, the lines and comments inside it too, and keeps the rest", () => {
+  const text = '# Mine\na = 1\nnext_patterns = [\n  "next", # usual\n  "more",\n] # end\n# Rules\n[[site_rules]]\nsite = "x"\n';
+  assert.equal(remove_top_level_key(text, "next_patterns"), '# Mine\na = 1\n# Rules\n[[site_rules]]\nsite = "x"\n');
+  assert.equal(remove_top_level_key('a = 1\nhint_add = ["x"] # c\n', "hint_add"), "a = 1\n");
+  refused(() => remove_top_level_key('a = 1\nhint_add = ["""x\n"""]\n', "hint_add"), /does not rewrite/);
 });
