@@ -20,6 +20,11 @@ export function settings_d_file_that_sets(files: ConfigFiles, name: keyof Settin
   return Object.keys(files).find((path) => path.startsWith("settings.d/") && path.endsWith(".toml") && Object.hasOwn(parse(files[path]!), name));
 }
 
+// The `settings.d` files that set `name` to `value`.
+export function settings_d_files_naming(files: ConfigFiles, name: keyof Settings, value: string): string[] {
+  return Object.keys(files).filter((path) => path.startsWith("settings.d/") && path.endsWith(".toml") && parse(files[path]!)[name] === value);
+}
+
 export const held_in_settings_d = (path: string, name: keyof Settings) => new RuntimeRefusal(`${path} sets ${name}, and it wins over ${SETTINGS_FILE}. Change it there.`);
 
 export function with_setting_in_files(files: ConfigFiles, name: keyof Settings, value: TomlValue): ConfigFiles {
@@ -50,6 +55,11 @@ export function rows_in_settings_file(files: ConfigFiles, name: keyof Settings):
 // Whether settings.toml itself sets `name`, as opposed to a default or a `settings.d` file.
 export function settings_file_sets(files: ConfigFiles, name: keyof Settings): boolean {
   return Object.hasOwn(parse(files[SETTINGS_FILE] ?? ""), name);
+}
+
+// Whether settings.toml itself sets `name` to `value`.
+export function settings_file_naming(files: ConfigFiles, name: keyof Settings, value: string): boolean {
+  return parse(files[SETTINGS_FILE] ?? "")[name] === value;
 }
 
 // The edits without `name`, so a saved or temp value no longer hides the file's.
@@ -139,31 +149,29 @@ export async function text_sha256(text: string): Promise<string> {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// What became of the file after a setting changed in the browser copy.
+// What became of a config file after a change of its browser copy.
 // `waiting`: no host, no permission or a host without the write verb (`host_outdated`), so the next start or `,r` writes it.
 // `conflict`: the file changed on disk, so the copies-differ question took over. `conflict_kept`: it changed on disk, and no question was stored (the user kept the browser copy over that folder before), so the change stays in the browser copy only.
 // `failed`: the host could not write, or the folder could not be read after a refusal, and the next start tries again.
 // `replaced`: a swap replaced the browser copy after the change and dropped the record. `written` says whether the folder got the change before that.
-// `saved_in_browser`: a theme or search engine known only in the browser, which the files cannot name, went to the saved edits instead.
+// `saved_in_browser`: a search engine known only in the browser, which the files cannot name, went to the saved edits instead.
 // `browser_copy`: the browser copy did not come from the config folder, so only the copy changed.
-export type FileWriteOutcome = { kind: "written" } | { kind: "waiting"; host_outdated?: true } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser"; missing: NamedKind } | { kind: "browser_copy" } | { kind: "replaced"; by: CopyReplacedBy; written: boolean };
+export type FileWriteOutcome = { kind: "written" } | { kind: "waiting"; host_outdated?: true } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" } | { kind: "browser_copy" } | { kind: "replaced"; by: CopyReplacedBy; written: boolean };
 
-// What a setting value can name that the files build checks.
-export type NamedKind = "theme" | "search engine";
-
-// The swaps that drop the record: a read of the config folder (`,r`, Use the folder), an import of config files and an editor save of settings.toml.
+// The swaps that drop the record: a read of the config folder (`,r`, Use the folder), an import of config files and an editor save of the file itself.
 export type CopyReplacedBy = "reload" | "import" | "edit";
-const REPLACED_BY: Record<CopyReplacedBy, string> = { reload: "A read of the config folder", import: "A config import", edit: `An editor save of ${SETTINGS_FILE}` };
+const replaced_by = (by: CopyReplacedBy, path: string): string => ({ reload: "A read of the config folder", import: "A config import", edit: `An editor save of ${path}` })[by];
 
-export function outcome_note(outcome: FileWriteOutcome): string {
+// The end of a reply, about the file at `path`.
+export function outcome_note(outcome: FileWriteOutcome, path = SETTINGS_FILE): string {
   switch (outcome.kind) {
-    case "written": return `, saved to ${SETTINGS_FILE}`;
-    case "waiting": return outcome.host_outdated ? `. ${SETTINGS_FILE} updates once the native host is updated` : `. ${SETTINGS_FILE} updates when the native host connects`;
-    case "conflict": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is. Open the Settings page to choose`;
-    case "failed": return `. ${SETTINGS_FILE} was not written (${outcome.reason}). It is tried again at the next start`;
-    case "conflict_kept": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is, and the change stays in the browser copy`;
-    case "saved_in_browser": return `, saved in the browser because the ${outcome.missing} is not in your files`;
-    case "browser_copy": return `, saved in the browser copy. It did not come from a config folder, so no ${SETTINGS_FILE} is written`;
-    case "replaced": return outcome.written ? `, saved to ${SETTINGS_FILE}. ${REPLACED_BY[outcome.by]} replaced the browser copy during the write` : `. ${REPLACED_BY[outcome.by]} replaced the browser copy before the write, so ${SETTINGS_FILE} was not written`;
+    case "written": return `, saved to ${path}`;
+    case "waiting": return outcome.host_outdated ? `. ${path} updates once the native host is updated` : `. ${path} updates when the native host connects`;
+    case "conflict": return `. ${path} changed on disk, so it stays as it is. Open the Settings page to choose`;
+    case "failed": return `. ${path} was not written (${outcome.reason}). It is tried again at the next start`;
+    case "conflict_kept": return `. ${path} changed on disk, so it stays as it is, and the change stays in the browser copy`;
+    case "saved_in_browser": return ", saved in the browser because the search engine is not in your files";
+    case "browser_copy": return `, saved in the browser copy. It did not come from a config folder, so no ${path} is written`;
+    case "replaced": return outcome.written ? `, saved to ${path}. ${replaced_by(outcome.by, path)} replaced the browser copy during the write` : `. ${replaced_by(outcome.by, path)} replaced the browser copy before the write, so ${path} was not written`;
   }
 }
