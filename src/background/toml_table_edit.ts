@@ -86,6 +86,22 @@ const row_lines = (key: string, row: Record<string, TomlValue>, eol: string): Li
   ...Object.entries(row).map(([field, value]) => ({ body: `${toml_key(field)} = ${toml_value(value)}`, eol })),
 ];
 
+const same_shape = (left: Record<string, TomlValue>, right: Record<string, TomlValue>): boolean => left.site !== undefined && left.site === right.site && Object.keys(left).join() === Object.keys(right).join();
+
+// The block's lines with each changed string value rewritten before its trailing comment, or undefined when a change is not a one-line string.
+function with_values_of(block: readonly Line[], old_row: Record<string, TomlValue>, next_row: Record<string, TomlValue>, eol: string): Line[] | undefined {
+  const bodies = block.map((line) => line.body);
+  for (const [field, value] of Object.entries(next_row)) {
+    if (same_value(old_row[field], value)) continue;
+    const name = toml_key(field).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const line_pattern = new RegExp(`^(\\s*${name}\\s*=\\s*)"(?:[^"\\\\]|\\\\.)*"(.*)$`);
+    const at = bodies.findIndex((body) => line_pattern.test(body));
+    if (typeof value !== "string" || at < 0) return undefined;
+    bodies[at] = bodies[at]!.replace(line_pattern, (_whole, head: string, tail: string) => `${head}${toml_value(value)}${tail}`);
+  }
+  return bodies.map((body) => ({ body, eol }));
+}
+
 const BLANK: (eol: string) => Line = (eol) => ({ body: "", eol });
 
 const layout_refusal = (label: string, key: string) =>
@@ -149,9 +165,23 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
   const lines_of = (j: number): Line[] => {
     // Each list holds its rows last first, so the earliest dropped copy of a row moves first.
     const source = dropped_rows.get(row_identity(next[j]))?.pop();
-    if (source === undefined) return row_lines(key, next[j]!, eol);
+    if (source === undefined) return edited_in_place(j) ?? row_lines(key, next[j]!, eol);
     const { start, end } = blocks[source]!;
     return lines.slice(start, end + 1).map((line) => ({ body: line.body, eol }));
+  };
+  // A dropped row of the same site and fields that differs only in string values gives its lines to the new row, so a comment on the line stays.
+  const edited_in_place = (j: number): Line[] | undefined => {
+    const row = next[j]!;
+    for (const same_rows of dropped_rows.values()) {
+      const at = same_rows.findIndex((i) => same_shape(old[i] as Record<string, TomlValue>, row));
+      if (at < 0) continue;
+      const source = same_rows[at]!;
+      const rewritten = with_values_of(lines.slice(blocks[source]!.start, blocks[source]!.end + 1), old[source] as Record<string, TomlValue>, row, eol);
+      if (rewritten === undefined) return undefined;
+      same_rows.splice(at, 1);
+      return rewritten;
+    }
+    return undefined;
   };
 
   // Each new row goes after the block of the kept row before it, above the first block when no kept row comes before it, or at the end when the text has no block.
@@ -165,7 +195,10 @@ function replaced_rows(text: string, key: string, next: readonly Record<string, 
       previous_kept = kept;
       continue;
     }
-    if (previous_kept === undefined && blocks.length > 0) above_first.push(...lines_of(j), BLANK(eol));
+    // A first block that is dropped and followed by a blank line or the end hands that blank line to the new row.
+    const first_after = blocks[0] === undefined ? undefined : lines[blocks[0].end + 1];
+    const takes_slot = !kept_old.has(0) && (first_after === undefined || first_after.body.trim() === "");
+    if (previous_kept === undefined && blocks.length > 0) above_first.push(...lines_of(j), ...(takes_slot && above_first.length === 0 ? [] : [BLANK(eol)]));
     else if (previous_kept === undefined) at_end.push(...(at_end.length > 0 ? [BLANK(eol)] : []), ...lines_of(j));
     else {
       const bucket = after_block.get(previous_kept) ?? [];

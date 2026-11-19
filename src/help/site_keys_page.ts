@@ -11,8 +11,8 @@ type StorageChangedEvents = { addListener: (listener: (changes: Record<string, u
 
 export const SITE_KEYS_CAPTURE_CLASS = "desertfox-site-keys-capture";
 
-// Draws the form into `container`. `prefill` is the site pattern the popup link carries. The returned function stops the listening and the capture.
-export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps, "on_change">, prefill: string | undefined, capture: KeyCapture, storage_changed: StorageChangedEvents): () => void {
+// Draws the form into `container`. `prefill` is the site pattern the popup link carries. `stop` ends the listening and the capture, and `set_site` points the form at another site.
+export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps, "on_change">, prefill: string | undefined, capture: KeyCapture, storage_changed: StorageChangedEvents): { stop: () => void; set_site: (site: string) => void } {
   let session: SiteKeysSession;
 
   const site = el("input", "desertfox-settings-input") as HTMLInputElement;
@@ -121,8 +121,11 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
     if (touches_settings(changes, area)) void session.refresh();
   };
   storage_changed.addListener(listener);
-  return () => {
-    storage_changed.removeListener(listener);
-    release_capture();
+  return {
+    stop: () => {
+      storage_changed.removeListener(listener);
+      release_capture();
+    },
+    set_site: (next) => session.set_site(next),
   };
 }
