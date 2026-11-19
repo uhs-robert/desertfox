@@ -3,9 +3,10 @@ import "../../src/background/command_modules.ts";
 import { test } from "node:test";
 import { load_effective_config } from "../../src/background/config_load.ts";
 import { create_settings_messages } from "../../src/background/settings_message.ts";
-import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
+import { files_digest } from "../../src/background/host_start.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
@@ -15,6 +16,8 @@ const fresh_startup = async () => (await import(`../../src/background/startup.ts
 const MINE = '# My settings\n\nhint_letters = "abc" # home row\n\n# Rules\n[[site_rules]]\nsite = "*://x.test/*"\noff = true\n';
 const with_theme = (theme: string) => MINE.replace('hint_letters = "abc" # home row\n', `hint_letters = "abc" # home row\ntheme = "${theme}"\n`);
 
+// `apply_files` drops the record by storing null in its one storage write.
+const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
 const stored_settings = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["settings.toml"];
 
 // A profile that read the folder once through the host, as after `,r`.
@@ -37,7 +40,7 @@ test("a pick writes the browser copy and the folder, keeps every comment, and dr
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_delay_ms: 5 });
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], {});
   assert.equal((await startup.get_config()).settings.theme, "oasis_night");
-  assert.equal(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
 });
 
 test("after a written pick a restart asks nothing, and a hand edit after it applies at the next start", async () => {
@@ -75,7 +78,7 @@ test("a hand edit since the last read is never overwritten: the folder stays, an
   assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
   assert.equal(stored_settings(local), with_theme("oasis_night"));
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
-  assert.equal(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
 });
 
 test("without the native host the browser copy changes, nothing throws, and the next start with the host writes the file", async () => {
@@ -94,7 +97,7 @@ test("without the native host the browser copy changes, nothing throws, and the 
   await restarted.reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
-  assert.equal(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
   assert.equal((await restarted.get_config()).settings.theme, "oasis_night");
 });
 
@@ -137,7 +140,7 @@ test("`,r` with a pick the old host cannot write lets the folder win, as `,r` al
   await startup.set_in_settings_file("theme", "oasis_night");
   await startup.reload_config();
   assert.equal(stored_settings(local), MINE);
-  assert.equal(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
 });
 
 test("two quick picks in a row: the last one wins in the browser copy and in the file", async () => {
@@ -154,7 +157,7 @@ test("two quick picks while the host is old: the later write starts from the fol
   const host = { files: { "settings.toml": MINE }, old_host: true };
   const { local, startup } = await reloaded(host);
   await Promise.all([startup.set_in_settings_file("theme", "nord"), startup.set_in_settings_file("theme", "oasis_night")]);
-  assert.deepEqual(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], { base: MINE });
+  assert.deepEqual(unsynced_of(local), { base: MINE });
   host.old_host = false;
   await (await fresh_startup()).reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
@@ -200,7 +203,7 @@ test("a theme name the files build does not know is refused before anything is s
   sent.length = 0;
   await assert.rejects(startup.set_in_settings_file("theme", "only_in_the_browser"), /no theme named "only_in_the_browser"/);
   assert.equal(stored_settings(local), MINE);
-  assert.equal(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
   assert.deepEqual(sent, []);
 });
 
@@ -219,7 +222,7 @@ test("an imported theme, which the files cannot name, goes to the saved edits an
   assert.equal(stored_settings(local), MINE);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { theme: "my_import" });
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], {});
-  assert.equal(local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
   assert.ok(!sent.some((message) => message.cmd === "write_settings"));
   assert.equal((await startup.get_config()).settings.theme, "my_import");
 
@@ -247,4 +250,97 @@ test("the settings message says an imported theme is saved in the browser", asyn
   assert.ok(answer.ok, answer.message);
   assert.equal(answer.message, 'theme = "my_import", saved in the browser because the theme is not in your files');
   assert.equal(answer.setting.top_layer, "saved");
+});
+
+test("the record of a lagging folder goes into the same storage write as the browser copy", async () => {
+  const host = { files: { "settings.toml": MINE }, old_host: true };
+  const { fake, startup } = await reloaded(host);
+  const writes: string[][] = [];
+  const set = fake.storage.local.set;
+  fake.storage.local.set = async (values: Record<string, unknown>) => {
+    writes.push(Object.keys(values));
+    return set(values);
+  };
+  await startup.set_in_settings_file("theme", "oasis_night");
+  const files_write = writes.find((keys) => keys.includes(FILES_SOURCE_STORAGE_KEY));
+  assert.ok(files_write?.includes(SETTINGS_FILE_UNSYNCED_STORAGE_KEY) && files_write.includes(SAVED_SETTINGS_STORAGE_KEY), `the files went alone: ${JSON.stringify(writes)}`);
+});
+
+test("a failed edits write puts back the browser copy, the saved edits and the record", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, fake, startup } = await reloaded(host);
+  await startup.change_edits(() => ({ saved: { theme: "nord" }, temp: {} }));
+  const set = fake.storage.session.set;
+  let failures = 1;
+  fake.storage.session.set = async (values: Record<string, unknown>) => {
+    if (failures-- > 0) throw new Error("session storage down");
+    return set(values);
+  };
+  await assert.rejects(startup.set_in_settings_file("theme", "oasis_night"), /session storage down/);
+  assert.equal(stored_settings(local), MINE);
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { theme: "nord" });
+  assert.equal(unsynced_of(local), undefined);
+  assert.equal(host.files["settings.toml"], MINE);
+});
+
+test("a refused write whose folder cannot be read again keeps the record and says it tries again", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, fake, startup } = await reloaded(host);
+  host.files = { "settings.toml": MINE.replace('"abc"', '"hand"') };
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
+    if (message.cmd === "read_config") throw new Error("Native application exited");
+    return send(name, message);
+  };
+  const outcome = await startup.set_in_settings_file("theme", "oasis_night");
+  assert.equal(outcome.kind, "failed");
+  assert.deepEqual(unsynced_of(local), { base: MINE });
+  assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
+});
+
+test("an editor save of another file keeps the record, and a save of settings.toml drops it", async () => {
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" }, old_host: true };
+  const { local, startup } = await reloaded(host);
+  await startup.set_in_settings_file("theme", "oasis_night");
+  await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
+  assert.deepEqual(unsynced_of(local), { base: MINE });
+  await startup.save_config_file("settings.toml", 'theme = "nord"\n', with_theme("oasis_night"));
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a written pick keeps the copies-differ question while the folder still differs in another file", async () => {
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } };
+  const { local, startup } = await reloaded(host);
+  await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
+  host.files = { ...host.files, "keymap.toml": '[normal]\n"zx" = "tab.next"\n' };
+  const restarted = await fresh_startup();
+  await restarted.reload_config_at_start();
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+
+  assert.deepEqual(await restarted.set_in_settings_file("theme", "oasis_night"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
+  const pending = local[HOST_START_PENDING_STORAGE_KEY] as { changes: { path: string }[] } | undefined;
+  assert.deepEqual(pending?.changes.map((change) => change.path), ["keymap.toml"]);
+});
+
+test("a browser copy that did not come from the folder changes alone, and nothing is sent", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, sent, startup } = await reloaded(host);
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  sent.length = 0;
+  assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
+  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.equal(unsynced_of(local), undefined);
+  assert.equal(host.files["settings.toml"], MINE);
+});
+
+test("a refused write over a folder the user kept the copy over says the pick stays in the browser copy", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, startup } = await reloaded(host);
+  await startup.save_config_file("settings.toml", MINE.replace('"abc"', '"typed"'), MINE);
+  host.files = { "settings.toml": MINE.replace('"abc"', '"hand"') };
+  local[HOST_START_KEPT_STORAGE_KEY] = await files_digest(host.files);
+  assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "conflict_kept" });
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
 });
