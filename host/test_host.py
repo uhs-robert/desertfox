@@ -518,6 +518,47 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertIn(aside, reply["error"])
         self.assertEqual(self.read_settings(os.path.join(self.config, aside)), b"a = 9\n")
 
+    def edit_replace_then(self, path, after):
+        """os.replace whose first call writes an edit into the old file, renames, then runs `after`."""
+        real_replace = os.replace
+        calls = []
+
+        def replace(source, destination):
+            calls.append(destination)
+            if len(calls) > 1:
+                return real_replace(source, destination)
+            with open(path, "r+b") as file:
+                file.write(b"a = 9\n")
+            real_replace(source, destination)
+            after()
+
+        return mock.patch.object(host.os, "replace", side_effect=replace)
+
+    def test_an_edit_whose_file_is_removed_after_the_rename_is_put_back(self):
+        path = self.put("settings.toml", "a = 1\n")
+        with self.edit_replace_then(path, lambda: os.unlink(path)):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read_settings(), b"a = 9\n")
+        self.assertEqual(self.entries(), ["settings.toml"])
+
+    def test_an_edit_whose_file_cannot_be_checked_stays_aside_and_named(self):
+        path = self.put("settings.toml", "a = 1\n")
+        real_stat = os.stat
+        failing = []
+
+        def stat(target, *args, **kwargs):
+            if failing and target == path:
+                raise OSError(5, "Input/output error")
+            return real_stat(target, *args, **kwargs)
+
+        with mock.patch.object(host.os, "stat", side_effect=stat), self.edit_replace_then(path, lambda: failing.append(True)):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertFalse(reply["ok"])
+        [aside] = [name for name in self.entries() if name.endswith(".old")]
+        self.assertIn(aside, reply["error"])
+        self.assertEqual(self.read_settings(os.path.join(self.config, aside)), b"a = 9\n")
+
     def test_a_folder_that_takes_no_lock_is_refused_with_a_reply(self):
         self.put("settings.toml", "a = 1\n")
         with mock.patch.object(host.fcntl, "flock", side_effect=OSError(37, "No locks available")):
