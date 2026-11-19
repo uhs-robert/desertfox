@@ -9,7 +9,7 @@ import type { MergedConfig, SettingEdits, SettingOverrides, Settings } from "../
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { FILE_WRITTEN_SETTINGS, parse_setting_text, SETTING_NAMES, SETTING_SPECS } from "../shared/settings_schema.ts";
+import { FILE_WRITTEN_SETTINGS, is_consent_setting, parse_setting_text, SETTING_NAMES, SETTING_SPECS } from "../shared/settings_schema.ts";
 import type { ToastKind } from "../shared/messages.ts";
 import type { TomlValue } from "../background/toml_key_edit.ts";
 
@@ -18,7 +18,7 @@ type Toast = { kind: ToastKind; message: string };
 // What a `:set`, `:toggle` or `:unset` comes to: the edits to keep (absent for no change) and the toast that answers it.
 export type SettingsPlan = { next?: SettingEdits; toast: Toast };
 
-// `saved` lasts. `temp` ends when the browser restarts.
+// `saved` lasts and takes only the consent settings. `temp` ends when the browser restarts.
 export type EditLayer = "saved" | "temp";
 
 const show = (name: string, value: unknown): string => (value === undefined ? `${name} is not set` : `${name} = ${JSON.stringify(value)}`);
@@ -31,8 +31,10 @@ function without(layer: SettingOverrides, name: keyof Settings): SettingOverride
 }
 
 // A saved edit drops the temp edit of the same name. Otherwise the temp edit keeps winning and the save shows no effect.
+// Every other setting lasts in settings.toml, so the saved layer refuses it. A value an older version saved there stays until an unset or the start fold takes it out.
 function edit_with(current: SettingEdits, layer: EditLayer, name: keyof Settings, value: unknown): SettingEdits {
   if (layer === "temp") return { saved: current.saved, temp: { ...current.temp, [name]: value } };
+  if (!is_consent_setting(name)) throw new Error(`${name} is not kept in the browser. Only the consent settings are.`);
   return { saved: { ...current.saved, [name]: value }, temp: without(current.temp, name) };
 }
 

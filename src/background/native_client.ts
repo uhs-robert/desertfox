@@ -161,7 +161,7 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
       if (!Array.isArray(fonts) || fonts.some((name) => typeof name !== "string")) throw new NativeHostError("bad_reply", "The DesertFox native host sent no font list. Update it with :native.update.");
       return fonts as string[];
     },
-    // Mirrors the saved edits (TOML text) into autoconfig.toml.
+    // Mirrors the key edits (TOML text) into autoconfig.toml.
     write_autoconfig: async (toml: string): Promise<void> => {
       await call({ cmd: "write_autoconfig", toml });
     },

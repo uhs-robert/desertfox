@@ -121,7 +121,7 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       const mark = events.length;
       await press_keys(...SHIFT_ESCAPE);
       await wait_event(mark, (event) => event.type === "indicator" && event.page_id === "rule_live" && event.label === "NORMAL", "NORMAL after <S-Escape>");
-      await send_from_popup({ type: "change_setting", name: "newtab_date", action: "set", value: false });
+      await send_from_popup({ type: "change_setting", name: "newtab_date", action: "set", value: false, layer: "temp" });
       await sleep(300);
       expect(badge_of("rule_live") === "NORMAL", "an unrelated change put the page back in ignore mode");
     } finally {

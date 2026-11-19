@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { make_settings_handlers, plan_set, plan_toggle, plan_unset } from "../../src/commands/settings.ts";
+import { make_settings_handlers, plan_set, plan_set_value, plan_toggle, plan_unset } from "../../src/commands/settings.ts";
+import { FILE_WRITTEN_SETTINGS, is_consent_setting, SETTING_NAMES, SETTING_SPECS } from "../../src/shared/settings_schema.ts";
 import type { SettingsDeps } from "../../src/commands/settings.ts";
 import type { FileWriteOutcome } from "../../src/background/settings_file.ts";
 import type { UnsetResult } from "../../src/background/startup.ts";
@@ -15,14 +16,18 @@ import { registry } from "../../src/shared/registry/builtin.ts";
 
 const config = (settings: MergedConfig["settings"] = {}): MergedConfig => ({ ...empty_config(), settings });
 const saved = (layer: SettingOverrides): SettingEdits => ({ saved: layer, temp: {} });
+const SETTABLE_NAMES = SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable);
+
+const temp = (layer: SettingOverrides): SettingEdits => ({ saved: {}, temp: layer });
 
 test("set stores the typed value and answers with a success toast", () => {
-  const plan = plan_set("which_key_delay_ms", "500", "saved", NO_EDITS, config());
-  assert.deepEqual(plan, { next: saved({ which_key_delay_ms: 500 }), toast: { kind: "success", message: "which_key_delay_ms = 500" } });
+  const plan = plan_set("which_key_delay_ms", "500", "temp", NO_EDITS, config());
+  assert.deepEqual(plan, { next: temp({ which_key_delay_ms: 500 }), toast: { kind: "success", message: "which_key_delay_ms = 500 until the browser restarts" } });
 });
 
 test("a new set keeps the edits already there", () => {
-  assert.deepEqual(plan_set("hint_letters", "qwer", "saved", saved({ which_key_delay_ms: 5 }), config()).next, saved({ which_key_delay_ms: 5, hint_letters: "qwer" }));
+  assert.deepEqual(plan_set("hint_letters", "qwer", "temp", temp({ which_key_delay_ms: 5 }), config()).next, temp({ which_key_delay_ms: 5, hint_letters: "qwer" }));
+  assert.deepEqual(plan_set("bridge", "true", "saved", saved({ newtab_ip_info: true }), config()).next, saved({ newtab_ip_info: true, bridge: true }));
 });
 
 test("a name with no value shows the value in force, without a change", () => {
@@ -31,30 +36,39 @@ test("a name with no value shows the value in force, without a change", () => {
   assert.equal(plan_set("home_page", "", "saved", NO_EDITS, config()).toast.message, "home_page is not set");
 });
 
+test("the saved layer takes the consent settings and refuses every other setting", () => {
+  assert.deepEqual(plan_toggle("host_auto_update", "saved", NO_EDITS, config()).next, saved({ host_auto_update: true }));
+  for (const name of SETTABLE_NAMES.filter((name) => !is_consent_setting(name))) {
+    assert.throws(() => plan_set_value(name, "x", "saved", NO_EDITS, config()), /is not kept in the browser/, name);
+  }
+  assert.throws(() => plan_toggle("newtab_date", "saved", NO_EDITS, config()), /newtab_date is not kept in the browser/);
+});
+
 test("toggle flips a boolean from its value, or from what an absent setting reads as", () => {
-  assert.deepEqual(plan_toggle("completion_all_windows", "saved", NO_EDITS, config()).next, saved({ completion_all_windows: true }));
-  assert.deepEqual(plan_toggle("newtab_date", "saved", NO_EDITS, config()).next, saved({ newtab_date: false }));
-  assert.deepEqual(plan_toggle("newtab_date", "saved", saved({ newtab_date: false }), config({ newtab_date: false })).next, saved({ newtab_date: true }));
+  assert.deepEqual(plan_toggle("completion_all_windows", "temp", NO_EDITS, config()).next, temp({ completion_all_windows: true }));
+  assert.deepEqual(plan_toggle("newtab_date", "temp", NO_EDITS, config()).next, temp({ newtab_date: false }));
+  assert.deepEqual(plan_toggle("newtab_date", "temp", temp({ newtab_date: false }), config({ newtab_date: false })).next, temp({ newtab_date: true }));
+  assert.deepEqual(plan_toggle("bridge", "saved", saved({ bridge: true }), config({ bridge: true })).next, saved({ bridge: false }));
 });
 
 test("a list takes one item per word", () => {
-  assert.deepEqual(plan_set("next_patterns", "a.com  b.com", "saved", NO_EDITS, config()).next, saved({ next_patterns: ["a.com", "b.com"] }));
+  assert.deepEqual(plan_set("next_patterns", "a.com  b.com", "temp", NO_EDITS, config()).next, temp({ next_patterns: ["a.com", "b.com"] }));
 });
 
 test("[] sets an empty list, and no value still shows the list", () => {
-  assert.deepEqual(plan_set("next_patterns", "[]", "saved", NO_EDITS, config({ next_patterns: ["a.com"] })).next, saved({ next_patterns: [] }));
-  assert.deepEqual(plan_set("open_completion", "[]", "saved", NO_EDITS, config()).next, saved({ open_completion: [] }));
-  assert.equal(plan_set("next_patterns", "", "saved", NO_EDITS, config({ next_patterns: ["a.com"] })).next, undefined);
+  assert.deepEqual(plan_set("next_patterns", "[]", "temp", NO_EDITS, config({ next_patterns: ["a.com"] })).next, temp({ next_patterns: [] }));
+  assert.deepEqual(plan_set("open_completion", "[]", "temp", NO_EDITS, config()).next, temp({ open_completion: [] }));
+  assert.equal(plan_set("next_patterns", "", "temp", NO_EDITS, config({ next_patterns: ["a.com"] })).next, undefined);
 });
 
 test("default_engine or theme naming nothing is kept with a warning", () => {
-  const engine = plan_set("default_engine", "nothing", "saved", NO_EDITS, config());
+  const engine = plan_set("default_engine", "nothing", "temp", NO_EDITS, config());
   assert.equal(engine.toast.kind, "warning");
-  assert.deepEqual(engine.next, saved({ default_engine: "nothing" }));
-  assert.equal(plan_set("default_engine", "duck", "saved", NO_EDITS, config()).toast.kind, "success");
-  assert.equal(plan_set("theme", "nothing", "saved", NO_EDITS, config()).toast.kind, "warning");
-  assert.equal(plan_set("theme", "oasis_moonlight", "saved", NO_EDITS, config()).toast.kind, "success");
-  assert.equal(plan_set("theme", "desktop", "saved", NO_EDITS, config()).toast.kind, "success");
+  assert.deepEqual(engine.next, temp({ default_engine: "nothing" }));
+  assert.equal(plan_set("default_engine", "duck", "temp", NO_EDITS, config()).toast.kind, "success");
+  assert.equal(plan_set("theme", "nothing", "temp", NO_EDITS, config()).toast.kind, "warning");
+  assert.equal(plan_set("theme", "oasis_moonlight", "temp", NO_EDITS, config()).toast.kind, "success");
+  assert.equal(plan_set("theme", "desktop", "temp", NO_EDITS, config()).toast.kind, "success");
 });
 
 test("unset removes one edit and says so for a name that is not edited", () => {
@@ -72,8 +86,8 @@ test("set --temp writes the temp layer, and a saved set drops the temp edit of t
   const temp = plan_set("hint_letters", "qw", "temp", saved({ hint_letters: "ab" }), config());
   assert.deepEqual(temp.next, { saved: { hint_letters: "ab" }, temp: { hint_letters: "qw" } });
   assert.equal(temp.toast.message, 'hint_letters = "qw" until the browser restarts');
-  const resaved = plan_set("hint_letters", "zx", "saved", { saved: {}, temp: { hint_letters: "qw", newtab_date: false } }, config());
-  assert.deepEqual(resaved.next, { saved: { hint_letters: "zx" }, temp: { newtab_date: false } });
+  const resaved = plan_set("bridge", "true", "saved", { saved: {}, temp: { bridge: false, newtab_date: false } }, config());
+  assert.deepEqual(resaved.next, { saved: { bridge: true }, temp: { newtab_date: false } });
   assert.deepEqual(plan_toggle("newtab_date", "temp", NO_EDITS, config()).next, { saved: {}, temp: { newtab_date: false } });
 });
 
@@ -143,6 +157,23 @@ test("--temp, a consent setting and unset all never touch settings.toml", async 
   assert.deepEqual(state.edits, NO_EDITS);
   assert.deepEqual(file_writes, []);
   assert.equal(toasts.at(-1), "success Cleared 3 edits");
+});
+
+test("a :set or :toggle without --temp of a setting other than a consent one never reaches the saved layer", async () => {
+  const { deps, state, file_writes } = fake_deps();
+  const handlers = make_settings_handlers(deps);
+  for (const name of SETTABLE_NAMES.filter((name) => !is_consent_setting(name))) {
+    if (!FILE_WRITTEN_SETTINGS.has(name)) {
+      // The site rules: no text :set parses passes their check, so the schema refuses the line before any handler runs.
+      for (const value of ["x", "[]", '[{ site = "a.test" }]']) assert.equal(check_args(registry.get("settings.set")!, { name, value }).ok, false, `${name} ${value}`);
+      continue;
+    }
+    await handlers.set(ctx, { name, value: "x" });
+    if (SETTING_SPECS[name].is_toggle) await handlers.toggle(ctx, { name });
+  }
+  assert.deepEqual(state.edits, NO_EDITS);
+  assert.equal(state.publishes, 0);
+  assert.ok(file_writes.length >= FILE_WRITTEN_SETTINGS.size);
 });
 
 test("set with no value shows the value and writes nothing", async () => {

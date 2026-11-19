@@ -256,8 +256,8 @@ export async function run_cases({ config_copy, load_config_dir, config_dir, take
       const settings_text = () => readFileSync(join(picked_dir, "settings.toml"), "utf8");
       const file_before = settings_text();
       const edits = () => in_background(`Promise.all([browser.storage.local.get("desertfox_saved_settings"), browser.storage.session.get("desertfox_temp_settings")]).then(([saved, temp]) => JSON.stringify([saved.desertfox_saved_settings?.theme ?? null, temp.desertfox_temp_settings?.theme ?? null]))`);
-      // A saved theme from before is dropped by the pick, so it no longer hides the file.
-      await ask({ type: "change_setting", name: "theme", action: "set", value: "nord" });
+      // A theme an older version saved in the browser is dropped by the pick, so it no longer hides the file.
+      await in_background(`browser.storage.local.set({ desertfox_saved_settings: { theme: "nord" } }).then(() => true)`);
       await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "catppuccin"; select.dispatchEvent(new Event("change")); return true; })()`);
       const notice = () => popup_eval(`document.querySelector(".desertfox-popup-notice")?.textContent`);
       // The notice comes with the answer, after the file write and the edits clear, so the checks below see the finished pick.

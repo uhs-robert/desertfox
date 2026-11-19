@@ -33,7 +33,7 @@ The line is the setting `newtab_ip_info`. It is off by default. When you turn it
 
 ## The optional native host (Linux)
 
-The native host is a helper program you install yourself. It talks to DesertFox through Firefox. Its only network use is the update download described below. It reads your config folder and writes one file there, `autoconfig.toml`. Outside that folder it writes only the files of its own update, the scratch files of the external editor and the cache files of the desktop link. The last two are described below.
+The native host is a helper program you install yourself. It talks to DesertFox through Firefox. Its only network use is the update download described below. It reads your config folder and writes one file there, `autoconfig.toml`, a copy of the key edits you made in the browser. Outside that folder it writes only the files of its own update, the scratch files of the external editor and the cache files of the desktop link. The last two are described below.
 
 Two paths download files from GitHub over HTTPS. The `:native.install` command shows an install command that you paste into a terminal yourself. The install script downloads a script from this project's GitHub releases and checks it against a hash that comes from the signed add-on. The setting `host_auto_update` is off by default. When you turn it on, DesertFox asks the host to replace itself, and the host itself downloads the scripts of the same release from GitHub over HTTPS and checks each script against the same hashes. GitHub sees these downloads as it sees any download.
 

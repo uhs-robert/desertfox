@@ -1,5 +1,5 @@
 // config.reload and debug.restart on open tabs. The reduced keymap lives in a config copy, and the harness links the base config back and unsets the temp edit when the piece ends.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["config", "keys"];
@@ -93,6 +93,7 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
     await run_line(":debug.restart");
     await wait_reinject_report();
     const settings_text = () => readFileSync(join(folded_config, "settings.toml"), "utf8");
+    const mirror_text = () => (existsSync(join(folded_config, "autoconfig.toml")) ? readFileSync(join(folded_config, "autoconfig.toml"), "utf8") : "");
     // The host writes the file before the start settles its record, so the poll waits for the whole stored state too.
     const fold_state = async () => {
       const status = await read_local("desertfox_config_status");
@@ -102,9 +103,11 @@ export async function run_cases({ config_copy, load_config_dir, run_case, setup,
         record: (await read_local("desertfox_settings_file_unsynced")) ?? null,
         in_force: status?.settings?.toast_ms === 4321 && status?.saved?.length === 0,
         noted: (await read_local("desertfox_warnings"))?.some((warning) => warning.startsWith("2 settings saved in the browser moved into settings.toml")) ?? false,
+        // The fold's change to the saved layer rewrites autoconfig.toml, which holds key edits alone.
+        mirror: mirror_text().includes("# The key edits made in the browser") && !/toast_ms|which_key_skip/.test(mirror_text()),
       };
     };
-    const settled = (state) => state.file && state.saved === "{}" && state.record === null && state.in_force && state.noted;
+    const settled = (state) => state.file && state.saved === "{}" && state.record === null && state.in_force && state.noted && state.mirror;
     let last_state;
     await poll_until("the saved settings to reach settings.toml in the folder, and the start to settle its record, status and warnings", async () => settled((last_state = await fold_state())), { timeout_ms: 8000 }).catch((error) => {
       throw new Error(`${error.message}: ${JSON.stringify(last_state)}`);

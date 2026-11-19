@@ -243,7 +243,7 @@ export function create_settings_session(deps: SessionDeps) {
     await answered(name, field, sequence, request, answer);
   }
 
-  // Saves at once, like `:set`, unless the check refuses the value. A scalar or list goes into settings.toml, a consent or table setting into the saved edits.
+  // Saves at once, like `:set`, unless the check refuses the value. A consent setting goes into the saved edits, every other one into settings.toml.
   async function commit(name: string, value: unknown): Promise<void> {
     draft(name, value);
     if (fields.get(name)?.error !== undefined) return;

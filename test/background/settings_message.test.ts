@@ -53,39 +53,50 @@ async function make(file_settings: Record<string, unknown> = {}) {
   return { ...fake, startup, messages: create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys((await startup.get_config()).local_themes ?? {}), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file }) };
 }
 
-test("a save stores the typed value, and the reply names the value and its top layer", async () => {
+test("a save of a consent setting stores the typed value, and the reply names the value and its top layer", async () => {
   const { messages, local, startup } = await make();
-  const answer = await messages.change({ type: "change_setting", name: "newtab_clock", action: "set", value: "analog" });
+  const answer = await messages.change({ type: "change_setting", name: "newtab_ip_info", action: "set", value: true });
   assert.ok(answer.ok);
-  assert.equal(answer.setting.value, "analog");
+  assert.equal(answer.setting.value, true);
   assert.equal(answer.setting.top_layer, "saved");
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_clock: "analog" });
-  assert.equal((await startup.get_config()).settings.newtab_clock, "analog");
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_ip_info: true });
+  assert.equal((await startup.get_config()).settings.newtab_ip_info, true);
+});
+
+test("a save of any other setting without the file layer is refused, and the saved layer stays as it was", async () => {
+  const { messages, local, session } = await make();
+  for (const [name, value] of [["newtab_clock", "analog"], ["light_intensity", 3], ["newtab_links", [{ label: "Mail", url: "https://mail.test/" }]], ["site_rules", [{ site: "a.test", off: true }]]] as const) {
+    const answer = await messages.change({ type: "change_setting", name, action: "set", value });
+    assert.deepEqual(answer, { ok: false, message: `${name} is not kept in the browser. Only the consent settings are.` });
+  }
+  assert.equal(local[SAVED_SETTINGS_STORAGE_KEY], undefined);
+  assert.equal(session[TEMP_SETTINGS_STORAGE_KEY], undefined);
 });
 
 test("typed values keep their type: a boolean and a number are stored as sent", async () => {
-  const { messages, local } = await make();
-  await messages.change({ type: "change_setting", name: "newtab_clock", action: "set", value: false });
-  await messages.change({ type: "change_setting", name: "light_intensity", action: "set", value: 3 });
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_clock: false, light_intensity: 3 });
+  const { messages, local, session } = await make();
+  await messages.change({ type: "change_setting", name: "bridge", action: "set", value: false });
+  await messages.change({ type: "change_setting", name: "light_intensity", action: "set", value: 3, layer: "temp" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { bridge: false });
+  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { light_intensity: 3 });
 });
 
 test("temp sets the temp layer, and a later save drops it", async () => {
-  const { messages, local, session } = await make({ hint_letters: "ab" });
-  const temp = await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "qw", layer: "temp" });
+  const { messages, local, session } = await make({ bridge: false });
+  const temp = await messages.change({ type: "change_setting", name: "bridge", action: "set", value: true, layer: "temp" });
   assert.ok(temp.ok);
   assert.equal(temp.setting.top_layer, "temp");
-  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { hint_letters: "qw" });
-  const saved = await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "zx" });
+  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { bridge: true });
+  const saved = await messages.change({ type: "change_setting", name: "bridge", action: "set", value: false });
   assert.ok(saved.ok);
   assert.equal(saved.setting.top_layer, "saved");
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], {});
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "zx" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { bridge: false });
 });
 
-test("reset drops the saved and the temp edit and shows the file value", async () => {
+test("reset drops a saved value an older version left and the temp edit, and shows the file value", async () => {
   const { messages, local, session } = await make({ hint_letters: "ab" });
-  await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "zx" });
+  local[SAVED_SETTINGS_STORAGE_KEY] = { hint_letters: "zx" };
   await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "qw", layer: "temp" });
   const answer = await messages.change({ type: "change_setting", name: "hint_letters", action: "reset" });
   assert.ok(answer.ok);
@@ -124,35 +135,35 @@ test("the settings that :set refuses get the text :set gives, and unknown names 
 test("changes that arrive together all land, each on what the others wrote", async () => {
   const { messages, local } = await make();
   const answers = await Promise.all([
-    messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "xy" }),
-    messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false }),
-    messages.change({ type: "change_setting", name: "which_key_delay_ms", action: "set", value: 7 }),
+    messages.change({ type: "change_setting", name: "bridge", action: "set", value: true }),
+    messages.change({ type: "change_setting", name: "newtab_ip_info", action: "set", value: true }),
+    messages.change({ type: "change_setting", name: "host_auto_update", action: "set", value: true }),
   ]);
   assert.ok(answers.every((answer) => answer.ok));
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "xy", newtab_date: false, which_key_delay_ms: 7 });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { bridge: true, newtab_ip_info: true, host_auto_update: true });
 });
 
 test("a failed write puts both layers back and the reply is a failure, not a rejection", async () => {
   const { messages, local, session, state } = await make();
-  await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false });
-  await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "qw", layer: "temp" });
+  await messages.change({ type: "change_setting", name: "newtab_ip_info", action: "set", value: true });
+  await messages.change({ type: "change_setting", name: "bridge", action: "set", value: false, layer: "temp" });
   // The saved layer's write lands, then the temp layer's write fails. The rollback's writes work.
   state.fail_session_writes = 1;
-  const answer = await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "zx" });
+  const answer = await messages.change({ type: "change_setting", name: "bridge", action: "set", value: true });
   assert.deepEqual(answer, { ok: false, message: "session storage down" });
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_date: false });
-  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { hint_letters: "qw" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_ip_info: true });
+  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { bridge: false });
 });
 
 test("the list gives every setting with value, top layer, kind and allowed values", async () => {
   const { messages } = await make({ hint_letters: "ab" });
-  await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: true });
+  await messages.change({ type: "change_setting", name: "newtab_ip_info", action: "set", value: true });
   const answer = await messages.list();
   assert.ok(answer.ok);
   const row = (name: string) => answer.settings.find((candidate) => candidate.name === name)!;
   assert.equal(row("hint_letters").top_layer, "settings.toml");
-  assert.equal(row("newtab_date").top_layer, "saved");
-  assert.equal(row("newtab_date").value, true);
+  assert.equal(row("newtab_ip_info").top_layer, "saved");
+  assert.equal(row("newtab_ip_info").value, true);
   assert.equal(row("which_key_delay_ms").top_layer, "default");
   assert.deepEqual(row("newtab_clock").allowed, [true, false, "analog", "digital"]);
   assert.equal(row("newtab_clock").kind, "enum");
@@ -172,42 +183,42 @@ test("an unknown action or layer is refused before anything is planned", async (
 });
 
 test("an enum list keeps the order it was sent in", async () => {
-  const { messages, local } = await make();
+  const { messages, session } = await make();
   const order = ["history", "bookmarks"];
-  const answer = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: order });
+  const answer = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: order, layer: "temp" });
   assert.ok(answer.ok);
   assert.deepEqual(answer.setting.value, order);
-  assert.deepEqual((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).open_completion, order);
-  const reversed = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: [...order].reverse() });
+  assert.deepEqual((session[TEMP_SETTINGS_STORAGE_KEY] as Record<string, unknown>).open_completion, order);
+  const reversed = await messages.change({ type: "change_setting", name: "open_completion", action: "set", value: [...order].reverse(), layer: "temp" });
   assert.ok(reversed.ok);
   assert.deepEqual(reversed.setting.value, [...order].reverse());
 });
 
-test("newtab_links saves as a whole list through the settings page, and a bad list is refused", async () => {
-  const { messages, local, startup } = await make();
+test("newtab_links takes a whole list, and a bad list is refused", async () => {
+  const { messages, session, startup } = await make();
   const links = [{ label: "Mail", url: "https://mail.test/", group: "Work" }, { label: "News", url: "https://news.test/" }];
-  const saved = await messages.change({ type: "change_setting", name: "newtab_links", action: "set", value: links });
-  assert.ok(saved.ok);
-  assert.deepEqual((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, links);
+  const set = await messages.change({ type: "change_setting", name: "newtab_links", action: "set", value: links, layer: "temp" });
+  assert.ok(set.ok);
+  assert.deepEqual((session[TEMP_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, links);
   assert.deepEqual((await startup.get_config()).settings.newtab_links, links);
-  const bad = await messages.change({ type: "change_setting", name: "newtab_links", action: "set", value: [{ label: "x", url: "javascript:alert(1)" }] });
+  const bad = await messages.change({ type: "change_setting", name: "newtab_links", action: "set", value: [{ label: "x", url: "javascript:alert(1)" }], layer: "temp" });
   assert.equal(bad.ok, false);
-  assert.deepEqual((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, links);
+  assert.deepEqual((session[TEMP_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, links);
   const reset = await messages.change({ type: "change_setting", name: "newtab_links", action: "reset" });
   assert.ok(reset.ok);
-  assert.equal((local[SAVED_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, undefined);
+  assert.equal((session[TEMP_SETTINGS_STORAGE_KEY] as Record<string, unknown>).newtab_links, undefined);
 });
 
 test("a list during a change that then fails does not show the unpublished value", async () => {
   const { messages, state } = await make();
   state.fail_session_writes = 1;
-  const changing = messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false });
+  const changing = messages.change({ type: "change_setting", name: "bridge", action: "set", value: true });
   await new Promise((resolve) => setTimeout(resolve, 10));
   const listing = messages.list();
   assert.equal((await changing).ok, false);
   const answer = await listing;
   assert.ok(answer.ok);
-  assert.equal(answer.settings.find((row) => row.name === "newtab_date")!.top_layer, "default");
+  assert.equal(answer.settings.find((row) => row.name === "bridge")!.top_layer, "default");
 });
 
 const ORIGIN = "moz-extension://abc/";
