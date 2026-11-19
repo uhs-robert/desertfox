@@ -96,9 +96,12 @@ export async function text_sha256(text: string): Promise<string> {
 // `conflict`: the file changed on disk, so the copies-differ question took over. `conflict_kept`: it changed on disk, and no question was stored (the user kept the browser copy over that folder before), so the change stays in the browser copy only.
 // `failed`: the host could not write, or the folder could not be read after a refusal, and the next start tries again.
 // `replaced`: a swap replaced the browser copy after the change and dropped the record. `written` says whether the folder got the change before that.
-// `saved_in_browser`: an imported theme, which the files cannot name, went to the saved edits instead.
+// `saved_in_browser`: a theme or search engine known only in the browser, which the files cannot name, went to the saved edits instead.
 // `browser_copy`: the browser copy did not come from the config folder, so only the copy changed.
-export type FileWriteOutcome = { kind: "written" } | { kind: "waiting"; host_outdated?: true } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" } | { kind: "browser_copy" } | { kind: "replaced"; by: CopyReplacedBy; written: boolean };
+export type FileWriteOutcome = { kind: "written" } | { kind: "waiting"; host_outdated?: true } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser"; missing: NamedKind } | { kind: "browser_copy" } | { kind: "replaced"; by: CopyReplacedBy; written: boolean };
+
+// What a setting value can name that the files build checks.
+export type NamedKind = "theme" | "search engine";
 
 // The swaps that drop the record: a read of the config folder (`,r`, Use the folder), an import of config files and an editor save of settings.toml.
 export type CopyReplacedBy = "reload" | "import" | "edit";
@@ -111,7 +114,7 @@ export function outcome_note(outcome: FileWriteOutcome): string {
     case "conflict": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is. Open the Settings page to choose`;
     case "failed": return `. ${SETTINGS_FILE} was not written (${outcome.reason}). It is tried again at the next start`;
     case "conflict_kept": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is, and the change stays in the browser copy`;
-    case "saved_in_browser": return ", saved in the browser because the theme is not in your files";
+    case "saved_in_browser": return `, saved in the browser because the ${outcome.missing} is not in your files`;
     case "browser_copy": return `, saved in the browser copy. It did not come from a config folder, so no ${SETTINGS_FILE} is written`;
     case "replaced": return outcome.written ? `, saved to ${SETTINGS_FILE}. ${REPLACED_BY[outcome.by]} replaced the browser copy during the write` : `. ${REPLACED_BY[outcome.by]} replaced the browser copy before the write, so ${SETTINGS_FILE} was not written`;
   }

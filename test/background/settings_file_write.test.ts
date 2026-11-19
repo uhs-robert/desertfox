@@ -261,7 +261,7 @@ test("an imported theme, which the files cannot name, goes to the saved edits an
   await startup.change_edits((current) => ({ ...current, temp: { theme: "dracula" } }));
   sent.length = 0;
 
-  assert.deepEqual(await startup.set_in_settings_file("theme", "my_import"), { kind: "saved_in_browser" });
+  assert.deepEqual(await startup.set_in_settings_file("theme", "my_import"), { kind: "saved_in_browser", missing: "theme" });
   assert.equal(host.files["settings.toml"], MINE);
   assert.equal(stored_settings(local), MINE);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { theme: "my_import" });

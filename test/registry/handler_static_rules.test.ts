@@ -22,8 +22,8 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "help.key": [/has no normal-mode binding/],
-  // settings.toml must build, and the stub config has no theme or engine of that name.
-  "settings.set": [/no theme named "stub"/, /unknown search engine "stub"/],
+  // The stub config knows no theme or engine of that name, in the files or in the browser.
+  "settings.set": [/no theme named "stub"/, /no search engine named "stub"/],
   "tab.alternate": [/no previous tab/],
   "tab.alternate_any_window": [/no previous tab/],
   "tab.goto_audible": [/no tab is playing sound/],
