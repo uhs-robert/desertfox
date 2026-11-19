@@ -250,11 +250,12 @@ test("an import between a change and its write says the file was not written, an
   assert.equal((await startup.get_config()).settings.toast_ms, undefined);
 });
 
-test("a name the files build does not know is refused as a runtime refusal, and nothing changes", async () => {
+test("a theme or engine name that matches nothing is refused by name, and nothing changes", async () => {
   const host = { files: { "settings.toml": MINE } };
   const { local, sent, startup } = await reloaded(host);
   sent.length = 0;
-  await assert.rejects(startup.set_in_settings_file("default_engine", "nowhere"), (error: unknown) => error instanceof RuntimeRefusal && /unknown search engine "nowhere"/.test(error.message));
+  await assert.rejects(startup.set_in_settings_file("default_engine", "nowhere"), (error: unknown) => error instanceof RuntimeRefusal && error.message === 'default_engine not changed: no search engine named "nowhere"');
+  await assert.rejects(startup.set_in_settings_file("theme", "nowhere"), (error: unknown) => error instanceof RuntimeRefusal && error.message === 'theme not changed: no theme named "nowhere"');
   assert.equal(stored_settings(local), MINE);
   assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
 });
@@ -283,4 +284,22 @@ test("a :set while the copies-differ question waits is written, the question sta
     await startup.choose_host_start(choice, pending);
     assert.equal((await startup.get_config()).settings.toast_ms, 1500, choice);
   }
+});
+
+test("an engine added in the browser saves as the default in the browser, and an engine in the files goes to the file", async () => {
+  const host = { files: { "settings.toml": MINE, "search_engines.toml": 'files_one = { url = "https://f.test/?q={query}" }\n' } };
+  const { local, sent, startup } = await reloaded(host);
+  await startup.change_layers("engines", () => ({ engines: { browser_one: { url: "https://b.test/?q={query}" } } }));
+  sent.length = 0;
+  const { handlers, toasts } = commands(startup);
+  await handlers.set(ctx, { name: "default_engine", value: "browser_one" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { default_engine: "browser_one" });
+  assert.equal(stored_settings(local), MINE);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  assert.equal((await startup.get_config()).settings.default_engine, "browser_one");
+
+  await handlers.set(ctx, { name: "default_engine", value: "files_one" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
+  assert.match(host.files["settings.toml"]!, /^default_engine = "files_one"$/m);
+  assert.deepEqual(toasts, ['success default_engine = "browser_one", saved in the browser because the search engine is not in your files', 'success default_engine = "files_one", saved to settings.toml']);
 });

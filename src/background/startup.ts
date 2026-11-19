@@ -1,7 +1,8 @@
 // Loads the config, compiles the keymap and publishes the result.
 
 import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
-import { effective_settings } from "../shared/config.ts";
+import { effective_settings, with_fallback_engines } from "../shared/config.ts";
+import { built_in_theme_names } from "../shared/theme/load.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -47,7 +48,7 @@ import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
 import { clear_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, text_sha256, with_setting_in_files, without_setting, without_setting_in_files } from "./settings_file.ts";
-import type { CopyReplacedBy, FileWriteOutcome, UnsyncedSettingsFile } from "./settings_file.ts";
+import type { CopyReplacedBy, FileWriteOutcome, NamedKind, UnsyncedSettingsFile } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
 
@@ -389,9 +390,14 @@ function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
 // Writes `value` into the browser copy of settings.toml, drops any saved or temp edit of `name` that would hide it, then asks the host to write the file.
 export function set_in_settings_file(name: keyof Settings, value: TomlValue): Promise<FileWriteOutcome> {
   return change_setting_in_file<FileWriteOutcome>(name, async (files) => {
-    if (name === "theme" && (await is_browser_only_theme(value))) {
-      await save_in_browser(name, value as TomlScalar);
-      return { done: { kind: "saved_in_browser" } };
+    const named = NAMED_KINDS[name];
+    if (named !== undefined && typeof value === "string") {
+      const home = await where_named(named, value);
+      if (home === "nowhere") throw new RuntimeRefusal(`${name} not changed: no ${named} named "${value}"`);
+      if (home === "browser") {
+        await save_in_browser(name, value);
+        return { done: { kind: "saved_in_browser", missing: named } };
+      }
     }
     return { files: with_setting_in_files(files, name, value) };
   });
@@ -442,7 +448,7 @@ async function change_setting_in_file<R>(name: keyof Settings, plan: (files: Con
     try {
       await apply_files({ ...current, files: planned.files }, "setting", { edits_after, unsynced });
     } catch (error) {
-      // The files build refuses a value the setting's own check passes: a theme or a search engine the files do not have.
+      // The files build can refuse a value the setting's own check passes, such as a default engine that needs a page slot.
       throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
     }
     if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
@@ -466,11 +472,19 @@ async function came_from_folder(source: FilesSource): Promise<boolean> {
   return !source.imported && (await read_host_memory()).applied !== undefined;
 }
 
-// An imported theme lives in browser storage only, so the files build refuses a settings.toml that names it. A theme file of the same name is known to the build, so that name still goes to the file.
-async function is_browser_only_theme(value: TomlValue): Promise<boolean> {
-  if (typeof value !== "string") return false;
-  const files_themes = (await (load_step as Promise<LoadStep>)).loaded.config.local_themes ?? {};
-  return Object.hasOwn((await load_layers()).themes ?? {}, value) && !Object.hasOwn(files_themes, value);
+// The settings whose value names a theme or a search engine, which the files build checks against the names it knows.
+const NAMED_KINDS: Partial<Record<keyof Settings, NamedKind>> = { theme: "theme", default_engine: "search engine" };
+
+// Where a theme or engine name is known. `browser`: only in the browser (an imported theme, an engine added on the Engines page), so the files build refuses a settings.toml that names it.
+// A theme file or an engine of the same name in the files is known to the build, so that name still goes to the file.
+async function where_named(kind: NamedKind, value: string): Promise<"files" | "browser" | "nowhere"> {
+  const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
+  if (kind === "theme") {
+    if (value === DESKTOP_THEME || built_in_theme_names().includes(value) || Object.hasOwn(files_config.local_themes ?? {}, value)) return "files";
+    return Object.hasOwn((await load_layers()).themes ?? {}, value) ? "browser" : "nowhere";
+  }
+  if (Object.hasOwn(with_fallback_engines(files_config.search_engines), value)) return "files";
+  return Object.hasOwn(with_fallback_engines((await get_config()).search_engines), value) ? "browser" : "nowhere";
 }
 
 // The saved edit, as before the file write existed: it lasts, and it drops a temp edit of the name that would hide it.
