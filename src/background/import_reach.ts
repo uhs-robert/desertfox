@@ -12,7 +12,6 @@ import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 
 import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
-export { CONSENT_SETTINGS };
 
 export const ROW_CAP = 12;
 
