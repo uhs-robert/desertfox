@@ -17,8 +17,10 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
   let piece_config;
   const use_config_copy = async () => {
     if (piece_config !== undefined) return;
-    piece_config = config_copy();
-    await load_config_dir(piece_config);
+    const copy = config_copy();
+    await load_config_dir(copy);
+    // Kept only once loaded, so a rejected load makes the next case load again rather than write a folder the browser never read.
+    piece_config = copy;
   };
   // The copy's settings.toml, which the host writes once the browser copy changed.
   const settings_toml = async () => readFileSync(join(piece_config, "settings.toml"), "utf8");
