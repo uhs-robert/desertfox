@@ -9,6 +9,7 @@ import { all_off_step } from "./site_rule.ts";
 import { create_keymap_asks } from "./ask_keymap.ts";
 import { message_of } from "./bundle_host.ts";
 import type { PageHostApi } from "./bundle_host.ts";
+import { keep_chain } from "../shared/swallow.ts";
 import { bundles } from "./bundles.ts";
 import { deepest_focused_element, is_editable_element, set_editable_rules } from "./editable.ts";
 import { scroll_by, set_scroll_selector } from "./handlers/scroll.ts";
@@ -68,6 +69,8 @@ const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => 
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
+// The leaf that ran last, hint leaves included. A bundle that holds keys behind its own pick waits for its end through `leaf_end_`.
+let leaf_ran: Promise<unknown> = Promise.resolve();
 
 let escape_to_page = false;
 
@@ -82,7 +85,7 @@ const key_flow = create_key_flow({
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
-    const ran = recording === undefined ? run() : last_leaf.then(run);
+    const ran = (leaf_ran = recording === undefined ? run() : last_leaf.then(run));
     if (!leaf.steps.some((step) => /^(hint\.run|macro\.play)$/.test(step.invocation.id))) last_leaf = ran;
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
@@ -359,7 +362,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, pressed_keys_: () => pressed_keys, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, pressed_keys_: () => pressed_keys, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element, leaf_end_: () => keep_chain(leaf_ran) });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);
