@@ -256,8 +256,8 @@ test("a Reset of the link list removes every link row from settings.toml, never 
   const { local, session, startup } = await reloaded(host);
   await startup.change_edits(() => ({ saved: { newtab_links: [] }, temp: { newtab_links: [] } }));
   assert.deepEqual(await startup.unset_in_settings_file("newtab_links"), { kind: "written" });
-  // The comment right over the first link row is that row's, so it goes too.
-  assert.equal(host.files["settings.toml"], MINE.slice(0, MINE.indexOf("\n# Links")));
+  // The comment over the first link row is the list's, so it stays.
+  assert.equal(host.files["settings.toml"], MINE.slice(0, MINE.indexOf("[[newtab_links]]")));
   assert.ok(!host.files["settings.toml"].includes("newtab_links"));
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], {});
@@ -268,7 +268,7 @@ test("a cleared link list is written as an empty list, stays empty after a reloa
   const host = { files: { "settings.toml": MINE } };
   const { startup } = await reloaded(host);
   assert.deepEqual(await startup.set_in_settings_file("newtab_links", []), { kind: "written" });
-  assert.equal(host.files["settings.toml"], MINE.slice(0, MINE.indexOf("\n# Links")).replace('# home row\n', "# home row\nnewtab_links = []\n"));
+  assert.equal(host.files["settings.toml"], MINE.slice(0, MINE.indexOf("[[newtab_links]]")).replace('# home row\n', "# home row\nnewtab_links = []\n"));
   const reloaded_startup = await fresh_startup();
   await reloaded_startup.reload_config();
   assert.deepEqual((await reloaded_startup.get_config()).settings.newtab_links, []);
