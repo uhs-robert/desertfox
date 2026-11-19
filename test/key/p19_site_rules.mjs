@@ -6,7 +6,7 @@ import { SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["keys", "config", "toolbar"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep, config_dir }) {
+export async function run_cases({ run_case, open_page, press_keys, wait_event, wait_takes_keys, events, expect, expect_no_scroll, hint_label_count, scroll_delta_by_press, poll_until, in_background, url_of, sleep, config_dir, take_shot }) {
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   // A passed `/` or `'` opens Firefox's Quick Find, which takes the keys after it, so the bar is closed before the next wait.
   const page_sees = async (page_id, key, what) => {
@@ -147,6 +147,61 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, w
       expect((await scroll_delta_by_press("rule_pass_fresh", ["G"])) > 0, "G did not scroll after the off row left");
     } finally {
       await site_request("rule_pass_live", "enable");
+      await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
+    }
+  });
+
+  await run_case("the keys form opens filled from the popup's link, takes a pressed key, and Save and Remove write the row and give the file back", async () => {
+    const pattern = "*://127.0.0.1/page?id=rule_form*";
+    const settings_toml = () => readFileSync(join(config_dir, "settings.toml"), "utf8");
+    const file_before = settings_toml();
+    const in_settings = (code) => in_background(`(() => { const view = browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html"); const document = view?.document; return (${code}); })()`);
+    const close_settings = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
+    const open_form = async () => {
+      await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#section=settings/site-rules?site=${encodeURIComponent(pattern)}"), active: true }).then(() => true)`);
+      await poll_until("the form to hold the site", () => in_settings(`document?.querySelector('.desertfox-site-keys input[aria-label="Site pattern"]')?.value === ${JSON.stringify(pattern)}`).catch(() => false), { timeout_ms: 10000 });
+      await poll_until("focus in the capture box", () => in_settings(`document.activeElement?.classList.contains("desertfox-site-keys-capture")`).catch(() => false), { timeout_ms: 5000 });
+    };
+    const press_form_button = (label) => in_settings(`([...document.querySelectorAll(".desertfox-site-keys button")].find((button) => button.textContent === ${JSON.stringify(label)}).click(), true)`);
+    // Shots of the form under DESERTFOX_SHOT_DIR: the form is scrolled into view first.
+    const shoot = async (name) => {
+      if (!process.env.DESERTFOX_SHOT_DIR) return;
+      await in_settings(`(document.querySelector(".desertfox-site-keys").scrollIntoView(), true)`);
+      await sleep(500);
+      await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/site-keys-form-${name}.png`);
+    };
+    const chip_text = () => in_settings(`[...document.querySelectorAll(".desertfox-site-keys-chip kbd")].map((chip) => chip.textContent).join(" ")`);
+    await open_page("page", "rule_form", { new_tab: true });
+    try {
+      await poll_until("NORMAL before the rule", async () => badge_of("rule_form") === "NORMAL");
+      expect((await scroll_delta_by_press("rule_form", ["j"])) > 0, "j did not scroll before the form's rule");
+      await open_form();
+      await sleep(500);
+      await shoot("empty");
+      await press_keys("j");
+      await poll_until("the chip for j", async () => (await chip_text()) === "j");
+      await shoot("filled");
+      await press_form_button("Save");
+      await poll_until("the row in settings.toml", async () => settings_toml() === `${file_before}\n[[site_rules]]\nsite = "${pattern}"\npass = "j"\n`, { timeout_ms: 8000 });
+      await close_settings();
+      await in_background(`(async () => { const [tab] = await browser.tabs.query({ url: ${JSON.stringify(url_of("page", "rule_form"))} }); await browser.tabs.update(tab.id, { active: true }); })()`);
+      await page_sees("rule_form", "j", "the page to see the j the form keeps");
+      expect((await scroll_delta_by_press("rule_form", ["G"])) > 0, "G did not scroll after the form's rule");
+      await open_form();
+      await poll_until("the saved row to open filled", async () => (await chip_text()) === "j");
+      await shoot("edit");
+      // A site that an earlier rule already gives keys to is refused before Save.
+      await in_settings(`(() => { const input = document.querySelector('.desertfox-site-keys input[aria-label="Site pattern"]'); input.value = "*://127.0.0.1/page?id=rule_pass_x*"; input.dispatchEvent(new view.Event("input")); return true; })()`);
+      await poll_until("the refusal text", async () => (await in_settings(`[...document.querySelectorAll(".desertfox-site-keys .desertfox-settings-error")].map((node) => node.textContent).join(" ")`)).includes("already sets which keys pass"));
+      expect((await in_settings(`[...document.querySelectorAll(".desertfox-site-keys button")].find((button) => button.textContent === "Save").disabled`)) === true, "Save stayed live under a refusal");
+      await shoot("refusal");
+      await in_settings(`(() => { const input = document.querySelector('.desertfox-site-keys input[aria-label="Site pattern"]'); input.value = ${JSON.stringify(pattern)}; input.dispatchEvent(new view.Event("input")); return true; })()`);
+      await poll_until("the form to hold the saved row again", async () => (await chip_text()) === "j");
+      await press_form_button("Remove");
+      await poll_until("settings.toml to be as it was", async () => settings_toml() === file_before, { timeout_ms: 8000 });
+    } finally {
+      await close_settings();
+      await send_from_popup({ type: "site_keys", pattern, keys: null });
       await in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.endsWith("/popup.html")) await browser.tabs.remove(tab.id); })()`);
     }
   });

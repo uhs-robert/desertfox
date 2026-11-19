@@ -1,14 +1,14 @@
 import { load_effective_config } from "../background/config_load.ts";
 import { plan_help_tab } from "../background/open_help.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
-import { site_state } from "../background/toolbar.ts";
+import { site_pattern, site_state } from "../background/toolbar.ts";
 import type { SiteState } from "../background/toolbar.ts";
 import { effective_settings } from "../shared/config.ts";
 import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH, site_keys_hash } from "./model.ts";
 import type { HostDot, PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -63,7 +63,10 @@ async function act(row: PopupRow): Promise<void> {
   else if (row.id === "support") return open_page_beside(SUPPORT_URL);
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
   else if (row.id === "rule") return open_help_page(SITE_RULES_HASH);
-  else if (row.id === "site") {
+  else if (row.id === "keys_for_site") {
+    const pattern = site_pattern(tab?.url);
+    if (pattern !== undefined) return open_help_page(site_keys_hash(pattern));
+  } else if (row.id === "site") {
     show_notice(await ask({ type: "toolbar_site", url: tab?.url ?? "", action: row.site_action ?? "disable" }));
   } else if (row.id === "reload_config") show_notice(await ask({ type: "toolbar_reload_config" }));
   await draw();
@@ -194,6 +197,7 @@ function card_element(rows: PopupRow[], inputs: { site: SiteState; disabled: boo
   card.append(element("div", "desertfox-popup-host", host), element("div", "desertfox-popup-state", state));
   const site = rows.find((row) => row.id === "site")!;
   card.append(row_button(site, "desertfox-popup-site"));
+  card.append(row_button(rows.find((row) => row.id === "keys_for_site")!, "desertfox-popup-keys-for-site desertfox-popup-link"));
   const rule = rows.find((row) => row.id === "rule");
   if (rule !== undefined) card.append(row_button(rule, "desertfox-popup-rule desertfox-popup-link"));
   return card;

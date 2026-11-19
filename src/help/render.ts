@@ -299,6 +299,8 @@ function site_rules_section(): HTMLElement {
     el("p", undefined, edit_rules_link()),
     el("p", "desertfox-help-muted", "Each rule names the sites it covers and what DesertFox does there, for example turns its keys off or gives some keys to the page. The first rule that matches a page and sets a field decides that field. ", new_tab_link("Read how to write a rule", SITE_RULES_DOC_URL), "."),
     box,
+    // `main.ts` fills `.desertfox-site-keys`.
+    el("div", "desertfox-site-keys"),
   );
 }
 

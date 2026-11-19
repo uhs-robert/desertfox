@@ -15,13 +15,14 @@ export const PAGES = [
 
 export type PageId = (typeof PAGES)[number]["id"];
 
-export type Route = { page: PageId; engine?: string; command?: string; section?: string; address?: string; advanced?: true };
+export type Route = { page: PageId; engine?: string; command?: string; section?: string; address?: string; site_keys?: string; advanced?: true };
 
 // `engine.show <name>` opens `#engine=<name>`, which stays valid and lands on the Search Engines page.
 // `#section=<page>/<slug>` lands on that page at that section, the same way, for every page with sections.
 // `#command=<id>` lands on the Commands page at that command's card.
 // A trailing `?advanced` on any of them also shows the Commands page cards flagged `advanced`.
 // `#/site-rules?address=<address>` shows the Site Rules page for that address, which `help site_rules` fills in from the invoking tab. Without an address that page tells the reader where to run it.
+// `#section=settings/site-rules?site=<pattern>` lands on the Your site rules section with the "keep some keys" form filled in for that site pattern.
 // An unknown hash shows Home.
 export function parse_route(hash: string): Route {
   const advanced = hash.endsWith(ADVANCED_SUFFIX);
@@ -44,8 +45,23 @@ function site_rules_route(hash: string): Route | undefined {
   }
 }
 
+const SITE_KEYS = /^#section=settings\/site-rules\?site=(.*)$/;
+
+// Read before the whole hash is decoded, as the address above is, because a pattern holds `?` and `%`.
+function site_keys_route(hash: string): Route | undefined {
+  const encoded = SITE_KEYS.exec(hash)?.[1];
+  if (encoded === undefined) return undefined;
+  const section = { page: "settings", section: "site-rules" } as const;
+  try {
+    const site_keys = decodeURIComponent(encoded);
+    return site_keys === "" ? section : { ...section, site_keys };
+  } catch {
+    return section;
+  }
+}
+
 function parse_route_without_flag(hash: string): Route {
-  const site_rules = site_rules_route(hash);
+  const site_rules = site_rules_route(hash) ?? site_keys_route(hash);
   if (site_rules) return site_rules;
   let text = hash;
   try {
