@@ -572,3 +572,16 @@ test("only a first line that is the whole marker makes the page's path the page'
   assert.equal(page_path_is_hand_file({ [FILE]: PAGE_FILE_MARKER }), false);
   assert.equal(page_path_is_hand_file({ [FILE]: `${PAGE_FILE_MARKER} and my notes\n[a]\n` }), true);
 });
+
+test("a save whose browser copy an import replaced does not say its key letter searches it", async () => {
+  const { messages, startup, fake } = await started();
+  const held = hold_writes(fake);
+  const saving = messages.change(set("wiki", "https://w.test/?q={query}", { letter: "W" }));
+  await until(() => held.length === 1, "the page's file write did not go out");
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  held.shift()!();
+  const answer = await saving;
+  assert.equal(answer.ok, true, answer.message);
+  assert.match(answer.message, /A config import replaced the browser copy/);
+  assert.doesNotMatch(answer.message, /sW searches/);
+});
