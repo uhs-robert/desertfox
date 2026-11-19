@@ -30,7 +30,7 @@ import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.t
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after } from "./toolbar.ts";
 import { saved_pass_rows, site_rows_with_pass, site_rows_without_pass } from "./site_keys.ts";
-import type { SiteRuleRow } from "../shared/match_pattern.ts";
+import { matches_pattern, site_row_columns, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
@@ -53,7 +53,7 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
+import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_hides, settings_d_files_naming, settings_d_site_rules, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
@@ -486,7 +486,7 @@ export function unset_in_settings_file(name: keyof Settings): Promise<UnsetResul
   return change_setting_in_file<UnsetResult>(name, async (files) => {
     const edits = await load_edits();
     const has_browser_edit = Object.hasOwn(edits.saved, name) || Object.hasOwn(edits.temp, name);
-    const winning_file = settings_d_file_that_sets(files, name);
+    const winning_file = settings_d_file_that_hides(files, name);
     if (winning_file === undefined && settings_file_sets(files, name)) return { files: without_setting_in_files(files, name) };
     if (has_browser_edit) {
       await drop_edits_of(name);
@@ -504,17 +504,17 @@ export function change_site_rule_in_file(url: string, action: "disable" | "enabl
   return change_setting_in_file<{ kind: "unchanged" }>("site_rules", async (files) => {
     const pattern = site_pattern(url);
     if (pattern === undefined) throw new RuntimeRefusal("this page has no site to change");
-    // Checked before the rows, as a popup row held in that file reads as already gone from settings.toml.
-    const winning_file = settings_d_file_that_sets(files, "site_rules");
-    if (winning_file !== undefined) throw held_in_settings_d(winning_file, "site_rules");
     const saved_list = (await load_edits()).saved.site_rules;
     const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
     const rows = [...file_rows, ...saved_popup_rows(file_rows, saved_list)];
     const changed_rows = site_rows_after(rows, pattern, action);
     const rows_after = changed_rows ?? rows;
-    // With the saved list gone, the file's own rules decide again, and one of them can still decide the site the other way.
-    if (site_is_off(rows_after, url) !== (action === "disable")) {
-      throw new RuntimeRefusal(action === "disable" ? "Not disabled: an earlier rule in site_rules keeps this site on. Change it in settings.toml." : "Not enabled: another rule in site_rules turns this site off. Change it in settings.toml.");
+    // With the saved list gone, the rules of every file decide again, and one of them can still decide the site the other way.
+    // The settings.d rows come after settings.toml's, so they decide only where no row of settings.toml sets the column.
+    const rules_after = [...rows_after.map((row) => ({ file: SETTINGS_FILE, row })), ...settings_d_site_rules(files)];
+    if (site_is_off(rules_after.map(({ row }) => row), url) !== (action === "disable")) {
+      const deciding_file = rules_after.find(({ row }) => matches_pattern(row.site, url) && site_row_columns(row).off !== undefined)?.file;
+      throw new RuntimeRefusal(`${action === "disable" ? "Not disabled: an earlier rule in site_rules keeps this site on" : "Not enabled: another rule in site_rules turns this site off"}. Change it in ${deciding_file ?? SETTINGS_FILE}.`);
     }
     if (changed_rows === undefined && saved_list === undefined) return { done: { kind: "unchanged" } };
     // No rows left removes the key, so a file that had none before the first click gets its text back.
@@ -525,8 +525,6 @@ export function change_site_rule_in_file(url: string, action: "disable" | "enabl
 // The Settings form's Save and Remove for the keys a site keeps: writes or removes its `{site, pass}` row in settings.toml, in place when the file has one. `unchanged`: Remove found no row.
 export function change_site_keys_in_file(pattern: string, keys: string | null): Promise<FileWriteOutcome | { kind: "unchanged" }> {
   return change_setting_in_file<{ kind: "unchanged" }>("site_rules", async (files) => {
-    const winning_file = settings_d_file_that_sets(files, "site_rules");
-    if (winning_file !== undefined) throw held_in_settings_d(winning_file, "site_rules");
     const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
     const saved_list = (await load_edits()).saved.site_rules;
     const rows = [...file_rows, ...saved_popup_rows(file_rows, saved_list), ...saved_pass_rows(file_rows, saved_list, pattern)];

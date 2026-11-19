@@ -12,7 +12,7 @@ import { COUNT_MODES } from "../keys/matcher.ts";
 import type { BoundInvocation, Prompt } from "../invocation.ts";
 import type { Modifier } from "../keymap.ts";
 import { bind_tables_of } from "../match_pattern.ts";
-import { origin_key, type MergedData } from "./merge.ts";
+import { origin_key, SITE_RULE_ROW_SECTION, type MergedData } from "./merge.ts";
 import { is_labeled_binding, make_entry_resolver, site_bind_resolver } from "./resolve_binding.ts";
 
 const no_op = () => {};
@@ -90,6 +90,11 @@ function location_of(merged: MergedData, section: string, key: string): string {
   return `${file}: ${section.replace(/^keymap\./, "keymap ")} "${key}"`;
 }
 
+// The file of one `site_rules` row, which concatenates across files, labelled as `location_of` labels a setting.
+function site_rule_file(merged: MergedData, index: number): string {
+  return `${merged.origins.get(origin_key(SITE_RULE_ROW_SECTION, String(index))) ?? "config"}: settings "site_rules"`;
+}
+
 // Turns the binding strings of every mode into invocations, in place. The
 // extension and the stored file only ever see invocations.
 export function resolve_bindings(merged: MergedData, registry: Registry, problems: string[]) {
@@ -115,9 +120,9 @@ export function resolve_bindings(merged: MergedData, registry: Registry, problem
     }
   }
   // Site binds take the same formats. Row by row, the settings check already vouched for the shape.
-  const site_where = location_of(merged, "settings", "site_rules");
   const resolve_site_bind = site_bind_resolver(resolve_entry);
-  for (const row of merged.settings.site_rules ?? []) {
+  for (const [index, row] of (merged.settings.site_rules ?? []).entries()) {
+    const site_where = site_rule_file(merged, index);
     for (const { scope, table } of bind_tables_of(row)) {
       for (const [sequence, entry] of Object.entries(table)) {
         const binding = resolve_site_bind(entry, `${site_where}: ${scope}bind "${sequence}" of "${row.site}"`);
@@ -214,7 +219,7 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
   }
 
   // The settings check covers the shape of each bind. Each step gets the checks of a keymap entry.
-  for (const row of merged.settings.site_rules ?? []) {
+  for (const [index, row] of (merged.settings.site_rules ?? []).entries()) {
     for (const { scope, keymap_mode, table } of bind_tables_of(row)) {
       for (const [sequence, entry] of Object.entries(table)) {
         // A choice list holds a list of steps per choice.
@@ -222,7 +227,7 @@ export function check_config(merged: MergedData, registry: Registry, problems: s
           // Text here failed to parse, and resolve_bindings already reported it.
           if (typeof step !== "object" || step === null || is_labeled_binding(step)) continue;
           const binding = step as BoundInvocation;
-          const prefix = `${where("settings", "site_rules")}: ${scope}bind "${sequence}" of "${row.site}"`;
+          const prefix = `${site_rule_file(merged, index)}: ${scope}bind "${sequence}" of "${row.site}"`;
           for (const message of [binding.label === undefined ? null : label_problem(binding.label), binding.intent === undefined ? null : intent_problem(binding.intent)]) {
             if (message) problems.push(`${prefix}: ${message}`);
           }

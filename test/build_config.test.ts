@@ -693,6 +693,51 @@ test("a site row bind is checked like a keymap binding", () => {
   assert.equal(problems.some((problem) => problem.includes('bind "l"')), false);
 });
 
+const site_row = (site: string, extra = "") => `[[site_rules]]\nsite = "${site}"\n${extra}\n`;
+const BAD_BIND = 'bind = { j = { id = "tab.nope" } }';
+const sites_of = (dir: string) => (build_config(dir, commands).settings.site_rules ?? []).map((row) => row.site);
+
+test("site_rules concatenate: settings.toml first, then settings.d files in name order, while another list still replaces", () => {
+  const dir = config_dir_with({
+    "settings.toml": `which_key_skip = ["a"]\n\n${site_row("https://main.test/*")}`,
+    "settings.d/20-b.toml": `which_key_skip = ["b"]\n\n${site_row("https://b.test/*")}`,
+    "settings.d/10-a.toml": site_row("https://a.test/*"),
+  });
+  const built = build_config(dir, commands);
+  assert.deepEqual(sites_of(dir), ["https://main.test/*", "https://a.test/*", "https://b.test/*"]);
+  assert.deepEqual(built.settings.which_key_skip, ["b"]);
+});
+
+test("a settings.d file with no settings.toml rows, or a toml with none, still gives the list", () => {
+  assert.deepEqual(sites_of(config_dir_with({ "settings.d/10-a.toml": site_row("https://a.test/*") })), ["https://a.test/*"]);
+  assert.deepEqual(sites_of(config_dir_with({ "settings.toml": site_row("https://m.test/*") })), ["https://m.test/*"]);
+});
+
+test("a site bind problem names the file of its own row, and keeps doing so when settings.d files come and go", () => {
+  const first = config_dir_with({
+    "settings.toml": site_row("https://m.test/*"),
+    "settings.d/20-bad.toml": site_row("https://bad.test/*", BAD_BIND),
+  });
+  assert.ok(problems_of(first).some((problem) => problem.includes("20-bad.toml: settings \"site_rules\"")), problems_of(first).join("\n"));
+  // A file that sorts before it, with rows of its own, moves the bad row's index but not its file.
+  const added = config_dir_with({
+    "settings.toml": site_row("https://m.test/*"),
+    "settings.d/10-ok.toml": site_row("https://ok1.test/*") + site_row("https://ok2.test/*"),
+    "settings.d/20-bad.toml": site_row("https://bad.test/*", BAD_BIND),
+  });
+  const problems = problems_of(added);
+  assert.ok(problems.some((problem) => problem.includes("20-bad.toml") && problem.includes('of "https://bad.test/*"')), problems.join("\n"));
+  assert.ok(!problems.some((problem) => problem.includes("10-ok.toml")), problems.join("\n"));
+  // The bad row in settings.toml, with a settings.d file after it, is named for settings.toml.
+  const in_main = config_dir_with({
+    "settings.toml": site_row("https://bad.test/*", BAD_BIND),
+    "settings.d/10-ok.toml": site_row("https://ok1.test/*"),
+  });
+  const main_problems = problems_of(in_main);
+  assert.ok(main_problems.some((problem) => problem.includes("settings.toml") && problem.includes('of "https://bad.test/*"')), main_problems.join("\n"));
+  assert.ok(!main_problems.some((problem) => problem.includes("10-ok.toml")), main_problems.join("\n"));
+});
+
 test("the settings schema offers the keymap column for the five site modes and no other", () => {
   const dir = make_tmp_dir("desertfox-schemas-");
   write_schemas(dir, build_schemas(commands));

@@ -2,7 +2,10 @@
 // `startup.ts` runs both in the change queue and sends each file's text to the native host (`write_config_file`).
 
 import { parse, TomlError } from "smol-toml";
+import { site_rule_rows } from "../shared/config_build/merge.ts";
+import { parse_data_layers } from "../shared/config_build/source_files.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
+import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { SettingEdits, Settings } from "../shared/config.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { SETTINGS_TABLE } from "../shared/settings_table.ts";
@@ -20,6 +23,15 @@ export function settings_d_file_that_sets(files: ConfigFiles, name: keyof Settin
   return Object.keys(files).find((path) => path.startsWith("settings.d/") && path.endsWith(".toml") && Object.hasOwn(parse(files[path]!), name));
 }
 
+// The `settings.d` file that hides settings.toml's value of `name`. `site_rules` is never hidden: its files add up, settings.toml first.
+export const settings_d_file_that_hides = (files: ConfigFiles, name: keyof Settings): string | undefined => (name === "site_rules" ? undefined : settings_d_file_that_sets(files, name));
+
+// The `site_rules` rows of the `settings.d` files in the order the build joins them, each with its file. A file that does not parse adds none, as the build refuses it and says why.
+export function settings_d_site_rules(files: ConfigFiles): { file: string; row: SiteRuleRow }[] {
+  const d_files = Object.fromEntries(Object.entries(files).filter(([path]) => path.startsWith("settings.d/")));
+  return site_rule_rows(parse_data_layers(d_files, "", "settings", []));
+}
+
 // The `settings.d` files that set `name` to `value`.
 export function settings_d_files_naming(files: ConfigFiles, name: keyof Settings, value: string): string[] {
   return Object.keys(files).filter((path) => path.startsWith("settings.d/") && path.endsWith(".toml") && parse(files[path]!)[name] === value);
@@ -28,7 +40,7 @@ export function settings_d_files_naming(files: ConfigFiles, name: keyof Settings
 export const held_in_settings_d = (path: string, name: keyof Settings) => new RuntimeRefusal(`${path} sets ${name}, and it wins over ${SETTINGS_FILE}. Change it there.`);
 
 export function with_setting_in_files(files: ConfigFiles, name: keyof Settings, value: TomlValue): ConfigFiles {
-  const winning_file = settings_d_file_that_sets(files, name);
+  const winning_file = settings_d_file_that_hides(files, name);
   if (winning_file !== undefined) throw held_in_settings_d(winning_file, name);
   return { ...files, [SETTINGS_FILE]: with_key(files[SETTINGS_FILE] ?? "", name, value) };
 }
