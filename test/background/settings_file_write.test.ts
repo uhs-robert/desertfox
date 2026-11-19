@@ -577,3 +577,84 @@ test("the edits are put onto the folder's text only where the folder kept the ba
   assert.equal(replayed_on_folder(MINE, MINE, HAND), undefined);
   assert.equal(replayed_on_folder("a = [1]\n", "a = [2]\n", "a = [1]\nb = 1\n"), undefined);
 });
+
+test("a refused write whose folder also changed keymap.toml takes that file too, so nothing waits for a later reload", async () => {
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } as Files };
+  const { local, fake, startup } = await reloaded(host);
+  const send = fake.runtime.sendNativeMessage;
+  const held = hold_writes(fake);
+  const pick = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  const keys = '[normal]\n"zx" = "tab.next"\n';
+  host.files = { "settings.toml": HAND, "keymap.toml": keys };
+  fake.runtime.sendNativeMessage = send;
+  held.shift()!();
+
+  assert.deepEqual(await pick, { kind: "written" });
+  assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
+  assert.equal((local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["keymap.toml"], keys);
+  await (await fresh_startup()).reload_config_at_start();
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("each pick a swap dropped names the swap that dropped it", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { fake, startup } = await reloaded(host);
+  const held = hold_writes(fake);
+  const saved_over = startup.set_in_settings_file("theme", "nord");
+  await pause();
+  await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
+  const imported_over = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  held.shift()!();
+  assert.deepEqual(await saved_over, { kind: "replaced", by: "edit", written: true });
+  assert.deepEqual(await imported_over, { kind: "replaced", by: "import", written: false });
+});
+
+test("a refusal older than a new record with the same base leaves that record, and its pick is written", async () => {
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } as Files };
+  const { local, fake, startup } = await reloaded(host);
+  const send = fake.runtime.sendNativeMessage;
+  const held = hold_writes(fake);
+  const dropped_pick = startup.set_in_settings_file("theme", "nord");
+  await pause();
+  // An editor save puts settings.toml back to the folder's text, so the next pick's record has the same base as the first.
+  await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
+  const later_pick = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  // A browser change beside the pick, so the refusal cannot put the pick onto the folder's text.
+  await startup.save_config_file("keymap.toml", '[normal]\n"zy" = "tab.next"\n', "");
+  // The folder differs while the first write is checked and read again, then is back to the base before the next write.
+  host.files = { ...host.files, "settings.toml": HAND };
+  fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
+    const answer = await send(name, message);
+    if (message.cmd === "read_config") host.files = { ...host.files, "settings.toml": MINE };
+    return answer;
+  };
+  held.shift()!();
+
+  assert.deepEqual(await dropped_pick, { kind: "replaced", by: "edit", written: false });
+  assert.deepEqual(await later_pick, { kind: "written" });
+  assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a folder that changes on every write is merged three times, then the question takes over", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, fake, startup } = await reloaded(host);
+  const send = fake.runtime.sendNativeMessage;
+  let writes = 0;
+  fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
+    if (message.cmd === "write_settings") {
+      writes += 1;
+      host.files = { "settings.toml": `${host.files["settings.toml"]}# stamped ${writes}\n` };
+    }
+    return send(name, message);
+  };
+  const pick = startup.set_in_settings_file("theme", "oasis_night");
+  const outcome = await Promise.race([pick, pause(3000).then(() => "still writing")]);
+  assert.deepEqual(outcome, { kind: "conflict" });
+  assert.equal(writes, 4);
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
