@@ -26,9 +26,6 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       const { site: _site, ...columns } = shipped;
       lines.push("", "[[site_rules]]", `site = "*://127.0.0.1/*?id=${id}_*"`, ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`));
     }
-    // ]] works in normal mode only, so its case has a row of the user's that binds the same keys in normal mode.
-    const { keymap: ddg_keymap } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "ddg").row;
-    lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ddgn_*"', `bind = ${toml(ddg_keymap.item)}`);
     // The rows the address-change cases need: one that turns the page off and one with a site mode that has a label.
     lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=off_*"', "off = true");
     lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=mode_*"', 'bind = { v = "mode.site spy" }', 'modes.spy = { label = "SPY", bind = { x = { id = "mode.site", args = { name = "off" } } } }');
@@ -319,7 +316,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   // The More results button loads in two steps, a spinner first and the results 300 ms later, and drops the first result as a virtualized list does, so the old count is no longer the index of the first new result.
   await run_case("on ddg, after ]] loads more results the box moves to the first new one", async () => {
-    await open_page("controls", "ddgn_more", { new_tab: true });
+    await open_page("controls", "ddg_more", { new_tab: true });
     await in_active_tab(`(() => {
       const result = (index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a><p>snippet</p></article></li>';
       const list = document.createElement("ol");
@@ -337,6 +334,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       document.activeElement?.blur();
       return true;
     })()`);
+    await enter_item_mode();
     await press_keys("jj");
     await expect_focus("d1");
     await press_keys("-k", "bracketright", "-k", "bracketright");

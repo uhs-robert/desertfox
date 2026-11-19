@@ -54,7 +54,7 @@ function fake_page(count: number) {
     items_: () => (page.reads++, items.filter((item) => !page.hidden.has((item as unknown as { name: string }).name))),
     watch_: { start_: (added) => ((on_added = added), () => (on_added = () => {})), page_height_: () => 0 },
     cursor_: () => Promise.resolve(cursor()),
-    in_normal_mode_: () => page.mode === "normal",
+    mode_: () => page.mode,
     watch_user_left_: () => watch_user_left(events.doc, events.win, events.pressed_keys),
   };
   return { page, deps, cursor, events };
@@ -261,4 +261,14 @@ test("with no box shown, no listener is added", async () => {
   const { deps, events } = fake_page(3);
   await move_box_after_load(undefined, deps);
   assert.equal(events.listeners(), 0);
+});
+
+test("in item mode the box moves to the first new item too", async () => {
+  const { page, deps, cursor } = fake_page(3);
+  page.mode = "item";
+  page.current = page.named("old2");
+  const done = move_box_after_load(cursor(), deps);
+  page.add("new0");
+  await done;
+  assert.deepEqual(page.landed, ["new0"]);
 });

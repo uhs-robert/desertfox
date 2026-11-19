@@ -21,7 +21,8 @@ export type ItemAfterLoadDeps = {
   // Hands over the elements of each addition to the page. Its height is not read.
   watch_: ContentWatch;
   cursor_: () => Promise<ItemCursor | undefined>;
-  in_normal_mode_: () => boolean;
+  // The frame mode now. The box moves only in the modes it walks the items in: normal mode for a row that binds there, and item mode.
+  mode_: () => string;
   // Starts the watch for the user leaving. Called once the box is known to move, so a signal before the load starts never counts.
   watch_user_left_: () => UserLeft;
 };
@@ -30,7 +31,7 @@ const holds_item = (added: Element, selector: string): boolean => added.matches(
 
 // Call it before the click or scroll, with the cursor read then. It waits up to the load wait for an item to follow the old last one, which can come after a spinner or other first additions.
 // Only a batch that adds an item reads the whole list, because each read forces a layout and some pages change all the time. An item that fades in after its batch is found by one more look at the end of the wait.
-// It leaves the box where it is when the user moved it to another item, left normal mode, left the page (hid the tab, pressed a key, used the wheel or pressed a pointer) or no item came.
+// It leaves the box where it is when the user moved it to another item, left normal or item mode, left the page (hid the tab, pressed a key, used the wheel or pressed a pointer) or no item came.
 export async function move_box_after_load(before: ItemCursor | undefined, deps: ItemAfterLoadDeps): Promise<void> {
   if (!before?.shown_ || !before.item_) return;
   const user = deps.watch_user_left_();
@@ -43,7 +44,7 @@ export async function move_box_after_load(before: ItemCursor | undefined, deps: 
     const target = first_new();
     if (!target) return;
     const now = await deps.cursor_();
-    if (now?.item_ === before.item_ && deps.in_normal_mode_() && !user.left_()) now.land_(target);
+    if (now?.item_ === before.item_ && ["normal", "item"].includes(deps.mode_()) && !user.left_()) now.land_(target);
   } finally {
     user.stop_();
   }
