@@ -213,6 +213,9 @@ export async function run_cases({ config_copy, load_config_dir, config_dir, take
       await wait_state(true, "the arrow key to turn DesertFox off");
       await poll_until("Off to be checked", async () => (await checked()) === "Off");
       await poll_until("the site card to name the host and the rule", async () => (await popup_eval(`document.querySelector(".desertfox-popup-host")?.textContent === "127.0.0.1" && document.querySelector(".desertfox-popup-rule .desertfox-popup-detail")?.textContent === "Pass 2 keys"`)) === true);
+      // The keys-for-site row sits in the card, and it is grey with its reason while DesertFox is off.
+      const keys_row = () => popup_eval(`(() => { const row = document.querySelector(".desertfox-popup-card .desertfox-popup-keys-for-site"); return row ? [row.textContent, row.disabled].join("|") : null; })()`);
+      expect((await keys_row()) === "Let this site keep some keys...DesertFox is off|true", `the keys-for-site row while off: ${await keys_row()}`);
       const shot_dir = process.env.DESERTFOX_SHOT_DIR;
       const shoot = async (name) => {
         if (!shot_dir) return;
@@ -241,6 +244,7 @@ export async function run_cases({ config_copy, load_config_dir, config_dir, take
       await wait_state(false, "the clicks to leave DesertFox on");
       await poll_until("On to be checked", async () => (await checked()) === "On");
       await poll_until("the state line to read enabled", async () => (await popup_eval(`document.querySelector(".desertfox-popup-state")?.textContent`)) === "Enabled on this site");
+      expect((await keys_row()) === "Let this site keep some keys...|false", `the keys-for-site row while on: ${await keys_row()}`);
       await shoot("on");
       // The extras: the host dot, the version link, the keys row, and a theme pick that writes settings.toml.
       const manifest_version = await in_background(`browser.runtime.getManifest().version`);
