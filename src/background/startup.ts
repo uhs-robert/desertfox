@@ -543,9 +543,12 @@ export async function set_theme_file(name: string, text: string | null, replace:
       return { files: { ...files, [path]: text }, edits_after: edits, paths: [path] };
     }
     if (!replaced) throw new RuntimeRefusal(`No theme named ${name} is in the config files.`);
+    if (host_file_of(path) === undefined) throw new RuntimeRefusal(`The native host does not write ${path}, as its name holds more than lowercase letters, digits, _ and -. Remove it from the config folder by hand.`);
+    const { [path]: _removed, ...others } = files;
+    // A built-in theme of the same name takes over, so a selection of the name still finds a theme.
+    if (theme_resolves_without_file(name)) return { files: others, edits_after: edits, paths: [path] };
     const naming_file = settings_d_files_naming(files, "theme", name)[0];
     if (naming_file !== undefined) throw new RuntimeRefusal(`${naming_file} sets theme = "${name}". Change it there before you remove the theme.`);
-    const { [path]: _removed, ...others } = files;
     const edits_after = { saved: without_theme_named(edits.saved, name), temp: without_theme_named(edits.temp, name) };
     // settings.toml goes first, so the folder never names a theme file it no longer has.
     return settings_file_naming(files, "theme", name) ? { files: without_setting_in_files(others, "theme"), edits_after, paths: [SETTINGS_FILE, path] } : { files: others, edits_after, paths: [path] };
@@ -563,10 +566,13 @@ async function came_from_folder(source: FilesSource): Promise<boolean> {
   return !source.imported && (await read_host_memory()).applied !== undefined;
 }
 
+// A name a theme file can shadow and still resolve without it: `desktop` and the built-in themes.
+const theme_resolves_without_file = (name: string): boolean => name === DESKTOP_THEME || built_in_theme_names().includes(name);
+
 // Whether the files build knows the theme, so a settings.toml that names it builds.
 async function theme_in_files(value: string): Promise<boolean> {
   const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
-  return value === DESKTOP_THEME || built_in_theme_names().includes(value) || Object.hasOwn(files_config.local_themes ?? {}, value);
+  return theme_resolves_without_file(value) || Object.hasOwn(files_config.local_themes ?? {}, value);
 }
 
 // Where an engine name is known. `browser`: only in the browser (an engine added on the Engines page), so the files build refuses a settings.toml that names it.
@@ -697,7 +703,7 @@ async function path_to_write_first(path: string): Promise<string | undefined> {
     return named_path !== undefined && Object.hasOwn(unsynced, named_path) && files[named_path] !== undefined ? named_path : undefined;
   }
   const deleted_theme = files[path] === undefined ? theme_name_of_file(path) : undefined;
-  if (deleted_theme === undefined || !Object.hasOwn(unsynced, SETTINGS_FILE)) return undefined;
+  if (deleted_theme === undefined || theme_resolves_without_file(deleted_theme) || !Object.hasOwn(unsynced, SETTINGS_FILE)) return undefined;
   return theme_named_in(unsynced[SETTINGS_FILE] ?? null) === deleted_theme ? SETTINGS_FILE : undefined;
 }
 
@@ -774,7 +780,7 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
         const still_named = theme_named_in(folder.files[SETTINGS_FILE] ?? null);
         const { files } = await load_files_source();
         for (const other of Object.keys(kept ?? {})) {
-          if (files[other] !== undefined || still_named === undefined || theme_name_of_file(other) !== still_named) continue;
+          if (files[other] !== undefined || still_named === undefined || theme_resolves_without_file(still_named) || theme_name_of_file(other) !== still_named) continue;
           kept = without_unsynced_path(kept, other);
           writes_of(other).end = end;
         }

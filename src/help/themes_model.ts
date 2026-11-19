@@ -8,6 +8,8 @@ import type { PickedFile } from "./transfer_model.ts";
 
 export type ThemesState = {
   names: string[];
+  // Theme files the native host does not write, listed with no Remove.
+  kept_names: string[];
   loaded: boolean;
   text: string;
   name: string;
@@ -36,7 +38,7 @@ export const name_problem = (state: Pick<ThemesState, "name" | "scheme">): strin
 export const can_save = (state: ThemesState): boolean => !state.busy && state.scheme !== undefined && name_problem(state) === undefined;
 
 export function create_themes_session(deps: ThemesDeps) {
-  const state: ThemesState = { names: [], loaded: false, text: "", name: "", name_typed: false, busy: false };
+  const state: ThemesState = { names: [], kept_names: [], loaded: false, text: "", name: "", name_typed: false, busy: false };
 
   const ask = async <T>(message: ListImportedThemes | ChangeImportedThemes): Promise<T | { ok: false; message: string }> => {
     try {
@@ -50,6 +52,7 @@ export function create_themes_session(deps: ThemesDeps) {
     const answer = await ask<ListImportedThemesAnswer>({ type: "list_imported_themes" });
     if (answer.ok) {
       state.names = answer.names;
+      state.kept_names = answer.kept_names ?? [];
       state.loaded = true;
       delete state.error;
     } else state.error = `The imported themes could not be loaded: ${answer.message}`;
