@@ -9,7 +9,7 @@ import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEnginesAnswer } from "../shared/messages.ts";
 import { ConfigRefusal, failure, KEPT_CURRENT } from "./config_reload.ts";
 import type { AliasEdits, EngineEdits } from "./edit_layers.ts";
-import { ENGINE_FILE, hand_file_defining, owned_engines, with_owned_engines } from "./engine_file.ts";
+import { ENGINE_FILE, hand_file_at_page_path, hand_file_defining, owned_engines, page_path_is_hand_file, with_owned_engines } from "./engine_file.ts";
 import type { EngineTables } from "./engine_file.ts";
 import { dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
 import type { DroppedPiece, LayeredBuild } from "./engine_layer.ts";
@@ -148,6 +148,7 @@ export function create_engine_messages(deps: EngineMessageDeps) {
     const tables = Object.entries(parsed).filter(([, table]) => is_table(table)) as [string, Record<string, unknown>][];
     let result = { added: [] as string[], skipped: 0, left_out: [] as DroppedPiece[] };
     const change = await deps.change_engine_file<"none">((turn) => {
+      if (page_path_is_hand_file(turn.files)) throw hand_file_at_page_path();
       const has_table = (name: string) => Object.hasOwn(turn.layer.engines ?? {}, name) || Object.entries(turn.config.search_engines).some(([path, engine]) => top_name(path) === name && engine.origins !== undefined);
       const fresh = tables.filter(([name]) => !has_table(name));
       const owned = owned_engines(turn.files);

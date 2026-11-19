@@ -192,11 +192,12 @@ test("a settings.toml refusal whose folder read predates a theme write that land
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const lag = await lagging(folder, { "settings.toml": MINE, [THEME]: EDITED }, { [THEME]: FRAPPE }, { ...folder, "settings.toml": HAND });
   const held = hold_writes(lag.fake);
-  // The first folder read after the refusal answers what the folder held when it was asked, but only when the test says so.
+  // The first folder read after the refusal answers what the folder held when it was asked, but only when the test says so. The reads of the write gate before it pass.
   const send = lag.fake.runtime.sendNativeMessage;
   const held_reads: (() => void)[] = [];
+  let refusal_sent = false;
   lag.fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "read_config" || held_reads.length > 0) return send(name, message);
+    if (message.cmd !== "read_config" || !refusal_sent || held_reads.length > 0) return send(name, message);
     const answer = send(name, message);
     return new Promise((resolve) => held_reads.push(() => resolve(answer)));
   };
@@ -206,6 +207,7 @@ test("a settings.toml refusal whose folder read predates a theme write that land
   await until(() => held.length === 1, "the theme write did not go out");
   const pick = restarted.set_in_settings_file("theme", "nord");
   await until(() => held.length === 2, "the pick's write did not go out");
+  refusal_sent = true;
   held.pop()!();
   await until(() => held_reads.length === 1, "the folder was not read after the refusal");
   held.shift()!();

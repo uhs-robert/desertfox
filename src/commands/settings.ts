@@ -86,7 +86,7 @@ export function plan_unset(name: keyof Settings | "all", only_temp: boolean, cur
 
 // A change that left settings.toml as it was, though the setting applies, warns: the file and the browser now differ.
 const outcome_kind = (outcome: FileWriteOutcome): ToastKind =>
-  outcome.kind === "failed" || outcome.kind === "conflict" || outcome.kind === "conflict_kept" || (outcome.kind === "replaced" && !outcome.written) ? "warning" : "success";
+  outcome.kind === "failed" || outcome.kind === "held" || outcome.kind === "conflict" || outcome.kind === "conflict_kept" || (outcome.kind === "replaced" && !outcome.written) ? "warning" : "success";
 
 export function unset_toast(name: keyof Settings, result: UnsetResult): Toast {
   if (result.kind === "not_set") return { kind: "info", message: `${name} is not set` };
