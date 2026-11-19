@@ -81,9 +81,15 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
   async function set_in_file(name: keyof Settings, value: string | number | boolean): Promise<ChangeSettingAnswer> {
     try {
       const outcome = await deps.set_in_file(name, value);
-      const { source, config_settings, edits, config } = await deps.read_layers();
+      // The config in force, with the imported themes, so the name check knows every theme the pick could name.
+      let config: MergedConfig | undefined;
+      await deps.change_edits((_current, in_force) => {
+        config = in_force;
+        return undefined;
+      });
+      const { source, config_settings, edits } = await deps.read_layers();
       const status = build_config_status(source, config_settings, edits);
-      return { ok: true, setting: build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!, message: set_toast(name, value, outcome_note(outcome), config).message };
+      return { ok: true, setting: build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!, message: set_toast(name, value, outcome_note(outcome), config!).message };
     } catch (error) {
       return failure(error);
     }

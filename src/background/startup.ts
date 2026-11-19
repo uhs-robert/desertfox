@@ -355,6 +355,10 @@ function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
 // The host write runs in the same queue turn, so two picks in a row reach the folder in order, each from the text the one before left.
 export function set_in_settings_file(name: keyof Settings, value: TomlScalar): Promise<FileWriteOutcome> {
   return in_change_queue(async () => {
+    if (name === "theme" && (await is_browser_only_theme(value))) {
+      await save_in_browser(name, value);
+      return { kind: "saved_in_browser" };
+    }
     const current = await load_files_source();
     const files = with_setting_in_files(current.files, name, value);
     // An earlier edit the folder never got keeps its base: the folder still holds that text.
@@ -366,6 +370,21 @@ export function set_in_settings_file(name: keyof Settings, value: TomlScalar): P
     await store_unsynced(unsynced);
     return write_unsynced_settings_file(unsynced);
   });
+}
+
+// An imported theme lives in browser storage only, so the files build refuses a settings.toml that names it. A theme file of the same name is known to the build, so that name still goes to the file.
+async function is_browser_only_theme(value: TomlScalar): Promise<boolean> {
+  if (typeof value !== "string") return false;
+  const files_themes = (await (load_step as Promise<LoadStep>)).loaded.config.local_themes ?? {};
+  return Object.hasOwn((await load_layers()).themes ?? {}, value) && !Object.hasOwn(files_themes, value);
+}
+
+// The saved edit, as before the file write existed: it lasts, and it drops a temp edit of the name that would hide it.
+async function save_in_browser(name: keyof Settings, value: TomlScalar): Promise<void> {
+  const before = await load_edits();
+  const next = { saved: { ...before.saved, [name]: value }, temp: without_setting(before, name).temp };
+  await commit_change(before, next, { store: store_edits, publish: async (edits) => publish(await (load_step as Promise<LoadStep>), edits) });
+  void autoconfig.mirror(next.saved, (await load_layers()).keymap);
 }
 
 // Sends the browser copy of settings.toml to the host, which writes it only while the folder still holds `unsynced.base`. Runs in the change queue.

@@ -52,7 +52,8 @@ export async function text_sha256(text: string): Promise<string> {
 // What became of the file after the browser copy changed.
 // `waiting`: no host, no permission or a host without `write_settings`, so the next start or `,r` writes it.
 // `conflict`: the file changed on disk, so the copies-differ question took over. `failed`: the host could not write, and the next start tries again.
-export type FileWriteOutcome = { kind: "written" } | { kind: "waiting" } | { kind: "conflict" } | { kind: "failed"; reason: string };
+// `saved_in_browser`: an imported theme, which the files cannot name, went to the saved edits instead.
+export type FileWriteOutcome = { kind: "written" } | { kind: "waiting" } | { kind: "conflict" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" };
 
 export function outcome_note(outcome: FileWriteOutcome): string {
   switch (outcome.kind) {
@@ -60,5 +61,6 @@ export function outcome_note(outcome: FileWriteOutcome): string {
     case "waiting": return `. ${SETTINGS_FILE} updates when the native host connects`;
     case "conflict": return `. ${SETTINGS_FILE} changed on disk, so it stays as it is. Open the Settings page to choose`;
     case "failed": return `. ${SETTINGS_FILE} was not written (${outcome.reason}). It is tried again at the next start`;
+    case "saved_in_browser": return ", saved in the browser because the theme is not in your files";
   }
 }
