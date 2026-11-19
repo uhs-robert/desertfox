@@ -5,11 +5,20 @@ import type { SiteRuleRow } from "../shared/match_pattern.ts";
 
 type RowItem = { selector: string; link?: unknown; hover?: unknown };
 
-// The item the row's keys move through, read from `j` first and else from any key of its item column.
+// The `page.item` steps that name a selector, at any depth of a bind: a plain step, a step list, a choice list of step lists, or a `{ run, when_present }` choice.
+const item_steps = (binding: unknown): BoundInvocation[] => {
+  if (Array.isArray(binding)) return binding.flatMap(item_steps);
+  if (typeof binding !== "object" || binding === null) return [];
+  const step = binding as BoundInvocation & { run?: unknown };
+  return step.run !== undefined ? item_steps(step.run) : step.id === "page.item" && typeof step.args?.["selector"] === "string" ? [step] : [];
+};
+
+// The row's items are what its `j` moves through, else what any key of its item column does. A `j` that chooses between selectors (Drive's grid and list view) gives them all, joined into one selector, so the picker finds whichever view shows.
 const row_item_of = (table: Record<string, unknown>): RowItem | undefined => {
-  const steps = (binding: unknown) => ([binding] as unknown[]).flat(Infinity).filter((step): step is BoundInvocation => typeof step === "object" && step !== null && (step as BoundInvocation).id === "page.item" && typeof (step as BoundInvocation).args?.["selector"] === "string");
-  const [step] = [...steps(table["j"]), ...Object.values(table).flatMap(steps)];
-  return step && { selector: step.args!["selector"] as string, link: step.args!["link"], hover: step.args!["hover"] };
+  const steps = item_steps(table["j"]);
+  const [first] = steps.length > 0 ? steps : Object.values(table).flatMap(item_steps);
+  const same = steps.length > 0 ? steps : first ? [first] : [];
+  return first && { selector: [...new Set(same.map((step) => step.args!["selector"] as string))].join(", "), link: first.args!["link"], hover: first.args!["hover"] };
 };
 
 const ALIGNS = { zt: "top", zz: "center", zb: "bottom" } as const;

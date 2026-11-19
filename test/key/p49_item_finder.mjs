@@ -174,6 +174,24 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
   });
 
+  // The shape of a notifications page: five short rows, far under 60% of the view, and no other list. The picker is the only way in.
+  await run_case("I on a page of five short rows starts at once and j walks them", async () => {
+    await open_page("page", "finder_short_rows", { new_tab: true });
+    await in_active_tab(`(() => {
+      const list = document.createElement("div");
+      list.innerHTML = Array.from({ length: 5 }, (_, index) => '<div class="row" style="height:40px;margin:0 0 4px 20px;width:500px"><h3 style="margin:0"><a id="n' + index + '" href="#n' + index + '">Notification number ' + index + ' title text</a></h3></div>').join("");
+      document.body.prepend(list);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+    await expect_focus("n0");
+    await press_keys("j");
+    await expect_focus("n1");
+  });
+
   await run_case("I labels a list in a scroll box whose top items are scrolled out of the box", async () => {
     await open_page("page", "finder_pick_scrolled_list", { new_tab: true });
     await enter_item_mode();

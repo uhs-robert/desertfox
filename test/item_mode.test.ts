@@ -8,6 +8,7 @@ import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { item_start_for } from "../src/background/page_keymap.ts";
+import { with_item_landings } from "../src/background/item_landings.ts";
 import { create_mode_state, fullscreen_step } from "../src/content/mode_state.ts";
 import type { Mode } from "../src/shared/command.ts";
 import { MODES } from "../src/shared/command.ts";
@@ -198,7 +199,7 @@ test("the start carries the item selectors of every item key and guarded choice 
   assert.deepEqual(await item_start_for(stored(compiled), "https://a.test/"), { selectors: [] });
   const step = (selector: string) => ({ id: "page.item", args: { selector, direction: "down" }, when_present: selector });
   const choices = compiled_with({ item_navigator: true, site_rules: [{ site: "https://a.test/*", keymap: { item: { j: [[step(".grid .tile")], [step("tr.result")]] } } }] });
-  assert.deepEqual(await item_start_for(stored(choices), "https://a.test/"), { selectors: [".grid .tile", "tr.result"] });
+  assert.deepEqual(await item_start_for(stored(choices), "https://a.test/"), { selectors: [".grid .tile, tr.result", ".grid .tile", "tr.result"] }, "the derived I adds the union of the choices");
   // A user key on j that is not a move leaves the selectors of the row's other item keys.
   const remapped = compiled_with({ item_navigator: true, site_rules: [{ site: "https://news.ycombinator.com/*", keymap: { item: { j: { id: "tab.next" } } } }] });
   assert.deepEqual(await item_start_for(stored(remapped), "https://news.ycombinator.com/"), { selectors: ["tr.athing"] });
@@ -234,4 +235,18 @@ test("every shipped item row marks its sites as shipped, the rows that give j an
   for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a", "https://www.google.com/maps/place/a"]) assert.equal(await item_start_for(stored(shipped), address), undefined, address);
   assert.equal(await item_start_for(stored(compiled_with({ default_site_rows_off: ["hackernews"] })), "https://news.ycombinator.com/"), undefined);
   for (const { name, row } of DEFAULT_SITE_ROWS) assert.equal((row as { item_navigator?: unknown }).item_navigator, row.keymap?.item === undefined ? undefined : "shipped", name);
+});
+
+test("a row whose j chooses between selectors gets an I for the union of them, whatever shape the choices take", () => {
+  const step = (selector: string) => ({ id: "page.item", args: { selector, direction: "down" } });
+  const shapes = {
+    "choice lists of step lists": [[{ ...step(".grid_card"), when_present: ".grid_card" }], [step(".file_row")]],
+    "run tables": [{ run: step(".grid_card"), when_present: ".grid_card" }, { run: step(".file_row") }],
+    "one step": [step(".grid_card, .file_row")],
+  };
+  for (const [name, j] of Object.entries(shapes)) {
+    const row = with_item_landings({ site: "https://example.org/*", keymap: { item: { j } } } as never);
+    assert.equal((row.bind?.["I"] as { when_present?: string }[] | undefined)?.[0]?.when_present, ".grid_card, .file_row", name);
+    assert.equal(((row.bind?.["I"] as unknown as { args: { items: string } }[])[0]!).args.items, ".grid_card, .file_row", name);
+  }
 });

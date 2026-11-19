@@ -186,8 +186,18 @@ export async function run_cases({ run_line, config_dir, open_cmdline, close_cmdl
   await run_case("I on a page with no list stays in normal mode", async () => {
     await open_page("controls", "im_no_list", { new_tab: true });
     await press_keys("I");
-    await sleep(700);
+    const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
+    await poll_until("the notice", async () => (await toast_text()).includes("No list on this page"));
     await expect_badge("NORMAL");
+  });
+
+  await run_case("I then j typed together lands one item down, and the key typed behind the pick waits for the landing", async () => {
+    await open_list("im_fast");
+    await press_keys("I", "j");
+    await expect_badge("ITEM");
+    await expect_focus("c1");
+    await sleep(500);
+    expect((await focused()) === "c1", "the key typed after I landed on " + (await focused()));
   });
 
   await run_case("H in item mode goes back in the tab history", async () => {
