@@ -156,9 +156,11 @@ test("a refresh leaves the form alone when the site changed during its reads", a
   set_rules([{ site: MAIL, pass: "j k" }, { site: "*://*.b.test/*", pass: "q" }]);
   const refreshing = session.refresh();
   session.set_site("*://*.b.test/*");
+  // B's draft now equals what A's row held before the refresh.
+  session.remove_chip("q");
   session.toggle_pick("j");
   await refreshing;
-  assert.deepEqual(session.view().chips, ["q", "j"]);
+  assert.deepEqual(session.view().chips, ["j"]);
 });
 
 test("a refresh reloads the pick list", async () => {
@@ -173,7 +175,8 @@ test("a send that fails frees the form, and Remove holds it until the rules are 
   const { session, fail_next } = make([{ site: MAIL, pass: "j" }]);
   await session.load(MAIL);
   fail_next();
-  await assert.rejects(session.remove());
+  await session.remove();
+  assert.deepEqual(session.view().message, { ok: false, text: "Not saved: port closed" });
   assert.equal(session.view().busy, false);
   assert.equal(session.view().can_remove, true);
 });

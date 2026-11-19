@@ -125,6 +125,9 @@ export function create_site_keys_session(deps: SiteKeysDeps) {
       await read_rules();
       if (answer.ok && keys === null) set_chips([]);
       message = { ok: answer.ok, text: answer.message };
+    } catch (error) {
+      // A closed port or a failed listener ends here, so the form says so and the rejection goes nowhere.
+      message = { ok: false, text: `Not saved: ${error instanceof Error ? error.message : String(error)}` };
     } finally {
       busy = false;
       changed();

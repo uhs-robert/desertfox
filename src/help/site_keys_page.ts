@@ -76,6 +76,8 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
     answer,
   );
 
+  let shown_chips: string[] = [];
+
   function draw(): void {
     const view = session.view();
     // The controls below are rebuilt, so the one that had focus is found again by its keys.
@@ -116,7 +118,17 @@ export function mount_site_keys(container: HTMLElement, deps: Omit<SiteKeysDeps,
     save.disabled = !view.can_save;
     remove.disabled = !view.can_remove;
     remove.hidden = !view.has_row;
-    if (focused !== undefined) container.querySelector<HTMLElement>(`[data-site-keys-focus="${CSS.escape(focused)}"]`)?.focus();
+    if (focused !== undefined) {
+      const again = container.querySelector<HTMLElement>(`[data-site-keys-focus="${CSS.escape(focused)}"]`);
+      if (again) again.focus();
+      else if (focused.startsWith("drop:")) {
+        // The chip is gone, so focus goes to the chip that took its place, or to the capture box when none is left.
+        const next = view.chips[shown_chips.indexOf(focused.slice("drop:".length))];
+        const target = next === undefined ? undefined : container.querySelector<HTMLElement>(`[data-site-keys-focus="${CSS.escape(`drop:${next}`)}"]`);
+        (target ?? capture_box).focus();
+      }
+    }
+    shown_chips = view.chips;
   }
 
   session = create_site_keys_session({ ...deps, on_change: draw });
