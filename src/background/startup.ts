@@ -301,7 +301,8 @@ export function republish(): Promise<void> {
 // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
 // A setting write passes `setting`: the edits that replace the setting edits, and the record of the folder's base text (none when no file is written).
 // They go into the same storage write as the files, so a stop between writes never leaves one without the other, and a failure restores them all.
-async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedSettingsFile | undefined }): Promise<{ warnings: number }> {
+async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedSettingsFile | undefined }): Promise<{ warnings: number }> {
+  const { files, dir_label } = source;
   await get_config();
   const current_step = await (load_step as Promise<LoadStep>);
   // The build checks snippet ids against the built-in commands, so the snippets of the last load stay out.
@@ -321,14 +322,14 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     // Before the publish, so a key bound to a snippet resolves.
     const snippet_warnings = snippets.register(loaded.config.snippets);
     // No slots: the new keymap can move the browser chords, so the publish plans them again.
-    const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings], source: { files, dir_label } };
+    const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings], source };
     const published = await publish(step, setting?.edits_after ?? edits);
     // One `set`, so the config, the files it was built from, the saved edits and the record of a lagging folder never part.
     // `null` drops the record within the same `set`.
     local_written = true;
     await browser.storage.local.set({
       [FILES_CONFIG_STORAGE_KEY]: stored,
-      [FILES_SOURCE_STORAGE_KEY]: { files, dir_label } satisfies FilesSource,
+      [FILES_SOURCE_STORAGE_KEY]: source satisfies FilesSource,
       [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: unsynced_after ?? null,
       ...(setting && { [SAVED_SETTINGS_STORAGE_KEY]: setting.edits_after.saved }),
     });
@@ -389,11 +390,11 @@ export function set_in_settings_file(name: keyof Settings, value: TomlScalar): P
     const current = await load_files_source();
     const files = with_setting_in_files(current.files, name, value);
     // An earlier edit the folder never got keeps its base: the folder still holds that text.
-    const unsynced = (await came_from_folder(current.dir_label)) ? ((await read_unsynced()) ?? { base: current.files[SETTINGS_FILE] ?? null }) : undefined;
+    const unsynced = (await came_from_folder(current)) ? ((await read_unsynced()) ?? { base: current.files[SETTINGS_FILE] ?? null }) : undefined;
     const edits = await load_edits();
     const edits_after = without_setting(edits, name);
     const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
-    await apply_files(files, current.dir_label, "setting", { edits_after, unsynced });
+    await apply_files({ ...current, files }, "setting", { edits_after, unsynced });
     if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
     if (!unsynced) return { kind: "browser_copy" };
     const outcome = await write_unsynced_settings_file(unsynced);
@@ -404,8 +405,8 @@ export function set_in_settings_file(name: keyof Settings, value: TomlScalar): P
 }
 
 // The folder's text is the base only when the browser copy came from the folder: a copy from an import, or one that never read a folder, would seed the folder with a settings.toml of its own.
-async function came_from_folder(dir_label: string): Promise<boolean> {
-  return dir_label !== IMPORT_DIR_LABEL && (await read_host_memory()).applied !== undefined;
+async function came_from_folder(source: FilesSource): Promise<boolean> {
+  return !source.imported && (await read_host_memory()).applied !== undefined;
 }
 
 // An imported theme lives in browser storage only, so the files build refuses a settings.toml that names it. A theme file of the same name is known to the build, so that name still goes to the file.
@@ -544,7 +545,7 @@ const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored i
 
 // Every swap to the folder's files goes through here, so the next start can tell an unedited browser copy from one with browser changes.
 async function apply_host_files(files: ConfigFiles, config_dir: string): Promise<{ warnings: number }> {
-  const applied = await apply_files(files, config_dir, "reload");
+  const applied = await apply_files({ files, dir_label: config_dir, imported: false }, "reload");
   await remember_applied(files);
   return applied;
 }
@@ -590,7 +591,8 @@ export function import_config(source: unknown, accepted: unknown): Promise<{ war
     if (imports_nothing(incoming, consented)) throw new ConfigRefusal(`${KEPT_CURRENT.import} The import holds no config files and no snippet was accepted.`);
     const current = await load_files_source();
     const { files, replaces_config } = plan_import_files(incoming, current.files, consented);
-    const { warnings } = await apply_files(files, replaces_config ? IMPORT_DIR_LABEL : current.dir_label, "import");
+    const source = replaces_config ? { files, dir_label: IMPORT_DIR_LABEL, imported: true } : { ...current, files };
+    const { warnings } = await apply_files(source, "import");
     return { warnings, replaces_config, snippets: Object.keys(consented).length };
   });
 }
@@ -606,7 +608,7 @@ export function remove_snippet(path: string): Promise<{ warnings: number }> {
       if (binding_edits.length > 0) throw new ConfigRefusal(`${KEPT_CURRENT.remove} The key edit ${binding_edits.join(", ")} runs ${snippet_id}. Reset or change it first.`);
     }
     const { [path]: _removed, ...files } = current.files;
-    return apply_files(files, current.dir_label, "remove");
+    return apply_files({ ...current, files }, "remove");
   });
 }
 
@@ -624,7 +626,7 @@ export function save_config_file(path: string, text: string | null, base: string
     if ((current.files[path] ?? null) !== base) throw new ConfigRefusal(`${KEPT_CURRENT.edit} ${path} changed since you opened it (an import, a reload or another tab). Close it and open it again.`);
     if (text !== null && is_snippet_file(path) && accepted !== text) return { consent: preview_snippet(path, text, current.files, EDITOR_DIR_LABEL) };
     const { [path]: _replaced, ...others } = current.files;
-    return apply_files(text === null ? others : { ...others, [path]: text }, EDITOR_DIR_LABEL, "edit");
+    return apply_files({ files: text === null ? others : { ...others, [path]: text }, dir_label: EDITOR_DIR_LABEL, imported: current.imported }, "edit");
   });
 }
 

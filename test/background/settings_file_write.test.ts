@@ -344,3 +344,20 @@ test("a refused write over a folder the user kept the copy over says the pick st
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
 });
+
+test("an edited import never reaches the folder: a pick after an editor save changes the browser copy alone", async () => {
+  const host = { files: { "keymap.toml": "" } as Files };
+  const { local, sent, startup } = await reloaded(host);
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
+  sent.length = 0;
+  assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
+  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.equal(host.files["settings.toml"], undefined);
+  assert.equal(unsynced_of(local), undefined);
+
+  // A folder read replaces the import, and picks reach the folder again.
+  await startup.reload_config();
+  assert.deepEqual(await startup.set_in_settings_file("theme", "nord"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], 'theme = "nord"\n');
+});
