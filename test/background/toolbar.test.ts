@@ -202,7 +202,7 @@ test("the popup messages go to the switch, the file write and the reload, and a 
   const calls: string[] = [];
   const deps = {
     toolbar: { set_disabled: async (disabled: boolean) => void calls.push(`set ${disabled}`) },
-    change_site_rule: async (pattern: string, action: string) => (calls.push(`${action} ${pattern}`), ", saved to settings.toml"),
+    change_site_rule: async (url: string, action: string) => (calls.push(`${action} ${url}`), ", saved to settings.toml"),
     reload_config: async () => ({ config_dir: "/c", warnings: 1 }),
   };
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_set_disabled", disabled: true }, deps), { ok: true, message: "DesertFox is off" });
@@ -215,7 +215,7 @@ test("the popup messages go to the switch, the file write and the reload, and a 
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_reload_config" }, failing), { ok: false, message: "no host" });
   const refusing = { ...deps, change_site_rule: async () => { throw new Error("settings.d/1.toml sets site_rules"); } };
   assert.deepEqual(await answer_toolbar_request({ type: "toolbar_site", url: www_url, action: "enable" }, refusing), { ok: false, message: "settings.d/1.toml sets site_rules" });
-  assert.deepEqual(calls, ["set true", "disable *://*.example.com/*"]);
+  assert.deepEqual(calls, ["set true", `disable ${www_url}`]);
 });
 
 test("a request for the state already in force changes nothing", async () => {

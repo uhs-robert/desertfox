@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse } from "smol-toml";
-import { set_table_rows } from "../../src/background/toml_table_edit.ts";
+import { remove_table_rows, set_table_rows } from "../../src/background/toml_table_edit.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 
 const RULES = [
@@ -41,10 +41,10 @@ test("a removed row takes only its own lines, and the comments around it stay", 
   const rows = rows_of(RULES);
   const without_mail = set_table_rows(RULES, "site_rules", [rows[0], rows[2]] as never);
   assert.equal(without_mail, RULES.replace('[[site_rules]]\nsite = "*://*.mail.test/*"\noff = true\n\n', ""));
-  // The first row's own inline comment and the comment above it are kept with it.
+  // The comment right over a row's header is the row's, so it goes with the row.
   const without_forum = set_table_rows(RULES, "site_rules", [rows[1], rows[2]] as never);
-  assert.ok(without_forum.includes("# Forums hand j and k over\n\n[[site_rules]]\nsite = \"*://*.mail.test/*\""), without_forum);
-  assert.ok(!without_forum.includes("pass ="));
+  assert.ok(without_forum.startsWith('# My settings\nhint_letters = "abc" # home row\n\n[[site_rules]]\nsite = "*://*.mail.test/*"'), without_forum);
+  assert.ok(!without_forum.includes("pass =") && !without_forum.includes("# Forums"));
 });
 
 test("of two rows that share a site, only the one that equals the removed row goes", () => {
@@ -61,9 +61,9 @@ test("a whole new list keeps the rows that stay, moves none it need not, and wri
   assert.deepEqual(rows_of(after.replaceAll("newtab_links", "site_rules")), next);
   assert.ok(after.includes('label = "A" # first'), after);
   assert.ok(after.includes('[[newtab_links]]\nlabel = "New"\nurl = "https://n.test/"\ngroup = "G"\n'), after);
-  // An empty list removes the key, so a list that was never written reads the same.
-  const emptied = set_table_rows(text, "newtab_links", []);
-  assert.equal(emptied, "# links\n");
+  // An empty list is written as one, so it stays empty where a default has rows. Removing the list removes the key.
+  assert.equal(set_table_rows(text, "newtab_links", []), "newtab_links = []\n");
+  assert.equal(remove_table_rows(text, "newtab_links"), "");
 });
 
 test("a row first in a list with no kept row before it goes above the first block and its comment", () => {
@@ -77,7 +77,8 @@ test("a list in a text without one goes at the end, and an inline array stays on
   assert.equal(set_table_rows("a = 1", "newtab_links", [{ label: "A", url: "https://a.test/" }]), 'a = 1\n\n[[newtab_links]]\nlabel = "A"\nurl = "https://a.test/"');
   const inline = 'newtab_links = [{ label = "A", url = "https://a.test/" }] # mine\n[t]\nb = 2\n';
   assert.equal(set_table_rows(inline, "newtab_links", [{ label: "B", url: "https://b.test/" }]), 'newtab_links = [{ label = "B", url = "https://b.test/" }] # mine\n[t]\nb = 2\n');
-  assert.equal(set_table_rows(inline, "newtab_links", []), "[t]\nb = 2\n");
+  assert.equal(set_table_rows(inline, "newtab_links", []), "newtab_links = [] # mine\n[t]\nb = 2\n");
+  assert.equal(remove_table_rows(inline, "newtab_links"), "[t]\nb = 2\n");
 });
 
 test("quotes, backslashes, newlines and non-ASCII in values and keys parse back exactly", () => {
@@ -92,4 +93,31 @@ test("a layout the scan misreads, a key inside a table and text that does not pa
   assert.throws(() => set_table_rows(text, "site_rules", []), RuntimeRefusal);
   assert.throws(() => set_table_rows("[t]\nsite_rules = 3\n", "site_rules", [OFF_ROW]), RuntimeRefusal);
   assert.throws(() => set_table_rows("a = \n", "site_rules", [OFF_ROW]), (error: unknown) => error instanceof RuntimeRefusal && /does not parse/.test(error.message));
+});
+
+test("a row that moves takes its comment and layout along, and no comment is left over another row", () => {
+  const text = '# the A link\n[[newtab_links]]\nlabel = "A" # first\nurl = "https://a.test/"\n\n# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n';
+  const swapped = set_table_rows(text, "newtab_links", [{ label: "B", url: "https://b.test/" }, { label: "A", url: "https://a.test/" }]);
+  assert.equal(swapped, '# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n\n# the A link\n[[newtab_links]]\nlabel = "A" # first\nurl = "https://a.test/"\n');
+  const back = set_table_rows(swapped, "newtab_links", [{ label: "A", url: "https://a.test/" }, { label: "B", url: "https://b.test/" }]);
+  assert.equal(back, text);
+});
+
+test("a row added after the last one and removed again gives back a text without a final newline", () => {
+  const text = '[[site_rules]]\nsite = "a"';
+  const added = set_table_rows(text, "site_rules", [{ site: "a" }, OFF_ROW]);
+  assert.ok(!added.endsWith("\n"));
+  assert.equal(set_table_rows(added, "site_rules", [{ site: "a" }]), text);
+});
+
+test("thousands of rows change in one pass at the ends, and a large reorder in the middle is written anew and still checked", () => {
+  const rows = Array.from({ length: 3000 }, (_, index) => ({ site: `*://*.s${index}.test/*`, off: true }));
+  const text = set_table_rows("", "site_rules", rows);
+  const started = performance.now();
+  const added = set_table_rows(text, "site_rules", [...rows, OFF_ROW]);
+  assert.equal(added, `${text}\n[[site_rules]]\nsite = "*://*.news.test/*"\noff = true\n`);
+  assert.equal(set_table_rows(added, "site_rules", rows), text);
+  const reversed = [rows[0]!, ...rows.slice(1, -1).reverse(), rows.at(-1)!];
+  assert.deepEqual(rows_of(set_table_rows(text, "site_rules", reversed)), reversed);
+  assert.ok(performance.now() - started < 10_000, `took ${Math.round(performance.now() - started)} ms`);
 });

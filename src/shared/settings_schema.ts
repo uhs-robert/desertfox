@@ -311,7 +311,7 @@ export const SETTING_SPECS = Object.fromEntries(SETTING_NAMES.map((name) => [nam
 export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update", "newtab_ip_info"] as const;
 
 // The settings that `:set`, `:toggle`, `:unset` and the pages write into settings.toml (`change_setting` with layer `file`) rather than into the saved edits.
-// Every settable scalar, list and `[[table]]` list but `site_rules`: a Reset of it would drop every hand-written rule, so the popup changes its rows one at a time (`change_site_rule_in_file`).
+// Every settable scalar, list and `[[table]]` list but `site_rules`. A Reset of the whole list drops every hand-written rule, so the popup changes its rows one at a time instead (`change_site_rule_in_file`).
 export const FILE_WRITTEN_SETTINGS: ReadonlySet<string> = new Set<SettingName>(
   SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable && !BROWSER_KEPT_KINDS.has(SETTINGS_TABLE[name].kind) && !(CONSENT_SETTINGS as readonly string[]).includes(name)),
 );

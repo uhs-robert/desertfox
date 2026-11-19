@@ -8,7 +8,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import { SETTINGS_TABLE } from "../shared/settings_table.ts";
 import { parsed, remove_top_level_key, same_value, set_top_level_key } from "./toml_key_edit.ts";
 import type { TomlValue } from "./toml_key_edit.ts";
-import { set_table_rows } from "./toml_table_edit.ts";
+import { remove_table_rows, set_table_rows } from "./toml_table_edit.ts";
 import type { TomlRow } from "./toml_table_edit.ts";
 import { SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "./storage_keys.ts";
 
@@ -36,7 +36,7 @@ const is_table_setting = (name: string): boolean => Object.hasOwn(SETTINGS_TABLE
 
 // settings.toml's text with `key` set to `value`, or removed for undefined. A table setting changes only the rows that differ.
 function with_key(text: string, key: string, value: TomlValue | undefined): string {
-  if (is_table_setting(key)) return set_table_rows(text, key, (value ?? []) as readonly TomlRow[], SETTINGS_FILE);
+  if (is_table_setting(key)) return value === undefined ? remove_table_rows(text, key, SETTINGS_FILE) : set_table_rows(text, key, value as readonly TomlRow[], SETTINGS_FILE);
   return value === undefined ? remove_top_level_key(text, key, SETTINGS_FILE) : set_top_level_key(text, key, value, SETTINGS_FILE);
 }
 
