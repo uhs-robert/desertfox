@@ -54,13 +54,14 @@ export async function run_cases({ run_case, setup, expect, press_keys, poll_unti
     const MIN_SETTING_ROWS = 20;
     const settings = await evaluate(`(async () => {
       await browser.runtime.openOptionsPage();
+      let last_seen = { hash: "", rows: 0 };
       for (let attempt = 0; attempt < 150; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 50));
         const view = ${extension_view("home.html")};
-        const rows = view?.document.querySelectorAll("[data-setting]").length ?? 0;
-        if (rows > ${MIN_SETTING_ROWS}) return { hash: view.location.hash, rows };
+        last_seen = { hash: view?.location.hash ?? "", rows: view?.document.querySelectorAll("[data-setting]").length ?? 0 };
+        if (last_seen.rows > ${MIN_SETTING_ROWS}) return last_seen;
       }
-      return { hash: "", rows: 0 };
+      return last_seen;
     })()`);
     expect(settings?.hash === "#/settings" && settings?.rows > MIN_SETTING_ROWS, `settings page after openOptionsPage: ${JSON.stringify(settings)}`);
   });
