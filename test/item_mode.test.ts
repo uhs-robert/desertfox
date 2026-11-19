@@ -159,12 +159,33 @@ test("the start carries the item selector of the row whose item keys apply, and 
   assert.deepEqual(await item_start_for(stored(compiled), "https://a.test/"), {});
 });
 
-test("the shipped item rows start their pages in item mode with the setting off, the rows that give j and k to the site do not, and a user row turns a site off", async () => {
+test("each global value starts the shipped sites and the other list pages as it says", async () => {
+  const shipped_site = "https://news.ycombinator.com/";
+  const other_site = "https://a.test/";
+  const expected = [["shipped", true, false], [true, true, true], [false, false, false], [undefined, true, false]] as const;
+  for (const [global, on_shipped, on_other] of expected) {
+    const compiled = compiled_with(global === undefined ? {} : { item_navigator: global });
+    assert.equal(await starts_item_mode(stored(compiled), shipped_site), on_shipped, `${global} on a shipped site`);
+    assert.equal(await starts_item_mode(stored(compiled), other_site), on_other, `${global} elsewhere`);
+  }
+});
+
+test("a user row beats the global value on a shipped site and elsewhere, and a row of shipped follows the global value", async () => {
+  const hn = "https://news.ycombinator.com/";
+  const rows = (global: "shipped" | boolean, site: string, value: "shipped" | boolean) => compiled_with({ item_navigator: global, site_rules: [{ site, item_navigator: value }] });
+  assert.equal(await starts_item_mode(stored(rows("shipped", "https://news.ycombinator.com/*", false)), hn), false);
+  assert.equal(await starts_item_mode(stored(rows(true, "https://news.ycombinator.com/*", false)), hn), false);
+  assert.equal(await starts_item_mode(stored(rows(false, "https://news.ycombinator.com/*", true)), hn), true);
+  assert.equal(await starts_item_mode(stored(rows(false, "https://a.test/*", true)), "https://a.test/"), true);
+  assert.equal(await starts_item_mode(stored(rows(true, "https://a.test/*", false)), "https://a.test/"), false);
+  assert.equal(await starts_item_mode(stored(rows("shipped", "https://a.test/*", "shipped")), "https://a.test/"), true);
+  assert.equal(await starts_item_mode(stored(rows(false, "https://a.test/*", "shipped")), "https://a.test/"), false);
+});
+
+test("every shipped item row marks its sites as shipped, the rows that give j and k to the site stay off, and a row switched off takes its mark along", async () => {
   const shipped = compiled_with();
-  for (const address of ["https://www.google.com/search?q=a", "https://news.ycombinator.com/", "https://www.reddit.com/r/a/", "https://drive.google.com/drive/my-drive", "https://duckduckgo.com/?q=a"]) assert.notEqual(await item_start_for(stored(shipped), address), undefined, address);
-  for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a", "https://www.google.com/maps/place/a", "https://a.test/"]) assert.equal(await item_start_for(stored(shipped), address), undefined, address);
-  const turned_off = compiled_with({ site_rules: [{ site: "https://news.ycombinator.com/*", item_navigator: false }] });
-  assert.equal(await item_start_for(stored(turned_off), "https://news.ycombinator.com/"), undefined);
+  for (const address of ["https://www.google.com/search?q=a", "https://www.reddit.com/r/a/", "https://drive.google.com/drive/my-drive", "https://duckduckgo.com/?q=a"]) assert.notEqual(await item_start_for(stored(shipped), address), undefined, address);
+  for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a", "https://www.google.com/maps/place/a"]) assert.equal(await item_start_for(stored(shipped), address), undefined, address);
   assert.equal(await item_start_for(stored(compiled_with({ default_site_rows_off: ["hackernews"] })), "https://news.ycombinator.com/"), undefined);
-  for (const { name, row } of DEFAULT_SITE_ROWS) assert.equal("item_navigator" in row, row.keymap?.item !== undefined, name);
+  for (const { name, row } of DEFAULT_SITE_ROWS) assert.equal((row as { item_navigator?: unknown }).item_navigator, row.keymap?.item === undefined ? undefined : "shipped", name);
 });

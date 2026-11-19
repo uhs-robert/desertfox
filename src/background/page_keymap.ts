@@ -43,11 +43,17 @@ export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresse
 const site_claims_item_keys = (columns: PageSiteColumns): boolean =>
   ["j", "k"].some((key) => Object.hasOwn(columns.bind ?? {}, key) || Object.hasOwn(columns.keymap?.["normal"] ?? {}, key) || (columns.keys !== undefined && is_freed(frees_of(columns.keys), key)));
 
+// A row's own `item_navigator` value decides its pages. A shipped row says `shipped`, which follows the global value unless that is false. With no row value only a global true starts the page.
+const item_navigator_on = (columns: PageSiteColumns, global: CompiledKeymap["item_navigator"]): boolean => {
+  const own = Object.hasOwn(columns.values, "item_navigator") ? columns.values["item_navigator"] : undefined;
+  return own === undefined ? global === true : own === true || (own === "shipped" && global !== undefined);
+};
+
 // Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there or claims j or k. `selector` is the item selector of the row whose item keys apply, so the start looks for the row's items and not the finder's list.
 export async function item_start_for(storage: KeymapStorage, address: string | undefined): Promise<{ selector?: string } | undefined> {
   const keymap = current_keymap(await stored_keymap(storage));
   const columns = site_columns_for(keymap, [address]);
-  if (keymap === undefined || columns.off === true || site_claims_item_keys(columns) || !site_value(columns, "item_navigator", keymap.item_navigator === true)) return undefined;
+  if (keymap === undefined || columns.off === true || site_claims_item_keys(columns) || !item_navigator_on(columns, keymap.item_navigator)) return undefined;
   const selector = columns.keymap?.["item"]?.["j"]?.leaf.steps.find((step) => step.invocation.id === "page.item")?.invocation.args?.["selector"];
   return typeof selector === "string" ? { selector } : {};
 }

@@ -89,8 +89,8 @@ export type CompiledKeymap = {
   bridge_share_tabs?: true;
   // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
   frame_site_globals?: FrameSiteValues;
-  // Set when the `item_navigator` setting is on. A site row can turn the finder on or off for its pages against it. Absent means off.
-  item_navigator?: true;
+  // The global `item_navigator` value when it is not false: `shipped` starts item mode on the sites of the shipped rows, true on every list page. Absent means off, as in a keymap an older version stored.
+  item_navigator?: true | "shipped";
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
   which_key_delay_ms: number;
