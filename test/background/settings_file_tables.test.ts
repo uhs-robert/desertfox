@@ -157,6 +157,23 @@ test("Remove in the keys form on a pass row only a settings.d file holds is refu
   assert.deepEqual(await startup.change_site_keys_in_file(FORUM.replace("forum", "none"), null), { kind: "unchanged" });
 });
 
+test("a keys-form Save over a file pass row writes no dead row for a saved list's other keys", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { startup } = await reloaded(host);
+  await startup.change_edits(() => ({ saved: { site_rules: [{ site: FORUM, pass: "x" }] }, temp: {} }));
+  assert.deepEqual(await startup.change_site_keys_in_file(FORUM, "z"), { kind: "written" });
+  assert.deepEqual(await site_rules_in_force(startup), [{ site: FORUM, pass: "z" }]);
+});
+
+test("a keys-form write does not copy a saved off row a settings.d file already has", async () => {
+  const host = { files: { "settings.toml": MINE, [D_FILE]: d_row("*://*.mine.test/*", "off = true") } };
+  const { startup } = await reloaded(host);
+  await startup.change_edits(() => ({ saved: { site_rules: [{ site: "*://*.mine.test/*", off: true }] }, temp: {} }));
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, "x"), { kind: "written" });
+  const rows = JSON.parse(JSON.stringify((parse(host.files["settings.toml"]) as { site_rules: unknown[] }).site_rules));
+  assert.deepEqual(rows, [{ site: FORUM, pass: "j k" }, { site: NEWS, pass: "x" }]);
+});
+
 test("a popup write and a reload that picks up a new settings.d file, in either order, leave one popup row and the combined list in force", async () => {
   const blocker = d_row("*://*.news.test/*", "off = true");
   for (const write_first of [true, false]) {
