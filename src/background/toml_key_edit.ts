@@ -1,30 +1,30 @@
 // Sets or removes one top-level key in TOML text and keeps every other byte: comments, blank lines, order and line endings.
 // smol-toml's `stringify` would rewrite the whole file and drop the comments, so the edit works on lines. A parse of the
 // text before and after then proves that nothing but the one key changed, and refuses the edit otherwise.
-// A value is a scalar or a list of strings: every shape a setting outside the tables takes.
+// A value is a scalar, a list or an inline table. The rows of a `[[table]]` list go through `toml_table_edit.ts` instead.
 
 import { parse, TomlError } from "smol-toml";
 import { RuntimeRefusal } from "../shared/command.ts";
 
 export type TomlScalar = string | number | boolean;
-export type TomlValue = TomlScalar | readonly string[];
+export type TomlValue = TomlScalar | readonly TomlValue[] | { readonly [key: string]: TomlValue };
 
-const BARE_KEY = /^[A-Za-z0-9_-]+$/;
+export const BARE_KEY = /^[A-Za-z0-9_-]+$/;
 // `[name]` or `[[name]]` with an optional comment. A line of a multi-line array that starts with `[` carries a comma, so it
 // does not match. A case this misreads still cannot write a wrong file: the parse check refuses it.
-const TABLE_HEADER = /^\s*\[\[?[^[\]=,]*\]\]?\s*(#.*)?$/;
-const BLANK_OR_COMMENT = /^\s*(#.*)?$/;
+export const TABLE_HEADER = /^\s*\[\[?[^[\]=,]*\]\]?\s*(#.*)?$/;
+export const BLANK_OR_COMMENT = /^\s*(#.*)?$/;
 
-type Line = { body: string; eol: string };
+export type Line = { body: string; eol: string };
 
-function split_lines(text: string): Line[] {
+export function split_lines(text: string): Line[] {
   return text === "" ? [] : text.split(/(?<=\n)/).map((line) => {
     const eol = line.endsWith("\r\n") ? "\r\n" : line.endsWith("\n") ? "\n" : "";
     return { body: line.slice(0, line.length - eol.length), eol };
   });
 }
 
-const join_lines = (lines: Line[]): string => lines.map((line) => line.body + line.eol).join("");
+export const join_lines = (lines: Line[]): string => lines.map((line) => line.body + line.eol).join("");
 
 function key_line_pattern(key: string): RegExp {
   return new RegExp(`^(\\s*)(${key}|"${key}"|'${key}')(\\s*=\\s*)(.*)$`);
@@ -88,9 +88,14 @@ function value_end(lines: Line[], at: number, rest: string): ValueEnd | undefine
 }
 
 // JSON escapes every control character but DEL, which a TOML basic string also refuses unescaped.
-function toml_value(value: TomlValue): string {
-  if (typeof value === "object") return `[${value.map(toml_value).join(", ")}]`;
-  if (typeof value === "string") return JSON.stringify(value).replace(/\x7f/g, "\\u007f");
+const toml_string = (text: string): string => JSON.stringify(text).replace(/\x7f/g, "\\u007f");
+
+export const toml_key = (key: string): string => (BARE_KEY.test(key) ? key : toml_string(key));
+
+export function toml_value(value: TomlValue): string {
+  if (Array.isArray(value)) return `[${(value as readonly TomlValue[]).map(toml_value).join(", ")}]`;
+  if (typeof value === "object") return `{ ${Object.entries(value).map(([key, item]) => `${toml_key(key)} = ${toml_value(item)}`).join(", ")} }`;
+  if (typeof value === "string") return toml_string(value);
   if (typeof value === "number" && !Number.isFinite(value)) throw new RuntimeRefusal(`${value} is not a TOML number`);
   return String(value);
 }
@@ -107,7 +112,7 @@ export function same_value(left: unknown, right: unknown): boolean {
   return Object.is(left, right);
 }
 
-function parsed(text: string, label: string): Record<string, unknown> {
+export function parsed(text: string, label: string): Record<string, unknown> {
   try {
     return parse(text) as Record<string, unknown>;
   } catch (error) {
@@ -117,7 +122,7 @@ function parsed(text: string, label: string): Record<string, unknown> {
 }
 
 // The one top-level line that sets `key`, if any. A key set twice never gets here: the parse refuses it first.
-function find_key(lines: Line[], key: string, label: string): { header: number; at: number | undefined } {
+export function find_key(lines: Line[], key: string, label: string): { header: number; at: number | undefined } {
   if (!BARE_KEY.test(key)) throw new RuntimeRefusal(`${key} is not a top-level key. This editor changes top-level keys only.`);
   const pattern = key_line_pattern(key);
   const header = lines.findIndex((line) => TABLE_HEADER.test(line.body));

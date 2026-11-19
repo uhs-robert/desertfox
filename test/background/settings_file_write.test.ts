@@ -215,7 +215,7 @@ test("a theme set in settings.d is refused, and nothing changes", async () => {
   assert.equal(host.files["settings.toml"], MINE);
 });
 
-test("the settings message takes layer file for every scalar and list but the consents, and says where the value went", async () => {
+test("the settings message takes layer file for every scalar, list and link list but the consents and the site rules, and says where the value went", async () => {
   const host = { files: { "settings.toml": MINE }, granted: true };
   const { startup, local } = await reloaded(host);
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
@@ -234,7 +234,7 @@ test("the settings message takes layer file for every scalar and list but the co
   assert.ok(list.ok, list.message);
   assert.match(stored_settings(local)!, /^next_patterns = \["more", "on"\]$/m);
 
-  for (const name of ["bridge", "newtab_links", "site_rules"]) {
+  for (const name of ["bridge", "site_rules"]) {
     const value = name === "bridge" ? true : [];
     assert.deepEqual(await messages.change({ type: "change_setting", name, action: "set", value, layer: "file" }), { ok: false, message: `${name} is not written to settings.toml yet` });
   }
@@ -580,7 +580,7 @@ test("the edits are put onto the folder's text only where the folder kept the ba
   assert.equal(replayed_on_folder(MINE, with_theme("nord"), "theme = \n"), undefined);
   // Nothing to put on, or a change this editor does not write.
   assert.equal(replayed_on_folder(MINE, MINE, HAND), undefined);
-  assert.equal(replayed_on_folder("a = [1]\n", "a = [2]\n", "a = [1]\nb = 1\n"), undefined);
+  assert.equal(replayed_on_folder("a = 1979-05-27\n", "a = 1979-05-28\n", "a = 1979-05-27\nb = 1\n"), undefined);
 });
 
 test("a refused write whose folder also changed keymap.toml takes that file too, so nothing waits for a later reload", async () => {

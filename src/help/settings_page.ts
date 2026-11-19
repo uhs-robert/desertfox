@@ -236,7 +236,7 @@ function widget_of(field: Field, hooks: Hooks): Widget | undefined {
 // The long description is kept for power users in a closed fold: it holds the input format, such as CSS selectors or the range of a number.
 const more_of = (doc: string): HTMLElement => el("details", "desertfox-settings-more", el("summary", undefined, "More"), el("p", "desertfox-help-muted", doc));
 
-// The Your site rules box: one table row per rule, with its site and its effect in words. The rules stay in the settings file, so the table has no controls except Reset. Rules in the saved layer (the popup's Disable on this site writes them) hide the file's rules, so they are marked and Reset clears them.
+// The Your site rules box: one table row per rule, with its site and its effect in words. The rules stay in the settings file, so the table has no controls except Reset. Rules in the saved layer (the popup's Disable on this site wrote them there before it wrote settings.toml) hide the file's rules, so they are marked and Reset clears them.
 export function fill_site_rules(box: HTMLElement, field: Field, reset: () => void): void {
   const rules = Array.isArray(field.row.value) ? (field.row.value as SiteRuleRow[]) : [];
   const saved = field.row.top_layer === "saved" || field.row.top_layer === "temp";

@@ -5,8 +5,11 @@ import { parse, TomlError } from "smol-toml";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { SettingEdits, Settings } from "../shared/config.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import { remove_top_level_key, same_value, set_top_level_key } from "./toml_key_edit.ts";
+import { SETTINGS_TABLE } from "../shared/settings_table.ts";
+import { parsed, remove_top_level_key, same_value, set_top_level_key } from "./toml_key_edit.ts";
 import type { TomlValue } from "./toml_key_edit.ts";
+import { set_table_rows } from "./toml_table_edit.ts";
+import type { TomlRow } from "./toml_table_edit.ts";
 import { SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "./storage_keys.ts";
 
 export const SETTINGS_FILE = "settings.toml";
@@ -21,11 +24,26 @@ export const held_in_settings_d = (path: string, name: keyof Settings) => new Ru
 export function with_setting_in_files(files: ConfigFiles, name: keyof Settings, value: TomlValue): ConfigFiles {
   const winning_file = settings_d_file_that_sets(files, name);
   if (winning_file !== undefined) throw held_in_settings_d(winning_file, name);
-  return { ...files, [SETTINGS_FILE]: set_top_level_key(files[SETTINGS_FILE] ?? "", name, value, SETTINGS_FILE) };
+  return { ...files, [SETTINGS_FILE]: with_key(files[SETTINGS_FILE] ?? "", name, value) };
 }
 
 export function without_setting_in_files(files: ConfigFiles, name: keyof Settings): ConfigFiles {
-  return { ...files, [SETTINGS_FILE]: remove_top_level_key(files[SETTINGS_FILE] ?? "", name, SETTINGS_FILE) };
+  return { ...files, [SETTINGS_FILE]: with_key(files[SETTINGS_FILE] ?? "", name, undefined) };
+}
+
+// The settings that are lists of tables, which a file holds as `[[name]]` rows.
+const is_table_setting = (name: string): boolean => Object.hasOwn(SETTINGS_TABLE, name) && ["table_list", "site_table"].includes(SETTINGS_TABLE[name as keyof typeof SETTINGS_TABLE].kind);
+
+// settings.toml's text with `key` set to `value`, or removed for undefined. A table setting changes only the rows that differ.
+function with_key(text: string, key: string, value: TomlValue | undefined): string {
+  if (is_table_setting(key)) return set_table_rows(text, key, (value ?? []) as readonly TomlRow[], SETTINGS_FILE);
+  return value === undefined ? remove_top_level_key(text, key, SETTINGS_FILE) : set_top_level_key(text, key, value, SETTINGS_FILE);
+}
+
+// The rows of the `[[name]]` list settings.toml itself holds, as written there.
+export function rows_in_settings_file(files: ConfigFiles, name: keyof Settings): TomlRow[] {
+  const rows = parsed(files[SETTINGS_FILE] ?? "", SETTINGS_FILE)[name];
+  return Array.isArray(rows) ? (rows as TomlRow[]) : [];
 }
 
 // Whether settings.toml itself sets `name`, as opposed to a default or a `settings.d` file.
@@ -45,7 +63,7 @@ export type UnsyncedSettingsFile = { base: string | null };
 
 // The keys the browser copy changed over `base`, set the same way on `folder`, the folder's new text (null: no file).
 // The record needs no list of its edits: while it stands, the copy's settings.toml is `base` plus those edits, so a parse of both gives them back.
-// Undefined when that is not safe: the folder changed one of those keys too, removed a file the base had, or holds a value the editor does not write (a table, a list of anything but strings).
+// Undefined when that is not safe: the folder changed one of those keys too, removed a file the base had, or has a layout the editor refuses.
 export function replayed_on_folder(base: string | null, edited: string, folder: string | null): string | undefined {
   if (base !== null && folder === null) return undefined;
   try {
@@ -57,9 +75,8 @@ export function replayed_on_folder(base: string | null, edited: string, folder: 
     let text = folder ?? "";
     for (const key of changed) {
       const value = after[key];
-      if (value === undefined) text = remove_top_level_key(text, key, SETTINGS_FILE);
-      else if (is_toml_value(value)) text = set_top_level_key(text, key, value, SETTINGS_FILE);
-      else return undefined;
+      if (value !== undefined && !is_toml_value(value)) return undefined;
+      text = with_key(text, key, value);
     }
     return text;
   } catch (error) {
@@ -68,8 +85,9 @@ export function replayed_on_folder(base: string | null, edited: string, folder: 
   }
 }
 
+// A parsed date is the one TOML value the editor does not write.
 const is_toml_value = (value: unknown): value is TomlValue =>
-  typeof value === "string" || typeof value === "number" || typeof value === "boolean" || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+  typeof value === "string" || typeof value === "number" || typeof value === "boolean" || (Array.isArray(value) ? value.every(is_toml_value) : typeof value === "object" && value !== null && !(value instanceof Date) && Object.values(value).every(is_toml_value));
 
 export async function read_unsynced(): Promise<UnsyncedSettingsFile | undefined> {
   // `null` is a dropped record: `apply_files` drops it inside its one storage write.

@@ -35,12 +35,8 @@ async function active_tab(): Promise<browser.tabs.Tab | undefined> {
 
 type LoadedConfig = Awaited<ReturnType<typeof load_effective_config>>;
 
-function read_site(url: string | undefined, { config, edits, config_settings }: LoadedConfig): SiteState {
-  return site_state(url, {
-    file: config_settings.site_rules ?? [],
-    saved: edits.saved.site_rules,
-    effective: effective_settings(config.settings).site_rules,
-  });
+function read_site(url: string | undefined, { config }: LoadedConfig): SiteState {
+  return site_state(url, effective_settings(config.settings).site_rules);
 }
 
 async function open_help_page(hash: string): Promise<void> {
