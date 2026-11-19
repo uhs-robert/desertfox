@@ -81,7 +81,7 @@ export function mount_themes(container: HTMLElement, deps: Omit<ThemesDeps, "on_
     );
     message.textContent = state.message?.text ?? "";
     message.className = state.message?.ok === false ? "desertfox-settings-error" : "desertfox-help-muted";
-    if (state.names.length === 0) {
+    if (state.names.length === 0 && state.kept_names.length === 0) {
       list.replaceChildren(el("p", "desertfox-help-muted", state.loaded ? "You have no theme files yet." : "Loading..."));
       return;
     }
@@ -90,6 +90,7 @@ export function mount_themes(container: HTMLElement, deps: Omit<ThemesDeps, "on_
       remove.setAttribute("aria-label", `Remove the theme ${name}`);
       return el("tr", undefined, el("td", undefined, el("code", undefined, name)), el("td", undefined, remove));
     });
+    for (const name of state.kept_names) rows.push(el("tr", undefined, el("td", undefined, el("code", undefined, name)), el("td", "desertfox-help-muted", "Remove by hand")));
     list.replaceChildren(el("h4", undefined, "Your theme files"), el("table", "desertfox-keys-table", ...rows));
   }
 

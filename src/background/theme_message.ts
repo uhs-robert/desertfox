@@ -11,6 +11,7 @@ import { ROLES } from "../shared/theme/roles.ts";
 import type { RoleColors, Theme } from "../shared/theme/roles.ts";
 import { local_theme_problem, parse_color } from "../shared/theme/theme_file.ts";
 import { failure } from "./config_reload.ts";
+import { host_file_of } from "./native_client.ts";
 import { outcome_note, SETTINGS_FILE, with_setting_in_files } from "./settings_file.ts";
 import type { FileWriteOutcome } from "./settings_file.ts";
 
@@ -47,7 +48,9 @@ function removal_note(outcome: FileWriteOutcome, path: string): string {
 export function create_theme_messages(deps: ThemeMessageDeps) {
   async function list(): Promise<ListImportedThemesAnswer> {
     try {
-      return { ok: true, names: theme_file_names(await deps.read_files()) };
+      const names = theme_file_names(await deps.read_files());
+      const kept_names = names.filter((name) => host_file_of(theme_file_path(name)) === undefined);
+      return { ok: true, names: names.filter((name) => !kept_names.includes(name)), ...(kept_names.length > 0 && { kept_names }) };
     } catch (error) {
       return failure(error);
     }
