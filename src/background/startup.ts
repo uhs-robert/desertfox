@@ -1,6 +1,8 @@
 // Loads the config, compiles the keymap and publishes the result.
 
 import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
+import { effective_settings } from "../shared/config.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
@@ -44,9 +46,9 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { clear_unsynced, read_unsynced, replayed_on_folder, SETTINGS_FILE, store_unsynced, text_sha256, with_setting_in_files, without_setting } from "./settings_file.ts";
+import { clear_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, text_sha256, with_setting_in_files, without_setting, without_setting_in_files } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedSettingsFile } from "./settings_file.ts";
-import type { TomlScalar } from "./toml_key_edit.ts";
+import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
@@ -385,27 +387,70 @@ function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
 }
 
 // Writes `value` into the browser copy of settings.toml, drops any saved or temp edit of `name` that would hide it, then asks the host to write the file.
-// Only the edit runs in the change queue. The host write runs outside it, so a slow host never holds up a `:set`.
-export async function set_in_settings_file(name: keyof Settings, value: TomlScalar): Promise<FileWriteOutcome> {
-  const committed = await in_change_queue(async (): Promise<FileWriteOutcome | { question_was_pending: boolean; pick: PickMark }> => {
+export function set_in_settings_file(name: keyof Settings, value: TomlValue): Promise<FileWriteOutcome> {
+  return change_setting_in_file<FileWriteOutcome>(name, async (files) => {
     if (name === "theme" && (await is_browser_only_theme(value))) {
-      await save_in_browser(name, value);
-      return { kind: "saved_in_browser" };
+      await save_in_browser(name, value as TomlScalar);
+      return { done: { kind: "saved_in_browser" } };
     }
+    return { files: with_setting_in_files(files, name, value) };
+  });
+}
+
+// Flips the value in force and writes it as `set_in_settings_file` does. The value is read in the change queue, so two quick toggles flip twice.
+export async function toggle_in_settings_file(name: keyof Settings): Promise<{ value: boolean; outcome: FileWriteOutcome }> {
+  let value = false;
+  const outcome = await change_setting_in_file<FileWriteOutcome>(name, async (files) => {
+    value = !effective_settings((await get_config()).settings)[name];
+    return { files: with_setting_in_files(files, name, value) };
+  });
+  return { value, outcome };
+}
+
+// What an unset did besides a file write: `edits_only` dropped the browser edits and left settings.toml as it was, `not_set` found nothing to drop.
+export type UnsetResult = FileWriteOutcome | { kind: "edits_only" } | { kind: "not_set" };
+
+// Removes `name` from settings.toml and drops its saved and temp edits, so the default applies.
+// A `settings.d` file that sets it would still win, so the file stays as it is then: the browser edits go, or, with none, the unset refuses and names that file.
+export function unset_in_settings_file(name: keyof Settings): Promise<UnsetResult> {
+  return change_setting_in_file<UnsetResult>(name, async (files) => {
+    const edits = await load_edits();
+    const has_browser_edit = Object.hasOwn(edits.saved, name) || Object.hasOwn(edits.temp, name);
+    const winning_file = settings_d_file_that_sets(files, name);
+    if (winning_file === undefined && settings_file_sets(files, name)) return { files: without_setting_in_files(files, name) };
+    if (has_browser_edit) {
+      await drop_edits_of(name);
+      return { done: { kind: "edits_only" } };
+    }
+    if (winning_file !== undefined) throw held_in_settings_d(winning_file, name);
+    return { done: { kind: "not_set" } };
+  });
+}
+
+// One change of `name` in settings.toml. `plan` runs in the change queue on the browser copy's files and returns them changed, or a result that wrote no file.
+// Only the edit runs in the change queue. The host write runs outside it, so a slow host never holds up a `:set`.
+async function change_setting_in_file<R>(name: keyof Settings, plan: (files: ConfigFiles) => Promise<{ files: ConfigFiles } | { done: R }>): Promise<FileWriteOutcome | R> {
+  const committed = await in_change_queue(async (): Promise<{ done: R } | { done: FileWriteOutcome } | { question_was_pending: boolean; pick: PickMark }> => {
     const current = await load_files_source();
-    const files = with_setting_in_files(current.files, name, value);
+    const planned = await plan(current.files);
+    if ("done" in planned) return planned;
     // An earlier edit the folder never got keeps its base: the folder still holds that text.
     const unsynced = (await came_from_folder(current)) ? ((await read_unsynced()) ?? { base: current.files[SETTINGS_FILE] ?? null }) : undefined;
     const edits = await load_edits();
     const edits_after = without_setting(edits, name);
     const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
-    await apply_files({ ...current, files }, "setting", { edits_after, unsynced });
+    try {
+      await apply_files({ ...current, files: planned.files }, "setting", { edits_after, unsynced });
+    } catch (error) {
+      // The files build refuses a value the setting's own check passes: a theme or a search engine the files do not have.
+      throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
+    }
     if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
-    if (!unsynced) return { kind: "browser_copy" };
+    if (!unsynced) return { done: { kind: "browser_copy" } };
     picks_made += 1;
     return { question_was_pending, pick: { seq: picks_made, drops: record_drops } };
   });
-  if ("kind" in committed) return committed;
+  if ("done" in committed) return committed.done;
   // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
   const outcome = (await write_waiting_settings_file(in_change_queue, committed.pick)) ?? { kind: "written" };
   // The question was made against the copy before the pick. The folder may still differ in other files, so it is asked again or settled.
@@ -422,7 +467,7 @@ async function came_from_folder(source: FilesSource): Promise<boolean> {
 }
 
 // An imported theme lives in browser storage only, so the files build refuses a settings.toml that names it. A theme file of the same name is known to the build, so that name still goes to the file.
-async function is_browser_only_theme(value: TomlScalar): Promise<boolean> {
+async function is_browser_only_theme(value: TomlValue): Promise<boolean> {
   if (typeof value !== "string") return false;
   const files_themes = (await (load_step as Promise<LoadStep>)).loaded.config.local_themes ?? {};
   return Object.hasOwn((await load_layers()).themes ?? {}, value) && !Object.hasOwn(files_themes, value);
@@ -431,9 +476,18 @@ async function is_browser_only_theme(value: TomlScalar): Promise<boolean> {
 // The saved edit, as before the file write existed: it lasts, and it drops a temp edit of the name that would hide it.
 async function save_in_browser(name: keyof Settings, value: TomlScalar): Promise<void> {
   const before = await load_edits();
-  const next = { saved: { ...before.saved, [name]: value }, temp: without_setting(before, name).temp };
+  await commit_setting_edits(before, { saved: { ...before.saved, [name]: value }, temp: without_setting(before, name).temp });
+}
+
+async function drop_edits_of(name: keyof Settings): Promise<void> {
+  const before = await load_edits();
+  await commit_setting_edits(before, without_setting(before, name));
+}
+
+// `change_edits` for a caller already in the change queue.
+async function commit_setting_edits(before: SettingEdits, next: SettingEdits): Promise<void> {
   await commit_change(before, next, { store: store_edits, publish: async (edits) => publish(await (load_step as Promise<LoadStep>), edits) });
-  void autoconfig.mirror(next.saved, (await load_layers()).keymap);
+  if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) void autoconfig.mirror(next.saved, (await load_layers()).keymap);
 }
 
 type HostWriteReply = { ok: true } | { ok: false; error: unknown };
@@ -546,7 +600,8 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
       await clear_unsynced();
       return (record_end = { kind: asked === "asked" ? "conflict" : "conflict_kept" });
     }
-    if (error.failure === "no_permission" || error.failure === "host_missing" || error.failure === "host_outdated") return { kind: "waiting" };
+    if (error.failure === "host_outdated") return { kind: "waiting", host_outdated: true };
+    if (error.failure === "no_permission" || error.failure === "host_missing") return { kind: "waiting" };
     return { kind: "failed", reason: error.message };
   }
   const { files } = await load_files_source();

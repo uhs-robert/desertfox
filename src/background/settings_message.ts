@@ -1,6 +1,8 @@
 // The settings page's way to change a setting. It shares `:set`'s planners, check and `change_edits` queue, so a page edit and a `:set` publish the same way.
 
-import { plan_set_value, plan_unset, set_toast } from "../commands/settings.ts";
+import { plan_set_value, plan_unset, set_toast, unset_toast } from "../commands/settings.ts";
+import type { UnsetResult } from "./startup.ts";
+import type { TomlValue } from "./toml_key_edit.ts";
 import { outcome_note, SETTINGS_FILE } from "./settings_file.ts";
 import type { FileWriteOutcome } from "./settings_file.ts";
 import type { ConfigSource } from "./config_load.ts";
@@ -19,7 +21,9 @@ export type SettingsMessageDeps = {
   // The names of the imported themes, which the theme picker lists.
   read_theme_names: () => Promise<string[]>;
   // Writes the value into settings.toml and drops its edits (`set_in_settings_file`).
-  set_in_file: (name: keyof Settings, value: string | number | boolean) => Promise<FileWriteOutcome>;
+  set_in_file: (name: keyof Settings, value: TomlValue) => Promise<FileWriteOutcome>;
+  // Removes the name from settings.toml and drops its edits (`unset_in_settings_file`).
+  unset_in_file: (name: keyof Settings) => Promise<UnsetResult>;
 };
 
 // The text `:set` or `:unset` gives for a name it does not take, from the same validator.
@@ -55,9 +59,9 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
     if (typeof name !== "string" || !is_setting_name(name)) return { ok: false, message: `unknown setting ${String(name)}` };
     const spec = SETTING_SPECS[name];
     if (action === "set" && !spec.check(request.value)) return { ok: false, message: `${name}: expected ${spec.expectation}` };
-    if (action === "set" && layer === "file") {
+    if (layer === "file") {
       if (!FILE_WRITTEN_SETTINGS.has(name)) return { ok: false, message: `${name} is not written to ${SETTINGS_FILE} yet` };
-      return set_in_file(name, request.value as string | number | boolean);
+      return action === "set" ? set_in_file(name, request.value as TomlValue) : unset_in_file(name);
     }
 
     let message = "";
@@ -78,7 +82,7 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
     }
   }
 
-  async function set_in_file(name: keyof Settings, value: string | number | boolean): Promise<ChangeSettingAnswer> {
+  async function set_in_file(name: keyof Settings, value: TomlValue): Promise<ChangeSettingAnswer> {
     try {
       const outcome = await deps.set_in_file(name, value);
       // The config in force, with the imported themes, so the name check knows every theme the pick could name.
@@ -87,12 +91,25 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
         config = in_force;
         return undefined;
       });
-      const { source, config_settings, edits } = await deps.read_layers();
-      const status = build_config_status(source, config_settings, edits);
-      return { ok: true, setting: build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!, message: set_toast(name, value, outcome_note(outcome), config!).message };
+      return { ok: true, setting: await row_now(name), message: set_toast(name, value, outcome_note(outcome), config!).message };
     } catch (error) {
       return failure(error);
     }
+  }
+
+  async function unset_in_file(name: keyof Settings): Promise<ChangeSettingAnswer> {
+    try {
+      const result = await deps.unset_in_file(name);
+      return { ok: true, setting: await row_now(name), message: unset_toast(name, result).message };
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async function row_now(name: keyof Settings) {
+    const { source, config_settings, edits } = await deps.read_layers();
+    const status = build_config_status(source, config_settings, edits);
+    return build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!;
   }
 
   return { list, change };

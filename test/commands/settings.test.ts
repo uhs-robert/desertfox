@@ -3,6 +3,8 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { make_settings_handlers, plan_set, plan_toggle, plan_unset } from "../../src/commands/settings.ts";
 import type { SettingsDeps } from "../../src/commands/settings.ts";
+import type { FileWriteOutcome } from "../../src/background/settings_file.ts";
+import type { UnsetResult } from "../../src/background/startup.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { NO_EDITS } from "../../src/shared/config.ts";
@@ -86,8 +88,10 @@ test("unset drops both layers, and unset --temp drops only the temp edit", () =>
 
 const ctx: CommandContext = { tab_id: 7, window_id: 1, frame_id: 0, mode: "normal" };
 
-function fake_deps(initial: SettingEdits = NO_EDITS) {
+// `outcome` answers every settings.toml write. The writes are recorded, as the file is not modelled.
+function fake_deps(initial: SettingEdits = NO_EDITS, outcome: FileWriteOutcome = { kind: "written" }, unset_result: UnsetResult = outcome) {
   const toasts: string[] = [];
+  const file_writes: string[] = [];
   const state = { edits: initial, publishes: 0 };
   const deps: SettingsDeps = {
     change_edits: async (decide) => {
@@ -97,22 +101,80 @@ function fake_deps(initial: SettingEdits = NO_EDITS) {
       state.publishes++;
     },
     toast: async (_ctx, kind, message) => void toasts.push(`${kind} ${message}`),
+    set_in_file: async (name, value) => {
+      file_writes.push(`set ${name} ${JSON.stringify(value)}`);
+      return outcome;
+    },
+    toggle_in_file: async (name) => {
+      file_writes.push(`toggle ${name}`);
+      return { value: false, outcome };
+    },
+    unset_in_file: async (name) => {
+      file_writes.push(`unset ${name}`);
+      return unset_result;
+    },
+    get_config: async () => config(),
   };
-  return { deps, toasts, state };
+  return { deps, toasts, state, file_writes };
 }
 
-test("the handler toasts after the change and publishes only on a change", async () => {
-  const { deps, toasts, state } = fake_deps();
+test("without --temp a set, toggle and unset go to settings.toml, and the toast says where they went", async () => {
+  const { deps, toasts, state, file_writes } = fake_deps();
   const handlers = make_settings_handlers(deps);
   await handlers.set(ctx, { name: "hint_letters", value: "qwer" });
-  await handlers.set(ctx, { name: "hint_letters", value: "" });
+  await handlers.set(ctx, { name: "next_patterns", value: "a b" });
+  await handlers.toggle(ctx, { name: "newtab_date" });
   await handlers.unset(ctx, { name: "newtab_date" });
-  await handlers.unset(ctx, { name: "all" });
-  assert.deepEqual(toasts, ['success hint_letters = "qwer"', 'info hint_letters = "qwer"', "info newtab_date is not edited", "success Cleared 1 edit"]);
-  assert.equal(state.publishes, 2);
-  assert.deepEqual(state.edits, NO_EDITS);
+  assert.deepEqual(file_writes, ['set hint_letters "qwer"', 'set next_patterns ["a","b"]', "toggle newtab_date", "unset newtab_date"]);
+  assert.deepEqual(toasts, ['success hint_letters = "qwer", saved to settings.toml', 'success next_patterns = ["a","b"], saved to settings.toml', "success newtab_date = false, saved to settings.toml", "success Unset newtab_date, saved to settings.toml"]);
+  assert.equal(state.publishes, 0);
+});
+
+test("--temp, a consent setting and unset all never touch settings.toml", async () => {
+  const { deps, toasts, state, file_writes } = fake_deps();
+  const handlers = make_settings_handlers(deps);
   await handlers.set(ctx, { name: "hint_letters", value: "qwer", temp: true });
-  assert.deepEqual(state.edits, { saved: {}, temp: { hint_letters: "qwer" } });
+  await handlers.toggle(ctx, { name: "newtab_date", temp: true });
+  await handlers.set(ctx, { name: "bridge", value: "true" });
+  await handlers.toggle(ctx, { name: "host_auto_update" });
+  assert.deepEqual(state.edits, { saved: { bridge: true, host_auto_update: true }, temp: { hint_letters: "qwer", newtab_date: false } });
+  await handlers.unset(ctx, { name: "hint_letters", temp: true });
+  await handlers.unset(ctx, { name: "all" });
+  assert.deepEqual(state.edits, NO_EDITS);
+  assert.deepEqual(file_writes, []);
+  assert.equal(toasts.at(-1), "success Cleared 3 edits");
+});
+
+test("set with no value shows the value and writes nothing", async () => {
+  const { deps, toasts, file_writes } = fake_deps(saved({ hint_letters: "qwer" }));
+  await make_settings_handlers(deps).set(ctx, { name: "hint_letters", value: "" });
+  assert.deepEqual(toasts, ['info hint_letters = "qwer"']);
+  assert.deepEqual(file_writes, []);
+});
+
+test("a write that left settings.toml as it was warns, and a missing or old host says when the file follows", async () => {
+  const toast_for = async (outcome: FileWriteOutcome) => {
+    const { deps, toasts } = fake_deps(NO_EDITS, outcome);
+    await make_settings_handlers(deps).set(ctx, { name: "hint_letters", value: "qwer" });
+    return toasts[0];
+  };
+  assert.equal(await toast_for({ kind: "failed", reason: "disk full" }), 'warning hint_letters = "qwer". settings.toml was not written (disk full). It is tried again at the next start');
+  assert.match((await toast_for({ kind: "conflict" }))!, /^warning .*changed on disk/);
+  assert.match((await toast_for({ kind: "replaced", by: "import", written: false }))!, /^warning .*was not written/);
+  assert.equal(await toast_for({ kind: "waiting" }), 'success hint_letters = "qwer". settings.toml updates when the native host connects');
+  assert.equal(await toast_for({ kind: "waiting", host_outdated: true }), 'success hint_letters = "qwer". settings.toml updates once the native host is updated');
+  assert.ok(!(await toast_for({ kind: "waiting" }))!.includes("saved to"));
+});
+
+test("an unset answers for a key it removed, for browser edits alone and for nothing to drop", async () => {
+  const unset_toast_for = async (result: UnsetResult) => {
+    const { deps, toasts } = fake_deps(NO_EDITS, { kind: "written" }, result);
+    await make_settings_handlers(deps).unset(ctx, { name: "toast_ms" });
+    return toasts[0];
+  };
+  assert.equal(await unset_toast_for({ kind: "edits_only" }), "success Unset toast_ms");
+  assert.equal(await unset_toast_for({ kind: "not_set" }), "info toast_ms is not set");
+  assert.equal(await unset_toast_for({ kind: "waiting" }), "success Unset toast_ms. settings.toml updates when the native host connects");
 });
 
 function checked(text: string) {

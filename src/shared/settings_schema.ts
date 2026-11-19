@@ -299,6 +299,7 @@ function spec_of(name: SettingName, row: SettingRow): SettingSpec {
 }
 
 export const SETTING_NAMES = Object.keys(SETTINGS_TABLE) as SettingName[];
+const TABLE_KINDS: ReadonlySet<string> = new Set(["site_table", "table_list", "text_table"]);
 
 // Built before the site table's spec, which checks each per-site column with these. A per-site setting is never a site table itself.
 export const PER_SITE_SETTING_NAMES = SETTING_NAMES.filter((name): name is PerSiteName => (SETTINGS_TABLE[name] as SettingRow).per_site === true);
@@ -306,8 +307,14 @@ const PER_SITE_SPECS: ColumnSpecs = Object.fromEntries(PER_SITE_SETTING_NAMES.ma
 
 export const SETTING_SPECS = Object.fromEntries(SETTING_NAMES.map((name) => [name, spec_of(name, SETTINGS_TABLE[name])])) as Record<SettingName, SettingSpec>;
 
-// The settings the popup and the settings page write into settings.toml (`change_setting` with layer `file`) rather than into the saved edits.
-export const FILE_WRITTEN_SETTINGS: ReadonlySet<string> = new Set<SettingName>(["theme"]);
+// Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on, and a change stays in the browser.
+export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update", "newtab_ip_info"] as const;
+
+// The settings that `:set`, `:toggle`, `:unset` and the pages write into settings.toml (`change_setting` with layer `file`) rather than into the saved edits.
+// Every settable scalar and list. The tables wait for an editor of their own, so they stay saved edits.
+export const FILE_WRITTEN_SETTINGS: ReadonlySet<string> = new Set<SettingName>(
+  SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable && !TABLE_KINDS.has(SETTINGS_TABLE[name].kind) && !(CONSENT_SETTINGS as readonly string[]).includes(name)),
+);
 
 export function is_setting_name(name: string): name is SettingName {
   return Object.hasOwn(SETTINGS_TABLE, name);

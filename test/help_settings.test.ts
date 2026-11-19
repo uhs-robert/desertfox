@@ -3,15 +3,20 @@ import "../src/background/command_modules.ts";
 import { test } from "node:test";
 import { load_effective_config } from "../src/background/config_load.ts";
 import { create_settings_messages } from "../src/background/settings_message.ts";
-import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
+import { stringify } from "smol-toml";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
 import { mount_settings, update_row } from "../src/help/settings_page.ts";
-import { control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
+import { can_reset, control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
 import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages.ts";
 
+// The config and the settings.toml it came from, so a write to the file keeps the other settings.
 function install_fake_browser(file_settings: Record<string, unknown>) {
-  const local: Record<string, unknown> = { [FILES_CONFIG_STORAGE_KEY]: { config: { format_version: CONFIG_FORMAT_VERSION, settings: file_settings }, warnings: [] } };
+  const local: Record<string, unknown> = {
+    [FILES_CONFIG_STORAGE_KEY]: { config: { format_version: CONFIG_FORMAT_VERSION, settings: file_settings }, warnings: [] },
+    [FILES_SOURCE_STORAGE_KEY]: { files: { "settings.toml": stringify(file_settings) }, dir_label: "/home/u/.config/desertfox" },
+  };
   const session: Record<string, unknown> = {};
   const area = (store: Record<string, unknown>) => ({
     get: async (key?: string | string[]) => {
@@ -37,12 +42,14 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
   return { local, session };
 }
 
+const stored_settings_toml = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { files: Record<string, string> }).files["settings.toml"];
+
 // A session wired to the real background handlers over fake storage. `other_tab` sends the same messages, as a `:set` in another tab would.
 async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (text: string) => string = (text) => text) {
   const fake = install_fake_browser(file_settings);
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = async (message: unknown) => {
     const request = message as { type: string };
     return request.type === "list_settings" ? messages.list() : messages.change(message as never);
@@ -121,16 +128,26 @@ test("every layer has a tag label", () => {
   assert.deepEqual(Object.keys(LAYER_LABEL).sort(), ["default", "saved", "settings.toml", "temp"]);
 });
 
-test("a change saves, shows the saved tag, and reset returns to the file value", async () => {
-  const { session, local } = await make({ which_key_border: "round" });
+test("a change goes into settings.toml, and reset removes it there so the default shows", async () => {
+  const { session, local } = await make({ which_key_border: "round", hint_letters: "ab" });
   assert.equal(session.field("which_key_border")!.row.top_layer, "settings.toml");
   await session.commit("which_key_border", "chamfer");
   assert.equal(session.field("which_key_border")!.row.value, "chamfer");
-  assert.equal(session.field("which_key_border")!.row.top_layer, "saved");
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_border: "chamfer" });
-  await session.reset("which_key_border");
-  assert.equal(session.field("which_key_border")!.row.value, "round");
   assert.equal(session.field("which_key_border")!.row.top_layer, "settings.toml");
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
+  assert.equal(stored_settings_toml(local), 'which_key_border = "chamfer"\nhint_letters = "ab"\n');
+  await session.reset("which_key_border");
+  assert.equal(session.field("which_key_border")!.row.value, "square");
+  assert.equal(session.field("which_key_border")!.row.top_layer, "default");
+  assert.equal(stored_settings_toml(local), 'hint_letters = "ab"\n');
+});
+
+test("Reset is on for a value in settings.toml only where a reset can remove it", () => {
+  const row = (name: string, top_layer: SettingListRow["top_layer"]) => ({ name, top_layer, value: true, kind: "boolean", settable: true, expectation: "" }) as SettingListRow;
+  assert.equal(can_reset(row("newtab_date", "settings.toml")), true);
+  assert.equal(can_reset(row("newtab_date", "default")), false);
+  assert.equal(can_reset(row("bridge", "settings.toml")), false);
+  assert.equal(can_reset(row("bridge", "saved")), true);
 });
 
 test("an invalid value shows its error and sends nothing", async () => {
@@ -140,21 +157,21 @@ test("an invalid value shows its error and sends nothing", async () => {
   assert.equal(local[SAVED_SETTINGS_STORAGE_KEY], undefined);
 });
 
-test("a temp edit shows temp, a saved edit of the same setting takes over, and reset clears both", async () => {
+test("a temp edit shows temp, a file edit of the same setting takes over, and reset clears both", async () => {
   const { session, messages } = await make({ hint_letters: "ab" });
   await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "qw", layer: "temp" });
   await session.refresh();
   assert.equal(session.field("hint_letters")!.row.top_layer, "temp");
   assert.equal(session.field("hint_letters")!.row.value, "qw");
   await session.commit("hint_letters", "zx");
-  assert.equal(session.field("hint_letters")!.row.top_layer, "saved");
+  assert.equal(session.field("hint_letters")!.row.top_layer, "settings.toml");
   assert.equal(session.field("hint_letters")!.row.value, "zx");
   await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "tq", layer: "temp" });
   await session.refresh();
   assert.equal(session.field("hint_letters")!.row.top_layer, "temp");
   await session.reset("hint_letters");
-  assert.equal(session.field("hint_letters")!.row.top_layer, "settings.toml");
-  assert.equal(session.field("hint_letters")!.row.value, "ab");
+  assert.equal(session.field("hint_letters")!.row.top_layer, "default");
+  assert.equal(session.field("hint_letters")!.row.value, "asdfghjkl");
 });
 
 test("a change from another tab shows after a refresh", async () => {
@@ -182,7 +199,7 @@ test("a refresh that began before an edit does not overwrite the edit's answer",
   await session.commit("newtab_date", false);
   await stale;
   assert.equal(session.field("newtab_date")!.row.value, false);
-  assert.equal(session.field("newtab_date")!.row.top_layer, "saved");
+  assert.equal(session.field("newtab_date")!.row.top_layer, "settings.toml");
 });
 
 test("unmounting stops the listener, and a load that ends after it adds none", async () => {
@@ -255,7 +272,7 @@ test("the font settings suggest the names the background answers, and no other t
   install_fake_browser({});
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = async (message: unknown) => {
     const type = (message as { type: string }).type;
     return type === "list_font_names" ? names : type === "list_settings" ? messages.list() : messages.change(message as never);
@@ -271,7 +288,7 @@ test("a font ask that fails leaves the font settings with no suggestions", async
   install_fake_browser({});
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = async (message: unknown) => {
     const type = (message as { type: string }).type;
     if (type === "list_font_names") throw new Error("background restarting");

@@ -109,7 +109,7 @@ test("an older host without the verb keeps the pick, asks nothing at start, and 
   const host = { files: { "settings.toml": MINE }, old_host: true };
   const { local, startup } = await reloaded(host);
 
-  assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "waiting" });
+  assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "waiting", host_outdated: true });
   assert.equal(host.files["settings.toml"], MINE);
 
   const still_old = await fresh_startup();
@@ -216,10 +216,10 @@ test("a theme set in settings.d is refused, and nothing changes", async () => {
   assert.equal(host.files["settings.toml"], MINE);
 });
 
-test("the settings message takes layer file for theme only and says where the value went", async () => {
+test("the settings message takes layer file for every scalar and list but the consents, and says where the value went", async () => {
   const host = { files: { "settings.toml": MINE }, granted: true };
-  const { startup } = await reloaded(host);
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file });
+  const { startup, local } = await reloaded(host);
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
 
   const written = await messages.change({ type: "change_setting", name: "theme", action: "set", value: "oasis_night", layer: "file" });
   assert.ok(written.ok, written.message);
@@ -231,8 +231,14 @@ test("the settings message takes layer file for theme only and says where the va
   assert.ok(waiting.ok);
   assert.equal(waiting.message, 'theme = "nord". settings.toml updates when the native host connects');
 
-  const other = await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "qw", layer: "file" });
-  assert.deepEqual(other, { ok: false, message: "hint_letters is not written to settings.toml yet" });
+  const list = await messages.change({ type: "change_setting", name: "next_patterns", action: "set", value: ["more", "on"], layer: "file" });
+  assert.ok(list.ok, list.message);
+  assert.match(stored_settings(local)!, /^next_patterns = \["more", "on"\]$/m);
+
+  for (const name of ["bridge", "newtab_links", "site_rules"]) {
+    const value = name === "bridge" ? true : [];
+    assert.deepEqual(await messages.change({ type: "change_setting", name, action: "set", value, layer: "file" }), { ok: false, message: `${name} is not written to settings.toml yet` });
+  }
 });
 
 test("a theme name the files build does not know is refused before anything is stored or sent", async () => {
@@ -283,7 +289,7 @@ test("the settings message says an imported theme is saved in the browser", asyn
   const host = { files: { "settings.toml": MINE } };
   const { startup } = await reloaded(host);
   await startup.change_layers("themes", () => ({ my_import: imported_theme() }));
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const answer = await messages.change({ type: "change_setting", name: "theme", action: "set", value: "my_import", layer: "file" });
   assert.ok(answer.ok, answer.message);
   assert.equal(answer.message, 'theme = "my_import", saved in the browser because the theme is not in your files');
@@ -689,7 +695,7 @@ test("each write loop gets its own three merges, whatever an earlier loop used",
     if ([1, 2, 4, 5, 6].includes(writes)) host.files = { "settings.toml": `${host.files["settings.toml"]}# stamped ${writes}\n` };
     return send(name, message);
   };
-  assert.deepEqual(await startup.set_in_settings_file("theme", "nord"), { kind: "waiting" });
+  assert.deepEqual(await startup.set_in_settings_file("theme", "nord"), { kind: "waiting", host_outdated: true });
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "written" });
   assert.equal(writes, 7);
 });

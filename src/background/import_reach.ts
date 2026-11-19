@@ -11,8 +11,8 @@ import { CLIPBOARD_REGISTER } from "../shared/register_names.ts";
 import { is_context_source } from "../shared/registry/params.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 
-// Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on.
-export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update", "newtab_ip_info"] as const;
+import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
+export { CONSENT_SETTINGS };
 
 export const ROW_CAP = 12;
 
