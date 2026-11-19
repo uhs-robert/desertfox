@@ -648,6 +648,39 @@ class WriteConfigFileTest(ConfigDirCase):
         self.assertTrue(self.write("settings", None, "a = 2\n", sha("a = 1\n"))["ok"])
         self.assertEqual(self.read("settings.toml"), b"a = 2\n")
 
+    def test_the_engines_kind_creates_search_engines_d_and_writes_only_its_fixed_name(self):
+        reply = self.write("engines", None, "[wiki]\nurl = \"u\"\n", None)
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(reply["path"], os.path.join(self.config, "search_engines.d", "zz-desertfox.toml"))
+        self.assertEqual(self.tree(), ["search_engines.d/", "search_engines.d/zz-desertfox.toml"])
+        _, raw = run_in_process(frame({"cmd": "read_config"}))
+        self.assertEqual(unframe(raw)["files"], {"search_engines.d/zz-desertfox.toml": "[wiki]\nurl = \"u\"\n"})
+        self.assertIn("takes no name", self.write("engines", "../settings", "a = 1\n", None)["error"])
+        self.assertTrue(self.write("engines", None, None, sha("[wiki]\nurl = \"u\"\n"))["ok"])
+        self.assertEqual(self.tree(), ["search_engines.d/"])
+
+    def test_a_hand_made_engines_file_is_never_overwritten_and_the_hand_files_beside_it_stay(self):
+        self.put("search_engines.d/10-mine.toml", "mine = 1\n")
+        self.put("search_engines.d/zz-desertfox.toml", "hand = 1\n")
+        for base in (sha("read = 1\n"), None):
+            reply = self.write("engines", None, "new = 1\n", base)
+            self.assertIn(host.CHANGED_ON_DISK, reply["error"], base)
+        self.assertIn(host.CHANGED_ON_DISK, self.write("engines", None, None, sha("read = 1\n"))["error"])
+        self.assertEqual(self.read("search_engines.d/zz-desertfox.toml"), b"hand = 1\n")
+        self.assertTrue(self.write("engines", None, "new = 1\n", sha("hand = 1\n"))["ok"])
+        self.assertEqual(self.read("search_engines.d/zz-desertfox.toml"), b"new = 1\n")
+        self.assertEqual(self.read("search_engines.d/10-mine.toml"), b"mine = 1\n")
+        self.assertEqual(self.tree(), ["search_engines.d/", "search_engines.d/10-mine.toml", "search_engines.d/zz-desertfox.toml"])
+
+    def test_a_linked_search_engines_d_is_used_as_it_is(self):
+        target = os.path.join(self.tmp.name, "dotfiles", "engines")
+        os.makedirs(target)
+        os.symlink(target, os.path.join(self.config, "search_engines.d"))
+        self.assertTrue(self.write("engines", None, "a = 1\n", None)["ok"])
+        self.assertTrue(os.path.islink(os.path.join(self.config, "search_engines.d")))
+        with open(os.path.join(target, "zz-desertfox.toml"), "rb") as file:
+            self.assertEqual(file.read(), b"a = 1\n")
+
     def test_a_hand_edited_or_unknown_theme_file_is_never_overwritten(self):
         self.put("themes/mine.toml", "hand = 1\n")
         for base in (sha("read = 1\n"), None):

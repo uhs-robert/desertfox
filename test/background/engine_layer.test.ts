@@ -22,24 +22,36 @@ async function started(tag: string, files: Files = { "settings.toml": "" }) {
   await startup.reload_config();
   const messages = create_engine_messages({
     read_engine_state: startup.read_engine_state,
-    change_layers: startup.change_layers,
+    change_engine_file: startup.change_engine_file,
     read_starter: async () => readFileSync(new URL("../../examples/engines.toml", import.meta.url), "utf8"),
   });
+  return { host, startup, messages, ...browser };
+}
+
+// Engines an older version added to the browser layer, stored before the start.
+async function started_with_layer(tag: string, layer: Record<string, unknown>, files: Files = { "settings.toml": "" }) {
+  const host = { files };
+  const browser = install_fake_browser(host);
+  browser.local[ENGINE_EDITS_STORAGE_KEY] = layer;
+  const startup = await fresh_startup(tag);
+  await startup.get_config();
+  await startup.reload_config();
+  const messages = create_engine_messages({ read_engine_state: startup.read_engine_state, change_engine_file: startup.change_engine_file, read_starter: async () => "" });
   return { host, startup, messages, ...browser };
 }
 
 const wiki = { type: "change_engines", action: "set", name: "wiki", url: "https://w.test/?q={query}", keyword: "w", letter: "w" } as const;
 const stored_keymap = (local: Record<string, unknown>) => local[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap;
 
-test("an added engine is in the config and binds its key letter, and survives a reload, an import and a restart", async () => {
+test("an added engine is in the config and binds its key letter, and survives a reload and a restart", async () => {
   const { startup, messages, local, host } = await started("add");
   const saved = await messages.change(wiki);
-  assert.equal(saved.ok, true);
+  assert.deepEqual(saved, { ok: true, message: "Saved the engine wiki, saved to search_engines.d/zz-desertfox.toml. sw searches it." });
   assert.equal((await startup.get_config()).search_engines.wiki?.url, "https://w.test/?q={query}");
   assert.ok(stored_keymap(local).modes.normal?.children.s, "s is bound");
   assert.ok((await load_effective_config()).config.search_engines.wiki, "a page reads the engine");
 
-  host.files = { "search_engines.toml": 'other = { url = "https://o.test/?q={query}" }\n' };
+  host.files = { ...host.files, "search_engines.toml": 'other = { url = "https://o.test/?q={query}" }\n' };
   await startup.reload_config();
   assert.ok((await startup.get_config()).search_engines.wiki);
   assert.ok((await startup.get_config()).search_engines.other);
@@ -59,10 +71,8 @@ test("a refused engine keeps the old config and stores nothing", async () => {
   assert.equal(local[LAYERED_CONFIG_STORAGE_KEY] ?? null, null);
 });
 
-test("a file edit that now clashes drops the engine with a warning and the others stay", async () => {
-  const { startup, messages, local } = await started("drop");
-  await messages.change(wiki);
-  await messages.change({ type: "change_engines", action: "set", name: "other", url: "https://o.test/?q={query}" });
+test("a file edit that now clashes drops an engine of the old browser layer with a warning and the others stay", async () => {
+  const { startup, messages, local } = await started_with_layer("drop", { engines: { wiki: { url: wiki.url, keyword: "w" }, other: { url: "https://o.test/?q={query}" } }, letters: { w: "wiki" } });
   await startup.save_config_file("search_engines.toml", 'taken = { url = "https://t.test/?q={query}", keyword = "w" }\n', null);
   const config = await startup.get_config();
   assert.equal(config.search_engines.wiki, undefined);
@@ -79,10 +89,8 @@ test("a file edit that now clashes drops the engine with a warning and the other
   assert.equal((await messages.change({ type: "change_engines", action: "remove", name: "wiki" })).ok, true);
 });
 
-test("one broken engine can be removed while another stays broken", async () => {
-  const { startup, messages } = await started("two_broken");
-  await messages.change(wiki);
-  await messages.change({ ...wiki, name: "wiki2", keyword: "x", letter: "x" });
+test("one broken engine of the old browser layer can be removed while another stays broken", async () => {
+  const { startup, messages } = await started_with_layer("two_broken", { engines: { wiki: { url: wiki.url, keyword: "w" }, wiki2: { url: wiki.url, keyword: "x" } }, letters: { w: "wiki", x: "wiki2" } });
   await startup.save_config_file("search_engines.toml", 'one = { url = "https://1.test/?q={query}", keyword = "w" }\ntwo = { url = "https://2.test/?q={query}", keyword = "x" }\n', null);
   assert.equal((await startup.read_engine_state()).dropped.length, 2);
   assert.equal((await messages.change({ type: "change_engines", action: "remove", name: "wiki" })).ok, true);
@@ -124,22 +132,22 @@ test("a refused engine writes nothing, not even for a moment", async () => {
   assert.equal(local[ENGINE_EDITS_STORAGE_KEY] === undefined || Object.keys(local[ENGINE_EDITS_STORAGE_KEY] as object).length === 0, true);
 });
 
-test("the starter set keeps a save that landed between its read and its turn", async () => {
-  const { startup, messages } = await started("race");
+test("the starter set keeps a save that landed between its start and its turn", async () => {
+  const { startup, messages, host } = await started("race");
   const racing = create_engine_messages({
-    read_engine_state: async () => {
-      const state = await startup.read_engine_state();
-      // Another tab saves after this read and before the starter's turn.
-      await messages.change({ type: "change_engines", action: "set", name: "late", url: "https://l.test/?q={query}" });
-      return state;
+    read_engine_state: startup.read_engine_state,
+    // Another tab saves after the starter read its file and before its turn of the change queue.
+    change_engine_file: (plan) => {
+      const late = messages.change({ type: "change_engines", action: "set", name: "late", url: "https://l.test/?q={query}" });
+      return late.then(() => startup.change_engine_file(plan));
     },
-    change_layers: startup.change_layers,
     read_starter: async () => readFileSync(new URL("../../examples/engines.toml", import.meta.url), "utf8"),
   });
   assert.equal((await racing.change({ type: "change_engines", action: "starter" })).ok, true);
   const config = await startup.get_config();
   assert.ok(config.search_engines.late);
   assert.ok(config.search_engines.stackoverflow);
+  assert.match(host.files["search_engines.d/zz-desertfox.toml"]!, /\[late\][^]*\[stackoverflow\]/);
 });
 
 test("the starter set skips names that exist, replaces the built-in duck and leaves out a keyword clash", async () => {

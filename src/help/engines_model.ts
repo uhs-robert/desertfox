@@ -1,4 +1,4 @@
-// No DOM: the state of the Search engines section on the settings page. It lists the engines of the browser layer, holds the add form, and sends each change to the background.
+// No DOM: the state of the Search engines section on the settings page. It lists the engines the page added, holds the add form, and sends each change to the background.
 // The form checks its fields while the user types (`field_problems`). The background builds the whole config at Save and refuses what the build refuses.
 
 import { field_problems } from "../shared/engine_fields.ts";

@@ -62,16 +62,19 @@ export function settings_file_naming(files: ConfigFiles, name: keyof Settings, v
   return parse(files[SETTINGS_FILE] ?? "")[name] === value;
 }
 
-// The theme a settings.toml text sets, or undefined for none or a text that does not parse.
-export function theme_named_in(text: string | null): string | undefined {
+// The name a settings.toml text sets `name` to, or undefined for none or a text that does not parse.
+function name_set_in(text: string | null, name: "theme" | "default_engine"): string | undefined {
   try {
-    const theme = parse(text ?? "").theme;
-    return typeof theme === "string" ? theme : undefined;
+    const value = parse(text ?? "")[name];
+    return typeof value === "string" ? value : undefined;
   } catch (error) {
     if (error instanceof TomlError) return undefined;
     throw error;
   }
 }
+
+export const theme_named_in = (text: string | null): string | undefined => name_set_in(text, "theme");
+export const default_engine_named_in = (text: string | null): string | undefined => name_set_in(text, "default_engine");
 
 // The edits without `name`, so a saved or temp value no longer hides the file's.
 export function without_setting(edits: SettingEdits, name: keyof Settings): SettingEdits {

@@ -428,14 +428,14 @@ export type ChangeKeymap = { type: "change_keymap"; mode: KeymapMode; keys: stri
 export const STALE_MOVE_REFUSAL = "changed since you opened it. Open the row again.";
 export type ChangeKeymapAnswer = { ok: true; row?: BindingRow; message: string } | { ok: false; message: string; problems?: string[] };
 
-// One engine the settings page added, as the Search engines section lists it. A table of the browser layer, children inside it counted. `url` is empty for a table that holds only children. `letter` is the key letter that searches it. `left_out` is the reason the build dropped it after a files edit: it then runs nowhere.
+// One engine the settings page added, as the Search engines section lists it. A table of search_engines.d/zz-desertfox.toml, or of the browser layer an older version kept, children inside it counted. `url` is empty for a table that holds only children. `letter` is the key letter that searches it. `left_out` is the reason the build dropped it after a files edit: it then runs nowhere.
 export type EngineRow = { name: string; url: string; label: string; keyword?: string; letter?: string; children: number; left_out?: string };
 
-// From an extension page: the engines of the browser layer. The answer is a ListEnginesAnswer.
+// From an extension page: the engines the settings page added. The answer is a ListEnginesAnswer.
 export type ListEngines = { type: "list_engines" };
 export type ListEnginesAnswer = { ok: true; engines: EngineRow[] } | { ok: false; message: string };
 
-// From an extension page: one change of the engines layer. `set` adds an engine, or replaces the one of that name. `remove` drops one. `starter` adds the sample engines whose names no file or layer table holds yet.
+// From an extension page: one change of the page's engines, which go to search_engines.d/zz-desertfox.toml. `set` adds an engine, or replaces the one of that name. `remove` drops one. `starter` adds the sample engines whose names no file or layer table holds yet.
 // The background builds the config with the change and refuses it, with every problem, when the build does, before anything is stored.
 export type ChangeEngines =
   | { type: "change_engines"; action: "set"; name: string; url: string; keyword?: string; letter?: string }
