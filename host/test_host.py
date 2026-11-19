@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import os
@@ -237,7 +238,7 @@ class WriteAutoconfigTest(ConfigDirCase):
 
 
 def sha(text):
-    return host.text_sha256(text)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class WriteSettingsTest(ConfigDirCase):
@@ -692,6 +693,60 @@ class WriteConfigFileTest(ConfigDirCase):
         self.assertEqual(self.tree(), ["themes/"])
         self.assertEqual(sorted(os.listdir(dotfiles)), ["mine.toml"])
 
+    def linked_theme(self, text):
+        """themes/mine.toml as a link to a file of `text` in a dotfiles folder. Answers the link and the target."""
+        dotfiles = os.path.join(self.tmp.name, "dotfiles")
+        os.makedirs(dotfiles, exist_ok=True)
+        target = os.path.join(dotfiles, "mine.toml")
+        with open(target, "w", encoding="utf-8") as file:
+            file.write(text)
+        os.makedirs(os.path.join(self.config, "themes"), exist_ok=True)
+        link = os.path.join(self.config, "themes", "mine.toml")
+        os.symlink(target, link)
+        return link, target
+
+    def rename_after(self, before):
+        """os.rename that first runs `before`, as a save that lands after the host's check."""
+        real_rename = os.rename
+
+        def rename(source, destination):
+            before(source)
+            return real_rename(source, destination)
+
+        return mock.patch.object(host.os, "rename", side_effect=rename)
+
+    def test_a_save_renamed_over_a_link_just_before_its_delete_stays(self):
+        link, target = self.linked_theme("old = 1\n")
+
+        def save_over_link(source):
+            saved = os.path.join(self.config, "themes", "saved.tmp")
+            with open(saved, "w", encoding="utf-8") as file:
+                file.write("new = 9\n")
+            os.replace(saved, source)
+
+        with self.rename_after(save_over_link):
+            reply = self.write("theme", "mine", None, sha("old = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertFalse(os.path.islink(link))
+        self.assertEqual(self.read("themes/mine.toml"), b"new = 9\n")
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+        with open(target, "rb") as file:
+            self.assertEqual(file.read(), b"old = 1\n")
+
+    def test_a_link_whose_target_was_edited_just_before_its_delete_goes_back_as_a_link(self):
+        link, target = self.linked_theme("old = 1\n")
+
+        def edit_target(_source):
+            with open(target, "w", encoding="utf-8") as file:
+                file.write("new = 9\n")
+
+        with self.rename_after(edit_target):
+            reply = self.write("theme", "mine", None, sha("old = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(os.readlink(link), target)
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+
     def test_an_edit_saved_into_the_file_just_before_the_delete_is_put_back(self):
         path = self.put("themes/mine.toml", "old = 1\n")
         real_rename = os.rename
@@ -830,16 +885,27 @@ class WriteConfigFileTest(ConfigDirCase):
         holder = threading.Thread(target=hold)
         holder.start()
         held.wait(5)
+        real_flock = host.fcntl.flock
+        attempted = threading.Event()
+
+        def flock(descriptor, operation):
+            if threading.current_thread() is not holder:
+                attempted.set()
+            return real_flock(descriptor, operation)
+
         replies = []
-        writer = threading.Thread(target=lambda: replies.append(self.write("theme", "mine", "a = 1\n", None)))
-        writer.start()
-        writer.join(0.3)
-        self.assertTrue(writer.is_alive(), "the write did not wait for the lock")
-        self.assertEqual(self.tree(), [])
-        release.set()
-        holder.join(5)
-        writer.join(5)
+        with mock.patch.object(host.fcntl, "flock", side_effect=flock):
+            writer = threading.Thread(target=lambda: replies.append(self.write("theme", "mine", "a = 1\n", None)))
+            writer.start()
+            self.assertTrue(attempted.wait(5), "the write never asked for the lock")
+            writer.join(0.3)
+            self.assertTrue(writer.is_alive(), "the write did not wait for the lock")
+            self.assertEqual(self.tree(), [])
+            release.set()
+            holder.join(5)
+            writer.join(5)
         self.assertTrue(replies[0]["ok"], replies)
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
 
     def test_an_edit_saved_into_a_theme_just_before_the_rename_is_put_back(self):
         path = self.put("themes/mine.toml", "a = 1\n")
