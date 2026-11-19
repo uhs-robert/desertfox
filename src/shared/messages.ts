@@ -479,6 +479,9 @@ export type ToolbarRequest =
 
 export type ToolbarAnswer = { ok: true; message: string } | { ok: false; message: string };
 
+// From the Settings page: keep `keys` (key sequences in keymap notation, separated by spaces) for the sites `pattern` covers, or with `keys` null stop keeping any. The answer is a ToolbarAnswer.
+export type SiteKeysRequest = { type: "site_keys"; pattern: string; keys: string | null };
+
 // The user's pick for an import: a zip's bytes, or the files of a `webkitdirectory` folder as read by the page, with paths relative to the picked folder's parent.
 export type ImportSource = { kind: "zip"; bytes: Uint8Array | ArrayBuffer } | { kind: "folder"; entries: { path: string; text: string }[] };
 
@@ -556,7 +559,7 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListFontNames | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ListImportedThemes | ChangeImportedThemes | ToolbarRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
+export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListFontNames | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ListImportedThemes | ChangeImportedThemes | ToolbarRequest | SiteKeysRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
 
 // From `;M`: the frame that sent it holds the pinned video. See `src/background/tab_media.ts`.
 export type MediaPin = { type: "media_pin" };

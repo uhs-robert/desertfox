@@ -287,3 +287,25 @@ test("a table change is put onto the folder's text where the folder kept the bas
   assert.equal(replayed_on_folder(MINE, WITH_NEWS, hand), WITH_NEWS.replace('"abc"', '"hand"'));
   assert.equal(replayed_on_folder(MINE, WITH_NEWS, MINE.replace('pass = "j k"', 'pass = "j"')), undefined);
 });
+
+test("Save from the keys form appends a pass row, replaces it in place on the next Save, and Remove puts the text back", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { startup } = await reloaded(host);
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, "j k"), { kind: "written" });
+  assert.ok(host.files["settings.toml"].includes(`site = "${NEWS}"\npass = "j k"\n`));
+  assert.ok(host.files["settings.toml"].includes("# Forums hand j and k over") && host.files["settings.toml"].includes("# their own keys") && host.files["settings.toml"].includes("# the manual"), "comments stay");
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, "j k c"), { kind: "written" });
+  const rows = (parse(host.files["settings.toml"]) as { site_rules: unknown[] }).site_rules.map((row) => JSON.parse(JSON.stringify(row)));
+  assert.deepEqual(rows, [{ site: FORUM, pass: "j k" }, { site: NEWS, pass: "j k c" }]);
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, null), { kind: "written" });
+  assert.equal(host.files["settings.toml"], MINE);
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, null), { kind: "unchanged" });
+});
+
+test("Save refuses a site an earlier rule already gives keys to, and names that rule", async () => {
+  const wide = `[[site_rules]]\nsite = "*://*/*"\nonly = "q"\n`;
+  const blocked = { files: { "settings.toml": wide } };
+  const { startup: next } = await reloaded(blocked);
+  await assert.rejects(next.change_site_keys_in_file(NEWS, "j"), (error: unknown) => error instanceof RuntimeRefusal && /earlier rule for \*:\/\/\*\/\*/.test(error.message));
+  assert.equal(blocked.files["settings.toml"], wide);
+});
