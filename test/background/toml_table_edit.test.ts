@@ -41,10 +41,12 @@ test("a removed row takes only its own lines, and the comments around it stay", 
   const rows = rows_of(RULES);
   const without_mail = set_table_rows(RULES, "site_rules", [rows[0], rows[2]] as never);
   assert.equal(without_mail, RULES.replace('[[site_rules]]\nsite = "*://*.mail.test/*"\noff = true\n\n', ""));
-  // The comment right over a row's header is the row's, so it goes with the row.
+  // A comment over the first row is the list's, so it stays when that row goes. One between two rows is the later row's.
   const without_forum = set_table_rows(RULES, "site_rules", [rows[1], rows[2]] as never);
-  assert.ok(without_forum.startsWith('# My settings\nhint_letters = "abc" # home row\n\n[[site_rules]]\nsite = "*://*.mail.test/*"'), without_forum);
-  assert.ok(!without_forum.includes("pass =") && !without_forum.includes("# Forums"));
+  assert.ok(without_forum.startsWith('# My settings\nhint_letters = "abc" # home row\n\n# Forums hand j and k over\n\n[[site_rules]]\nsite = "*://*.mail.test/*"'), without_forum);
+  assert.ok(!without_forum.includes("pass ="));
+  const without_docs = set_table_rows(RULES, "site_rules", [rows[0], rows[1]] as never);
+  assert.ok(!without_docs.includes("# Docs") && without_docs.includes("[other]\na = 1\n"), without_docs);
 });
 
 test("of two rows that share a site, only the one that equals the removed row goes", () => {
@@ -62,14 +64,14 @@ test("a whole new list keeps the rows that stay, moves none it need not, and wri
   assert.ok(after.includes('label = "A" # first'), after);
   assert.ok(after.includes('[[newtab_links]]\nlabel = "New"\nurl = "https://n.test/"\ngroup = "G"\n'), after);
   // An empty list is written as one, so it stays empty where a default has rows. Removing the list removes the key.
-  assert.equal(set_table_rows(text, "newtab_links", []), "newtab_links = []\n");
-  assert.equal(remove_table_rows(text, "newtab_links"), "");
+  assert.equal(set_table_rows(text, "newtab_links", []), "newtab_links = []\n# links\n");
+  assert.equal(remove_table_rows(text, "newtab_links"), "# links\n");
 });
 
-test("a row first in a list with no kept row before it goes above the first block and its comment", () => {
-  const text = 'a = 1\n\n# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n';
+test("a row first in a list with no kept row before it goes right above the first block, under the list's comment", () => {
+  const text = 'a = 1\n\n# the links\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n';
   const after = set_table_rows(text, "newtab_links", [{ label: "A", url: "https://a.test/" }, { label: "B", url: "https://b.test/" }]);
-  assert.equal(after, 'a = 1\n\n[[newtab_links]]\nlabel = "A"\nurl = "https://a.test/"\n\n# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n');
+  assert.equal(after, 'a = 1\n\n# the links\n[[newtab_links]]\nlabel = "A"\nurl = "https://a.test/"\n\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n');
 });
 
 test("a list in a text without one goes at the end, and an inline array stays one", () => {
@@ -95,12 +97,24 @@ test("a layout the scan misreads, a key inside a table and text that does not pa
   assert.throws(() => set_table_rows("a = \n", "site_rules", [OFF_ROW]), (error: unknown) => error instanceof RuntimeRefusal && /does not parse/.test(error.message));
 });
 
-test("a row that moves takes its comment and layout along, and no comment is left over another row", () => {
-  const text = '# the A link\n[[newtab_links]]\nlabel = "A" # first\nurl = "https://a.test/"\n\n# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n';
-  const swapped = set_table_rows(text, "newtab_links", [{ label: "B", url: "https://b.test/" }, { label: "A", url: "https://a.test/" }]);
-  assert.equal(swapped, '# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n\n# the A link\n[[newtab_links]]\nlabel = "A" # first\nurl = "https://a.test/"\n');
-  const back = set_table_rows(swapped, "newtab_links", [{ label: "A", url: "https://a.test/" }, { label: "B", url: "https://b.test/" }]);
-  assert.equal(back, text);
+test("a row that moves takes its own comment and layout along, and the list's comment stays on top", () => {
+  const text = '# the links\n[[newtab_links]]\nlabel = "A" # first\nurl = "https://a.test/"\n\n# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n\n# the C link\n[[newtab_links]]\nlabel = "C"\nurl = "https://c.test/"\n';
+  const [a, b, c] = [{ label: "A", url: "https://a.test/" }, { label: "B", url: "https://b.test/" }, { label: "C", url: "https://c.test/" }];
+  const moved = set_table_rows(text, "newtab_links", [a, c, b]);
+  assert.equal(moved, '# the links\n[[newtab_links]]\nlabel = "A" # first\nurl = "https://a.test/"\n\n# the C link\n[[newtab_links]]\nlabel = "C"\nurl = "https://c.test/"\n\n# the B link\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n');
+  assert.equal(set_table_rows(moved, "newtab_links", [a, b, c]), text);
+});
+
+test("a comment over the first row, after a root key or after another table stays when the rows go", () => {
+  const link = '[[newtab_links]]\nlabel = "A"\nurl = "https://a.test/"\n';
+  const second = '\n[[newtab_links]]\nlabel = "B"\nurl = "https://b.test/"\n';
+  const section = `a = 1\n\n# Links for the new tab page. Keep work ones first.\n${link}${second}`;
+  assert.equal(remove_table_rows(section, "newtab_links"), "a = 1\n\n# Links for the new tab page. Keep work ones first.\n");
+  assert.ok(set_table_rows(section, "newtab_links", [{ label: "B", url: "https://b.test/" }]).includes("# Links for the new tab page. Keep work ones first.\n"));
+  // A Reset on a file whose only other content is its top comment keeps the comment.
+  assert.equal(remove_table_rows(`# My DesertFox settings\n# Written 2026\n${link}`, "newtab_links"), "# My DesertFox settings\n# Written 2026\n");
+  assert.equal(remove_table_rows(`hint_letters = "abc"\n# --- links ---\n${link}`, "newtab_links"), 'hint_letters = "abc"\n# --- links ---\n');
+  assert.equal(remove_table_rows(`[other]\nx = 1\n# note about x above\n${link}`, "newtab_links"), "[other]\nx = 1\n# note about x above\n");
 });
 
 test("a row added after the last one and removed again gives back a text without a final newline", () => {

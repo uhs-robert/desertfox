@@ -8,7 +8,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 
 export type TomlRow = { readonly [field: string]: TomlValue | undefined };
 
-// A row's comment lines right above its header, the header, and its lines up to the last one that is not blank or a comment, child tables (`[key.x]`, `[[key.x]]`) included.
+// A row's own comment lines right above its header (`own_comment_start`), the header, and its lines up to the last one that is not blank or a comment, child tables (`[key.x]`, `[[key.x]]`) included.
 // The comments and blank lines after it stay out: they most often lead into whatever comes next.
 type Block = { start: number; end: number };
 
@@ -30,15 +30,26 @@ function blocks_of(lines: Line[], key: string): Block[] {
   const own = row_header(key);
   const child = child_header(key);
   const headers = lines.flatMap((line, index) => (own.test(line.body) ? [index] : []));
-  return headers.map((header) => {
-    let start = header;
-    while (start > 0 && COMMENT.test(lines[start - 1]!.body)) start -= 1;
+  const blocks: Block[] = [];
+  for (const header of headers) {
     let next = header + 1;
     while (next < lines.length && !(TABLE_HEADER.test(lines[next]!.body) && !child.test(lines[next]!.body))) next += 1;
     let end = next - 1;
     while (end > header && BLANK_OR_COMMENT.test(lines[end]!.body)) end -= 1;
-    return { start, end };
-  });
+    blocks.push({ start: own_comment_start(lines, header, blocks.at(-1)), end });
+  }
+  return blocks;
+}
+
+// Where the comment lines right over a row's header start, when they sit between that row and the row before it in the list, and so describe it.
+// A comment over the first row, or after a root key or another table, is the file's or the list's: it stays where it is when the row goes or moves.
+function own_comment_start(lines: Line[], header: number, previous: Block | undefined): number {
+  let start = header;
+  while (start > 0 && COMMENT.test(lines[start - 1]!.body)) start -= 1;
+  if (start === header || previous === undefined) return header;
+  let above = start - 1;
+  while (above > previous.end && lines[above]!.body.trim() === "") above -= 1;
+  return above === previous.end ? start : header;
 }
 
 // The rows of `old` that stay, as pairs of indices into `old` and `next`: a longest common run, so a row edited in place or moved is one removal and one insertion.
