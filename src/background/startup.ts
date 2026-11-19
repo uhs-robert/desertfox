@@ -66,6 +66,11 @@ export const host_update = create_host_update(browser_host_update_deps(() => get
 export const native_host = create_native_client(browser_native_deps(), host_update.watch);
 const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
 
+// A change to the saved layer rewrites the file with the key edits, so the first one after an update clears the settings an older version mirrored there.
+async function mirror_key_edits(): Promise<void> {
+  void autoconfig.mirror((await load_layers()).keymap);
+}
+
 // Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
 type LoadStep = {
   loaded: LoadedConfig;
@@ -215,7 +220,7 @@ export function change_edits(decide: (current: SettingEdits, config: MergedConfi
     const next = decide(before, config);
     if (next === undefined) return;
     await commit_change(before, next, { store: store_edits, publish: async (edits) => publish(await (load_step as Promise<LoadStep>), edits) });
-    if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) void autoconfig.mirror(next.saved, (await load_layers()).keymap);
+    if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) await mirror_key_edits();
   });
 }
 
@@ -252,7 +257,7 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: La
       if (layers === before) await store_slot_map(slot_map_before);
     };
     await commit_change(before, next, { store, publish: publish_layers });
-    if (JSON.stringify(next.keymap) !== JSON.stringify(before.keymap)) void autoconfig.mirror((await load_edits()).saved, next.keymap);
+    if (JSON.stringify(next.keymap) !== JSON.stringify(before.keymap)) void autoconfig.mirror(next.keymap);
   });
 }
 
@@ -574,7 +579,7 @@ async function commit_folder_files(current: FilesSource, planned: FolderFilesPla
     // The files build can refuse a value the setting's own check passes. The checks before catch the common ones with a clearer message.
     throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
   }
-  if (JSON.stringify(planned.edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(planned.edits_after.saved, (await load_layers()).keymap);
+  if (JSON.stringify(planned.edits_after.saved) !== JSON.stringify(edits.saved)) await mirror_key_edits();
   if (!from_folder) return { question_was_pending };
   const picks = planned.paths.map((path) => {
     const writes = writes_of(path);
@@ -652,7 +657,7 @@ async function drop_edits_of(name: keyof Settings): Promise<void> {
 // `change_edits` for a caller already in the change queue.
 async function commit_setting_edits(before: SettingEdits, next: SettingEdits): Promise<void> {
   await commit_change(before, next, { store: store_edits, publish: async (edits) => publish(await (load_step as Promise<LoadStep>), edits) });
-  if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) void autoconfig.mirror(next.saved, (await load_layers()).keymap);
+  if (JSON.stringify(next.saved) !== JSON.stringify(before.saved)) await mirror_key_edits();
 }
 
 type HostWriteReply = { ok: true } | { ok: false; error: unknown };

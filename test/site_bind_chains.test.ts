@@ -99,9 +99,9 @@ test("a label or intent with a control character is a build error in each table 
 test("a text bind set from the browser compiles and runs like a file bind", () => {
   const typed = { a: "tab.next", b: ["tab.prev", "tab.next"], c: { run: "tab.next", label: "Next" }, d: "no.such.command" };
   const config = empty_config();
-  const plan = plan_set_value("site_rules", [{ site: "https://a.test/*", bind: typed }], "saved", { saved: {}, temp: {} }, config);
+  const plan = plan_set_value("site_rules", [{ site: "https://a.test/*", bind: typed }], "temp", { saved: {}, temp: {} }, config);
   assert.equal(plan.toast?.kind, "success");
-  const edited = { ...config, settings: { ...config.settings, ...plan.next!.saved } };
+  const edited = { ...config, settings: { ...config.settings, ...plan.next!.temp } };
   const { compiled, warnings } = compile_config({ config: edited, default_keymap: {}, get_command: (id) => registry.get(id), registry, enum_sources: {} });
   const bind = compiled.site_rules![0]!.bind!;
   assert.deepEqual(Object.keys(bind), ["a", "b", "c"]);

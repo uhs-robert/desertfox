@@ -1,8 +1,8 @@
-// Mirrors the saved settings and the stored key edits into `autoconfig.toml` through the native host. The file is write-only: nothing reads it back.
+// Mirrors the stored key edits into `autoconfig.toml` through the native host. The file is write-only: nothing reads it back.
 // A failed write never blocks or undoes an edit, because browser storage holds the edits and this file only copies them.
+// No setting goes here: settings.toml holds the settings, and the consent settings stay on this machine.
 
 import { stringify } from "smol-toml";
-import type { SettingOverrides } from "../shared/config.ts";
 import type { KeymapEdits } from "./edit_layers.ts";
 import type { NativeFailure } from "./native_client.ts";
 
@@ -10,6 +10,9 @@ export type AutoconfigMirrorDeps = {
   write_autoconfig: (toml: string) => Promise<void>;
   warn: (message: string) => void;
 };
+
+// The host writes its own header above this line.
+const KEY_EDITS_NOTE = "# The key edits made in the browser, as keymap.d mode tables. Settings live in settings.toml.\n";
 
 const failure_of = (error: unknown): NativeFailure | "other" => (error as { failure?: NativeFailure })?.failure ?? "other";
 
@@ -28,13 +31,11 @@ export function create_autoconfig_mirror(deps: AutoconfigMirrorDeps) {
 
   return {
     // Returns at once. The promise it gives back is for tests: it settles when this write has run, and never rejects.
-    // Both layers on every call, so the file always holds both and the write order is the commit order.
-    mirror(saved: SettingOverrides, key_edits: KeymapEdits): Promise<void> {
-      // Serialized now, so a later edit cannot change what this write holds. A value TOML cannot hold (a sparse list) only warns.
+    mirror(key_edits: KeymapEdits): Promise<void> {
+      // Serialized now, so a later edit cannot change what this write holds. A value TOML cannot hold only warns.
       let toml: string;
       try {
-        // Settings first: TOML wants the flat values before the first `[mode]` table. Both parts are empty for no edits, which leaves the header-only file.
-        toml = [saved, key_edits].filter((layer) => Object.keys(layer).length > 0).map((layer) => stringify(layer)).join("\n");
+        toml = Object.keys(key_edits).length > 0 ? `${KEY_EDITS_NOTE}\n${stringify(key_edits)}` : KEY_EDITS_NOTE;
       } catch (error) {
         warn_once(error);
         return Promise.resolve();

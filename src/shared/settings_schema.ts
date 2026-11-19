@@ -310,10 +310,12 @@ export const SETTING_SPECS = Object.fromEntries(SETTING_NAMES.map((name) => [nam
 // Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on, and a change stays in the browser.
 export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update", "newtab_ip_info"] as const;
 
+export const is_consent_setting = (name: string): boolean => (CONSENT_SETTINGS as readonly string[]).includes(name);
+
 // The settings that `:set`, `:toggle`, `:unset` and the pages write into settings.toml (`change_setting` with layer `file`) rather than into the saved edits.
 // Every settable scalar, list and `[[table]]` list but `site_rules`. A Reset of the whole list drops every hand-written rule, so the popup changes its rows one at a time instead (`change_site_rule_in_file`).
 export const FILE_WRITTEN_SETTINGS: ReadonlySet<string> = new Set<SettingName>(
-  SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable && !BROWSER_KEPT_KINDS.has(SETTINGS_TABLE[name].kind) && !(CONSENT_SETTINGS as readonly string[]).includes(name)),
+  SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable && !BROWSER_KEPT_KINDS.has(SETTINGS_TABLE[name].kind) && !is_consent_setting(name)),
 );
 
 export function is_setting_name(name: string): name is SettingName {

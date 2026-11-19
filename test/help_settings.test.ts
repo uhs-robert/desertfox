@@ -175,17 +175,17 @@ test("a temp edit shows temp, a file edit of the same setting takes over, and re
 
 test("a change from another tab shows after a refresh", async () => {
   const { session, messages } = await make();
-  await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false });
+  await messages.change({ type: "change_setting", name: "newtab_ip_info", action: "set", value: true });
   await session.refresh();
-  assert.equal(session.field("newtab_date")!.row.value, false);
-  assert.equal(session.field("newtab_date")!.row.top_layer, "saved");
+  assert.equal(session.field("newtab_ip_info")!.row.value, true);
+  assert.equal(session.field("newtab_ip_info")!.row.top_layer, "saved");
 });
 
 test("a refresh leaves a field with a typed draft alone and updates the others", async () => {
   const { session, messages } = await make();
   session.draft("hint_letters", "typing");
-  await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "other", layer: "saved" });
-  await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false });
+  await messages.change({ type: "change_setting", name: "hint_letters", action: "set", value: "other", layer: "temp" });
+  await messages.change({ type: "change_setting", name: "newtab_date", action: "set", value: false, layer: "temp" });
   await session.refresh();
   assert.equal(session.field("hint_letters")!.draft!.value, "typing");
   assert.notEqual(session.field("hint_letters")!.row.value, "other");

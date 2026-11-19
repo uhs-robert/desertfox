@@ -164,7 +164,7 @@ export const SETTINGS_TABLE = {
   newtab_weather_units: { kind: "enum", values: ["auto", "metric", "imperial"], default: "auto" },
   // Opt-in network: with `newtab_ip_info` on, the page asks Cloudflare for the public IP and country.
   newtab_ip_info: { kind: "boolean", default: false },
-  // Settable for the saved edits: the settings page saves the list. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
+  // Settable from the settings page, which writes the list into settings.toml. `:set` has no typed form for a list of tables, so a typed value fails the check, as for `site_rules`.
   newtab_links: { kind: "table_list", fields: { label: { value: "text" }, url: { value: "web_url" }, group: { value: "text", optional: true } }, default: [] },
 } as const satisfies Record<string, SettingRow>;
 

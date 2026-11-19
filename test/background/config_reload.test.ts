@@ -304,17 +304,19 @@ test("the build skips autoconfig.toml, which the host writes beside the files", 
   assert.equal((await startup.get_config()).settings.hint_letters, "ab");
 });
 
-test("a change to the saved edits writes autoconfig.toml, and a temp change does not", async () => {
+const NOTE = "# The key edits made in the browser, as keymap.d mode tables. Settings live in settings.toml.\n";
+
+test("a change to the saved edits rewrites autoconfig.toml with the key edits alone, and a temp change writes nothing", async () => {
   const host = { files: {} };
   const { sent, local } = install_fake_browser(host);
   const startup = await fresh_startup("mirror_on_save");
   await startup.get_config();
-  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } }));
+  await startup.change_edits((current) => ({ ...current, saved: { bridge: true } }));
   await set_temp(startup, "which_key_delay_ms", 3);
   // The mirror runs after the edit returns, so wait for its turn.
   await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.deepEqual(sent, [{ cmd: "write_autoconfig", toml: 'hint_letters = "xy"\n' }]);
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "xy" });
+  assert.deepEqual(sent, [{ cmd: "write_autoconfig", toml: NOTE }]);
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { bridge: true });
 });
 
 const writes_of = (sent: { cmd: string; toml?: string }[]) => sent.filter((message) => message.cmd === "write_autoconfig").map((message) => message.toml);
@@ -327,22 +329,20 @@ test("a key edit alone writes autoconfig.toml with an unbind as an empty string 
   await startup.get_config();
   await set_keys(startup, { normal: { J: "tab.close", K: "" }, browser: { "<A-x>": "tab.next" } });
   await settle();
-  assert.deepEqual(writes_of(sent), ['[normal]\nJ = "tab.close"\nK = ""\n\n[browser]\n"<A-x>" = "tab.next"\n']);
+  assert.deepEqual(writes_of(sent), [`${NOTE}\n[normal]\nJ = "tab.close"\nK = ""\n\n[browser]\n"<A-x>" = "tab.next"\n`]);
 });
 
-test("interleaved settings and key edits each write both layers, in commit order", async () => {
+test("interleaved saved settings and key edits write the key edits alone, in commit order", async () => {
   const { sent } = install_fake_browser({ files: {} });
   const startup = await fresh_startup("mirror_interleaved");
   await startup.get_config();
-  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } }));
+  // A value an older version saved, which the mirror held then.
+  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy", bridge: true } }));
   await set_keys(startup, { normal: { J: "tab.close" } });
-  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "zz" } }));
+  await startup.change_edits((current) => ({ ...current, saved: { bridge: true } }));
   await settle();
-  assert.deepEqual(writes_of(sent), [
-    'hint_letters = "xy"\n',
-    'hint_letters = "xy"\n\n[normal]\nJ = "tab.close"\n',
-    'hint_letters = "zz"\n\n[normal]\nJ = "tab.close"\n',
-  ]);
+  const keys = `${NOTE}\n[normal]\nJ = "tab.close"\n`;
+  assert.deepEqual(writes_of(sent), [NOTE, keys, keys]);
 });
 
 test("a rolled back key edit writes nothing, and removing every edit writes the header-only file", async () => {
@@ -360,7 +360,7 @@ test("a rolled back key edit writes nothing, and removing every edit writes the 
   await set_keys(startup, { normal: { J: "tab.close" } });
   await set_keys(startup, {});
   await settle();
-  assert.deepEqual(writes_of(sent).at(-1), "");
+  assert.deepEqual(writes_of(sent).at(-1), NOTE);
 });
 
 test("a rolled back :set writes nothing", async () => {
@@ -371,21 +371,21 @@ test("a rolled back :set writes nothing", async () => {
   fake.tabs.query = async () => {
     throw new Error("tabs down");
   };
-  await assert.rejects(startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } })), /tabs down/);
+  await assert.rejects(startup.change_edits((current) => ({ ...current, saved: { bridge: true } })), /tabs down/);
   fake.tabs.query = working;
   await settle();
   assert.deepEqual(writes_of(sent), []);
 });
 
-test("a table-valued saved setting and key edits write one TOML document", async () => {
+test("a saved site_rules list stays out of autoconfig.toml, which parses as the key edits alone", async () => {
   const { sent } = install_fake_browser({ files: {} });
   const startup = await fresh_startup("mirror_tables");
   await startup.get_config();
-  await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy", site_rules: [{ site: "a.test", off: true }] } }));
+  await startup.change_edits((current) => ({ ...current, saved: { site_rules: [{ site: "a.test", off: true }] } }));
   await set_keys(startup, { normal: { J: "tab.close" } });
   await settle();
   const toml = writes_of(sent).at(-1) as string;
-  assert.deepEqual(JSON.parse(JSON.stringify(parse(toml))), { hint_letters: "xy", site_rules: [{ site: "a.test", off: true }], normal: { J: "tab.close" } });
+  assert.deepEqual(JSON.parse(JSON.stringify(parse(toml))), { normal: { J: "tab.close" } });
 });
 
 test("a layer change that leaves the key edits as they were does not write", async () => {
@@ -408,11 +408,11 @@ test("a host failure on the autoconfig write keeps the edit and warns once", asy
   try {
     const startup = await fresh_startup("mirror_fails");
     await startup.get_config();
-    await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } }));
-    await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "zz" } }));
+    await startup.change_edits((current) => ({ ...current, saved: { bridge: true } }));
+    await startup.change_edits((current) => ({ ...current, saved: { bridge: false } }));
     await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "zz" });
-    assert.equal((await startup.get_config()).settings.hint_letters, "zz");
+    assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { bridge: false });
+    assert.equal((await startup.get_config()).settings.bridge, false);
     assert.equal(warnings.filter((line) => /autoconfig\.toml not written/.test(String(line))).length, 1);
   } finally {
     console.warn = original_warn;
@@ -432,21 +432,21 @@ test("the mirror writes in order, keeps quiet without the permission, and warns 
     },
     warn: (message) => void warned.push(message),
   });
-  await Promise.all([mirror.mirror({ hint_letters: "slow" }, {}), mirror.mirror({ hint_letters: "fast" }, {})]);
-  assert.deepEqual(written, ['hint_letters = "slow"\n', 'hint_letters = "fast"\n']);
+  await Promise.all([mirror.mirror({ normal: { a: "slow" } }), mirror.mirror({ normal: { a: "fast" } })]);
+  assert.deepEqual(written, [`${NOTE}\n[normal]\na = "slow"\n`, `${NOTE}\n[normal]\na = "fast"\n`]);
 
   fail_with = new NativeHostError("no_permission", "no permission");
-  await mirror.mirror({}, {});
+  await mirror.mirror({});
   assert.deepEqual(warned, []);
   fail_with = new NativeHostError("host_missing", "not installed");
-  await mirror.mirror({}, {});
-  await mirror.mirror({}, {});
+  await mirror.mirror({});
+  await mirror.mirror({});
   fail_with = new Error("odd");
-  await mirror.mirror({}, {});
+  await mirror.mirror({});
   assert.equal(warned.length, 2);
   fail_with = undefined;
-  await mirror.mirror({ hint_letters: "back" }, {});
-  assert.equal(written.at(-1), 'hint_letters = "back"\n');
+  await mirror.mirror({ normal: { a: "back" } });
+  assert.equal(written.at(-1), `${NOTE}\n[normal]\na = "back"\n`);
 });
 
 test("a reader during the swap waits for the commit and sees the config that matches the registry", async () => {
@@ -523,11 +523,12 @@ test("the build warnings of a reload survive a restart", async () => {
   assert.ok(shown.some((warning) => /starts with "-"/.test(warning)), shown.join("\n"));
 });
 
-test("a saved value TOML cannot hold only warns, and the edit stays", async () => {
+test("a key edit TOML cannot hold only warns, and the edit stays", async () => {
   const warned: string[] = [];
   const mirror = create_autoconfig_mirror({ write_autoconfig: async () => undefined, warn: (message) => void warned.push(message) });
-  assert.doesNotThrow(() => mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }, {}));
-  await mirror.mirror({ next_patterns: [, "a.com"] as unknown as string[] }, {});
+  const sparse = { normal: [, "a"] } as unknown as Parameters<typeof mirror.mirror>[0];
+  assert.doesNotThrow(() => mirror.mirror(sparse));
+  await mirror.mirror(sparse);
   assert.equal(warned.length, 1);
 });
 

@@ -34,7 +34,7 @@ export const HOST_UPDATE_STORAGE_KEY = "desertfox_host_update";
 // True once a Firefox page key without the native host showed the notice that the host opens the page in one key.
 export const FIREFOX_PAGE_NOTICE_STORAGE_KEY = "desertfox_firefox_page_notice";
 
-// Setting name to the value a saved browser edit gave it (`:set`). Global, private windows included.
+// Setting name to the value a saved browser edit gave it: a consent setting (`:set`), or a value an older version saved that the start has not moved into settings.toml (`saved_fold.ts`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
 
 // Mode to key sequence to command text, the key edits the settings page saved (`edit_layers.ts`). Global, private windows included.
