@@ -1,6 +1,6 @@
 // Loads the config, compiles the keymap and publishes the result.
 
-import { best_effort, keep_chain, refused_as, warn_and_go } from "../shared/swallow.ts";
+import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
 import { effective_settings, needs_page, with_fallback_engines } from "../shared/config.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
@@ -736,7 +736,9 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
       first_outcome = await write_waiting_file(in_queue, first, undefined, [...waiting_above, path]);
       continue;
     }
-    const folder_now = await folder_for_gate(in_queue, path);
+    const gate_read = await folder_for_gate(in_queue, path);
+    if (gate_read !== undefined && !is_gate_folder(gate_read)) return replaced() ?? gate_read;
+    const folder_now = gate_read;
     const started = await in_queue(async () => replaced() ?? (is_stale(folder_now) ? "stale" : await start_host_write(path, undefined, folder_now)));
     if (started === "stale") continue;
     if (started === undefined) return outcome ?? (pick && writes.end);
@@ -800,7 +802,9 @@ const MAX_BRIDGES = 3;
 // Writes the bridge page file: the folder's engines (the record's base) with the copy's over them. It drops nothing the folder's settings.toml names and holds what the copy's settings.toml names.
 // The record keeps the page file at the bridge text as its base, so the copy's own text follows.
 async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite> {
-  const folder_now = await folder_for_gate(in_queue, ENGINE_FILE);
+  const gate_read = await folder_for_gate(in_queue, ENGINE_FILE);
+  if (gate_read !== undefined && !is_gate_folder(gate_read)) return gate_read;
+  const folder_now = gate_read;
   const started = await in_queue(async () => {
     const unsynced = await read_unsynced();
     if (!unsynced || !Object.hasOwn(unsynced, ENGINE_FILE)) return undefined;
@@ -819,19 +823,25 @@ async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite>
 // The files whose writes must leave the folder building: the settings.toml and the page's file can name or drop an engine, a theme, a keyword the other depends on.
 const GATED_PATHS = new Set([SETTINGS_FILE, ENGINE_FILE]);
 
-// The folder as the host reads it now, for the gate of a write of `path`, with the count of writes landed before the read. Undefined when the path has no gate, nothing waits for it, or the folder cannot be read: the write then fails the same way, or goes as before the gate.
+// The folder as the host reads it now, for the gate of a write of `path`, with the count of writes landed before the read. Undefined when the path has no gate or nothing waits for it.
+// A failed read holds the write, since nothing checked it. A host that is missing or not permitted waits instead, as the write itself would.
 type GateFolder = ConfigFilesReply & { landed: number };
-async function folder_for_gate(in_queue: QueueRunner, path: string): Promise<GateFolder | undefined> {
+async function folder_for_gate(in_queue: QueueRunner, path: string): Promise<GateFolder | FileWriteOutcome | undefined> {
   if (!GATED_PATHS.has(path)) return undefined;
   const unsynced = await in_queue(read_unsynced);
   if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
   const landed = writes_landed;
-  const folder = await refused_as(native_host.read_config(), undefined);
-  return folder && { ...folder, landed };
+  try {
+    return { ...(await native_host.read_config()), landed };
+  } catch (error) {
+    if (error instanceof NativeHostError && (error.failure === "no_permission" || error.failure === "host_missing")) return { kind: "waiting" };
+    return { kind: "held", problem: error instanceof Error ? error.message : String(error), unread: true };
+  }
 }
 
 // A write landed since the gate's read, so the read can hold that file's old text. The loop reads the folder again.
 const is_stale = (folder: GateFolder | undefined): boolean => folder !== undefined && folder.landed !== writes_landed;
+const is_gate_folder = (read: GateFolder | FileWriteOutcome | undefined): read is GateFolder => read !== undefined && "files" in read;
 
 const writes_out_besides = (path: string): HostWrite[] => [...path_writes.entries()].flatMap(([other, writes]) => (other !== path && writes.out ? [writes.out] : []));
 

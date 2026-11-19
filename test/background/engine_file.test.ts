@@ -512,3 +512,55 @@ test("a hand file that holds only a child table of a page engine does not take t
   assert.equal(answer.ok, true, answer.message);
   assert.match(host.files[FILE]!, /new=1/);
 });
+
+test("a write whose gate cannot read the folder is held, and nothing goes out", async () => {
+  const { host, messages, fake, local, sent } = await started({ "settings.toml": "", "settings.d/10-search.toml": 'default_engine = "duck"\n', [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n\n[keep]\nurl = "https://k.test/?q={query}"\n' });
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => (message.cmd === "read_config" ? Promise.reject(new Error("read failed")) : send(name, message));
+  sent.length = 0;
+  const answer = await messages.change(remove("wiki"));
+  assert.ok(answer.ok);
+  assert.match(answer.message, /zz-desertfox\.toml waits, because the config folder could not be read to check the write \(.*read failed\)/);
+  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object), [FILE]);
+});
+
+test("a held write says what clears it when it keeps waiting", async () => {
+  const { messages, startup } = await started({ "settings.toml": "", "settings.d/10-search.toml": 'default_engine = "wiki"\n', [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n\n[keep]\nurl = "https://k.test/?q={query}"\n' });
+  await startup.save_config_file("settings.d/10-search.toml", 'default_engine = "duck"\n', 'default_engine = "wiki"\n');
+  const answer = await messages.change(remove("wiki"));
+  assert.match(answer.message, /change the folder's files by hand, or press ,r to take the folder's files and drop the browser's change\.$/);
+});
+
+test("a write that lands between the gate's folder read and its check makes the gate read the folder again", async () => {
+  const { host, messages, startup, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[keep]\nurl = "https://k.test/?q={query}"\n' });
+  const held = hold_writes(fake);
+  // Holds the next folder read when the test arms it, and counts every read.
+  const send = fake.runtime.sendNativeMessage;
+  const held_reads: (() => void)[] = [];
+  let reads = 0;
+  let hold_next_read = false;
+  fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
+    if (message.cmd !== "read_config") return send(name, message);
+    reads += 1;
+    if (!hold_next_read) return send(name, message);
+    hold_next_read = false;
+    const answer = send(name, message);
+    return new Promise((resolve) => held_reads.push(() => resolve(answer)));
+  };
+  const picking = startup.set_in_settings_file("default_engine", "duck");
+  await until(() => held.length === 1, "the settings.toml write did not go out");
+  hold_next_read = true;
+  const saving = messages.change(set("wiki", "https://w.test/?q={query}"));
+  await until(() => held_reads.length === 1, "the gate did not read the folder");
+  const reads_before = reads;
+  held.shift()!();
+  assert.deepEqual(await picking, { kind: "written" });
+  held_reads.shift()!();
+  await until(() => held.length === 1, "the page file write did not go out");
+  assert.equal(reads, reads_before + 1, "the gate sent the write on a read from before the settings.toml write landed");
+  held.shift()!();
+  assert.equal((await saving).ok, true);
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+});

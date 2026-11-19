@@ -285,9 +285,12 @@ test("a refused write whose folder cannot be read again keeps the record and say
   const host = { files: { "settings.toml": MINE } };
   const { local, fake, startup } = await reloaded(host);
   host.files = { "settings.toml": MINE.replace('"abc"', '"hand"') };
+  // The gate's read before the write works. The read after the refusal fails.
   const send = fake.runtime.sendNativeMessage;
+  let write_sent = false;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
-    if (message.cmd === "read_config") throw new Error("Native application exited");
+    if (message.cmd === "read_config" && write_sent) throw new Error("Native application exited");
+    if (message.cmd === "write_config_file") write_sent = true;
     return send(name, message);
   };
   const outcome = await startup.set_in_settings_file("theme", "oasis_night");
