@@ -4,7 +4,8 @@
 import { NATIVE_HOST_NAME, NATIVE_PERMISSION } from "../shared/native_host.ts";
 
 // "host_outdated": the host answered with an error and is older than the extension. The message says whether it is updating.
-export type NativeFailure = "no_permission" | "host_missing" | "host_failed" | "bad_reply" | "host_outdated";
+// "file_changed": `write_settings` found settings.toml changed on disk since the extension read it, and wrote nothing.
+export type NativeFailure = "no_permission" | "host_missing" | "host_failed" | "bad_reply" | "host_outdated" | "file_changed";
 
 export class NativeHostError extends Error {
   readonly failure: NativeFailure;
@@ -124,9 +125,20 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
       if (!Array.isArray(fonts) || fonts.some((name) => typeof name !== "string")) throw new NativeHostError("bad_reply", "The DesertFox native host sent no font list. Update it with :native.update.");
       return fonts as string[];
     },
-    // Mirrors the saved edits (TOML text) into autoconfig.toml. The host writes no other file.
+    // Mirrors the saved edits (TOML text) into autoconfig.toml.
     write_autoconfig: async (toml: string): Promise<void> => {
       await call({ cmd: "write_autoconfig", toml });
+    },
+    // Replaces settings.toml with `text` while the file on disk still has the digest `base_sha256` (null: no file). A host from before the verb answers `unknown cmd`, which reads as outdated, so the caller waits for an update.
+    write_settings: async (text: string, base_sha256: string | null): Promise<void> => {
+      try {
+        await call({ cmd: "write_settings", text, base_sha256 });
+      } catch (error) {
+        if (!(error instanceof NativeHostError)) throw error;
+        if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
+        if (error.failure === "host_failed" && /unknown cmd/.test(error.message)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
+        throw error;
+      }
     },
   };
 }

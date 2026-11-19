@@ -306,6 +306,9 @@ const PER_SITE_SPECS: ColumnSpecs = Object.fromEntries(PER_SITE_SETTING_NAMES.ma
 
 export const SETTING_SPECS = Object.fromEntries(SETTING_NAMES.map((name) => [name, spec_of(name, SETTINGS_TABLE[name])])) as Record<SettingName, SettingSpec>;
 
+// The settings the popup and the settings page write into settings.toml (`change_setting` with layer `file`) rather than into the saved edits.
+export const FILE_WRITTEN_SETTINGS: ReadonlySet<string> = new Set<SettingName>(["theme"]);
+
 export function is_setting_name(name: string): name is SettingName {
   return Object.hasOwn(SETTINGS_TABLE, name);
 }

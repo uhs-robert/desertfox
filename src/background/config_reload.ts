@@ -10,7 +10,7 @@ import { pick_config } from "./config_load.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import type { FilesSlot, LoadedConfig } from "./config_load.ts";
 
-export type ApplyAction = "reload" | "import" | "remove" | "edit" | "layer";
+export type ApplyAction = "reload" | "import" | "remove" | "edit" | "layer" | "setting";
 
 export const KEPT_CURRENT: Record<ApplyAction, string> = {
   reload: "Config not reloaded, the current one stays.",
@@ -18,6 +18,7 @@ export const KEPT_CURRENT: Record<ApplyAction, string> = {
   remove: "Snippet not removed, the current config stays.",
   edit: "File not saved, the current config stays.",
   layer: "Edit not saved, the current config stays.",
+  setting: "Setting not changed, the current config stays.",
 };
 
 // The answer a settings page message gives for a thrown error: the text, and every build problem when the build refused.
@@ -34,14 +35,14 @@ export class ConfigRefusal extends Error {
   }
 }
 
-const AGAIN_VERB: Record<ApplyAction, string> = { reload: "reload", import: "import", remove: "remove", edit: "save", layer: "save" };
+const AGAIN_VERB: Record<ApplyAction, string> = { reload: "reload", import: "import", remove: "remove", edit: "save", layer: "save", setting: "set it" };
 
 const PROBLEMS_SHOWN = 3;
 
 // `stored` goes to `storage.local` as it is, so a restart picks it the same way the swap did.
 export function build_files_config(files: ConfigFiles, dir_label: string, commands: CommandMeta[], action: ApplyAction): { stored: FilesSlot; loaded: LoadedConfig } {
-  // A layer rebuild and a snippet removal change no CSS. They rebuild from the stored files, so CSS stored before this check stays until the next reload.
-  const [breach] = action === "layer" || action === "remove" ? [] : css_limit_breaches(files);
+  // A layer rebuild, a snippet removal and a setting write change no CSS. They rebuild from the stored files, so CSS stored before this check stays until the next reload.
+  const [breach] = action === "layer" || action === "remove" || action === "setting" ? [] : css_limit_breaches(files);
   if (breach) throw new ConfigRefusal(`${KEPT_CURRENT[action]} ${breach.file} line ${breach.line} holds ${breach.what}. CSS may not load anything but data: addresses. Remove it from the file and ${AGAIN_VERB[action]} again.`);
   const build_warnings: string[] = [];
   let config: MergedConfig;

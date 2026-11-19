@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { create_native_client, missing_host_as_undefined, NativeHostError } from "../../src/background/native_client.ts";
 import type { NativeFailure } from "../../src/background/native_client.ts";
+import { text_sha256 } from "../../src/background/settings_file.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 
 const client_with = (reply: () => Promise<unknown>, permitted = true) => {
   const sent: object[] = [];
@@ -92,6 +94,32 @@ test("the client and the real host agree on both requests", { skip: spawnSync("p
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("write_settings reads a hand edit as file_changed and a host from before the verb as outdated", async () => {
+  const changed = client_with(async () => ({ ok: false, error: "/c/settings.toml changed on disk since DesertFox last read it, so it was not written" }));
+  assert.equal(await failure_of(() => changed.client.write_settings("a = 1\n", null)), "file_changed");
+  assert.deepEqual(changed.sent, [{ cmd: "write_settings", text: "a = 1\n", base_sha256: null }]);
+  const old = client_with(async () => ({ ok: false, error: "unknown cmd: 'write_settings'" }));
+  assert.equal(await failure_of(() => old.client.write_settings("a = 1\n", null)), "host_outdated");
+  const other = client_with(async () => ({ ok: false, error: "cannot write /c/settings.toml: Permission denied" }));
+  assert.equal(await failure_of(() => other.client.write_settings("a = 1\n", null)), "host_failed");
+});
+
+test("the extension's digest of the text read_config sends is the one the real host checks", { skip: spawnSync("python3", ["--version"]).error !== undefined }, async (t) => {
+  const dir = make_tmp_dir("desertfox-host-", t);
+  const mine = "# caf\u00e9\r\ntheme = \"nord\" # dark\r\nb = 1";
+  writeFileSync(join(dir, "settings.toml"), mine);
+  const client = create_native_client({ has_permission: async () => true, send: async (message) => spawn_host(message, dir) });
+  const read = (await client.read_config()).files["settings.toml"]!;
+  assert.equal(read, mine);
+  const next = mine.replace("nord", "dracula");
+  const base = await text_sha256(read);
+  await client.write_settings(next, base);
+  assert.equal(readFileSync(join(dir, "settings.toml"), "utf8"), next);
+  // The same base again is stale: the file now holds `next`.
+  assert.equal(await failure_of(() => client.write_settings(mine, base)), "file_changed");
+  assert.equal(readFileSync(join(dir, "settings.toml"), "utf8"), next);
 });
 
 test("editor_start sends the text with only the fields given and answers the job", async () => {

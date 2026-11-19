@@ -3,7 +3,7 @@
 import type { ChangeSetting, ChangeSettingAnswer, ListFontNames, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../shared/settings_docs.ts";
-import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
+import { FILE_WRITTEN_SETTINGS, is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 // Shown on a row `:set` refuses.
 // `reload_key` is the live key of config.reload. A settings file is a text file in the DesertFox folder, which the Advanced block explains.
@@ -243,11 +243,11 @@ export function create_settings_session(deps: SessionDeps) {
     await answered(name, field, sequence, request, answer);
   }
 
-  // Saves at once, like `:set`, unless the check refuses the value.
+  // Saves at once, like `:set`, unless the check refuses the value. A setting the popup also picks goes into settings.toml, so both controls keep one value.
   async function commit(name: string, value: unknown): Promise<void> {
     draft(name, value);
     if (fields.get(name)?.error !== undefined) return;
-    await send_change(name, { action: "set", value });
+    await send_change(name, { action: "set", value, ...(FILE_WRITTEN_SETTINGS.has(name) && { layer: "file" as const }) });
   }
 
   // Drops the saved and the temp edit, so the file value shows. Also discards a draft.

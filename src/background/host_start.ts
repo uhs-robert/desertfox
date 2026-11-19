@@ -16,7 +16,7 @@ export function compared_files(files: ConfigFiles): ConfigFiles {
 
 export const has_config_files = (files: ConfigFiles): boolean => Object.keys(compared_files(files)).length > 0;
 
-function same_files(left: ConfigFiles, right: ConfigFiles): boolean {
+export function same_files(left: ConfigFiles, right: ConfigFiles): boolean {
   const names = Object.keys(left);
   return names.length === Object.keys(right).length && names.every((name) => Object.hasOwn(right, name) && left[name] === right[name]);
 }
