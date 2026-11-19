@@ -170,7 +170,8 @@ export async function text_sha256(text: string): Promise<string> {
 // `replaced`: a swap replaced the browser copy after the change and dropped the record. `written` says whether the folder got the change before that.
 // `saved_in_browser`: a search engine known only in the browser, which the files cannot name, went to the saved edits instead.
 // `browser_copy`: the browser copy did not come from the config folder, so only the copy changed.
-export type FileWriteOutcome = { kind: "written" } | { kind: "waiting"; host_outdated?: true } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" } | { kind: "browser_copy" } | { kind: "replaced"; by: CopyReplacedBy; written: boolean };
+// `held`: the folder would not build after the write (`problem`), so the write waits in the record for the next start or `,r`.
+export type FileWriteOutcome = { kind: "written" } | { kind: "held"; problem: string } | { kind: "waiting"; host_outdated?: true } | { kind: "conflict" } | { kind: "conflict_kept" } | { kind: "failed"; reason: string } | { kind: "saved_in_browser" } | { kind: "browser_copy" } | { kind: "replaced"; by: CopyReplacedBy; written: boolean };
 
 // The swaps that drop the record: a read of the config folder (`,r`, Use the folder), an import of config files and an editor save of the file itself.
 export type CopyReplacedBy = "reload" | "import" | "edit";
@@ -183,6 +184,7 @@ export function outcome_note(outcome: FileWriteOutcome, path = SETTINGS_FILE): s
     case "waiting": return outcome.host_outdated ? `. ${path} updates once the native host is updated` : `. ${path} updates when the native host connects`;
     case "conflict": return `. ${path} changed on disk, so it stays as it is. Open the Settings page to choose`;
     case "failed": return `. ${path} was not written (${outcome.reason}). It is tried again at the next start`;
+    case "held": return `. ${path} waits, because the config folder would not build with it (${outcome.problem}). It is tried again at the next start`;
     case "conflict_kept": return `. ${path} changed on disk, so it stays as it is, and the change stays in the browser copy`;
     case "saved_in_browser": return ", saved in the browser because the search engine is not in your files";
     case "browser_copy": return `, saved in the browser copy. It did not come from a config folder, so no ${path} is written`;

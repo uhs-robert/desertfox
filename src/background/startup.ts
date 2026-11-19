@@ -1,6 +1,6 @@
 // Loads the config, compiles the keymap and publishes the result.
 
-import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
+import { best_effort, keep_chain, refused_as, warn_and_go } from "../shared/swallow.ts";
 import { effective_settings, needs_page, with_fallback_engines } from "../shared/config.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
@@ -654,7 +654,8 @@ type HostWriteReply = { ok: true } | { ok: false; error: unknown };
 type SettledWrite = FileWriteOutcome | { kind: "superseded" };
 // A write of the file at `path` sent to the host (`text` null deletes it). The change queue starts it and settles its reply once, and the host call runs between the two, outside the queue.
 // `covers` and `drops` are the path's `picks_made` and `drops` at the start: the text holds every pick of the path up to `covers` made since that many drops.
-type HostWrite = { path: string; base: string | null; text: string | null; covers: number; drops: number; reply: Promise<HostWriteReply>; outcome?: Promise<SettledWrite> };
+// `settled` resolves once its reply is applied to the record, so a write that waits on another file can go on from the record after it.
+type HostWrite = { path: string; base: string | null; text: string | null; covers: number; drops: number; reply: Promise<HostWriteReply>; outcome?: Promise<SettledWrite>; settled: Promise<void>; mark_settled: () => void };
 
 // What the write loop keeps for one path of the record. Each path has its own, so a refusal, a drop or a write out on one file never decides another file's outcome.
 // It lives in memory only, as the replies that read it do.
@@ -713,9 +714,9 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
   let pick_written = false;
   const replaced = (): FileWriteOutcome | undefined => (pick && writes.drops !== pick.drops ? { kind: "replaced", by: writes.drop_causes[pick.drops]!, written: pick_written } : undefined);
   const holds_pick = (write: HostWrite) => pick !== undefined && write.covers >= pick.seq && write.drops === pick.drops;
-  // The outcome of the one write this loop makes of a path that must land first. A path still behind it after that waits for a later loop, so two files never chase each other.
+  // Each path that must land first gets one write from this loop, a theme file and the page's file each. A path still behind after that waits for a later loop, so two files never chase each other.
   let first_outcome: FileWriteOutcome | undefined;
-  let wrote_first = false;
+  const written_first = new Set<string>();
   let bridges = 0;
   for (;;) {
     const first = await in_queue(() => path_to_write_first(path));
@@ -730,14 +731,22 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
       continue;
     }
     if (first !== undefined) {
-      if (wrote_first) return replaced() ?? (first_outcome?.kind === "waiting" ? first_outcome : { kind: "waiting" });
-      wrote_first = true;
+      if (written_first.has(first)) return replaced() ?? (first_outcome && first_outcome.kind !== "written" ? first_outcome : { kind: "waiting" });
+      written_first.add(first);
       first_outcome = await write_waiting_file(in_queue, first, undefined, [...waiting_above, path]);
       continue;
     }
-    const started = await in_queue(async () => replaced() ?? (await start_host_write(path)));
+    const folder_now = await folder_for_gate(in_queue, path);
+    const started = await in_queue(async () => replaced() ?? (is_stale(folder_now) ? "stale" : await start_host_write(path, undefined, folder_now)));
+    if (started === "stale") continue;
     if (started === undefined) return outcome ?? (pick && writes.end);
-    if ("kind" in started) return started;
+    if ("kind" in started) {
+      // A write of another file that is out can make the folder build again once it lands, so this path tries again after it.
+      const others_out = started.kind === "held" ? writes_out_besides(path) : [];
+      if (others_out.length === 0) return started;
+      await Promise.all(others_out.map((write) => write.settled));
+      continue;
+    }
     const reply = await started.reply;
     const landed_before_read = writes_landed;
     const folder = changed_on_disk(reply) ? await read_folder_after_write() : undefined;
@@ -791,11 +800,13 @@ const MAX_BRIDGES = 3;
 // Writes the bridge page file: the folder's engines (the record's base) with the copy's over them. It drops nothing the folder's settings.toml names and holds what the copy's settings.toml names.
 // The record keeps the page file at the bridge text as its base, so the copy's own text follows.
 async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite> {
+  const folder_now = await folder_for_gate(in_queue, ENGINE_FILE);
   const started = await in_queue(async () => {
     const unsynced = await read_unsynced();
     if (!unsynced || !Object.hasOwn(unsynced, ENGINE_FILE)) return undefined;
+    if (is_stale(folder_now)) return { kind: "superseded" } as const;
     const bridge = { ...engines_in_text(unsynced[ENGINE_FILE] ?? null), ...owned_engines((await load_files_source()).files) };
-    return start_host_write(ENGINE_FILE, engine_file_text(bridge));
+    return start_host_write(ENGINE_FILE, engine_file_text(bridge), folder_now);
   });
   if (started === undefined) return { kind: "written" };
   if ("kind" in started) return started;
@@ -805,9 +816,52 @@ async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite>
   return in_queue(() => settle_host_write(started, reply, folder && { ...folder, current: writes_landed === landed_before_read }));
 }
 
+// The files whose writes must leave the folder building: the settings.toml and the page's file can name or drop an engine, a theme, a keyword the other depends on.
+const GATED_PATHS = new Set([SETTINGS_FILE, ENGINE_FILE]);
+
+// The folder as the host reads it now, for the gate of a write of `path`, with the count of writes landed before the read. Undefined when the path has no gate, nothing waits for it, or the folder cannot be read: the write then fails the same way, or goes as before the gate.
+type GateFolder = ConfigFilesReply & { landed: number };
+async function folder_for_gate(in_queue: QueueRunner, path: string): Promise<GateFolder | undefined> {
+  if (!GATED_PATHS.has(path)) return undefined;
+  const unsynced = await in_queue(read_unsynced);
+  if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
+  const landed = writes_landed;
+  const folder = await refused_as(native_host.read_config(), undefined);
+  return folder && { ...folder, landed };
+}
+
+// A write landed since the gate's read, so the read can hold that file's old text. The loop reads the folder again.
+const is_stale = (folder: GateFolder | undefined): boolean => folder !== undefined && folder.landed !== writes_landed;
+
+const writes_out_besides = (path: string): HostWrite[] => [...path_writes.entries()].flatMap(([other, writes]) => (other !== path && writes.out ? [writes.out] : []));
+
+const with_file_text = (files: ConfigFiles, path: string, text: string | null): ConfigFiles => {
+  const { [path]: _old, ...others } = files;
+  return text === null ? others : { ...others, [path]: text };
+};
+
+function folder_build_problems(files: ConfigFiles, dir_label: string): string[] {
+  try {
+    build_files_config(files, dir_label, built_in_commands(), "setting");
+    return [];
+  } catch (error) {
+    if (!(error instanceof ConfigRefusal)) throw error;
+    return error.problems.length > 0 ? error.problems : [error.message];
+  }
+}
+
+// The gate of a write: the folder after it, as far as the extension knows (the folder's files, every write still out, then `text`), must build with no problem the folder without it lacks.
+// The first new problem, or undefined. One check covers every way a write can break the folder: a default engine or child it drops, a keyword it doubles, a settings.d file that names what it removes.
+function write_breaks_folder(path: string, text: string | null, folder: ConfigFilesReply): string | undefined {
+  const before = writes_out_besides(path).reduce((files, write) => with_file_text(files, write.path, write.text), folder.files);
+  const known = new Set(folder_build_problems(before, folder.config_dir));
+  return folder_build_problems(with_file_text(before, path, text), folder.config_dir).find((problem) => !known.has(problem));
+}
+
 // In the change queue. Sends the browser copy of the file at `path` when the folder lags it, or hands back the write already out.
 // A file the copy no longer has is deleted from the folder, through the same base check. `bridge_text` replaces the copy's text, and such a write holds no pick.
-async function start_host_write(path: string, bridge_text?: string): Promise<HostWrite | FileWriteOutcome | undefined> {
+// With `folder`, a write that breaks the folder build stays in the record and answers `held` (`write_breaks_folder`).
+async function start_host_write(path: string, bridge_text?: string, folder?: GateFolder): Promise<HostWrite | FileWriteOutcome | undefined> {
   const writes = writes_of(path);
   if (writes.out) return writes.out;
   const unsynced = await read_unsynced();
@@ -819,9 +873,13 @@ async function start_host_write(path: string, bridge_text?: string): Promise<Hos
     await store_unsynced(without_unsynced_path(unsynced, path));
     return (writes.end = { kind: "written" });
   }
+  const problem = folder && write_breaks_folder(path, text, folder);
+  if (problem !== undefined) return { kind: "held", problem };
   const base_sha256 = base === null ? null : await text_sha256(base);
   const reply = native_host.write_config_file(path, text, base_sha256).then((): HostWriteReply => ({ ok: true }), (error: unknown): HostWriteReply => ({ ok: false, error }));
-  writes.out = { path, base, text, covers: bridge_text === undefined ? writes.picks_made : -1, drops: writes.drops, reply };
+  let mark_settled!: () => void;
+  const settled = new Promise<void>((resolve) => (mark_settled = resolve));
+  writes.out = { path, base, text, covers: bridge_text === undefined ? writes.picks_made : -1, drops: writes.drops, reply, settled, mark_settled };
   return writes.out;
 }
 
@@ -842,7 +900,10 @@ function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: Fold
   const writes = writes_of(write.path);
   if (writes.out === write) delete writes.out;
   if (reply.ok) writes.replays_in_a_row = 0;
-  write.outcome ??= outcome_of_host_write(write, reply, folder);
+  if (!write.outcome) {
+    write.outcome = outcome_of_host_write(write, reply, folder);
+    void write.outcome.then(write.mark_settled, write.mark_settled);
+  }
   return write.outcome;
 }
 

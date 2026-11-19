@@ -3,9 +3,10 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import "../../src/background/command_modules.ts";
 import { load_layers } from "../../src/background/edit_layers.ts";
-import { holds_engine } from "../../src/background/engine_file.ts";
+import { holds_engine, PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
 import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { build_files_config } from "../../src/background/config_reload.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
@@ -13,6 +14,8 @@ let fresh_count = 0;
 const fresh_startup = async () => (await import(`../../src/background/startup.ts?engine_file_${fresh_count++}`)) as Startup;
 
 const FILE = "search_engines.d/zz-desertfox.toml";
+// The first lines of a page file the page wrote.
+const MARK = `${PAGE_FILE_MARKER}\n\n`;
 type Host = { files: Files; granted?: boolean; no_engines_kind?: boolean };
 
 const messages_of = (startup: Startup) =>
@@ -49,7 +52,7 @@ test("a saved engine goes into the page's file in the copy and the folder, and t
   assert.equal((await messages.change(set("wiki", "https://w.test/?q={query}", { keyword: "w" }))).ok, true);
   const second = await messages.change(set("docs", "https://d.test/?q={query}"));
   assert.deepEqual(second, { ok: true, message: `Saved the engine docs to ${FILE}.` });
-  assert.equal(host.files[FILE], '[wiki]\nurl = "https://w.test/?q={query}"\nkeyword = "w"\n\n[docs]\nurl = "https://d.test/?q={query}"\n');
+  assert.equal(host.files[FILE], MARK + '[wiki]\nurl = "https://w.test/?q={query}"\nkeyword = "w"\n\n[docs]\nurl = "https://d.test/?q={query}"\n');
   assert.equal(stored_files(local)[FILE], host.files[FILE]);
   assert.equal(unsynced_of(local), undefined);
   assert.deepEqual(await messages.list(), { ok: true, engines: [{ name: "wiki", url: "https://w.test/?q={query}", label: "wiki", keyword: "w", children: 0 }, { name: "docs", url: "https://d.test/?q={query}", label: "docs", children: 0 }] });
@@ -81,7 +84,7 @@ test("a save of an engine the old browser layer holds moves it into the file wit
   const { host, startup, messages } = await started(undefined, undefined, layer);
   const answer = await messages.change(set("gh", "https://github.com/search?q={query}&type=code", { letter: "g" }));
   assert.equal(answer.ok, true, answer.message);
-  assert.equal(host.files[FILE], '[gh]\nurl = "https://github.com/search?q={query}&type=code"\nlabel = "GitHub"\n\n[gh.repo]\nurl = "https://github.com/{repo}/search?q={query}"\nlabel = "Repo"\n');
+  assert.equal(host.files[FILE], MARK + '[gh]\nurl = "https://github.com/search?q={query}&type=code"\nlabel = "GitHub"\n\n[gh.repo]\nurl = "https://github.com/{repo}/search?q={query}"\nlabel = "Repo"\n');
   assert.deepEqual((await load_layers()).engines, { engines: { other: { url: "https://o.test/?q={query}" } }, letters: { g: "gh" } });
   const config = await startup.get_config();
   assert.equal(config.search_engines.gh?.keyword, undefined);
@@ -125,7 +128,7 @@ test("two saves sent while the first write is out reach the folder in order, and
   held.shift()!();
   const answers = await Promise.all([first, second]);
   assert.deepEqual(answers.map((answer) => answer.message), [`Saved the engine one to ${FILE}.`, `Saved the engine two to ${FILE}.`]);
-  assert.equal(host.files[FILE], '[one]\nurl = "https://1.test/?q={query}"\n\n[two]\nurl = "https://2.test/?q={query}"\n');
+  assert.equal(host.files[FILE], MARK + '[one]\nurl = "https://1.test/?q={query}"\n\n[two]\nurl = "https://2.test/?q={query}"\n');
   assert.equal(unsynced_of(local), undefined);
 });
 
@@ -153,7 +156,7 @@ test("a host without the engines kind leaves the file in the copy with the recor
   host.no_engines_kind = false;
   const updated = await fresh_startup();
   await updated.reload_config_at_start();
-  assert.equal(host.files[FILE], '[wiki]\nurl = "https://w.test/?q={query}"\n');
+  assert.equal(host.files[FILE], MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n');
   assert.equal(unsynced_of(local), undefined);
 });
 
@@ -168,7 +171,7 @@ test("without the host a save waits, and the next start writes the file", async 
   host.granted = true;
   const restarted = await fresh_startup();
   await restarted.reload_config_at_start();
-  assert.equal(host.files[FILE], '[wiki]\nurl = "https://w.test/?q={query}"\n');
+  assert.equal(host.files[FILE], MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n');
   assert.equal(unsynced_of(local), undefined);
 });
 
@@ -233,7 +236,7 @@ function watch_folder_states(fake: ReturnType<typeof install_fake_browser>["fake
 
 // The folder names `old` as the default engine and the page's file holds it. Without a host that writes the page's file, the copy gets `wiki`, names it the default and drops `old`.
 async function replaced_default_engine(host: Host, cut_host: (host: Host) => void) {
-  host.files = { "settings.toml": 'default_engine = "old"\n', [FILE]: '[old]\nurl = "https://o.test/?q={query}"\n' };
+  host.files = { "settings.toml": 'default_engine = "old"\n', [FILE]: MARK + '[old]\nurl = "https://o.test/?q={query}"\n' };
   const { messages, startup, local, fake } = await started(host.files, host);
   cut_host(host);
   assert.equal((await messages.change(set("wiki", "https://w.test/?q={query}"))).ok, true);
@@ -258,14 +261,14 @@ for (const [label, cut_host] of [
     await restarted.reload_config_at_start();
     assert.deepEqual(states.map((state) => state.kinds), ["engines", "settings", "engines"]);
     assert.ok(states.every((state) => state.defined), JSON.stringify(states));
-    assert.equal(host.files[FILE], '[wiki]\nurl = "https://w.test/?q={query}"\n');
+    assert.equal(host.files[FILE], MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n');
     assert.equal(host.files["settings.toml"], 'default_engine = "wiki"\n');
     assert.equal(unsynced_of(local), undefined);
   });
 }
 
 test("a remove that meets the same wait in its own write goes through the bridge file at once", async () => {
-  const host: Host = { files: { "settings.toml": 'default_engine = "old"\n', [FILE]: '[old]\nurl = "https://o.test/?q={query}"\n[keep]\nurl = "https://k.test/?q={query}"\n' } };
+  const host: Host = { files: { "settings.toml": 'default_engine = "old"\n', [FILE]: MARK + '[old]\nurl = "https://o.test/?q={query}"\n[keep]\nurl = "https://k.test/?q={query}"\n' } };
   const { messages, startup, local, fake } = await started(host.files, host);
   host.no_engines_kind = true;
   await messages.change(set("wiki", "https://w.test/?q={query}"));
@@ -281,7 +284,7 @@ test("a remove that meets the same wait in its own write goes through the bridge
 });
 
 test("a settings.toml that stops naming an engine goes before the page's file that drops it", async () => {
-  const host: Host = { files: { "settings.toml": 'default_engine = "wiki"\n', [FILE]: '[wiki]\nurl = "https://w.test/?q={query}"\n' } };
+  const host: Host = { files: { "settings.toml": 'default_engine = "wiki"\n', [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n' } };
   const { messages, startup, local, fake } = await started(host.files, host);
   host.granted = false;
   // The page's file goes into the record first.
@@ -297,7 +300,7 @@ test("a settings.toml that stops naming an engine goes before the page's file th
 });
 
 test("a remove waits for a settings.toml write that is out and still names the engine", async () => {
-  const { host, messages, startup, fake } = await started({ "settings.toml": "", [FILE]: '[wiki]\nurl = "https://w.test/?q={query}"\n' });
+  const { host, messages, startup, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n' });
   const held = hold_writes(fake);
   const naming = startup.set_in_settings_file("default_engine", "wiki");
   await until(() => held.length === 1, "the settings.toml write did not go out");
@@ -370,4 +373,142 @@ test("a remove whose storage write fails puts the page's file and the key letter
   const config = await startup.get_config();
   assert.ok(config.search_engines.wiki);
   assert.equal(config.keymap.search_keys?.w, "wiki");
+});
+
+// Every folder state the host leaves after a write, built as a `,r` would build it. A start after each write must build.
+function watch_folder_builds(fake: ReturnType<typeof install_fake_browser>["fake"], host: Host) {
+  const broken: string[] = [];
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
+    const reply = await send(name, message);
+    if (message.cmd === "write_config_file" && (reply as { ok: boolean }).ok) {
+      try {
+        build_files_config(host.files, "folder", [], "reload");
+      } catch (error) {
+        broken.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    return reply;
+  };
+  return broken;
+}
+
+test("a settings.toml that names an engine waits while a write that drops that engine is out", async () => {
+  const { host, messages, startup, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n\n[keep]\nurl = "https://k.test/?q={query}"\n' });
+  const broken = watch_folder_builds(fake, host);
+  const held = hold_writes(fake);
+  const removing = messages.change(remove("wiki"));
+  await until(() => held.length === 1, "the removal did not go out");
+  const adding = messages.change(set("wiki", "https://w.test/?q={query}"));
+  const naming = startup.set_in_settings_file("default_engine", "wiki");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(held.length, 1, "settings.toml went out beside the removal of the engine it names");
+  while (held.length > 0 || !(await Promise.race([naming.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 20))]))) {
+    if (held.length > 0) held.shift()!();
+  }
+  const answers = await Promise.all([removing, adding]);
+  assert.ok(answers.every((answer) => answer.ok), JSON.stringify(answers));
+  assert.deepEqual(await naming, { kind: "written" });
+  assert.deepEqual(broken, []);
+  assert.equal(host.files["settings.toml"], 'default_engine = "wiki"\n');
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+});
+
+// The folder names `old` (keyword o) as the default. Without a host the copy gets `wiki`, names it the default, drops `old`, then gives `wiki` the keyword o.
+test("a bridge file that would hold one keyword twice is not written, and both files wait", async () => {
+  const host: Host = { files: { "settings.toml": 'default_engine = "old"\n', [FILE]: MARK + '[old]\nurl = "https://o.test/?q={query}"\nkeyword = "o"\n' } };
+  const { messages, startup, local } = await started(host.files, host);
+  host.granted = false;
+  await messages.change(set("wiki", "https://w.test/?q={query}"));
+  await startup.set_in_settings_file("default_engine", "wiki");
+  await messages.change(remove("old"));
+  assert.equal((await messages.change(set("wiki", "https://w.test/?q={query}", { keyword: "o" }))).ok, true);
+  host.granted = true;
+  const before = structuredClone(host.files);
+  const restarted = await fresh_startup();
+  await restarted.reload_config_at_start();
+  assert.deepEqual(host.files, before);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object).sort(), [FILE, "settings.toml"]);
+});
+
+test("a bridge file that would drop the default child the folder names is not written", async () => {
+  const host: Host = { files: { "settings.toml": 'default_engine = "wiki.images"\n', [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n\n[wiki.images]\nurl = "https://w.test/i?q={query}"\n' } };
+  const { messages, startup, local } = await started(host.files, host);
+  host.granted = false;
+  await messages.change(set("docs", "https://d.test/?q={query}"));
+  await startup.set_in_settings_file("default_engine", "docs");
+  await messages.change(remove("wiki"));
+  await messages.change(set("wiki", "https://w.test/?q={query}"));
+  host.granted = true;
+  const before = structuredClone(host.files);
+  await (await fresh_startup()).reload_config_at_start();
+  assert.deepEqual(host.files, before);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object).sort(), [FILE, "settings.toml"]);
+});
+
+test("a remove of an engine that a settings.d file in the folder names waits and says why", async () => {
+  const { host, messages, startup, local } = await started({ "settings.toml": "", "settings.d/10-search.toml": 'default_engine = "wiki"\n', [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n\n[keep]\nurl = "https://k.test/?q={query}"\n' });
+  // The browser copy of the settings.d file changes in the Files editor, which writes nothing to the folder.
+  await startup.save_config_file("settings.d/10-search.toml", 'default_engine = "duck"\n', 'default_engine = "wiki"\n');
+  const answer = await messages.change(remove("wiki"));
+  assert.ok(answer.ok);
+  assert.match(answer.message, /zz-desertfox\.toml waits, because the config folder would not build with it \(.*default_engine: unknown search engine "wiki"\)/);
+  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object), [FILE]);
+});
+
+test("a default engine whose page-file write went to the question is not written to the folder", async () => {
+  const files = { "settings.toml": "" };
+  const host: Host = { files };
+  const { messages, startup, local } = await started(files, host);
+  host.granted = false;
+  await messages.change(set("wiki", "https://w.test/?q={query}"));
+  await startup.set_in_settings_file("default_engine", "wiki");
+  host.granted = true;
+  host.files = { ...host.files, [FILE]: '[hand]\nurl = "https://h.test/?q={query}"\n' };
+  await (await fresh_startup()).reload_config_at_start();
+  assert.equal(host.files["settings.toml"], "");
+  assert.equal(host.files[FILE], '[hand]\nurl = "https://h.test/?q={query}"\n');
+  assert.deepEqual(Object.keys(unsynced_of(local) as object), ["settings.toml"]);
+});
+
+test("a settings.toml that names a new theme and a new page engine waits for both, then lands in the same start", async () => {
+  const files = { "settings.toml": "" };
+  const host: Host = { files };
+  const { messages, startup, local, sent } = await started(files, host);
+  host.granted = false;
+  // settings.toml goes into the record first.
+  await startup.set_in_settings_file("default_engine", "duck");
+  await startup.set_theme_file("mine", '[dark]\nbg_core = "#000000"\nfg_core = "#ffffff"\nprimary = "#ff0000"\naccent = "#00ff00"\n', false);
+  await messages.change(set("wiki", "https://w.test/?q={query}"));
+  await startup.set_in_settings_file("theme", "mine");
+  await startup.set_in_settings_file("default_engine", "wiki");
+  assert.equal(Object.keys(unsynced_of(local) as object)[0], "settings.toml");
+  host.granted = true;
+  sent.length = 0;
+  await (await fresh_startup()).reload_config_at_start();
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file").map((message) => message.kind), ["theme", "engines", "settings"]);
+  assert.equal(host.files["settings.toml"], 'default_engine = "wiki"\ntheme = "mine"\n');
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a page-path file written by hand stays the user's: its engines are not listed and every write to it is refused by name", async () => {
+  const hand = '# my engines\n[mine]\nurl = "https://m.test/?q={query}"\n';
+  const { host, messages, sent } = await started({ "settings.toml": "", [FILE]: hand });
+  sent.length = 0;
+  assert.deepEqual(await messages.list(), { ok: true, engines: [] });
+  const refusal = `${FILE} was not written by the Engines page, so the page does not change it. Rename it, or move its engines to another search_engines.d file.`;
+  assert.deepEqual(await messages.change(set("wiki", "https://w.test/?q={query}")), { ok: false, message: refusal, problems: [] });
+  assert.deepEqual(await messages.change({ type: "change_engines", action: "starter" }), { ok: false, message: refusal, problems: [] });
+  assert.match((await messages.change(set("mine", "https://x.test/?q={query}"))).message, /The engine mine is in search_engines\.d\/zz-desertfox\.toml, which this page does not change/);
+  assert.match((await messages.change(remove("mine"))).message, /The engine mine is in search_engines\.d\/zz-desertfox\.toml/);
+  assert.equal(host.files[FILE], hand);
+  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
+});
+
+test("a hand file that holds only a child table of a page engine does not take the engine from the page", async () => {
+  const { host, messages } = await started({ "settings.toml": "", "search_engines.toml": '[wiki.images]\nurl = "https://w.test/i?q={query}"\n', [FILE]: MARK + '[wiki]\nurl = "https://w.test/?q={query}"\n' });
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}&new=1"));
+  assert.equal(answer.ok, true, answer.message);
+  assert.match(host.files[FILE]!, /new=1/);
 });
