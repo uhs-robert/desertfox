@@ -244,11 +244,12 @@ async function draw(): Promise<void> {
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
   const elements = [header_element(inputs.version, inputs.disabled, host_dot(inputs.has_native_host, host_flag.get())), power_element(by_id("power")), card_element(rows, inputs)];
+  if (rows.some((row) => row.id === "warnings")) elements.push(row_button(by_id("warnings"), "desertfox-popup-link"));
   const pair = element("div", "desertfox-popup-pair");
   pair.append(icon_button(by_id("settings"), "settings", "desertfox-popup-half"), icon_button(by_id("home"), "home", "desertfox-popup-half"), icon_button(by_id("keys"), "keys", "desertfox-popup-half"));
-  elements.push(icon_button(by_id("reload_config"), "reload", "desertfox-popup-action"), pair);
-  if (rows.some((row) => row.id === "warnings")) elements.push(row_button(by_id("warnings"), "desertfox-popup-link"));
-  elements.push(theme_element(theme_options(inputs.theme, inputs.extra_theme_names), inputs.theme), notice_line, icon_button(by_id("support"), "support", "desertfox-popup-support"));
+  const pages = element("div", "desertfox-popup-pages");
+  pages.append(icon_button(by_id("reload_config"), "reload", "desertfox-popup-action"), pair);
+  elements.push(theme_element(theme_options(inputs.theme, inputs.extra_theme_names), inputs.theme), notice_line, pages, icon_button(by_id("support"), "support", "desertfox-popup-support"));
   // A redraw replaces every control, so the one that had focus gets it back by its key. The power radios share a key, and the checked one takes it.
   const focus_key = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.focusKey : undefined;
   root.replaceChildren(...elements);

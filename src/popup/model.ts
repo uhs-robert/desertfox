@@ -144,6 +144,8 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
   if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: sentence_case(inputs.site.rule), enabled: true });
   if (inputs.site.kind !== "unavailable") rows.push({ id: "copy_rule", kind: "action", label: "Copy rule", enabled: true });
+  // Warnings is a problem list, so it shows only when there is something in it. It is status, so it sits under the site card and not with the page links.
+  if (inputs.warning_count > 0) rows.push({ id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true });
   rows.push(
     inputs.has_native_host
       ? { id: "reload_config", kind: "action", label: "Reload config", enabled: true }
@@ -152,8 +154,6 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
     { id: "home", kind: "link", label: "Help", enabled: true },
     { id: "keys", kind: "link", label: "Keys", enabled: true },
   );
-  // Warnings is a problem list, so it shows only when there is something in it.
-  if (inputs.warning_count > 0) rows.push({ id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true });
   rows.push({ id: "support", kind: "link", label: "Support DesertFox", enabled: true });
   return rows;
 }
