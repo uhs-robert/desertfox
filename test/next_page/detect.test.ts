@@ -128,3 +128,19 @@ test("the arrow of an ad post's gallery is skipped even when it is the only ad i
   delete ad.a;
   assert.equal(pick_next_control(reader, controls, NEXT), arrow);
 });
+
+// Brave's layout: the results and the pager are sibling div.snippet blocks, the pager's id says pagination.
+const brave_results = (pager_attrs: Record<string, string>, next: SavedNode) => {
+  const result = (y: number) => ({ t: "div", a: { class: "snippet" }, r: [0, y, 700, 150] }) as SavedNode;
+  return link_among([result(100), result(260), result(420), { t: "div", a: { class: "snippet", ...pager_attrs }, r: [0, 580, 700, 60], c: [{ t: "div", a: { class: "pagination" }, r: [0, 580, 700, 40], c: [next] }] }], next);
+};
+
+test("a Next link in a pagination block that shares the results' class is followed", () => {
+  const next: SavedNode = { t: "a", a: { href: "/search?q=cats&offset=1" }, r: [300, 590, 80, 30], s: "Next" };
+  assert.equal(brave_results({ id: "pagination-snippet" }, next), next);
+});
+
+test("a Next control inside a real result of the same stack stays skipped", () => {
+  const next: SavedNode = { t: "a", a: { href: "/search?q=cats&offset=1" }, r: [300, 590, 80, 30], s: "Next" };
+  assert.equal(brave_results({}, next), undefined);
+});

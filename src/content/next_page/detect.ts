@@ -139,8 +139,12 @@ export function stacked_items<N>(reader: PageReader<N>, items: readonly N[]): bo
 
 const is_navigation = <N>(reader: PageReader<N>, node: N): boolean => reader.tag_(node) === "nav" || reader.attr_(node, "role") === "navigation";
 
+const PAGINATION = /pagination/i;
+
+const is_pager_block = <N>(reader: PageReader<N>, item: N): boolean => PAGINATION.test(`${reader.attr_(item, "id") ?? ""} ${reader.attr_(item, "class") ?? ""}`);
+
 // A control inside one item of a list (a post's gallery arrow, a comment's menu) acts on that item, not on the page.
-// The climb stops at a navigation box, which pages put their pager in. An item taller than two screens is a page section (a shop's pager sits in one of a stack of sections).
+// The climb stops at a navigation box, which pages put their pager in. An item taller than two screens is a page section (a shop's pager sits in one of a stack of sections). A pager that is itself one more block of the results (it carries the results' class) is no item: its id or class says pagination. The last block of the stack is not enough, as the last post of a feed holds its own gallery arrows.
 function in_list_item<N>(reader: PageReader<N>, node: N): boolean {
   if ([...ancestors(reader, node)].some((at) => is_navigation(reader, at))) return false;
   for (const item of ancestors(reader, node)) {
@@ -148,7 +152,8 @@ function in_list_item<N>(reader: PageReader<N>, node: N): boolean {
     const box = reader.box_(item);
     if (list === null || !is_item_size(box) || box.h > 2 * reader.view_().h) continue;
     const kind = signature(reader, item);
-    if (stacked_items(reader, reader.children_(list).filter((sibling) => is_item_size(reader.box_(sibling)) && signature(reader, sibling) === kind))) return true;
+    const stack = reader.children_(list).filter((sibling) => is_item_size(reader.box_(sibling)) && signature(reader, sibling) === kind);
+    if (stacked_items(reader, stack) && !is_pager_block(reader, item)) return true;
   }
   return false;
 }
