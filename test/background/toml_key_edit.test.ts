@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parse } from "smol-toml";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import { remove_top_level_key, set_top_level_key } from "../../src/background/toml_key_edit.ts";
 
@@ -114,4 +115,13 @@ test("a remove drops a whole array, the lines and comments inside it too, and ke
   assert.equal(remove_top_level_key(text, "next_patterns"), '# Mine\na = 1\n# Rules\n[[site_rules]]\nsite = "x"\n');
   assert.equal(remove_top_level_key('a = 1\nhint_add = ["x"] # c\n', "hint_add"), "a = 1\n");
   refused(() => remove_top_level_key('a = 1\nhint_add = ["""x\n"""]\n', "hint_add"), /does not rewrite/);
+});
+
+test("quotes, backslashes, control characters, a hash and non-ASCII come back from a parse as written", () => {
+  const values = ['[data-label="a\\b"]', "line one\nline\ttwo\r\u0001\u007f", "# not a comment", "é 東京 🌵  ", ['say "next"', "a\\b", "#", "tab\there"]] as const;
+  for (const value of values) {
+    const text = set_top_level_key('a = 1 # keep\n[[site_rules]]\nsite = "x"\n', "scroll_selector", value);
+    assert.deepEqual(parse(text).scroll_selector, value, JSON.stringify(value));
+    assert.ok(text.startsWith("a = 1 # keep\nscroll_selector = ") && text.endsWith('[[site_rules]]\nsite = "x"\n'), text);
+  }
 });

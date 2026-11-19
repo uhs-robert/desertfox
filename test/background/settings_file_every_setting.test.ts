@@ -7,6 +7,8 @@ import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTING
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { replayed_on_folder } from "../../src/background/settings_file.ts";
+import { default_engine_names } from "../../src/shared/config.ts";
+import { parse } from "smol-toml";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
@@ -101,7 +103,7 @@ test(":set over a temp and a saved edit drops both, so the file value shows", as
   assert.equal((await startup.get_config()).settings.hint_letters, "dfg");
 });
 
-test("two quick :toggle presses flip twice, and the file ends where it began", async () => {
+test("two quick :toggle presses flip twice, and the file holds the second value", async () => {
   const host = { files: { "settings.toml": MINE } };
   const { startup } = await reloaded(host);
   const { handlers, toasts } = commands(startup);
@@ -302,4 +304,41 @@ test("an engine added in the browser saves as the default in the browser, and an
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.match(host.files["settings.toml"]!, /^default_engine = "files_one"$/m);
   assert.deepEqual(toasts, ['success default_engine = "browser_one", saved in the browser because the search engine is not in your files', 'success default_engine = "files_one", saved to settings.toml']);
+});
+
+test("a default engine that needs the current page is refused by name before any build, and the dropdown leaves it out", async () => {
+  const host = { files: { "settings.toml": MINE, "search_engines.toml": 'repo_one = { url = "https://r.test/{repo}?q={query}" }\nplain = { url = "https://p.test/?q={query}" }\n' } };
+  const { local, sent, startup } = await reloaded(host);
+  sent.length = 0;
+  for (const engine of ["site", "repo_one"]) {
+    await assert.rejects(startup.set_in_settings_file("default_engine", engine), (error: unknown) => error instanceof RuntimeRefusal && error.message === `default_engine not changed: ${engine} needs the current page, so it cannot be the default engine`);
+  }
+  assert.equal(stored_settings(local), MINE);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_settings"), []);
+  const offered = default_engine_names((await startup.get_config()).search_engines);
+  assert.ok(offered.includes("plain") && offered.includes("duck"), offered.join(" "));
+  assert.ok(!offered.includes("site") && !offered.includes("repo_one"), offered.join(" "));
+});
+
+// Each value a setting takes that TOML must escape: quotes, a backslash, a newline, a tab, a `#` and non-ASCII.
+const AWKWARD_VALUES = [
+  ["scroll_selector", '[data-label="a\\b"]'],
+  ["newtab_weather_city", 'line one\nline\ttwo # not a comment "quoted" \\ é 東京 🌵'],
+  ["next_patterns", ['say "next"', "a\\b", "# hash", "→ 次へ", "tab\there"]],
+] as const;
+
+test("every awkward string goes through the file, parses back and reloads as the exact value", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { startup } = await reloaded(host);
+  for (const [name, value] of AWKWARD_VALUES) assert.deepEqual(await startup.set_in_settings_file(name, value), { kind: "written" }, name);
+  const parsed = parse(host.files["settings.toml"]!) as Record<string, unknown>;
+  const reloaded_startup = await fresh_startup();
+  await reloaded_startup.reload_config();
+  const { settings } = await reloaded_startup.get_config();
+  for (const [name, value] of AWKWARD_VALUES) {
+    assert.deepEqual(parsed[name], value, `${name} in the file`);
+    assert.deepEqual(settings[name], value, `${name} after a reload`);
+  }
+  // The comment and the table after the edited keys stay as they were.
+  assert.ok(host.files["settings.toml"]!.includes('hint_letters = "abc" # home row\n') && host.files["settings.toml"]!.endsWith('[[site_rules]]\nsite = "*://x.test/*"\noff = true\n'));
 });

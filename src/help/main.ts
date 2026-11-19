@@ -2,6 +2,7 @@ import { load_commands_file } from "../shared/load_commands.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { build_config_status, load_effective_config } from "../background/config_load.ts";
+import { default_engine_names } from "../shared/config.ts";
 import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
 import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 import { follow_settings } from "../shared/storage_watch.ts";
@@ -183,6 +184,7 @@ async function command_names(): Promise<string[]> {
   return [...new Set(names)].sort();
 }
 
+// `engines` are the names the Settings page's default engine control offers.
 type Inputs = { model_: HelpModel; guide: Block[]; engines: string[] };
 let current: Inputs | undefined;
 let loaded_guide: Block[] | undefined;
@@ -203,7 +205,7 @@ async function load_inputs(): Promise<Inputs> {
   );
   // A missing guide must not blank the other pages. The guide ships with the build, so one fetch serves every draw.
   loaded_guide ??= await refused_as<Block[], Block[]>(fetch(browser.runtime.getURL("search_engines_guide.json")).then((response) => response.json()), []);
-  return { model_: model, guide: loaded_guide, engines: Object.keys(config.search_engines) };
+  return { model_: model, guide: loaded_guide, engines: default_engine_names(config.search_engines) };
 }
 
 // The Settings page follows storage by itself and keeps what the user is typing, so a full redraw there would only clobber it. It still takes the new inputs, for the next page.

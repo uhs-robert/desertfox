@@ -67,6 +67,14 @@ function site_engine_over(default_engine: SearchEngine | undefined): SearchEngin
   return { url: base.url.replace(FIRST_QUERY_SLOT, "site:{host}+{query}"), label: "This site", slots: ["host"] };
 }
 
+// Typed text with no page behind it goes to the default engine, so an engine that needs a page slot (`site`, `{host}`, `{repo}`) cannot be it.
+export const needs_page = (engine: SearchEngine | undefined): boolean => (engine?.slots ?? []).length > 0;
+
+// The engines `default_engine` can name.
+export function default_engine_names(engines: Record<string, SearchEngine>): string[] {
+  return Object.keys(engines).filter((name) => !needs_page(engines[name]));
+}
+
 // A user engine with a built-in's name replaces it whole. Nothing removes the built-ins, so the default engine always resolves.
 // `site` is built from the default engine at this call, so it follows the config and not a later `:set default_engine`.
 export function with_fallback_engines(user_engines: Record<string, SearchEngine>, default_engine: string = FALLBACK_ENGINE_NAME): Record<string, SearchEngine> {
