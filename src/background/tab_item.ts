@@ -78,3 +78,18 @@ export function create_tab_item(deps: TabItemDeps) {
 }
 
 export type TabItem = ReturnType<typeof create_tab_item>;
+
+export type ItemStartAsk = {
+  // The start for a page at this address, undefined where none is wanted (`item_start_for`).
+  start_for: (address: string | undefined) => Promise<{ selector?: string } | undefined>;
+  tab_now: (tab_id: number) => Promise<{ url?: string | undefined; status?: string | undefined } | undefined>;
+  send_start: (tab_id: number, args: { selector?: string }) => Promise<unknown>;
+};
+
+// Asks the top frame of a tab whose load completed at `address` to start item mode. The read takes a while, and a tab that has left the address or loads again meanwhile holds another document, which must not take this page's start.
+export async function ask_item_start(deps: ItemStartAsk, tab_id: number, address: string | undefined): Promise<void> {
+  const start = await deps.start_for(address);
+  if (!start) return;
+  const tab = await deps.tab_now(tab_id);
+  if (address !== undefined && tab?.url === address && tab.status === "complete") await deps.send_start(tab_id, start);
+}

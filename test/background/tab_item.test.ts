@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_tab_item } from "../../src/background/tab_item.ts";
+import { ask_item_start, create_tab_item } from "../../src/background/tab_item.ts";
 
 // Each storage call takes a few ticks, like the real one, so operations that are not ordered interleave.
 const ticks = async () => {
@@ -108,6 +108,18 @@ test("a frame that reloads in the hold joins again, and the report of normal tha
   // It has taken the mode, so a normal now is the user leaving.
   await tab_item.reported(4, 7, "normal");
   assert.deepEqual(steps, ["4:off:0"]);
+});
+
+test("the start goes to the tab only while it still shows the completed address", async () => {
+  const sent: unknown[] = [];
+  const ask = (wanted: { selector?: string } | undefined, now: { url?: string; status?: string } | undefined) =>
+    ask_item_start({ start_for: async () => wanted, tab_now: async () => now, send_start: async (tab_id, args) => void sent.push([tab_id, args]) }, 4, "https://a.test/");
+  await ask({ selector: "li" }, { url: "https://a.test/", status: "complete" });
+  await ask({}, { url: "https://b.test/", status: "complete" });
+  await ask({}, { url: "https://a.test/", status: "loading" });
+  await ask({}, undefined);
+  await ask(undefined, { url: "https://a.test/", status: "complete" });
+  assert.deepEqual(sent, [[4, { selector: "li" }]]);
 });
 
 test("a load of the page ends the mode in every frame, and an address change of the page keeps it", async () => {

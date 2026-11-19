@@ -233,7 +233,9 @@ export function start_server() {
       const cards = Array.from({ length: 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span></div>`).join("");
       const frame = url.pathname === "/item_list" && id.includes("_frame") ? `<iframe id="inner" src="/item_frame?id=${id}_inner" style="display:block;width:560px;height:300px"></iframe>` : "";
       const field = id.includes("_field") ? '<input id="q">' : "";
-      return response.end(page(`${url.pathname.slice(1)} ${id}`, field + frame + cards, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+      // A `_slow` id holds the load open for 2.5 s with an image, so a key can land before the load completes.
+      const slow = id.includes("_slow") ? '<img src="/slow_pixel?ms=2500">' : "";
+      return response.end(page(`${url.pathname.slice(1)} ${id}`, field + slow + frame + cards, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
     if (url.pathname === "/links") {
       // Two links up top, an anchor without href that ]l skips, and a link far below. The page reports each focus.

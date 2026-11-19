@@ -66,3 +66,14 @@ test("the finder is not read until the page is idle", () => {
   idle[0]!();
   assert.equal(reads, 1);
 });
+
+test("a row's item selector goes to the list read, and with none the finder reads", () => {
+  const read_with: (string | undefined)[] = [];
+  const row = make({ has_list_: (selector) => (read_with.push(selector), true) });
+  row.start("tr.athing");
+  row.idle[0]!();
+  const finder = make({ has_list_: (selector) => (read_with.push(selector), true) });
+  finder.start();
+  finder.idle[0]!();
+  assert.deepEqual(read_with, ["tr.athing", undefined]);
+});

@@ -7,7 +7,7 @@ import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
-import { item_start_wanted } from "../src/background/page_keymap.ts";
+import { item_start_for } from "../src/background/page_keymap.ts";
 import { create_mode_state, fullscreen_step } from "../src/content/mode_state.ts";
 import type { Mode } from "../src/shared/command.ts";
 import { MODES } from "../src/shared/command.ts";
@@ -112,22 +112,59 @@ test("the badge says ITEM", () => {
 });
 
 const stored = (compiled: unknown) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) }) as never;
+const starts_item_mode = async (storage: never, address: string) => (await item_start_for(storage, address)) !== undefined;
 
 test("a loaded page starts in item mode where the setting is on for its address, and a site row decides first", async () => {
   const off = compiled_with();
   const on = compiled_with({ item_navigator: true });
   const row_on = compiled_with({ site_rules: [{ site: "https://a.test/*", item_navigator: true }] });
   const row_off = compiled_with({ item_navigator: true, site_rules: [{ site: "https://a.test/*", item_navigator: false }] });
-  assert.equal(await item_start_wanted(stored(off), "https://a.test/"), false);
-  assert.equal(await item_start_wanted(stored(on), "https://a.test/"), true);
-  assert.equal(await item_start_wanted(stored(row_on), "https://a.test/"), true);
-  assert.equal(await item_start_wanted(stored(row_on), "https://b.test/"), false);
-  assert.equal(await item_start_wanted(stored(row_off), "https://a.test/"), false);
-  assert.equal(await item_start_wanted(stored(row_off), "https://b.test/"), true);
-  assert.equal(await item_start_wanted(stored(undefined), "https://a.test/"), false);
+  assert.equal(await starts_item_mode(stored(off), "https://a.test/"), false);
+  assert.equal(await starts_item_mode(stored(on), "https://a.test/"), true);
+  assert.equal(await starts_item_mode(stored(row_on), "https://a.test/"), true);
+  assert.equal(await starts_item_mode(stored(row_on), "https://b.test/"), false);
+  assert.equal(await starts_item_mode(stored(row_off), "https://a.test/"), false);
+  assert.equal(await starts_item_mode(stored(row_off), "https://b.test/"), true);
+  assert.equal(await starts_item_mode(stored(undefined), "https://a.test/"), false);
 });
 
 test("a page that a row turns all off does not start in item mode", async () => {
   const compiled = compiled_with({ item_navigator: true, site_rules: [{ site: "https://a.test/*", off: true }] });
-  assert.equal(await item_start_wanted(stored(compiled), "https://a.test/"), false);
+  assert.equal(await starts_item_mode(stored(compiled), "https://a.test/"), false);
+});
+
+test("a page whose row passes or binds j or k in normal mode keeps them for the site and does not start in item mode", async () => {
+  const compiled = compiled_with({
+    item_navigator: true,
+    site_rules: [
+      { site: "https://pass.test/*", pass: "j k" },
+      { site: "https://only.test/*", only: "f" },
+      { site: "https://only_jk.test/*", only: "j k" },
+      { site: "https://bind.test/*", bind: { k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } } } },
+      { site: "https://other.test/*", pass: "x", bind: { h: { id: "page.send_key", args: { key: "ArrowLeft", key_code: 37 } } } },
+    ],
+  });
+  assert.equal(await starts_item_mode(stored(compiled), "https://pass.test/"), false);
+  assert.equal(await starts_item_mode(stored(compiled), "https://only.test/"), false, "an only rule gives every unlisted key to the page");
+  assert.equal(await starts_item_mode(stored(compiled), "https://only_jk.test/"), true);
+  assert.equal(await starts_item_mode(stored(compiled), "https://bind.test/"), false);
+  assert.equal(await starts_item_mode(stored(compiled), "https://other.test/"), true);
+  for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a"]) assert.equal(await starts_item_mode(stored(compiled), address), false, address);
+});
+
+test("the start carries the item selector of the row whose item keys apply, and none on a page the finder reads", async () => {
+  const compiled = compiled_with({ item_navigator: true });
+  assert.deepEqual(await item_start_for(stored(compiled), "https://news.ycombinator.com/"), { selector: "tr.athing" });
+  assert.deepEqual(await item_start_for(stored(compiled), "https://drive.google.com/drive/my-drive"), { selector: '[role="grid"] [role="gridcell"][data-id], [role="grid"] [role="row"][data-id]' });
+  assert.deepEqual(await item_start_for(stored(compiled), "https://a.test/"), {});
+});
+
+test("the shipped item rows start their pages in item mode with the setting off, the rows that give j and k to the site do not, and a user row turns a site off", async () => {
+  const shipped = compiled_with();
+  for (const address of ["https://www.google.com/search?q=a", "https://news.ycombinator.com/", "https://www.reddit.com/r/a/", "https://drive.google.com/drive/my-drive", "https://duckduckgo.com/?q=a"]) assert.notEqual(await item_start_for(stored(shipped), address), undefined, address);
+  for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a", "https://www.google.com/maps/place/a", "https://a.test/"]) assert.equal(await item_start_for(stored(shipped), address), undefined, address);
+  const turned_off = compiled_with({ site_rules: [{ site: "https://news.ycombinator.com/*", item_navigator: false }] });
+  assert.equal(await item_start_for(stored(turned_off), "https://news.ycombinator.com/"), undefined);
+  assert.equal(await item_start_for(stored(compiled_with({ default_site_rows_off: ["hackernews"] })), "https://news.ycombinator.com/"), undefined);
+  for (const { name, row } of DEFAULT_SITE_ROWS) assert.equal("item_navigator" in row, row.keymap?.item !== undefined, name);
 });
