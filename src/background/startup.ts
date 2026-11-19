@@ -37,6 +37,7 @@ import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../shared/messages.ts";
 import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
+import { css_limit_breaches } from "./css_limits.ts";
 import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
@@ -453,7 +454,7 @@ let record_drops = 0;
 const drop_causes: CopyReplacedBy[] = [];
 // How the record last ended, for a pick whose write another caller settled before the pick's own turn.
 let record_end: FileWriteOutcome | undefined;
-// Refused writes in a row whose edits went onto the folder's new text. A tool that rewrites settings.toml all the time would otherwise keep the loop going.
+// Refused writes in a row whose edits went onto the folder's new text, counted per write loop. A tool that rewrites settings.toml all the time would otherwise keep the loop going.
 let replays_in_a_row = 0;
 const MAX_REPLAYS_IN_A_ROW = 3;
 
@@ -471,6 +472,7 @@ const already_in_queue: QueueRunner = (work) => work();
 // With `pick` it stops at the outcome of that pick: the write that holds it, or the swap that replaced it.
 async function write_waiting_settings_file(in_queue: QueueRunner, pick?: PickMark): Promise<FileWriteOutcome | undefined> {
   let outcome: FileWriteOutcome | undefined;
+  replays_in_a_row = 0;
   // Whether a write that held the pick reached the folder before a swap replaced the copy.
   let pick_written = false;
   const replaced = (): FileWriteOutcome | undefined => (pick && record_drops !== pick.drops ? { kind: "replaced", by: drop_causes[pick.drops]!, written: pick_written } : undefined);
@@ -563,7 +565,8 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
 // After a refused write: swaps in the folder's files with the browser's edits set again on its new settings.toml, and moves the record to that text, so a hand edit saved during the write and the pick both stay.
 // Only for a copy that held no other browser change: the folder's files then replace it without losing one. False leaves everything as it was.
 async function replay_edits_onto_folder(unsynced: UnsyncedSettingsFile, folder: ConfigFilesReply): Promise<boolean> {
-  if (!folder.config_dir_exists) return false;
+  // The swap below is a setting write, which skips the checks of a folder read, so the folder's files pass them here: a `,r` of this folder would refuse it too.
+  if (!folder.config_dir_exists || !has_config_files(folder.files) || css_limit_breaches(folder.files).length > 0) return false;
   const current = await load_files_source();
   if ((await files_digest(before_unsynced_edit(current.files, unsynced))) !== (await read_host_memory()).applied) return false;
   const folder_text = folder.files[SETTINGS_FILE] ?? null;

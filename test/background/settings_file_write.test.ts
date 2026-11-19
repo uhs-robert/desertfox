@@ -658,3 +658,38 @@ test("a folder that changes on every write is merged three times, then the quest
   assert.equal(writes, 4);
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
+
+test("a refused write whose folder gained remote CSS adopts nothing and asks, as `,r` of that folder refuses", async () => {
+  const host = { files: { "settings.toml": MINE } as Files };
+  const { local, fake, startup } = await reloaded(host);
+  const send = fake.runtime.sendNativeMessage;
+  const held = hold_writes(fake);
+  const pick = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  host.files = { "settings.toml": HAND, "style.css": '@import url("https://t.test/x.css");\n' };
+  fake.runtime.sendNativeMessage = send;
+  held.shift()!();
+
+  assert.deepEqual(await pick, { kind: "conflict" });
+  assert.equal(host.files["settings.toml"], HAND);
+  assert.equal((local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["style.css"], undefined);
+  await assert.rejects(startup.reload_config(), /style\.css line 1/);
+});
+
+test("each write loop gets its own three merges, whatever an earlier loop used", async () => {
+  const host = { files: { "settings.toml": MINE }, old_host: false };
+  const { fake, startup } = await reloaded(host);
+  const send = fake.runtime.sendNativeMessage;
+  let writes = 0;
+  fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
+    if (message.cmd !== "write_settings") return send(name, message);
+    writes += 1;
+    // The first loop merges twice and then meets an older host. The second loop merges three times and then writes.
+    host.old_host = writes === 3;
+    if ([1, 2, 4, 5, 6].includes(writes)) host.files = { "settings.toml": `${host.files["settings.toml"]}# stamped ${writes}\n` };
+    return send(name, message);
+  };
+  assert.deepEqual(await startup.set_in_settings_file("theme", "nord"), { kind: "waiting" });
+  assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "written" });
+  assert.equal(writes, 7);
+});
