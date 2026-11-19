@@ -9,6 +9,11 @@ const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Arr
 const FILES = 60;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+  const enter_item_mode = async () => {
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+  };
   await setup("load the shipped drive row on the drive_ test pages", async () => {
     const dir = config_copy();
     const lines = [];
@@ -24,7 +29,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. With `part`, the panel holds that many files at first and loads `part` more 300 ms after it reaches its bottom, as Drive fetches the next part of a long list. The page is wide, so the document scrolls sideways.
   const open_drive = async (id, view, files = FILES, part = files) => {
     await open_page("controls", `drive_${id}`, { new_tab: true });
-    await press_keys("I");
+    await enter_item_mode();
     await in_active_tab(`(() => {
       const root = document.createElement("div");
       root.style.width = "3000px";
@@ -203,7 +208,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("on a page with no file list, gg and G scroll as usual", async () => {
     await open_page("controls", "drive_empty", { new_tab: true });
-    await press_keys("I");
+    await enter_item_mode();
     await press_keys("G");
     await poll_until("G to scroll down", async () => (await in_active_tab("scrollY")) > 0);
     await press_keys("gg");
