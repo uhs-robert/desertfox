@@ -272,3 +272,14 @@ test("in item mode the box moves to the first new item too", async () => {
   await done;
   assert.deepEqual(page.landed, ["new0"]);
 });
+
+test("a landing pressed in item mode does not run once item mode has ended, as another frame can end it", async () => {
+  const { page, deps, cursor } = fake_page(3);
+  page.mode = "item";
+  page.current = page.named("old2");
+  const done = move_box_after_load(cursor(), deps);
+  page.mode = "normal";
+  page.add("new0");
+  await done;
+  assert.deepEqual(page.landed, []);
+});
