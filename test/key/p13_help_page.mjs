@@ -50,16 +50,19 @@ export async function run_cases({ run_case, setup, expect, press_keys, poll_unti
     // Firefox focuses an open help tab instead of opening Settings, so the help tab goes first.
     // The answer is a short summary: a whole page of text is too long to come back over RDP.
     await close_tabs_with("/home.html");
+    // The render draws the site rules row at once and the loaded settings add the rest in one step, so one row is not the full list.
+    const MIN_SETTING_ROWS = 20;
     const settings = await evaluate(`(async () => {
       await browser.runtime.openOptionsPage();
       for (let attempt = 0; attempt < 150; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 50));
         const view = ${extension_view("home.html")};
-        if (view?.document.querySelector("[data-setting]")) return { hash: view.location.hash, rows: view.document.querySelectorAll("[data-setting]").length };
+        const rows = view?.document.querySelectorAll("[data-setting]").length ?? 0;
+        if (rows > ${MIN_SETTING_ROWS}) return { hash: view.location.hash, rows };
       }
       return { hash: "", rows: 0 };
     })()`);
-    expect(settings?.hash === "#/settings" && settings?.rows > 20, `settings page after openOptionsPage: ${JSON.stringify(settings)}`);
+    expect(settings?.hash === "#/settings" && settings?.rows > MIN_SETTING_ROWS, `settings page after openOptionsPage: ${JSON.stringify(settings)}`);
   });
 
   // The page asks for page.js when a jump records where it left, so the selection and jump asks reach the page-tag route.
