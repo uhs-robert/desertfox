@@ -254,7 +254,8 @@ ConfigFileKind = collections.namedtuple("ConfigFileKind", "folder name_pattern f
 CONFIG_FILE_KINDS = {
     "settings": ConfigFileKind(folder=None, name_pattern=None, fixed_name=SETTINGS_NAME),
     "theme": ConfigFileKind(folder="themes", name_pattern=THEME_NAME_PATTERN, fixed_name=None),
-    # The Engines page's own file. Hand files in search_engines.d sort before it, so its engines win as the page expects.
+    # The Engines page's own file. The extension refuses a page engine that a hand file in search_engines.d defines, so the
+    # sort order of the hand files does not matter.
     "engines": ConfigFileKind(folder="search_engines.d", name_pattern=None, fixed_name="zz-desertfox.toml"),
 }
 
