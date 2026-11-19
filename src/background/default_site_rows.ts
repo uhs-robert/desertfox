@@ -127,20 +127,20 @@ const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
 // Reddit unloads posts far above the view, so gg would stop at the first post still drawn and not at the top of the feed. The row leaves gg out and keeps G, which follows the loading to the end. Item mode's own gg then runs: the finder's first item, which can also be a post still drawn, or the scroll to the top where the finder reads no list. The descendant combinator reaches the later pages, which sit in `faceplate-batch`. Ads are `shreddit-ad-post`, which the selector does not match. A thread page holds no `shreddit-feed`, so j and k scroll there.
 // A user overview page mixes posts and `shreddit-profile-comment`, so both are items. A comment holds a permalink overlay instead of a full-post link, so Enter opens the comment. A post lists its full-post link first, so the post keeps that link.
 const { gg: _gg, ...REDDIT_ITEMS } = item_binds("shreddit-feed shreddit-post, shreddit-feed shreddit-profile-comment", 'a[slot="full-post-link"], a[href*="/comment/"]');
-// Drive scrolls its file list in an inner panel and draws more rows as it scrolls, so a move through `page.item` stops at the last drawn row. Drive's own arrow keys move its selection, scroll the panel and draw more rows, so j, k, h and l focus the current file with `page.item` and then send Drive's key to it. gg and G go to the ends through `page.item`, which scrolls the panel and follows the end while Drive draws more. `current` takes the focus into the files from the view toggle or from nowhere, so the key never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Drive keeps its own selection, and Enter opens the selected file. `item_select = "arrows"` (`item_select.ts`) turns these plain `page.item` moves into Drive's own arrow keys, so j, k, h and l move the selection, scroll Drive's panel and draw more rows, and gg and G go to the ends and select the end file. `current` takes the focus into the files from the view toggle or from nowhere, so an arrow never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
 const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
-// Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll. The count goes to every step: `current` ignores it and the key goes out that many times.
-const drive_key = (guard: string, key: string, key_code: number, intent: string): BoundInvocation[] => [{ ...item_step(guard, undefined, "current"), when_present: guard, intent }, { id: "page.send_key", args: { key, key_code } }];
+// Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll.
+const drive_move = (guard: string, direction: "down" | "up" | "left" | "right", intent: string): BoundInvocation => ({ ...item_step(guard, undefined, direction), when_present: guard, intent });
 // A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
 const DRIVE_BIND: BindingTable = {
-  j: drive_key(DRIVE_ANY_ITEM, "ArrowDown", 40, "Move to the file below with Drive's own ArrowDown key (scrolls the page when no file shows)"),
-  k: drive_key(DRIVE_ANY_ITEM, "ArrowUp", 38, "Move to the file above with Drive's own ArrowUp key (scrolls the page when no file shows)"),
+  j: drive_move(DRIVE_ANY_ITEM, "down", "Move to the file below with Drive's own ArrowDown key (scrolls the page when no file shows)"),
+  k: drive_move(DRIVE_ANY_ITEM, "up", "Move to the file above with Drive's own ArrowUp key (scrolls the page when no file shows)"),
   ...end_binds(DRIVE_ANY_ITEM, undefined),
-  h: drive_key(DRIVE_GRID_ITEM, "ArrowLeft", 37, "Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view)"),
-  l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39, "Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view)"),
+  h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left with Drive's own ArrowLeft key (scrolls sideways in the list view)"),
+  l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view)"),
 };
 
 // Each row that names its items in the `item` column marks its sites with `item_navigator = "shipped"`, so they start in item mode under the default global value `shipped` and under true, and not under false. A user row with its own value comes first in the table and decides the site.
@@ -206,7 +206,7 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "amazon", row: { site: "https://www.amazon.com/s/*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
   { name: "reddit", row: { site: "https://www.reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
   { name: "reddit", row: { site: "https://reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
-  { name: "drive", row: { site: "https://drive.google.com/drive/*", keymap: { item: DRIVE_BIND }, item_navigator: "shipped" } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", keymap: { item: DRIVE_BIND }, item_navigator: "shipped", item_select: "arrows" } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

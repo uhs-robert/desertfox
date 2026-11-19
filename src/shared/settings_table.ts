@@ -138,6 +138,8 @@ export const SETTINGS_TABLE = {
   item_navigator: { kind: "enum", values: ["shipped", true, false], default: "shipped", per_site: true },
   // Sends the pointer events of a resting mouse to the item that `page.item` boxes on a thumbnail tile, so a video preview starts. Fills the `hover` arg of the rows that ask for it (`src/background/compile.ts`).
   item_hover: { kind: "boolean", default: true },
+  // `arrows` makes the `page.item` moves of a site's item keys select through the site's own arrow keys (`src/background/item_select.ts`). Only a site that keeps its own selection needs it.
+  item_select: { kind: "enum", values: ["off", "arrows"], default: "off", per_site: true },
   cmdline_prompt: { kind: "line", min_length: 1, max_length: 8, suggestions: ["caret", "colon"], default: "caret" },
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },
   // List order is display order. An empty list hides the status area.

@@ -1,4 +1,4 @@
-// The shipped drive row on a test address with the site pattern swapped, against a stand-in for Drive's file views as read on a live page. Both views are a role=grid: the grid view puts every file in one role=row as a role=gridcell, the list view is a table with one role=row per file. Each file has a data-id, and so do parts inside it. As on Drive, the files scroll in an inner panel that draws only the files near the view and can load a long list in parts as the panel reaches its bottom, and a key handler on the page moves the selection on the arrow keys sent to a file, scrolls the panel and draws the files it needs. Like Drive, it ignores Home and End, numbers list rows with aria-rowindex and gives aria-rowcount as the files it has loaded, and takes a focused file as its selection. A view toggle keeps the focus after it flips the view.
+// The shipped drive row on a test address with the site pattern swapped, against a stand-in for Drive's file views as read on a live page. Both views are a role=grid: the grid view puts every file in one role=row as a role=gridcell, the list view is a table with one role=row per file. Each file has a data-id, and so do parts inside it. As on Drive, the files scroll in an inner panel that draws only the files near the view and can load a long list in parts as the panel reaches its bottom, and a key handler on the page moves the selection on the arrow keys sent to a file, scrolls the panel and draws the files it needs. Like Drive, it ignores Home and End, numbers list rows with aria-rowindex and gives aria-rowcount as the files it has loaded, and selects a file only through an arrow key: a focused file alone is not selected, and Enter opens the selected file. An arrow that cannot move selects nothing. A view toggle keeps the focus after it flips the view.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
@@ -65,12 +65,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
         }
       };
       panel.addEventListener("scroll", draw);
-      panel.addEventListener("focusin", (event) => {
-        const file = event.target.closest('[role="gridcell"][data-id], tr[data-id]');
-        if (file) panel.dataset.selected = String((selected = Number(file.id.slice(1))));
-      });
       const select = (index) => {
-        selected = Math.max(0, Math.min(loaded - 1, index));
+        if (index < 0 || index >= loaded) return;
+        selected = index;
         panel.dataset.selected = String(selected);
         const top = Math.floor(selected / per_line()) * line_px();
         if (top < panel.scrollTop) panel.scrollTop = top;
@@ -87,8 +84,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
         const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
-        if (event.key === "Enter") location.hash = "opened-" + (target?.id ?? "");
-        else if (steps[event.key]) select(index + steps[event.key]());
+        if (event.key === "Enter") { if (selected >= 0) location.hash = "opened-" + prefix() + selected; }
+        else if (steps[event.key]) { panel.dataset.arrows = String(Number(panel.dataset.arrows ?? 0) + 1); select(index + steps[event.key]()); }
         else return;
         event.preventDefault();
       });
@@ -102,6 +99,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
   const expect_focus = (wanted) => poll_until(`focus on ${wanted}`, async () => (await focused()) === wanted);
   const panel_top = () => in_active_tab(`document.getElementById("panel").scrollTop`);
+  const selected_file = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.selected ?? -1`));
+  const arrows_sent = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.arrows ?? 0`));
+  const hash = () => in_active_tab("location.hash");
   const view_of = () => in_active_tab(`document.querySelector('[role="gridcell"]') !== null ? "grid" : "list"`);
 
   await run_case("list view: j takes the focus into the files from nowhere and moves down, and k moves up", async () => {
@@ -112,6 +112,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("f2");
     await press_keys("k");
     await expect_focus("f1");
+    expect((await selected_file()) === 1, `j and k selected ${await selected_file()}`);
   });
 
   await run_case("list view: j walks past the drawn rows, and the panel scrolls to draw more", async () => {
@@ -154,7 +155,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await run_case("list view: G follows a list that loads in parts to the last file", async () => {
     await open_drive("list_fetch", "list", 250, 100);
     await press_keys("G");
-    await expect_focus("f99");
+    // The stand-in redraws its rows on each scroll and drops the focus a redraw replaces, so only the end of the follow is stable: the select lands on the last file.
+    await poll_until("G to select the last file", async () => (await selected_file()) === 249);
     await expect_focus("f249");
   });
 
@@ -168,6 +170,78 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     // The next part lands 300 ms after G reached the bottom.
     await sleep(800);
     expect((await selected()) === 99, `G went on after Escape, to ${await selected()}`);
+  });
+
+  await run_case("list view: Enter opens the file that G or gg selected", async () => {
+    await open_drive("list_enter", "list");
+    await press_keys("G");
+    await poll_until("G to select the last file", async () => (await selected_file()) === FILES - 1);
+    await press_keys("-k", "Return");
+    await poll_until("the last file to open", async () => (await hash()) === `#opened-f${FILES - 1}`);
+    await press_keys("gg");
+    await poll_until("gg to select the first file", async () => (await selected_file()) === 0);
+    await press_keys("-k", "Return");
+    await poll_until("the first file to open", async () => (await hash()) === "#opened-f0");
+  });
+
+  // A key that item mode binds waits for the end key and runs after the select lands. Enter is unbound there, so it reaches the page at once and finds the old selection.
+  await run_case("list view: k pressed right after G or gg runs after the select has landed", async () => {
+    await open_drive("list_held", "list");
+    await press_keys("G", "k");
+    await poll_until("k to move the selection up from the last file", async () => (await arrows_sent()) === 3 && (await selected_file()) === FILES - 2);
+    await press_keys("gg", "j");
+    await poll_until("j to move the selection down from the first file", async () => (await arrows_sent()) === 6 && (await selected_file()) === 1);
+  });
+
+  // 59 files make the last grid line short, so G must select g58 and not a cell that is not there.
+  await run_case("grid view with a short last line: G selects the last file and gg the first", async () => {
+    await open_drive("grid_short", "grid", 59);
+    await press_keys("G");
+    await poll_until("G to select the last file", async () => (await selected_file()) === 58);
+    await expect_focus("g58");
+    await press_keys("gg");
+    await poll_until("gg to select the first file", async () => (await selected_file()) === 0);
+    await expect_focus("g0");
+  });
+
+  // Known gap: with one file no arrow can move, so the file gets the box and Drive selects nothing.
+  await run_case("list view with one file: G boxes it, nothing breaks, and Enter opens nothing", async () => {
+    await open_drive("list_one", "list", 1);
+    await press_keys("G");
+    await expect_focus("f0");
+    await sleep(300);
+    await press_keys("-k", "Return");
+    await sleep(300);
+    expect((await hash()) === "#before", `Enter opened ${await hash()}`);
+    expect((await selected_file()) === -1, "the file was selected");
+    await press_keys("j");
+    await sleep(300);
+    expect((await in_active_tab("document.querySelector('[data-desertfox-mode]')?.getAttribute('data-desertfox-mode')")) === "ITEM", "item mode ended");
+  });
+
+  // A count on G goes nowhere: one arrow pair goes out, and 100 is past the limit of a sent key, which would fail the leaf.
+  await run_case("list view: a count on G and gg sends one arrow pair and selects the end", async () => {
+    await open_drive("list_count", "list");
+    await press_keys("3G");
+    await poll_until("3G to select the last file", async () => (await selected_file()) === FILES - 1);
+    expect((await arrows_sent()) === 2, `3G sent ${await arrows_sent()} arrows`);
+    await press_keys("100gg");
+    await poll_until("100gg to select the first file", async () => (await selected_file()) === 0);
+    expect((await arrows_sent()) === 4, `100gg sent ${(await arrows_sent()) - 2} arrows`);
+    await press_keys("100G");
+    await poll_until("100G to select the last file", async () => (await selected_file()) === FILES - 1);
+    expect((await arrows_sent()) === 6, `100G sent ${(await arrows_sent()) - 4} arrows`);
+  });
+
+  await run_case("list view that loads in parts: k pressed during the follow of G stops it, the select lands on the file reached and k moves up from it", async () => {
+    await open_drive("list_held_follow", "list", 400, 100);
+    await press_keys("G", "k");
+    await poll_until("the arrows to go out", async () => (await arrows_sent()) === 3);
+    await sleep(500);
+    const selected = await selected_file();
+    expect(selected > 0 && selected < 399, `the select landed on ${selected}`);
+    expect((await arrows_sent()) === 3, `${await arrows_sent()} arrows went out`);
+    expect((await focused()) === `f${selected}`, `the focus is on ${await focused()}`);
   });
 
   await run_case("list view: h and l keep the plain sideways scroll and leave the files alone", async () => {
@@ -192,6 +266,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("g1");
     await press_keys("j");
     await expect_focus("g4");
+    expect((await selected_file()) === 4, `h, l and j selected ${await selected_file()}`);
     await press_keys("G");
     await expect_focus(`g${FILES - 1}`);
     await press_keys("gg");

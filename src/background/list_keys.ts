@@ -14,7 +14,7 @@ import { stored_keymap } from "./keymap_source.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
-import { keymap_mode_trees_for, normal_tree_for, site_columns_for } from "./page_keymap.ts";
+import { normal_tree_for, page_mode_trees_for, site_columns_for } from "./page_keymap.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
 // The modes where the matcher reads `"` as the register prefix.
@@ -118,7 +118,7 @@ export async function list_keys(
   // The panel lists what the page's key rule leaves and the page's mode binds, the same trees the page gets from `read_keymap`.
   const columns = site_columns_for(keymap, addresses);
   const page_normal = keymap && normal_tree_for(keymap.modes.normal, columns);
-  const mode_binds = keymap && page_normal && !page_normal.all_off ? keymap_mode_trees_for(keymap.modes, columns)[request.mode as keyof CompiledKeymap["modes"]] : undefined;
+  const mode_binds = keymap && page_normal && !page_normal.all_off ? page_mode_trees_for(keymap, columns, addresses[0])[request.mode as keyof CompiledKeymap["modes"]] : undefined;
   const root = request.mode === "normal" ? page_normal?.tree : (mode_binds ?? mode_root);
   const shown = root && availability ? without_unavailable(root, availability) : root;
   const panel = panel_after_prefix(shown, request.prefix, find_command, keymap?.which_key_border);
