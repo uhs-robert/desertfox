@@ -6,15 +6,22 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["help", "config"];
 
-export async function run_cases({ run_case, press_keys, poll_until, rdp, extension_id, take_shot, expect, sleep, config_dir }) {
+export async function run_cases({ run_case, press_keys, poll_until, rdp, extension_id, take_shot, expect, sleep, config_copy, load_config_dir }) {
   const view = `(browser.extension.getViews({ type: "tab" }).find((candidate) => candidate.location.pathname === "/home.html" && candidate.location.hash === "#/settings"))`;
   const in_page = (code) => evaluate_in_background(rdp, extension_id, `(() => { const view = ${view}; ${code} })()`);
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const close_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
   const row = (name, code) => `const row = view.document.querySelector('[data-setting="${name}"]'); ${code}`;
   const tag_of = (name) => in_page(row(name, `return row.querySelector(".desertfox-help-badge").textContent;`));
-  // The folder's settings.toml, which the host writes once the browser copy changed. The base config, so every change goes again before the piece ends.
-  const settings_toml = async () => readFileSync(join(config_dir, "settings.toml"), "utf8");
+  // A copy of the base config, loaded by the first case that writes settings.toml, so a case that fails midway leaves the shared folder as it was.
+  let piece_config;
+  const use_config_copy = async () => {
+    if (piece_config !== undefined) return;
+    piece_config = config_copy();
+    await load_config_dir(piece_config);
+  };
+  // The copy's settings.toml, which the host writes once the browser copy changed.
+  const settings_toml = async () => readFileSync(join(piece_config, "settings.toml"), "utf8");
   const border_line = (value) => new RegExp(`^which_key_border = "${value}"$`, "m");
 
   await run_case("settings page: a cold open of the site rules link lands on the section heading and its first row", async () => {
@@ -30,6 +37,7 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
   });
 
   await run_case("settings page: a select change goes into settings.toml, reset removes it there, another write refreshes the row", async () => {
+    await use_config_copy();
     await close_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
     await poll_until("the settings page to list the settings", () => in_page(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
@@ -58,6 +66,7 @@ export async function run_cases({ run_case, press_keys, poll_until, rdp, extensi
   });
 
   await run_case("settings page: the changed-only filter hides unchanged rows and empty groups and keeps the forms", async () => {
+    await use_config_copy();
     await close_tabs();
     await in_background(`browser.tabs.create({ url: browser.runtime.getURL("home.html#/settings") }).then(() => true)`);
     await poll_until("the settings page to list the settings", () => in_page(`return !!view && view.document.querySelectorAll("[data-setting]").length > 20;`).catch(() => false), { timeout_ms: 10000 });
