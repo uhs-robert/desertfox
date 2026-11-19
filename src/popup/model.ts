@@ -13,7 +13,6 @@ export const HOME_HASH = page_hash("home");
 export const SETTINGS_HASH = page_hash("settings");
 export const COMMANDS_HASH = page_hash("commands");
 // The file editor under the settings page's Advanced section. A test keeps the slug in step with the page, which this file cannot import.
-export const EDIT_FILES_HASH = "#section=settings/advanced-edit-files";
 // The settings page draws an empty anchor with the id `settings-site-rules` at the top of the General rows, because the rows load after the route lands. A test keeps the slug in step with the page, which this file cannot import.
 export const SITE_RULES_HASH = "#section=settings/site-rules";
 // The Warnings heading on Home, where the count points.
@@ -28,7 +27,6 @@ export function release_url(version: string): string {
 }
 
 // The rule the copy button puts on the clipboard: a `site_rules` row for the pattern with `pass` empty, for the user to fill in.
-export const rule_template = (pattern: string): string => `[[site_rules]]\nsite = "${pattern}"\npass = ""\n`;
 
 // `desktop` (follow the desktop's pushed theme), the built-in, local and imported themes, once each and sorted, plus the one in force so the list never lacks it.
 export function theme_options(current: string, extra_names: readonly string[]): string[] {
@@ -98,7 +96,7 @@ export type PopupInputs = {
 };
 
 export type PopupRow = {
-  id: "power" | "settings" | "home" | "support" | "site" | "rule" | "reload_config" | "warnings" | "copy_rule" | "keys";
+  id: "power" | "settings" | "home" | "support" | "site" | "rule" | "reload_config" | "warnings" | "keys";
   kind: "switch" | "link" | "action";
   label: string;
   // A greyed row says why in `detail`.
@@ -143,7 +141,6 @@ export function build_rows(inputs: PopupInputs): PopupRow[] {
   ];
   // A rule edit reaches open pages at once. The link opens the settings group that lists them.
   if (inputs.site.kind !== "unavailable" && inputs.site.rule !== undefined) rows.push({ id: "rule", kind: "link", label: "Rule on this page", detail: sentence_case(inputs.site.rule), enabled: true });
-  if (inputs.site.kind !== "unavailable") rows.push({ id: "copy_rule", kind: "action", label: "Copy rule", enabled: true });
   // Warnings is a problem list, so it shows only when there is something in it. It is status, so it sits under the site card and not with the page links.
   if (inputs.warning_count > 0) rows.push({ id: "warnings", kind: "link", label: `Warnings (${inputs.warning_count})`, enabled: true });
   rows.push(

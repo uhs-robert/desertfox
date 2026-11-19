@@ -242,13 +242,13 @@ export async function run_cases({ config_copy, load_config_dir, config_dir, take
       await poll_until("On to be checked", async () => (await checked()) === "On");
       await poll_until("the state line to read enabled", async () => (await popup_eval(`document.querySelector(".desertfox-popup-state")?.textContent`)) === "Enabled on this site");
       await shoot("on");
-      // The extras: the host dot, the version link, the copy and keys rows, and a theme pick that writes settings.toml.
+      // The extras: the host dot, the version link, the keys row, and a theme pick that writes settings.toml.
       const manifest_version = await in_background(`browser.runtime.getManifest().version`);
       expect((await popup_eval(`document.querySelector("a.desertfox-popup-version")?.href`)).startsWith("https://github.com/uhs-robert/desertfox/releases"), `the version links to the releases, got ${manifest_version}`);
       expect((await popup_eval(`document.querySelector(".desertfox-popup-host-dot")?.getAttribute("aria-label")`)).startsWith("Native host:"), "the header has a host dot");
       const row_text = () => popup_eval(`[...document.querySelectorAll(".desertfox-popup-row")].map((button) => button.textContent).join("|")`);
       const rows_now = await row_text();
-      expect(rows_now.includes("Copy rule") && rows_now.includes("Keys"), `the popup has the Copy rule and Keys rows, got ${rows_now}`);
+      expect(rows_now.includes("Keys") && !rows_now.includes("Copy rule"), `the popup has the Keys row and no Copy rule row, got ${rows_now}`);
       const settings_text = () => readFileSync(join(picked_dir, "settings.toml"), "utf8");
       const file_before = settings_text();
       const edits = () => in_background(`Promise.all([browser.storage.local.get("desertfox_saved_settings"), browser.storage.session.get("desertfox_temp_settings")]).then(([saved, temp]) => JSON.stringify([saved.desertfox_saved_settings?.theme ?? null, temp.desertfox_temp_settings?.theme ?? null]))`);
