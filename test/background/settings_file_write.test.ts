@@ -7,7 +7,7 @@ import { RuntimeRefusal } from "../../src/shared/command.ts";
 import { outcome_note, replayed_on_folder } from "../../src/background/settings_file.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 import { files_digest } from "../../src/background/host_start.ts";
-import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
 let fresh_count = 0;
@@ -440,7 +440,7 @@ test("a pick during a write lands after it, from the text the first one left", a
   const { local, fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const first = startup.set_in_settings_file("theme", "nord");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await until(() => held.length === 1, "the first write did not go out");
   const second = startup.set_in_settings_file("theme", "oasis_night");
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(held.length, 1, "a second write went out while the first was out");
@@ -461,7 +461,7 @@ test("`,r` while a write is out waits for it and keeps the pick", async () => {
   const { local, fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const pick = startup.set_in_settings_file("theme", "oasis_night");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await until(() => held.length === 1, "the first write did not go out");
   const reload = startup.reload_config();
   await new Promise((resolve) => setTimeout(resolve, 50));
   held.shift()!();
@@ -493,7 +493,7 @@ test("an editor save of another key during a write keeps both: the picks are put
   const send = fake.runtime.sendNativeMessage;
   const held = hold_writes(fake);
   const first = startup.set_in_settings_file("theme", "nord");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   const second = startup.set_in_settings_file("theme", "oasis_night");
   await pause();
   host.files = { "settings.toml": HAND };
@@ -522,7 +522,7 @@ test("a refused write keeps the record of a pick made after Use the folder, and 
   const send = fake.runtime.sendNativeMessage;
   const held = hold_writes(fake);
   const dropped_pick = startup.set_in_settings_file("theme", "nord");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   host.files = { ...host.files, "settings.toml": HAND };
   const use_folder = () => startup.choose_host_start("use_folder", local[HOST_START_PENDING_STORAGE_KEY] as { host_digest: string; browser_digest: string });
   // The pick changed the copy after the question, so the first answer finds it stale and asks again.
@@ -546,7 +546,7 @@ test("an import during a write: the pick reached the file, and the reply says th
   const { fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const pick = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
   held.shift()!();
   const outcome = await pick;
@@ -589,7 +589,7 @@ test("a refused write whose folder also changed keymap.toml takes that file too,
   const send = fake.runtime.sendNativeMessage;
   const held = hold_writes(fake);
   const pick = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   const keys = '[normal]\n"zx" = "tab.next"\n';
   host.files = { "settings.toml": HAND, "keymap.toml": keys };
   fake.runtime.sendNativeMessage = send;
@@ -607,7 +607,7 @@ test("each pick a swap dropped names the swap that dropped it", async () => {
   const { fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const saved_over = startup.set_in_settings_file("theme", "nord");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
   const imported_over = startup.set_in_settings_file("theme", "oasis_night");
   await pause();
@@ -623,7 +623,7 @@ test("a refusal older than a new record with the same base leaves that record, a
   const send = fake.runtime.sendNativeMessage;
   const held = hold_writes(fake);
   const dropped_pick = startup.set_in_settings_file("theme", "nord");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   // An editor save puts settings.toml back to the folder's text, so the next pick's record has the same base as the first.
   await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
   const later_pick = startup.set_in_settings_file("theme", "oasis_night");
@@ -670,7 +670,7 @@ test("a refused write whose folder gained remote CSS adopts nothing and asks, as
   const send = fake.runtime.sendNativeMessage;
   const held = hold_writes(fake);
   const pick = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => held.length === 1, "the first write did not go out");
   host.files = { "settings.toml": HAND, "style.css": '@import url("https://t.test/x.css");\n' };
   fake.runtime.sendNativeMessage = send;
   held.shift()!();
