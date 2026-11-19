@@ -132,15 +132,6 @@ test("a refresh after another tab changed the row updates a clean form and keeps
   assert.deepEqual(session.view().chips, ["j", "k", "c"]);
 });
 
-test("a key pressed while the form loads stays among the chips", async () => {
-  const { session } = make([{ site: MAIL, pass: "q" }]);
-  const loading = session.load(MAIL);
-  session.capture("j");
-  await loading;
-  assert.equal(session.view().site, MAIL);
-  assert.deepEqual(session.view().chips, ["j"]);
-});
-
 test("a key pressed during the load joins the stored keys of the row and Save sends both", async () => {
   const { session, sent } = make([{ site: MAIL, pass: "q" }]);
   const loading = session.load(MAIL);
