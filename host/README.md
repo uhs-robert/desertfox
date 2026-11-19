@@ -54,7 +54,7 @@ The root README lists them in plain words. The details:
 
 ## What the host can and cannot do
 
-- It has a fixed list of actions: read the config files, write one file that copies your key edits, update itself, edit text, open a Firefox page and, with the bridge, pass commands to DesertFox. It has no shell and no way to run a command that someone sends it.
+- It has a fixed list of actions: read the config files, write the config files DesertFox changes (settings, theme and search engine files, and `autoconfig.toml`, a copy of your key edits), update itself, edit text, open a Firefox page and, with the bridge, pass commands to DesertFox. It has no shell and no way to run a command that someone sends it.
 - A web page cannot give it an address. The `,f` keys pick a page from a fixed table, not a URL (see Firefox pages above).
 - Text from a web page goes only into a temporary file for your editor, in a memory-backed folder when the system has one. The editor program comes from your own `editor.toml`.
 - The updater starts at this project's GitHub releases and follows up to five HTTPS redirects, without limiting which hosts they lead to. It refuses a redirect that is not HTTPS, and refuses a file that does not match the hashes in the signed extension.
