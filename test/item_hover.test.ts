@@ -279,16 +279,16 @@ test("without the hover arg no land asks for a hover", () => {
   assert.deepEqual(calls, [false]);
 });
 
-// The setting: it fills the hover arg of the finder row and of the shipped video rows, and off removes it.
+// The setting: it fills the hover arg of the item keys and of the shipped video rows, and off removes it.
 const compiled = (settings: Record<string, unknown> = {}) =>
   compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
 const step_of = async (keymap: CompiledKeymap, url: string, key: string) => {
   const reply = (await page_keymap_for({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) } as never, [url]))!;
-  return ((reply.keymap.modes.normal as TreeBranch).children[key] as TreeLeaf).steps[0]!.invocation;
+  return ((reply.keymap.modes.item as TreeBranch).children[key] as TreeLeaf).steps[0]!.invocation;
 };
 
-test("item_hover is on by default: the finder row and the video rows carry hover", async () => {
-  const result = compiled({ item_navigator: true });
+test("item_hover is on by default: the item keys and the video rows carry hover", async () => {
+  const result = compiled();
   assert.deepEqual(result.warnings, []);
   assert.equal((await step_of(result.compiled, "https://a.test/", "j")).args?.["hover"], true);
   assert.equal((await step_of(result.compiled, "https://duckduckgo.com/?q=x&iax=videos&ia=videos", "j")).args?.["hover"], true);
@@ -299,8 +299,8 @@ test("a text result row never carries hover", async () => {
   assert.notEqual((await step_of(compiled().compiled, "https://duckduckgo.com/?q=x", "j")).args?.["hover"], true);
 });
 
-test("item_hover off removes the arg from the finder row and the video rows", async () => {
-  const result = compiled({ item_navigator: true, item_hover: false });
+test("item_hover off removes the arg from the item keys and the video rows", async () => {
+  const result = compiled({ item_hover: false });
   assert.deepEqual(result.warnings, []);
   assert.notEqual((await step_of(result.compiled, "https://a.test/", "j")).args?.["hover"], true);
   assert.notEqual((await step_of(result.compiled, "https://duckduckgo.com/?q=x&iax=videos&ia=videos", "j")).args?.["hover"], true);

@@ -28,7 +28,7 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { strip_patterns_for } from "./strip_patterns.ts";
-import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, read_keymap_reply } from "./page_keymap.ts";
+import { hint_selectors_reply, item_start_wanted, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -60,6 +60,7 @@ import { tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
 import { create_tab_insert } from "./tab_insert.ts";
+import { create_tab_item } from "./tab_item.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -112,6 +113,10 @@ const tab_insert = create_tab_insert({
   send_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode, held: true }),
 });
 wire_tab_insert(tab_insert.enter);
+const tab_item = create_tab_item({
+  storage: browser.storage.session,
+  send_step: (tab_id, on, frame_id, from) => send_to_tab(tab_id, { type: "media", on, from, item: true }, frame_id),
+});
 
 // Taken before the config loads, so it holds the built-in commands only, which are the ones the help page has cards for.
 const built_in_ids = new Set(registry.list().map((command) => command.id));
@@ -391,6 +396,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.reported"));
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true, activated: request.activated, in_field: request.in_field, cross_origin: is_cross_origin(sender.url, tab.url) };
     void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true).catch(warn_and_go("tab_media.reported"));
+    void tab_item.reported(tab_id, sender.frameId, request.mode, request.step === true).catch(warn_and_go("tab_item.reported"));
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
     return tab_modes.report(tab_id, report).then(({ child_mode, tell_top, park, parked }) => {
       // The frame that takes the focus on load is handed back through the path of `gF`. Gecko may give the focus back to the frame, and the park then ends in frame mode, as it was before parking.
@@ -453,7 +459,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender_at(sender, request.url).url);
   if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
   if (request?.type === "read_keymap") {
-    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender_at(sender, request.url)), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!))));
+    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender_at(sender, request.url)), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!), () => tab_item.join(sender.tab!.id!, sender.frameId!))));
     return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
   }
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
@@ -604,12 +610,20 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
 
+const start_item_mode = async (tab_id: number, address: string | undefined) => {
+  if ((await read_disabled()) || !(await item_start_wanted(browser.storage.local, address))) return;
+  await best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "item.start", args: {}, bundle: "item" }] }, 0));
+};
+
 const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.local), redraw_icon_png);
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // The icon often arrives after the load completes, so a later icon change saves too. A private tab saves nothing.
   if (change.status === "complete" || change.favIconUrl !== undefined) void favicon_saver.on_tab({ url: tab.url, icon: tab.favIconUrl, incognito: tab.incognito }).catch(warn_and_go("favicon_saver.on_tab"));
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
   if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(warn_and_go("tab_media.navigated"));
+  if (change.status === "loading") void tab_item.navigated(tab_id, change).catch(warn_and_go("tab_item.navigated"));
+  // The top frame decides whether the page holds a list. Item mode then spreads to the other frames from its report.
+  if (change.status === "complete") void start_item_mode(tab_id, tab.url).catch(warn_and_go("start_item_mode"));
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
@@ -653,6 +667,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void inspect_relay.forget(tab_id);
   void hint_frames.forget(tab_id).catch(warn_and_go("hint_frames.forget"));
   void tab_media.forget(tab_id).catch(warn_and_go("tab_media.forget"));
+  void tab_item.forget(tab_id).catch(warn_and_go("tab_item.forget"));
   void media_discovery.forget(tab_id).catch(warn_and_go("media_discovery.forget"));
   void tab_modes.forget(tab_id);
 });

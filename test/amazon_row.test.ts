@@ -8,12 +8,12 @@ import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 type Item_args = { selector: string; link: string };
 
 const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === "amazon");
-const { selector, link } = (rows[0]!.row.bind!.j as unknown as { args: Item_args }).args;
+const { selector, link } = (rows[0]!.row.keymap!.item!.j as unknown as { args: Item_args }).args;
 const page = load(readFileSync(new URL("fixtures/amazon/search_results.html", import.meta.url), "utf8"));
 
 test("the amazon rows cover the search address forms and share one item selector", () => {
   assert.deepEqual(rows.map(({ row }) => row.site), ["https://www.amazon.com/s?*", "https://www.amazon.com/s/*"]);
-  for (const { row } of rows) assert.deepEqual((row.bind!.l as unknown as { args: Item_args }).args, { selector, link, direction: "right" });
+  for (const { row } of rows) assert.deepEqual((row.keymap!.item!.l as unknown as { args: Item_args }).args, { selector, link, direction: "right" });
 });
 
 test("the item selector matches organic results only, not ads, carousels or the header", () => {

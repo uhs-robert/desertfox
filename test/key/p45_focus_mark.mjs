@@ -11,9 +11,10 @@ const LINKS = 6;
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   await setup("load the shipped ddg row for the fm_ddg pages", async () => {
     const dir = config_copy();
-    const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "ddg").row;
+    // The shipped ddg row binds its keys in item mode. ]l and ]] work in normal mode, so the page gets the same keys there.
+    const { site: _site, keymap, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "ddg").row;
     const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
-    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=fm_ddg*"', ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`), ""].join("\n"));
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=fm_ddg*"', ...Object.entries({ ...columns, bind: keymap.item }).map(([column, value]) => `${column} = ${toml(value)}`), ""].join("\n"));
     await load_config_dir(dir);
   });
 

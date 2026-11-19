@@ -21,6 +21,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       const { site: _site, ...columns } = shipped;
       lines.push("", "[[site_rules]]", `site = "*://127.0.0.1/*?id=${id}_*"`, ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`));
     }
+    // ]] works in normal mode only, so its case has a row of the user's that binds the same keys in normal mode.
+    const { keymap: ddg_keymap } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "ddg").row;
+    lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ddgn_*"', `bind = ${toml(ddg_keymap.item)}`);
     // The rows the address-change cases need: one that turns the page off and one with a site mode that has a label.
     lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=off_*"', "off = true");
     lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=mode_*"', 'bind = { v = "mode.site spy" }', 'modes.spy = { label = "SPY", bind = { x = { id = "mode.site", args = { name = "off" } } } }');
@@ -31,6 +34,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // The stand-in results: a block per result with a title link (an h3 inside the anchor) and an address and snippet beside it, as Google's result blocks have. The h3 has no margin, so the content fits the block and the box, which covers what pokes out, matches the block. A People also ask question sits among them, with an h3 link but outside any result block, and the row must skip it.
   const open_results = async (id, first_height = 60) => {
     await open_page("controls", `item_${id}`, { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const search = document.createElement("div");
       search.id = "search";
@@ -224,6 +228,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_focus("r1");
     await press_keys("-k", "Escape");
     await expect_no_box("the box to clear on Escape");
+    await press_keys("I");
     await press_keys("j");
     await expect_focus("r2");
     await expect_box_on_focus("the box on the third result");
@@ -241,10 +246,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_results("mode");
     await press_keys("j");
     await expect_box_on_focus("the box on the first result");
-    // Hint mode takes no focus from the result, so only the timer that reads the mode can clear the box.
-    await press_keys("f");
-    expect((await focused()) === "r0", "hint mode moved the focus, so the timer is not what clears the box");
-    await expect_no_box("the box to clear in hint mode");
+    // The command line is no mode where the box belongs, so the timer that reads the mode clears it.
+    await press_keys(":");
+    await expect_no_box("the box to clear in the command line");
     await press_keys("-k", "Escape");
   });
 
@@ -258,6 +262,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("on a matched page with no result, j and k scroll by line and show no box", async () => {
     await open_page("controls", "item_empty", { new_tab: true });
+    await press_keys("I");
     await press_keys("j");
     await poll_until("j scrolled the page", async () => (await in_active_tab("scrollY")) > 0);
     expect((await box()) === null, "a box showed on a page with no result");
@@ -268,6 +273,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // A Hacker News shaped list: a story row with a title link, then a comment-like row with no title link, only a user link.
   await run_case("a row with a link selector focuses that link, and an item without one takes focus itself", async () => {
     await open_page("controls", "hn_list", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const table = document.createElement("table");
       table.innerHTML = '<tr class="athing" id="story"><td><span class="titleline"><a id="title" href="#title">a story</a></span></td></tr><tr class="athing" id="comment"><td style="height:60px"><a id="user" href="#user">someone</a> a comment</td></tr>';
@@ -287,6 +293,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // A DuckDuckGo shaped list: result articles with a title link, and an ad article with the same link that must be skipped.
   await run_case("on ddg, j walks the result articles and skips the ad, and past the last result it scrolls on", async () => {
     await open_page("controls", "ddg_list", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const list = document.createElement("ol");
       list.innerHTML = '<li><article data-testid="ad"><a data-testid="result-title-a" id="ad" href="#ad">ad</a></article></li>' + [0, 1, 2].map((index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a><p>snippet</p></article></li>').join("");
@@ -307,7 +314,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   // The More results button loads in two steps, a spinner first and the results 300 ms later, and drops the first result as a virtualized list does, so the old count is no longer the index of the first new result.
   await run_case("on ddg, after ]] loads more results the box moves to the first new one", async () => {
-    await open_page("controls", "ddg_more", { new_tab: true });
+    await open_page("controls", "ddgn_more", { new_tab: true });
     await in_active_tab(`(() => {
       const result = (index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a><p>snippet</p></article></li>';
       const list = document.createElement("ol");
@@ -336,6 +343,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // A DuckDuckGo images shaped grid: rows of figures with a caption link, widths that differ from row to row, as its justified layout has.
   await run_case("on ddg images, h and l step along a row of tiles and j and k go to the tile below and above", async () => {
     await open_page("controls", "img_grid", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const widths = [[200, 120, 160], [150, 190, 140], [180, 130, 170]];
       const grid = document.createElement("ol");
@@ -365,6 +373,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
 
   await run_case("on ddg images, h at the start of a row says there is no previous tile and does not scroll", async () => {
     await open_page("controls", "img_edge", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const grid = document.createElement("div");
       grid.innerHTML = '<figure style="width:200px;height:80px"><a id="only" href="#only">only</a></figure>';
@@ -382,6 +391,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // The Google Videos shape: every video sits in one result block, each in its own data-hveid block inside the block's own data-hveid. The box must sit on one video, never on the block.
   await run_case("on google videos, j walks the videos one by one inside the one result block and the box spans a single video", async () => {
     await open_page("controls", "gvid_list", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const column = document.createElement("div");
       column.id = "center_col";
@@ -412,6 +422,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // The DuckDuckGo Videos shape: a grid of links, each around an article, so the link is the item and takes the focus itself.
   await run_case("on ddg videos, hjkl walk the grid of video links and Enter opens one", async () => {
     await open_page("controls", "dvid_grid", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const videos = document.createElement("div");
       videos.dataset.testid = "zci-videos";
@@ -440,6 +451,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // The hover of the boxed tile: the shipped ddg videos row asks for it, so a tile gets the enter events about 300 ms after the land, the leave after a j that scrolls to another tile, and the leave on Escape.
   await run_case("on ddg videos, the boxed tile gets enter after the land and leave after a scrolling j and on Escape", async () => {
     await open_page("controls", "dvid_hover", { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       window.hover_log = [];
       const videos = document.createElement("div");
@@ -474,6 +486,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   // A page of one site that lists both result shapes: ddg articles and image tiles. Which one j walks depends on the row the address matches.
   const open_both_shapes = async (id) => {
     await open_page("controls", id, { new_tab: true });
+    await press_keys("I");
     await in_active_tab(`(() => {
       const list = document.createElement("ol");
       list.innerHTML = [0, 1].map((index) => '<li><article data-testid="result" style="height:60px;margin-bottom:40px"><a data-testid="result-title-a" id="d' + index + '" href="#d' + index + '">result ' + index + '</a></article></li>').join("") + '<li style="display:flex;gap:10px"><figure style="margin:0;width:120px;height:80px"><a id="t0" href="#t0">tile</a></figure></li>';
@@ -663,6 +676,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await page_focuses("r3");
     await sleep(AT_ONCE_MS);
     expect((await box()) === null, "a box came back after Escape when the page moved the focus");
+    await press_keys("I");
     await press_keys("j");
     await expect_box_on_focus("the box on the result after the focused one");
     await push_to("off_cleared");
@@ -682,6 +696,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("-k", "Escape");
     await expect_no_box("the box to clear on Escape");
     const before = await in_active_tab("scrollY");
+    await press_keys("I");
     await press_keys("j");
     await poll_until("j to scroll 50 px", async () => (await in_active_tab("scrollY")) === before + 50);
     await poll_until("the box back on the tall result", async () => { const drawn = await box(); return drawn !== null && near(drawn, await item_rect_of("r0")); });
@@ -693,6 +708,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_box_on_focus("the box on the tall result");
     await press_keys("-k", "Escape");
     await expect_no_box("the box to clear on Escape");
+    await press_keys("I");
     await press_keys("j");
     await poll_until("the box back on the tall result", async () => (await box()) !== null);
     // Beside the tall result, below the top of the view, which the scroll moved past the top of #search.

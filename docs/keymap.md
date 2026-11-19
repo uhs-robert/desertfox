@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 496 (normal 265, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 518 (normal 265, media 58, item 22, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -170,7 +170,7 @@ bound: 496 (normal 265, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `]c` | `url.increment --up` | Change URL number |
 | `[c` | `url.increment --down` | Change URL number |
 | `gi` | `page.focus_input` | Focus input |
-| `I` | `toggle item_navigator` | Toggle item navigator |
+| `I` | `mode item` | Item mode |
 | `i` | `mode.insert` | Insert mode |
 | `pp` | `paste` | Open clipboard |
 | `pt` | `paste --tab` | Open clipboard |
@@ -388,6 +388,33 @@ Which-key group names:
 | `q` | `cmdline.open --text='media quality '` | Pick the quality |
 | `r` | `media loop` | Toggle loop |
 | `i` | `media info` | Show the time, speed, quality and volume |
+
+### item
+
+| Key | Command | Label |
+| --- | --- | --- |
+| `J` | `tab.next` | Next tab |
+| `K` | `tab.prev` | Previous tab |
+| `gt` | `tab.goto` | Next tab |
+| `gT` | `tab.prev` | Previous tab |
+| `<C-d>` | `scroll.pages --fraction=0.5` | Scroll half page down |
+| `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
+| `<C-f>` | `scroll.pages` | Scroll page down |
+| `<C-b>` | `scroll.pages --fraction=-1` | Scroll page up |
+| `:` | `cmdline.open` | Command line |
+| `<F1>` | `help` | Help |
+| `g?` | `help` | Help |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
+| `I` | `page.item --current` | Back to the current item |
+| `j` | `page.item --down --hover` | Next item, or scroll down |
+| `k` | `page.item --up --hover` | Previous item, or scroll up |
+| `h` | `page.item --left --hover` | Item to the left, or scroll left |
+| `l` | `page.item --right --hover` | Item to the right, or scroll right |
+| `gg` | `page.item --first --hover` | First item, or scroll to top |
+| `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 
 ### grab
 

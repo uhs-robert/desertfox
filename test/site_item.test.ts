@@ -257,8 +257,9 @@ test("the shipped result rows bind j and k to page.item", () => {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {
-      assert.match(JSON.stringify(row.bind?.j), /"id":"page.item"/, name);
-      assert.match(JSON.stringify(row.bind?.k), /"id":"page.item"/, name);
+      assert.match(JSON.stringify(row.keymap?.item?.j), /"id":"page.item"/, name);
+      assert.match(JSON.stringify(row.keymap?.item?.k), /"id":"page.item"/, name);
+      assert.equal(row.bind, undefined, `${name} leaves the plain keys alone`);
     }
   }
   assert.ok(!DEFAULT_SITE_ROWS.some((entry) => (entry.name as string) === "oldreddit"));
@@ -269,9 +270,9 @@ test("the shipped image row binds hjkl to page.item", () => {
     const rows = DEFAULT_SITE_ROWS.filter((entry) => entry.name === name);
     assert.ok(rows.length > 0, name);
     for (const { row } of rows) {
-      const directions = ["h", "j", "k", "l"].map((key) => (row.bind?.[key] as { id: string; args: { direction: string } }).args.direction);
+      const directions = ["h", "j", "k", "l"].map((key) => (row.keymap?.item?.[key] as { id: string; args: { direction: string } }).args.direction);
       assert.deepEqual(directions, ["left", "down", "up", "right"], name);
-      assert.match(JSON.stringify(row.bind?.h), /"id":"page.item"/, name);
+      assert.match(JSON.stringify(row.keymap?.item?.h), /"id":"page.item"/, name);
     }
   }
 });

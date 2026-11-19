@@ -513,15 +513,19 @@ test("the reply carries the mode a frame joins, insert beats media, and an all-o
   assert.equal(asked, 0, "join is never asked for an all-off frame");
 });
 
-test("join_mode: insert beats media, media is not asked when insert holds, and a re-ask asks nothing", async () => {
+test("join_mode: insert beats media, media beats item, a hold is asked only when the ones before it do not hold, and a re-ask asks nothing", async () => {
   let asked = 0;
   const media = async () => (asked++, true);
-  assert.equal(await join_mode(true, async () => true, media), "insert");
+  const item = async () => (asked++, true);
+  assert.equal(await join_mode(true, async () => true, media, item), "insert");
   assert.equal(asked, 0);
-  assert.equal(await join_mode(true, async () => false, media), "media");
-  assert.equal(await join_mode(true, async () => false, async () => false), undefined);
+  assert.equal(await join_mode(true, async () => false, media, item), "media");
+  assert.equal(asked, 1);
   asked = 0;
-  assert.equal(await join_mode(false, async () => (asked++, true), media), undefined);
+  assert.equal(await join_mode(true, async () => false, async () => false, item), "item");
+  assert.equal(await join_mode(true, async () => false, async () => false, async () => false), undefined);
+  asked = 0;
+  assert.equal(await join_mode(false, async () => (asked++, true), media, item), undefined);
   assert.equal(asked, 0);
 });
 
@@ -565,7 +569,12 @@ test("a site row auto under a global max answers auto, which the rule treats as 
   assert.equal(await media_quality_reply(storage_of(compiled), "https://b.test/"), "max");
 });
 
-test("the search rows: kagi passes j and k, ddg binds them to page.item, brave binds them to arrow keys, and each row compiles on its engine only", async () => {
+const item_key_at = async (compiled: CompiledKeymap, url: string, key: string) => {
+  const leaf = (await ask(compiled, url))!.keymap.modes.item?.children[key];
+  return leaf?.kind === "leaf" ? leaf.steps[0]?.invocation.id : undefined;
+};
+
+test("the search rows: kagi passes j and k, ddg binds them to page.item in item mode, brave binds them to arrow keys, and each row compiles on its engine only", async () => {
   const compiled = with_defaults({});
   const names = compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name);
   for (const name of ["ddg", "kagi", "brave"]) assert.ok(names?.includes(name), `${name} row missing from the compiled rows`);
@@ -576,10 +585,13 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
     assert.notEqual(reply.keymap.modes.normal?.children.h, undefined, `h freed on ${url}`);
   }
   for (const url of ["https://duckduckgo.com/?q=cats", "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=cats"]) {
-    for (const key of ["j", "k"]) assert.equal(await key_at(compiled, url, key), "page.item", `${key} on ${url}`);
+    for (const key of ["j", "k"]) {
+      assert.equal(await item_key_at(compiled, url, key), "page.item", `${key} on ${url}`);
+      assert.equal(await key_at(compiled, url, key), "scroll.lines", `${key} stays the plain scroll in normal mode on ${url}`);
+    }
     assert.notEqual((await ask(compiled, url))!.keymap.modes.normal?.children.h, undefined, `h freed on ${url}`);
   }
-  for (const url of ["https://duckduckgo.com/settings", "https://duckduckgo.com/duckduckgo-help-pages/"]) assert.notEqual(await key_at(compiled, url, "j"), "page.item", `j is plain scroll on ${url}`);
+  for (const url of ["https://duckduckgo.com/settings", "https://duckduckgo.com/duckduckgo-help-pages/"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, `j has no result selector on ${url}`);
   const brave = "https://search.brave.com/search?q=cats";
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
@@ -587,10 +599,11 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item, brave b
   assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 44);
 });
 
+// The item keys a row decides: the ones that name a selector. The shipped item keys name none, so a page without a row reads as undefined.
 const item_args_at = async (compiled: CompiledKeymap, url: string, key: string) => {
-  const leaf = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+  const leaf = (await ask(compiled, url))!.keymap.modes.item?.children[key];
   const step = leaf?.kind === "leaf" ? leaf.steps[0] : undefined;
-  return step?.invocation.id === "page.item" ? (step.invocation.args as { selector: string; direction: string }) : undefined;
+  return step?.invocation.id === "page.item" && step.invocation.args?.selector ? (step.invocation.args as { selector: string; direction: string }) : undefined;
 };
 
 test("the image row gives hjkl to the tiles on the DuckDuckGo image vertical and wins over the web row there", async () => {
@@ -761,7 +774,7 @@ test("the drive row focuses the current file and sends Drive's own key to it, bi
   const grid = '[role="grid"] [role="gridcell"][data-id]';
   const leaf_at = async (key: string) => {
     // gg sits under the g branch.
-    let node: TreeNode | undefined = (await ask(compiled, drive))!.keymap.modes.normal;
+    let node: TreeNode | undefined = (await ask(compiled, drive))!.keymap.modes.item;
     for (const token of key) node = node?.kind === "branch" ? node.children[token] : undefined;
     assert.equal(node?.kind, "leaf", key);
     return node as TreeLeaf;
@@ -778,8 +791,8 @@ test("the drive row focuses the current file and sends Drive's own key to it, bi
     assert.equal(leaf.when_present, `${grid}, ${list}`, key);
     assert.deepEqual([leaf.steps.map((step) => step.invocation.id), leaf.steps[0]?.invocation.args?.direction], [["page.item"], direction], key);
   }
-  // A guard that fails falls through to the plain key: h and l scroll sideways in the list view.
-  assert.equal((await leaf_at("h")).otherwise?.steps[0]?.invocation.id, "scroll.pixels");
+  // A guard that fails falls through to the item key of the mode, which scrolls sideways when the page has no grid.
+  assert.equal((await leaf_at("h")).otherwise?.steps[0]?.invocation.id, "page.item");
   for (const url of ["https://docs.google.com/document/d/abc/edit", "https://drive.google.com/file/d/abc/view"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
   assert.equal(await item_args_at(with_defaults({ default_site_rows_off: ["drive"] }), drive, "j"), undefined);
 });

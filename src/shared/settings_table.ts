@@ -23,7 +23,7 @@ export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[
 export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable; sticky?: boolean }>>;
 
 // The keymap modes a site row can bind keys in. `normal` is what the `bind` column writes in short form.
-export const SITE_KEYMAP_MODES = ["normal", "visual", "visual_line", "caret"] as const;
+export const SITE_KEYMAP_MODES = ["normal", "visual", "visual_line", "caret", "item"] as const;
 export type SiteKeymapMode = (typeof SITE_KEYMAP_MODES)[number];
 
 // One table of binds per keymap mode, in the same formats as `bind`.
@@ -134,7 +134,7 @@ export const SETTINGS_TABLE = {
   // Consent to update the native hosts to the extension's version on connect. Asked once from the :native.install page, off until then.
   host_auto_update: { kind: "boolean", default: false },
   completion_all_windows: { kind: "boolean", default: false },
-  // Lets j and k walk the list or grid of items that the finder (`src/content/item/finder.ts`) finds on a page that has no site row of its own. Off until the finder has no known misses left.
+  // Starts item mode on a page that has finished loading and holds a list or a grid that the finder (`src/content/item/finder.ts`) finds. The mode itself starts with `I` and ends with Escape, with the setting off or on.
   item_navigator: { kind: "boolean", default: false, per_site: true },
   // Sends the pointer events of a resting mouse to the item that `page.item` boxes on a thumbnail tile, so a video preview starts. Fills the `hover` arg of the rows that ask for it (`src/background/compile.ts`).
   item_hover: { kind: "boolean", default: true },

@@ -118,13 +118,13 @@ test("one key written two ways in bind and keymap.normal is a clash", () => {
   assert.equal(spec.check([{ site: SITE, bind: { "<C-a>": "tab.next" }, keymap: { normal: { "<C-b>": "tab.prev" } } }]), true);
 });
 
-test("the keymap column accepts the four modes and refuses another mode, an empty table and a bad key", () => {
+test("the keymap column accepts the five modes and refuses another mode, an empty table and a bad key", () => {
   const spec = SETTING_SPECS.site_rules;
   const ok = (keymap: unknown) => spec.check([{ site: SITE, keymap }]);
-  assert.equal(ok({ visual: { x: "find" }, visual_line: { x: "find" }, caret: { x: "find" }, normal: { x: "find" } }), true);
+  assert.equal(ok({ visual: { x: "find" }, visual_line: { x: "find" }, caret: { x: "find" }, normal: { x: "find" }, item: { x: "find" } }), true);
   for (const bad of [{ insert: { x: "find" } }, { Visual: { x: "find" } }, { visual: {} }, { visual: { "": "find" } }, {}, "visual", { visual: "find" }]) assert.equal(ok(bad), false, JSON.stringify(bad));
   const refused = spec.explain!([{ site: SITE, keymap: { insert: { x: "find" } } }]);
-  assert.match(refused ?? "", /names the mode "insert", which a site row cannot bind \(use "normal", "visual", "visual_line" or "caret"\)/);
+  assert.match(refused ?? "", /names the mode "insert", which a site row cannot bind \(use "normal", "visual", "visual_line", "caret" or "item"\)/);
 });
 
 test("the same key in bind and keymap.normal is refused with the key named", () => {
@@ -157,7 +157,7 @@ test("the config build resolves keymap binds, checks them against their mode and
   const row = good.settings.site_rules?.[0] as unknown as { keymap: { visual: Record<string, unknown> } };
   assert.deepEqual(row.keymap.visual["x"], { id: "find.open" });
   assert.equal((row.keymap.visual["y"] as unknown[]).length, 2);
-  assert.match(problems_of(`[[site_rules]]\nsite = "${SITE}"\n[site_rules.keymap.visual]\nn = "tab.next"\n`), /keymap "visual" bind "n" of "https:\/\/a\.test\/\*": tab\.next runs in normal mode, not visual/);
+  assert.match(problems_of(`[[site_rules]]\nsite = "${SITE}"\n[site_rules.keymap.visual]\nn = "tab.undo_close"\n`), /keymap "visual" bind "n" of "https:\/\/a\.test\/\*": tab\.undo_close runs in normal mode, not visual/);
   assert.match(problems_of(`[[site_rules]]\nsite = "${SITE}"\n[site_rules.keymap.visual]\nn = "no.such"\n`), /keymap "visual" bind "n"/);
 });
 

@@ -33,6 +33,7 @@ define("scroll.pages", {
   bridge: true,
   runs_in: "content",
   count: { param: "count" },
+  modes: ["normal", "item"],
 });
 
 define("scroll.to", {

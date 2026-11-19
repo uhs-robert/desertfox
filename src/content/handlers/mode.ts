@@ -8,7 +8,7 @@ import type { ContentHandler } from "./types.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./page.ts";
 import { best_effort } from "../../shared/swallow.ts";
 
-export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line"] as const;
+export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line", "item"] as const;
 
 // A caret mode answers once caret.js has set it.
 export const mode_set: ContentHandler = {

@@ -85,9 +85,9 @@ test("the , group holds the DesertFox commands", () => {
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",s"], { id: "help.open", args: { name: "settings" }, label: "Settings page" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",t"], { id: "settings.toggle", prompt: { param: "name" } });
   assert.equal(DEFAULT_KEYMAP.normal?.[",j"], undefined);
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle item navigator" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, { id: "mode.set", args: { mode: "item" }, label: "Item mode" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",?"], { id: "help.whichkey" });
-  for (const mode of ["normal", "caret", "visual", "visual_line", "media", "insert", "hint"] as const) {
+  for (const mode of ["normal", "caret", "visual", "visual_line", "media", "item", "insert", "hint"] as const) {
     assert.deepEqual(DEFAULT_KEYMAP[mode]?.["<A-?>"], { id: "help.whichkey", label: "Show the keys" }, mode);
   }
   assert.equal(DEFAULT_KEYMAP.ignore?.["<A-?>"], undefined);
@@ -176,7 +176,8 @@ test("every command has a one-line description that ends with a period", () => {
 
 test("the default keymap names places and hint actions by the new words", () => {
   const old_words = ["current", "new_tab", "new_window"];
-  const written = JSON.stringify(DEFAULT_KEYMAP);
+  // The item keys have a direction named current, which is no place of a hint.
+  const written = JSON.stringify(DEFAULT_KEYMAP).replaceAll('"direction":"current"', "");
   for (const word of old_words) assert.ok(!written.includes(`"${word}"`), word);
 });
 
