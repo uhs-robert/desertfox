@@ -450,9 +450,9 @@ test("the default insert keymap binds <A-Escape> to send Escape to the focused e
 
 test("default_site_rows_off turns off both sheets rows", async () => {
   const compiled = with_defaults({ default_site_rows_off: ["sheets"] });
-  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "amazon", "amazon", "reddit", "reddit", "drive"]);
+  assert.deepEqual(compiled.site_rules?.map((rule) => rule.origin === "default" && rule.name), ["maps", "maps", "arrow", "google_images", "google_images", "google_videos", "google_videos", "google_videos", "google_videos", "google_news", "google_news", "google_short_videos", "google_short_videos", "google_shopping", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi_images", "kagi", "brave_images", "brave", "google", "bing", "hackernews", "wikipedia", "wikipedia", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "amazon", "amazon", "reddit", "reddit", "drive"]);
   for (const url of [SHEETS, SHEETS_DOMAIN]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 47);
+  assert.equal(with_defaults({ default_site_rows_off: ["other"] }).site_rules?.length, 49);
 });
 
 test("the parked cell editor rule leaves with default_site_rows_off, and a user editable_remove replaces the shipped list", async () => {
@@ -596,7 +596,7 @@ test("the search rows: kagi passes j and k, ddg binds them to page.item in item 
   assert.equal(await key_at(compiled, brave, "j"), "ArrowDown");
   assert.equal(await key_at(compiled, brave, "k"), "ArrowUp");
   for (const url of ["https://duckduckgo.com/?q=cats", "https://example.test/"]) assert.notEqual(await key_at(compiled, url, "j"), "ArrowDown");
-  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 44);
+  assert.equal(with_defaults({ default_site_rows_off: ["ddg", "kagi", "brave"] }).site_rules?.length, 46);
 });
 
 // The item keys a row decides: the ones that name a selector. The shipped item keys name none, so a page without a row reads as undefined.
