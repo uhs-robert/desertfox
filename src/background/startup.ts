@@ -566,6 +566,8 @@ type PathWrites = {
 };
 const path_writes = new Map<string, PathWrites>();
 const MAX_REPLAYS_IN_A_ROW = 3;
+// Successful writes settled so far, of any path. A folder read taken before another path's write settled can hold that file's old text.
+let writes_landed = 0;
 
 function writes_of(path: string): PathWrites {
   let writes = path_writes.get(path);
@@ -608,9 +610,10 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
     if (started === undefined) return outcome ?? (pick && writes.end);
     if ("kind" in started) return started;
     const reply = await started.reply;
+    const landed_before_read = writes_landed;
     const folder = changed_on_disk(reply) ? await read_folder_after_write() : undefined;
     const settled = await in_queue(async () => {
-      const shared = await settle_host_write(started, reply, folder);
+      const shared = await settle_host_write(started, reply, folder && { ...folder, current: writes_landed === landed_before_read });
       if (reply.ok && holds_pick(started)) pick_written = true;
       return replaced() ?? shared;
     });
@@ -644,8 +647,11 @@ const changed_on_disk = (reply: HostWriteReply) => !reply.ok && reply.error inst
 
 const read_folder_after_write = () => native_host.read_config().catch(warn_and_go("read the folder after a config file write"));
 
-// In the change queue. Applies the host's reply to the record once, however many callers waited on the write. `folder` is the folder read after a refusal, undefined when it could not be read.
-function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: ConfigFilesReply | undefined): Promise<SettledWrite> {
+// The folder read after a refusal. `current` is false when another path's write settled since the read began, so the read can hold that file's text from before the write.
+type FolderAfterRefusal = ConfigFilesReply & { current: boolean };
+
+// In the change queue. Applies the host's reply to the record once, however many callers waited on the write. `folder` is undefined when it could not be read.
+function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: FolderAfterRefusal | undefined): Promise<SettledWrite> {
   const writes = writes_of(write.path);
   if (writes.out === write) delete writes.out;
   if (reply.ok) writes.replays_in_a_row = 0;
@@ -653,7 +659,7 @@ function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: Conf
   return write.outcome;
 }
 
-async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, folder: ConfigFilesReply | undefined): Promise<SettledWrite> {
+async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, folder: FolderAfterRefusal | undefined): Promise<SettledWrite> {
   if (!reply.ok && !(reply.error instanceof NativeHostError)) throw reply.error;
   const { path } = write;
   const writes = writes_of(path);
@@ -669,6 +675,8 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
     if (error.failure === "file_changed") {
       // Both sides changed. The record stays for a retry when the folder cannot be read.
       if (!folder) return { kind: "failed", reason: `${path} changed on disk, and the config folder could not be read again` };
+      // A replay of that read puts the other file back at its old text in the copy, so the write runs again and reads the folder anew.
+      if (!folder.current) return { kind: "superseded" };
       if (writes.replays_in_a_row < MAX_REPLAYS_IN_A_ROW && (await replay_edits_onto_folder(path, unsynced, folder))) {
         writes.replays_in_a_row += 1;
         return { kind: "superseded" };
@@ -683,6 +691,7 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
     if (error.failure === "no_permission" || error.failure === "host_missing") return { kind: "waiting" };
     return { kind: "failed", reason: error.message };
   }
+  writes_landed += 1;
   const { files } = await load_files_source();
   const folder_now: UnsyncedFiles = { ...unsynced, [path]: write.text };
   // The folder now matches the copy wherever it matched before the edit, so a copy that held no other browser change still holds none, and the next start does not ask.

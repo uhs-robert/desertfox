@@ -64,3 +64,12 @@ export function install_fake_browser(host: { files: Files; reply?: () => Promise
   Object.assign(globalThis, { browser: fake });
   return { local, session, tabs, told, sent, fake };
 }
+
+// Waits until `condition` holds, so a test that waits for a write to go out does not race a fixed pause on a loaded machine.
+export async function until(condition: () => boolean, what: string, deadline_ms = 5000): Promise<void> {
+  const deadline = Date.now() + deadline_ms;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`gave up waiting: ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
