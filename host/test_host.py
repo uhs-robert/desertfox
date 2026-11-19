@@ -733,6 +733,21 @@ class WriteConfigFileTest(ConfigDirCase):
         with open(target, "rb") as file:
             self.assertEqual(file.read(), b"old = 1\n")
 
+    def test_a_file_saved_at_the_name_right_after_the_delete_renamed_it_stays(self):
+        path = self.put("themes/mine.toml", "old = 1\n")
+        real_rename = os.rename
+
+        def rename_then_save(source, destination):
+            real_rename(source, destination)
+            with open(path, "w", encoding="utf-8") as file:
+                file.write("newer = 7\n")
+
+        with mock.patch.object(host.os, "rename", side_effect=rename_then_save):
+            reply = self.write("theme", "mine", None, sha("old = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read("themes/mine.toml"), b"newer = 7\n")
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+
     def test_a_link_whose_target_was_edited_just_before_its_delete_goes_back_as_a_link(self):
         link, target = self.linked_theme("old = 1\n")
 
