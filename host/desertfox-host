@@ -423,6 +423,9 @@ def delete_config_file(path, base):
     if unchanged:
         with contextlib.suppress(OSError):
             os.unlink(aside)
+        # A save that created the name again after the rename is newer than the delete: it stays, and the delete refuses.
+        if os.path.lexists(path):
+            raise changed
         return {"path": path, "deleted": True}
     # No inode was written, so any file now at the name is a newer save: it stays, and the old entry stays aside.
     if read_error is None:
