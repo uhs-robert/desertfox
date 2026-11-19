@@ -36,8 +36,8 @@ export type Matcher = {
 export type KeyFlowDeps = {
   get_mode_: () => Mode;
   take_pass_next_: () => boolean;
-  // `repeat` is true for an auto-repeat keydown of a held key.
-  run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => void;
+  // `repeat` is true for an auto-repeat keydown of a held key. Returns true when no leaf ran (every guard failed), so the page keeps the key.
+  run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => boolean | void;
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
   // True when the site row lets the page keep Escape while a field is focused.
@@ -178,8 +178,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const listing = listed(typed);
     deps.on_prefix_(result.kind_ === "pending" && listing.length > 0 ? { mode, typed_: listing } : undefined);
     if (result.kind_ === "match") {
-      deps.run_leaf_(result.leaf, result.count, repeat);
-      return "cancel";
+      return deps.run_leaf_(result.leaf, result.count, repeat) ? "pass" : "cancel";
     }
     if (result.kind_ === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.

@@ -1,4 +1,4 @@
-// Site row binds guarded by `when_present`. The shipped google row on a test address: gg and G go to the first and last result, and on a page that shows no result they keep the plain scroll to the top and bottom. A user row with a choice list: one key does one thing while a grid shows and another while a list shows, as two views toggled by a button, and the plain key once neither shows.
+// Site row binds guarded by `when_present`. The shipped google row on a test address: gg and G go to the first and last result, and on a page that shows no result they keep the plain scroll to the top and bottom. A user row with a choice list: one key does one thing while a grid shows and another while a list shows, as two views toggled by a button, and the plain key once neither shows. A guarded bind on a key with no default leaf runs while its guard holds and hands the key to the page once it fails.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
@@ -21,6 +21,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "google").row;
     const lines = ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ends_*"', ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`)];
     lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=views_*"', `bind = { l = [{ run = "page.item --direction=right ${GRID}", when_present = "${GRID}" }, { run = "page.item --direction=first ${LIST}", when_present = "${LIST}" }] }`);
+    lines.push("", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=pass_*"', `bind = { Q = { run = "page.item --direction=first ${LIST}", when_present = "${LIST}" } }`);
     appendFileSync(join(dir, "settings.toml"), [...lines, ""].join("\n"));
     await load_config_dir(dir);
   });
@@ -129,5 +130,38 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("l scrolled the page right", async () => (await in_active_tab("scrollX")) > 0);
     await sleep(100);
     expect((await focused()) === "", `l focused ${await focused()}`);
+  });
+
+  // Q is bound nowhere by default, so a failed guard leaves nothing to fall back to.
+  const open_pass = async (id, with_list) => {
+    await open_page("controls", `pass_${id}`, { new_tab: true });
+    await in_active_tab(`(() => {
+      window.seen_keys = [];
+      document.addEventListener("keydown", (event) => event.key !== "Shift" && window.seen_keys.push(event.key));
+      if (${with_list}) {
+        const list = document.createElement("table");
+        list.className = "list";
+        list.innerHTML = '<tr class="row" id="w0" tabindex="0"><td>row 0</td></tr>';
+        document.body.prepend(list);
+      }
+      document.activeElement?.blur();
+      return true;
+    })()`);
+  };
+  const seen_keys = () => in_active_tab("window.seen_keys.join('')");
+
+  await run_case("a guarded key with no default leaf reaches the page once its guard fails", async () => {
+    await open_pass("fails", false);
+    await press_keys("Q");
+    await poll_until("the page to see Q", async () => (await seen_keys()) === "Q");
+    await sleep(100);
+    expect((await focused()) === "", `Q focused ${await focused()}`);
+  });
+
+  await run_case("the same key runs its bind and stays from the page while the guard holds", async () => {
+    await open_pass("holds", true);
+    await press_keys("Q");
+    await expect_focus("w0");
+    expect((await seen_keys()) === "", `the page saw ${await seen_keys()}`);
   });
 }

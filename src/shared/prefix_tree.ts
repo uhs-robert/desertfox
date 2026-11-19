@@ -34,7 +34,7 @@ export type TreeLeaf = {
   label?: string;
   // The which-key hover text the binding wrote. Without one the row shows the command intent.
   intent?: string;
-  // A site row bind's guards (`when_focus` and `when_present` in `invocation.ts`), and the leaf that runs when a guard fails: the next choice of a choice list, else the leaf the bind replaced. Without `otherwise` a key whose guard fails does nothing.
+  // A site row bind's guards (`when_focus` and `when_present` in `invocation.ts`), and the leaf that runs when a guard fails: the next choice of a choice list, else the leaf the bind replaced. Without `otherwise` a key whose guard fails goes to the page.
   when_focus?: string;
   when_present?: string;
   otherwise?: TreeLeaf;

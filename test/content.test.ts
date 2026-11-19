@@ -41,7 +41,7 @@ function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefi
     escape_to_page_: () => escape_to_page,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
-    run_leaf_: (matched, count, repeat) => ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
+    run_leaf_: (matched, count, repeat) => void ran.push(`${matched.steps[0]?.invocation.id}${count ?? ""}${repeat ? "!" : ""}`),
     leave_insert_: () => state.escape(),
     is_loading_: () => loading.on,
     loading_sink_bundles_: () => [],
@@ -731,6 +731,41 @@ test("a key repeat reaches run_leaf_ as true, and a first press, a replayed key 
   flow.handle_token_("j");
   flow.handle_token_("<A-j>", true);
   assert.deepEqual(ran, ["down!", "down", "next_tab"]);
+});
+
+// A flow whose run_leaf_ answers `true` for every leaf, as main.ts does when every guard of a bound key fails.
+function make_passing_flow() {
+  const state = create_mode_state();
+  const ran: string[] = [];
+  const replayed_to_page: string[] = [];
+  const flow = create_key_flow({
+    in_editable_field_: () => false,
+    escape_to_page_: () => false,
+    get_mode_: state.get_mode_,
+    take_pass_next_: state.take_pass_next_,
+    run_leaf_: (matched) => (ran.push(String(matched.steps[0]?.invocation.id)), true),
+    leave_insert_: () => state.escape(),
+    is_loading_: () => false,
+    loading_sink_bundles_: () => [],
+    sink_of_: () => undefined,
+    on_prefix_: () => {},
+  });
+  return { ran, replayed_to_page, flow };
+}
+
+test("a leaf that ran nothing because its guards failed passes the key, and a browser chord stays cancelled", () => {
+  const { flow, ran } = make_passing_flow();
+  flow.set_matcher_(create_matcher(keymap), keymap.modes.browser);
+  assert.equal(flow.handle_token_("j"), "pass");
+  assert.equal(flow.handle_token_("<A-j>"), "cancel");
+  assert.deepEqual(ran, ["down", "next_tab"]);
+});
+
+test("a held key whose leaf ran nothing goes back to the page on replay", () => {
+  const { flow, ran, replayed_to_page } = make_passing_flow();
+  assert.equal(flow.handle_token_("j", false, () => replayed_to_page.push("j")), "cancel");
+  flow.set_matcher_(create_matcher(keymap), keymap.modes.browser);
+  assert.deepEqual([ran, replayed_to_page], [["down"], ["j"]]);
 });
 
 const cyrillic_press = (key: string, code: string, mods: Partial<KeyEventLike> = {}): KeyEventLike => ({ key, code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods });
