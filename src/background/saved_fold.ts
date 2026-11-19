@@ -8,7 +8,7 @@ import type { SettingOverrides, Settings } from "../shared/config.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
-import { rows_in_settings_file, settings_d_file_that_sets, with_setting_in_files } from "./settings_file.ts";
+import { rows_in_settings_file, settings_d_file_that_hides, settings_d_site_rules, with_setting_in_files } from "./settings_file.ts";
 import { saved_pass_rows } from "./site_keys.ts";
 import type { TomlValue } from "./toml_key_edit.ts";
 import { saved_popup_rows } from "./toolbar.ts";
@@ -56,7 +56,7 @@ export function saved_layer_folded(saved: SettingOverrides, files: ConfigFiles, 
 // A settings.d file that does not parse sets nothing the fold can tell. The files build then refuses the write of the name and says why.
 function settings_d_file_setting(files: ConfigFiles, name: SettingName): string | undefined {
   try {
-    return settings_d_file_that_sets(files, name);
+    return settings_d_file_that_hides(files, name);
   } catch (error) {
     if (error instanceof TomlError) return undefined;
     throw error;
@@ -92,11 +92,13 @@ function with_saved_value(files: ConfigFiles, saved: SettingOverrides, name: Set
 }
 
 // A saved `site_rules` list is the popup's from before it wrote settings.toml: copies of the file's rows taken at its first write, plus its own rows.
-// The file's rows stand for the copies, edits since included, so only the popup's off rows and kept-keys rows the file lacks go in, as the popup's next write would put them.
+// The files' rows stand for the copies, edits since included, so only the popup's off rows and kept-keys rows no file has go in, as the popup's next write would put them.
+// A row a settings.d file has counts as present, so a second run after a half-finished one adds nothing twice.
 function with_saved_site_rules(files: ConfigFiles, saved: readonly SiteRuleRow[] | undefined): ConfigFiles {
   const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
+  const present_rows = [...file_rows, ...settings_d_site_rules(files).map(({ row }) => row)];
   const patterns = [...new Set((saved ?? []).map((row) => row.site))];
-  const added = [...saved_popup_rows(file_rows, saved), ...patterns.flatMap((pattern) => saved_pass_rows(file_rows, saved, pattern))];
+  const added = [...saved_popup_rows(present_rows, saved), ...patterns.flatMap((pattern) => saved_pass_rows(present_rows, saved, pattern))];
   return added.length === 0 ? files : with_setting_in_files(files, "site_rules", [...file_rows, ...added] as TomlValue);
 }
 

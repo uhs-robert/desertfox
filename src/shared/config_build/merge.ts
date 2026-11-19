@@ -1,6 +1,6 @@
 // Merges the layers of each data kind. `search_keys`, `container_keys` and `site_keys` stay
 // as written: the background's keymap compiler expands them.
-// A later layer wins per key. Nothing here knows the command list, so binding
+// A later layer wins per key, except `site_rules`, whose layers add up. Nothing here knows the command list, so binding
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
 import { MODES } from "../command.ts";
@@ -8,6 +8,7 @@ import type { SearchEngine, Settings } from "../config.ts";
 import { nodes_of_file, resolve_engines } from "../engines/index.ts";
 import type { EngineNode } from "../engines/index.ts";
 import type { KeymapConfig } from "../keymap.ts";
+import type { SiteRuleRow } from "../match_pattern.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { is_plain_object } from "./errors.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../settings_schema.ts";
@@ -30,6 +31,9 @@ export type MergedData = {
 export function origin_key(section: string, key: string): string {
   return `${section}\u0000${key}`;
 }
+
+// The section of the per-row origins of `site_rules`, which concatenates across files. The key is the row's index in the merged list.
+export const SITE_RULE_ROW_SECTION = "settings.site_rules";
 
 function merge_map_layers(
   layers: DataLayer[],
@@ -156,7 +160,26 @@ function merge_quickmarks(layers: DataLayer[], origins: Origins, problems: strin
   }) as Record<string, string>;
 }
 
+// The `site_rules` rows of settings layers in merge order, each with its file. Layers whose value fails the setting's check add nothing, as in the merge.
+// The popup's recheck reads the files through this too, so it judges the list the build produces.
+export function site_rule_rows(layers: readonly DataLayer[]): { file: string; row: SiteRuleRow }[] {
+  return layers.flatMap((layer) => {
+    const rows = layer.data.site_rules;
+    return SETTING_SPECS.site_rules.check(rows) ? (rows as SiteRuleRow[]).map((row) => ({ file: layer.file, row })) : [];
+  });
+}
+
+// `site_rules` is the one setting whose files add up: settings.toml's rows, then each settings.d file's in name order. The first matching row decides a column, so an earlier file wins, the reverse of a scalar.
+// Each row keeps its file in `origins` under its index, so a message names the file of the row.
 function merge_settings(layers: DataLayer[], origins: Origins, problems: string[]) {
+  const merged = merge_setting_layers(layers, origins, problems);
+  const rows = site_rule_rows(layers);
+  rows.forEach(({ file }, index) => origins.set(origin_key(SITE_RULE_ROW_SECTION, String(index)), file));
+  if (Object.hasOwn(merged, "site_rules")) merged.site_rules = rows.map(({ row }) => row);
+  return merged;
+}
+
+function merge_setting_layers(layers: DataLayer[], origins: Origins, problems: string[]): Partial<Settings> {
   return merge_map_layers(layers, "settings", origins, (value, where, name) => {
     if (!is_setting_name(name)) {
       problems.push(`${where}: unknown setting (known: ${SETTING_NAMES.join(", ")})`);

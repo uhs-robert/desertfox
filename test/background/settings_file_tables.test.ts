@@ -96,15 +96,74 @@ test("Enable removes the popup's rows for the site and keeps the user's rows for
   assert.ok(host.files["settings.toml"].includes("# everywhere\n[[site_rules]]\nsite = \"*://*/*\"\npass = \"q\"\n"));
 });
 
-test("site_rules in a settings.d file refuses both clicks and names the file, and nothing is written", async () => {
-  const host = { files: { "settings.toml": MINE, "settings.d/10-sites.toml": `[[site_rules]]\nsite = "${NEWS}"\noff = true\n` } };
+const D_FILE = "settings.d/10-sites.toml";
+const d_row = (site: string, column: string) => `[[site_rules]]\nsite = "${site}"\n${column}\n`;
+const written = (sent: { cmd: string }[]) => sent.filter((message) => message.cmd === "write_config_file");
+
+test("a settings.d file that sets site_rules no longer blocks the popup: rows join the end of settings.toml and the file stays as it is", async () => {
+  const other = d_row("*://*.other.test/*", 'pass = "q"');
+  const host = { files: { "settings.toml": MINE, [D_FILE]: other } };
+  const { startup } = await reloaded(host);
+  assert.deepEqual(await startup.change_site_rule_in_file(NEWS_PAGE, "disable"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], WITH_NEWS);
+  assert.equal(host.files[D_FILE], other);
+  // settings.toml's rows come first, then the file's.
+  assert.deepEqual(await site_rules_in_force(startup), [{ site: FORUM, pass: "j k" }, { site: NEWS, off: true }, { site: "*://*.other.test/*", pass: "q" }]);
+  assert.deepEqual(await startup.change_site_rule_in_file(NEWS_PAGE, "enable"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], MINE);
+});
+
+test("a settings.d row that turns the site on cannot beat the popup's row, which sits before it", async () => {
+  const host = { files: { "settings.toml": MINE, [D_FILE]: d_row(NEWS, "off = false") } };
+  const { startup } = await reloaded(host);
+  assert.deepEqual(await startup.change_site_rule_in_file(NEWS_PAGE, "disable"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], WITH_NEWS);
+});
+
+test("a settings.d row that turns the site off refuses Enable and names the file, and nothing is written", async () => {
+  const host = { files: { "settings.toml": WITH_NEWS, [D_FILE]: d_row("*://*.news.test/*", "off = true") } };
   const { local, sent, startup } = await reloaded(host);
   sent.length = 0;
-  for (const action of ["disable", "enable"] as const) {
-    await assert.rejects(startup.change_site_rule_in_file(NEWS_PAGE, action), (error: unknown) => error instanceof RuntimeRefusal && error.message === "settings.d/10-sites.toml sets site_rules, and it wins over settings.toml. Change it there.");
+  await assert.rejects(startup.change_site_rule_in_file(NEWS_PAGE, "enable"), (error: unknown) => error instanceof RuntimeRefusal && error.message === `Not enabled: another rule in site_rules turns this site off. Change it in ${D_FILE}.`);
+  assert.equal(stored_settings(local), WITH_NEWS);
+  assert.deepEqual(written(sent), []);
+});
+
+test("a row in settings.toml that keeps the site on is named as settings.toml even when a settings.d file also has rows", async () => {
+  const keep_on = `${MINE}\n[[site_rules]]\nsite = "*://www.news.test/*"\noff = false\n`;
+  const host = { files: { "settings.toml": keep_on, [D_FILE]: d_row(NEWS, "off = false") } };
+  const { startup } = await reloaded(host);
+  await assert.rejects(startup.change_site_rule_in_file(NEWS_PAGE, "disable"), (error: unknown) => error instanceof RuntimeRefusal && error.message === "Not disabled: an earlier rule in site_rules keeps this site on. Change it in settings.toml.");
+});
+
+test("the keys form writes its row to settings.toml with a settings.d site_rules file present", async () => {
+  const host = { files: { "settings.toml": MINE, [D_FILE]: d_row("*://*.other.test/*", 'pass = "q"') } };
+  const { startup } = await reloaded(host);
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, "x"), { kind: "written" });
+  const rows = (parse(host.files["settings.toml"]) as { site_rules: { site: string }[] }).site_rules;
+  assert.deepEqual(JSON.parse(JSON.stringify(rows)), [{ site: FORUM, pass: "j k" }, { site: NEWS, pass: "x" }]);
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, null), { kind: "written" });
+  assert.equal(host.files["settings.toml"], MINE);
+});
+
+test("a popup write and a reload that picks up a new settings.d file, in either order, leave one popup row and the combined list in force", async () => {
+  const blocker = d_row("*://*.news.test/*", "off = true");
+  for (const write_first of [true, false]) {
+    const host = { files: { "settings.toml": MINE } as Files };
+    const { startup } = await reloaded(host);
+    // The file lands on disk while the click is on its way.
+    host.files[D_FILE] = blocker;
+    const click = () => startup.change_site_rule_in_file(NEWS_PAGE, "disable");
+    const reload = () => startup.reload_config();
+    const [first, second] = write_first ? [click(), reload()] : [reload(), click()];
+    await Promise.all([first, second]);
+    // A second reload settles whatever the order left in the browser copy.
+    await startup.reload_config();
+    const rows = (parse(host.files["settings.toml"]!) as { site_rules: { site: string }[] }).site_rules;
+    assert.equal(rows.filter((row) => row.site === NEWS).length, 1, `write_first ${write_first}`);
+    assert.deepEqual(await site_rules_in_force(startup), [{ site: FORUM, pass: "j k" }, { site: NEWS, off: true }, { site: NEWS, off: true }]);
+    assert.equal(host.files[D_FILE], blocker);
   }
-  assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
 });
 
 test("a site_rules list saved in the browser goes away on the next click, and only its popup rows join the file", async () => {

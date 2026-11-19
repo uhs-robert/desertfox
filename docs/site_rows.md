@@ -378,7 +378,7 @@ site = "*://docs.example.org/*"
 only = "G"            # keep only these keys on
 ```
 
-A rule can set `pass` or `only`, not both. A rule with nothing but `site` turns the keys off. For each field, the first rule that matches the page and sets that field decides. Edit the file, then run `config.reload`, or edit the same text in Settings under Advanced. The Your site rules section of Settings lists what each rule does. The Override a row section below covers `bind` and the rest.
+A rule can set `pass` or `only`, not both. A rule with nothing but `site` turns the keys off. For each field, the first rule that matches the page and sets that field decides. Rules add up across files: the rows of `settings.toml` come first, then each file of `settings.d` in name order, then the shipped rows. The earlier row wins, which is the reverse of a plain setting, where the later file wins. Put a row that must win in `settings.toml` or in an earlier-named file. Edit the file, then run `config.reload`, or edit the same text in Settings under Advanced. The Your site rules section of Settings lists what each rule does. The Override a row section below covers `bind` and the rest.
 
 ## Turn a row off
 
