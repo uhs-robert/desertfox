@@ -248,8 +248,10 @@ def write_settings(request):
 
     Host writers take a lock. An editor takes none, so the old file is hard-linked aside before the rename and checked
     after it: an edit saved into it in the meantime, or an old file that cannot be read, puts it back and refuses. A
-    filesystem without hard links refuses every write. An editor that saves by renaming a new file over settings.toml in
-    the microseconds between the last check and the rename is not caught."""
+    filesystem without hard links refuses every write. Before it puts the old file back, it checks that settings.toml is
+    still the file it renamed in: a save renamed over it since stays, the old file stays aside, and the write refuses.
+    Two windows of microseconds stay open: an editor that renames a new file over settings.toml between the last check
+    and the rename is not caught, and neither is one that does so between that inode check and the put-back."""
     checked_fields(request, {"text", "base_sha256"}, "write_settings")
     text, base = request.get("text"), request.get("base_sha256")
     if not isinstance(text, str):
@@ -279,6 +281,7 @@ def write_settings(request):
                 file.write(data)
                 file.flush()
                 os.fsync(file.fileno())
+                written_inode = os.fstat(file.fileno()).st_ino
             os.chmod(temporary, mode)
             # A dotfiles tool can point the link elsewhere while the text was written.
             if os.path.realpath(path) != target or settings_digest(target, path) != base:
@@ -303,6 +306,10 @@ def write_settings(request):
             os.replace(temporary, target)
             # The aside link shares the old file, so an editor that wrote into it after the check shows here.
             if not holds_digest(aside, base):
+                # An editor that renamed its save over the new text since is newer than the edit aside, so both stay.
+                if os.stat(target).st_ino != written_inode:
+                    kept, aside = aside, None
+                    raise HostError(f"{path} was edited twice during the write, so it holds the newer save and the older edit is in {kept}. Compare the two files.")
                 try:
                     os.replace(aside, target)
                 except OSError as error:
