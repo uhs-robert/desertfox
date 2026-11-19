@@ -69,10 +69,6 @@ export function site_rows_without_pass(rows: readonly SiteRuleRow[], pattern: st
   return kept.length === rows.length ? undefined : kept;
 }
 
-// The `{site, pass}` rows for `pattern` that a list saved in the browser holds and the file lacks. They go into the file with the next change, as the popup's saved rows do.
-export const saved_pass_rows = (file_rows: readonly SiteRuleRow[], saved: readonly SiteRuleRow[] | undefined, pattern: string): SiteRuleRow[] =>
-  pass_row_for(file_rows, pattern) === undefined ? (saved ?? []).filter((row) => row.site === pattern && is_pass_shaped(row)).slice(0, 1) : [];
-
 export type SiteKeysDeps = {
   // Writes the change into settings.toml (`change_site_keys_in_file`) and gives back what became of the file as the end of the answer.
   // `unchanged`: a Remove found no row.

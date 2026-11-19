@@ -527,7 +527,10 @@ export function change_site_keys_in_file(pattern: string, keys: string | null): 
   return change_setting_in_file<{ kind: "unchanged" }>("site_rules", async (files) => {
     const file_rows = rows_in_settings_file(files, "site_rules") as SiteRuleRow[];
     const saved_list = (await load_edits()).saved.site_rules;
-    const rows = [...file_rows, ...saved_rows_to_keep(files, saved_list)];
+    // A saved kept-keys row for a site a file already has keys for would sit behind that row, so the form leaves it out.
+    const files_rows = [...file_rows, ...settings_d_site_rules(files).map(({ row }) => row)];
+    const has_keys_in_file = (site: string) => files_rows.some((row) => row.site === site && is_pass_shaped(row));
+    const rows = [...file_rows, ...saved_rows_to_keep(files, saved_list).filter((row) => !(is_pass_shaped(row) && has_keys_in_file(row.site)))];
     let rows_after: SiteRuleRow[];
     if (keys === null) {
       const removed = site_rows_without_pass(rows, pattern);
