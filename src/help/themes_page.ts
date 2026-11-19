@@ -1,5 +1,5 @@
 // Draws the import-a-theme section under the theme picker from a themes session (`themes_model.ts`): a box for pasted text or a picked file,
-// a live preview of the hint label, mode badges, toasts and which-key panel in the scheme's colors, and the list of imported themes with a Remove button each.
+// a live preview of the hint label, mode badges, toasts and which-key panel in the scheme's colors, and the list of theme files with a Remove button each.
 
 import { el } from "./render.ts";
 import { button, picker } from "./transfer_page.ts";
@@ -7,7 +7,7 @@ import { can_save, create_themes_session, name_problem } from "./themes_model.ts
 import type { ThemesDeps, ThemesSession } from "./themes_model.ts";
 import type { ImportedScheme } from "../shared/theme/base16.ts";
 import { role_tokens } from "../shared/theme/tokens.ts";
-import { THEME_EDITS_STORAGE_KEY } from "../background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY } from "../background/storage_keys.ts";
 
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
@@ -77,12 +77,12 @@ export function mount_themes(container: HTMLElement, deps: Omit<ThemesDeps, "on_
     confirm_box.replaceChildren(
       ...(state.replacing === undefined
         ? []
-        : [el("span", undefined, `A theme named ${state.replacing.name} is already imported. Replace it?`), button("Replace", () => void session.confirm_replace(), state.busy), button("Keep the old one", () => session.cancel_replace())]),
+        : [el("span", undefined, `A theme named ${state.replacing.name} already exists. Replace it?`), button("Replace", () => void session.confirm_replace(), state.busy), button("Keep the old one", () => session.cancel_replace())]),
     );
     message.textContent = state.message?.text ?? "";
     message.className = state.message?.ok === false ? "desertfox-settings-error" : "desertfox-help-muted";
     if (state.names.length === 0) {
-      list.replaceChildren(el("p", "desertfox-help-muted", state.loaded ? "You have imported no theme yet." : "Loading..."));
+      list.replaceChildren(el("p", "desertfox-help-muted", state.loaded ? "You have no theme files yet." : "Loading..."));
       return;
     }
     const rows = state.names.map((name) => {
@@ -90,7 +90,7 @@ export function mount_themes(container: HTMLElement, deps: Omit<ThemesDeps, "on_
       remove.setAttribute("aria-label", `Remove the theme ${name}`);
       return el("tr", undefined, el("td", undefined, el("code", undefined, name)), el("td", undefined, remove));
     });
-    list.replaceChildren(el("h4", undefined, "Imported themes"), el("table", "desertfox-keys-table", ...rows));
+    list.replaceChildren(el("h4", undefined, "Your theme files"), el("table", "desertfox-keys-table", ...rows));
   }
 
   session = create_themes_session({ ...deps, on_change: draw });
@@ -109,7 +109,7 @@ export function mount_themes(container: HTMLElement, deps: Omit<ThemesDeps, "on_
   );
   draw();
   const listener = (changes: Record<string, unknown>, area: string) => {
-    if (area === "local" && THEME_EDITS_STORAGE_KEY in changes) void session.refresh();
+    if (area === "local" && FILES_SOURCE_STORAGE_KEY in changes) void session.refresh();
   };
   storage_changed.addListener(listener);
   void session.refresh();

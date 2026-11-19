@@ -250,51 +250,6 @@ test("a theme name the files build does not know is refused before anything is s
   assert.deepEqual(sent, []);
 });
 
-// An import of the nord colors under a name of its own, as the settings page's importer stores it.
-const imported_theme = () => load_theme("nord", 3)!;
-
-test("an imported theme, which the files cannot name, goes to the saved edits and the file stays as it was", async () => {
-  const host = { files: { "settings.toml": MINE } };
-  const { local, session, sent, startup } = await reloaded(host);
-  await startup.change_layers("themes", () => ({ my_import: imported_theme() }));
-  await startup.change_edits((current) => ({ ...current, temp: { theme: "dracula" } }));
-  sent.length = 0;
-
-  assert.deepEqual(await startup.set_in_settings_file("theme", "my_import"), { kind: "saved_in_browser", missing: "theme" });
-  assert.equal(host.files["settings.toml"], MINE);
-  assert.equal(stored_settings(local), MINE);
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { theme: "my_import" });
-  assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], {});
-  assert.equal(unsynced_of(local), undefined);
-  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
-  assert.equal((await startup.get_config()).settings.theme, "my_import");
-
-  // A theme the files know goes to the file again and drops that saved edit.
-  assert.deepEqual(await startup.set_in_settings_file("theme", "nord"), { kind: "written" });
-  assert.equal(host.files["settings.toml"], with_theme("nord"));
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
-});
-
-test("an import that shares its name with a theme file goes to the file, which the build knows", async () => {
-  const host = { files: { "settings.toml": MINE, "themes/shared.toml": '[dark]\nbg_core = "#101010"\nfg_core = "#eeeeee"\nprimary = "#88aaff"\naccent = "#ffcc66"\n' } };
-  const { local, startup } = await reloaded(host);
-  await startup.change_layers("themes", () => ({ shared: imported_theme() }));
-  assert.deepEqual(await startup.set_in_settings_file("theme", "shared"), { kind: "written" });
-  assert.equal(host.files["settings.toml"], with_theme("shared"));
-  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
-});
-
-test("the settings message says an imported theme is saved in the browser", async () => {
-  const host = { files: { "settings.toml": MINE } };
-  const { startup } = await reloaded(host);
-  await startup.change_layers("themes", () => ({ my_import: imported_theme() }));
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
-  const answer = await messages.change({ type: "change_setting", name: "theme", action: "set", value: "my_import", layer: "file" });
-  assert.ok(answer.ok, answer.message);
-  assert.equal(answer.message, 'theme = "my_import", saved in the browser because the theme is not in your files');
-  assert.equal(answer.setting.top_layer, "saved");
-});
-
 test("the record of a lagging folder goes into the same storage write as the browser copy", async () => {
   const host = { files: { "settings.toml": MINE }, old_host: true };
   const { fake, startup } = await reloaded(host);
@@ -423,11 +378,13 @@ test("a host that never answers a write blocks no other change, at start or afte
   const { fake, startup } = await reloaded(host);
   await startup.set_in_settings_file("theme", "oasis_night");
   host.old_host = false;
-  hold_writes(fake);
+  const held = hold_writes(fake);
 
   const restarted = await fresh_startup();
   await restarted.get_config();
   void restarted.reload_config_at_start();
+  // The held write goes out inside this test, so it never reaches the host of a later one.
+  await until(() => held.length === 1, "the start's write did not go out");
   assert.ok(await settles_soon(restarted.change_edits((current) => ({ ...current, saved: { which_key_delay_ms: 5 } }))), "a :set waited on the start's host write");
 
   void restarted.set_in_settings_file("theme", "nord");
@@ -445,7 +402,7 @@ test("a pick during a write lands after it, from the text the first one left", a
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(held.length, 1, "a second write went out while the first was out");
   held.shift()!();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await until(() => held.length === 1, "the second write did not go out after the first");
   held.shift()!();
   assert.deepEqual(await Promise.all([first, second]), [{ kind: "written" }, { kind: "written" }]);
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));

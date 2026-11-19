@@ -465,7 +465,7 @@ export type ChangeQuickmarksAnswer = { ok: true; message: string } | { ok: false
 export type ListImportedThemes = { type: "list_imported_themes" };
 export type ListImportedThemesAnswer = { ok: true; names: string[] } | { ok: false; message: string };
 
-// From an extension page: saves the scheme in `text` under `name`, or removes the import of that name. The background parses the text itself, so a page cannot store a theme the parser would refuse.
+// From an extension page: saves the scheme in `text` as `themes/<name>.toml`, or removes that theme file. The background parses the text itself, so a page cannot store a theme the parser would refuse.
 // A save over an existing name is refused with `needs_replace` until the request says `replace: true`, so the page can ask first.
 export type ChangeImportedThemes = { type: "change_imported_themes"; action: "save"; name: string; text: string; replace?: boolean } | { type: "change_imported_themes"; action: "remove"; name: string };
 export type ChangeImportedThemesAnswer = { ok: true; message: string } | { ok: false; message: string; needs_replace?: true };
