@@ -117,6 +117,13 @@ test("a host from before write_config_file writes settings.toml through write_se
   assert.deepEqual(older.sent.at(-1), { cmd: "write_config_file", kind: "settings", text: null, base_sha256: "0".repeat(64) });
 });
 
+test("an error that only holds the words of an unknown verb, such as a folder named so, stays the host's error and is not sent again", async () => {
+  const error = "cannot write /home/u/unknown cmd: 'write_config_file'/settings.toml: the config folder /home/u/unknown cmd: 'write_config_file' does not exist";
+  const { client, sent } = client_with(async () => ({ ok: false, error }));
+  assert.equal(await failure_of(() => client.write_config_file("settings.toml", "a = 1\n", null)), "host_failed");
+  assert.equal(sent.length, 1);
+});
+
 test("write_config_file sends a theme by name and refuses a path the host has no kind for before sending", async () => {
   const { client, sent } = client_with(async () => ({ ok: true }));
   await client.write_config_file("themes/nord_dark.toml", null, "0".repeat(64));

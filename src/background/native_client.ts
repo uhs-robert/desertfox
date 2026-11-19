@@ -61,6 +61,9 @@ function describe_send_failure(error: unknown): NativeHostError {
   return new NativeHostError("host_failed", `The DesertFox native host failed to run (Firefox: ${text}). Run it by hand to see its output: ~/.local/share/desertfox/desertfox-host`);
 }
 
+// Whether the host refused `cmd` itself as a verb it does not know. Its whole refusal ends the message, so a path in another error that holds the words does not count.
+const refuses_unknown_verb = (error: NativeHostError, cmd: string): boolean => error.message.endsWith(`refused: unknown cmd: '${cmd}'`);
+
 export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
   // `watched: false` is the updater's own call: its reply must not start another update or wear the outdated label.
   async function call(request: { cmd: string } & Record<string, unknown>, watched = true): Promise<Record<string, unknown>> {
@@ -96,14 +99,16 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
   }
 
   // A write's refusals by their words: a hand edit since the read, an old file the host could not read back, and a host from before the verb.
-  async function write_call(request: { cmd: string } & Record<string, unknown>): Promise<void> {
+  // `older_verb` sends the same write through a verb such a host knows. Without one, that host reads as outdated.
+  async function write_call(request: { cmd: string } & Record<string, unknown>, older_verb?: () => Promise<void>): Promise<void> {
     try {
       await call(request);
     } catch (error) {
       if (!(error instanceof NativeHostError)) throw error;
       if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
       if (/could not be read back/.test(error.message)) throw new NativeHostError("file_not_read_back", error.message);
-      if (/unknown cmd/.test(error.message)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
+      if (refuses_unknown_verb(error, request.cmd) && older_verb) return older_verb();
+      if (refuses_unknown_verb(error, request.cmd)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
       throw error;
     }
   }
@@ -159,12 +164,8 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     write_config_file: async (path: string, text: string | null, base_sha256: string | null): Promise<void> => {
       const file = host_file_of(path);
       if (file === undefined) throw new Error(`The native host writes no file at ${path}`);
-      try {
-        await write_call({ cmd: "write_config_file", ...file, text, base_sha256 });
-      } catch (error) {
-        if (!(error instanceof NativeHostError && /unknown cmd/.test(error.message) && file.kind === "settings" && text !== null)) throw error;
-        await write_call({ cmd: "write_settings", text, base_sha256 });
-      }
+      const older_verb = file.kind === "settings" && text !== null ? () => write_call({ cmd: "write_settings", text, base_sha256 }) : undefined;
+      await write_call({ cmd: "write_config_file", ...file, text, base_sha256 }, older_verb);
     },
   };
 }
