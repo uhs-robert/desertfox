@@ -138,7 +138,7 @@ const DRIVE_BIND: BindingTable = {
   l: drive_key(DRIVE_GRID_ITEM, "ArrowRight", 39, "Move to the file on the right with Drive's own ArrowRight key (scrolls sideways in the list view)"),
 };
 
-// Each row that names its items in the `item` column also sets `item_navigator`, so its pages start in item mode while the global setting stays off. A user row with `item_navigator = false` comes first in the table and turns a site off again.
+// Each row that names its items in the `item` column marks its sites with `item_navigator = "shipped"`, so they start in item mode under the default global value `shipped` and under true, and not under false. A user row with its own value comes first in the table and decides the site.
 export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "sheets", row: { site: "https://docs.google.com/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
   { name: "sheets", row: { site: "https://docs.google.com/a/*/spreadsheets/*", bind: SHEETS_BIND, modes: { visual: SHEETS_VISUAL }, pass: SHEETS_PASS, escape_to_page: true, editable_remove: [SHEETS_TARGET], editable_remove_unsized: true } },
@@ -146,60 +146,60 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "maps", row: { site: "https://google.com/maps*", bind: MAPS_BIND, focus_on_load: MAPS_TARGET } },
   { name: "arrow", row: { site: "<all_urls>", modes: { arrow: ARROW_MODE } } },
   // The Google image rows sit before the `google` row, which matches the same address (a pattern cannot exclude udm=2). The two patterns end the udm value at an ampersand or at the end, so udm=28 stays out.
-  { name: "google_images", row: { site: "https://www.google.com/search*udm=2&*", keymap: { item: GOOGLE_IMAGE_TILES }, item_navigator: true } },
-  { name: "google_images", row: { site: "https://www.google.com/search*udm=2", keymap: { item: GOOGLE_IMAGE_TILES }, item_navigator: true } },
+  { name: "google_images", row: { site: "https://www.google.com/search*udm=2&*", keymap: { item: GOOGLE_IMAGE_TILES }, item_navigator: "shipped" } },
+  { name: "google_images", row: { site: "https://www.google.com/search*udm=2", keymap: { item: GOOGLE_IMAGE_TILES }, item_navigator: "shipped" } },
   // Each vertical row below sits before the `google` row for the same reason. Videos is udm=7 from the tab bar and udm=vids, where Google sends an old tbm=vid address. Books and Forums keep the web row, whose blocks fit them.
-  { name: "google_videos", row: { site: "https://www.google.com/search*udm=7&*", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: true } },
-  { name: "google_videos", row: { site: "https://www.google.com/search*udm=7", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: true } },
-  { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids&*", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: true } },
-  { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: true } },
-  { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws&*", keymap: { item: GOOGLE_NEWS_ITEMS }, item_navigator: true } },
-  { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws", keymap: { item: GOOGLE_NEWS_ITEMS }, item_navigator: true } },
-  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids&*", keymap: { item: GOOGLE_SHORT_VIDEO_TILES }, item_navigator: true } },
-  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids", keymap: { item: GOOGLE_SHORT_VIDEO_TILES }, item_navigator: true } },
-  { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28&*", keymap: { item: GOOGLE_SHOPPING_TILES }, item_navigator: true } },
-  { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28", keymap: { item: GOOGLE_SHOPPING_TILES }, item_navigator: true } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=7&*", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: "shipped" } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=7", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: "shipped" } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids&*", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: "shipped" } },
+  { name: "google_videos", row: { site: "https://www.google.com/search*udm=vids", keymap: { item: GOOGLE_VIDEO_ITEMS }, item_navigator: "shipped" } },
+  { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws&*", keymap: { item: GOOGLE_NEWS_ITEMS }, item_navigator: "shipped" } },
+  { name: "google_news", row: { site: "https://www.google.com/search*tbm=nws", keymap: { item: GOOGLE_NEWS_ITEMS }, item_navigator: "shipped" } },
+  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids&*", keymap: { item: GOOGLE_SHORT_VIDEO_TILES }, item_navigator: "shipped" } },
+  { name: "google_short_videos", row: { site: "https://www.google.com/search*udm=short_vids", keymap: { item: GOOGLE_SHORT_VIDEO_TILES }, item_navigator: "shipped" } },
+  { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28&*", keymap: { item: GOOGLE_SHOPPING_TILES }, item_navigator: "shipped" } },
+  { name: "google_shopping", row: { site: "https://www.google.com/search*udm=28", keymap: { item: GOOGLE_SHOPPING_TILES }, item_navigator: "shipped" } },
   // The vertical rows sit before the `ddg` row. The first row that binds a key decides it, so on the image vertical (iax=images), for one, its row wins over `ddg`, which matches the same address. Shopping is all ads, so it has no row.
-  { name: "ddg_images", row: { site: "https://duckduckgo.com/?*iax=images*", keymap: { item: DDG_IMAGE_TILES }, item_navigator: true } },
-  { name: "ddg_videos", row: { site: "https://duckduckgo.com/?*iax=videos*", keymap: { item: DDG_VIDEO_TILES }, item_navigator: true } },
-  { name: "ddg_news", row: { site: "https://duckduckgo.com/?*iar=news*", keymap: { item: DDG_NEWS_ITEMS }, item_navigator: true } },
+  { name: "ddg_images", row: { site: "https://duckduckgo.com/?*iax=images*", keymap: { item: DDG_IMAGE_TILES }, item_navigator: "shipped" } },
+  { name: "ddg_videos", row: { site: "https://duckduckgo.com/?*iax=videos*", keymap: { item: DDG_VIDEO_TILES }, item_navigator: "shipped" } },
+  { name: "ddg_news", row: { site: "https://duckduckgo.com/?*iar=news*", keymap: { item: DDG_NEWS_ITEMS }, item_navigator: "shipped" } },
   // DuckDuckGo's own j and k stop at the last result and never reach the More results button, so j and k walk the results through `page.item`. The ad blocks are `article[data-testid="ad"]`, so they stay out.
   // Its results and verticals all sit at `/?q=...` and a search from its home page loads that address afresh, so its settings and help pages keep j and k as scroll. The image, video and news verticals have their own rows above.
-  { name: "ddg", row: { site: "https://duckduckgo.com/?*", keymap: { item: DDG_ITEMS }, item_navigator: true } },
+  { name: "ddg", row: { site: "https://duckduckgo.com/?*", keymap: { item: DDG_ITEMS }, item_navigator: "shipped" } },
   // Kagi moves its own result highlight on j and k, so the keys go to the page. h, l, v and ' stay ours.
   { name: "kagi", row: { site: "https://kagi.com/search*", pass: "j k" } },
   // Brave moves its highlight on arrow keys only, so j and k send them to the focused element.
   { name: "brave", row: { site: "https://search.brave.com/search*", bind: { j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } }, k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 } } } } },
   // Google result pages on www.google.com only, as the Maps rows. The result blocks that hold a title link are the items, so People also ask and the sidebar stay out.
-  { name: "google", row: { site: "https://www.google.com/search*", keymap: { item: GOOGLE_ITEMS }, item_navigator: true } },
-  { name: "bing", row: { site: "https://www.bing.com/search*", keymap: { item: BING_ITEMS }, item_navigator: true } },
+  { name: "google", row: { site: "https://www.google.com/search*", keymap: { item: GOOGLE_ITEMS }, item_navigator: "shipped" } },
+  { name: "bing", row: { site: "https://www.bing.com/search*", keymap: { item: BING_ITEMS }, item_navigator: "shipped" } },
   // Hacker News has no keys of its own. A comment has no title link, so it takes the focus itself.
-  { name: "hackernews", row: { site: "https://news.ycombinator.com/*", keymap: { item: HACKERNEWS_ITEMS }, item_navigator: true } },
-  { name: "wikipedia", row: { site: "https://*.wikipedia.org/w/index.php?*search=*", keymap: { item: WIKIPEDIA_ITEMS }, item_navigator: true } },
-  { name: "wikipedia", row: { site: "https://*.wikipedia.org/wiki/Special:Search*", keymap: { item: WIKIPEDIA_ITEMS }, item_navigator: true } },
+  { name: "hackernews", row: { site: "https://news.ycombinator.com/*", keymap: { item: HACKERNEWS_ITEMS }, item_navigator: "shipped" } },
+  { name: "wikipedia", row: { site: "https://*.wikipedia.org/w/index.php?*search=*", keymap: { item: WIKIPEDIA_ITEMS }, item_navigator: "shipped" } },
+  { name: "wikipedia", row: { site: "https://*.wikipedia.org/wiki/Special:Search*", keymap: { item: WIKIPEDIA_ITEMS }, item_navigator: "shipped" } },
   // Lobsters has no keys of its own. A story page holds one story header, so the rows cover the story lists only.
-  { name: "lobsters", row: { site: "https://lobste.rs/", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/newest*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/active*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/t/*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/page/*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/recent*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/top*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/domains/*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "lobsters", row: { site: "https://lobste.rs/search*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: true } },
-  { name: "archwiki", row: { site: "https://wiki.archlinux.org/index.php?*search=*", keymap: { item: WIKIPEDIA_ITEMS }, item_navigator: true } },
+  { name: "lobsters", row: { site: "https://lobste.rs/", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/newest*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/active*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/t/*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/page/*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/recent*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/top*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/domains/*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "lobsters", row: { site: "https://lobste.rs/search*", keymap: { item: LOBSTERS_ITEMS }, item_navigator: "shipped" } },
+  { name: "archwiki", row: { site: "https://wiki.archlinux.org/index.php?*search=*", keymap: { item: WIKIPEDIA_ITEMS }, item_navigator: "shipped" } },
   // Startpage's knowledge panel is also a `div.result`, so the item needs a title link.
-  { name: "startpage", row: { site: "https://www.startpage.com/sp/search*", keymap: { item: STARTPAGE_ITEMS }, item_navigator: true } },
-  { name: "arxiv", row: { site: "https://arxiv.org/search/*", keymap: { item: ARXIV_ITEMS }, item_navigator: true } },
+  { name: "startpage", row: { site: "https://www.startpage.com/sp/search*", keymap: { item: STARTPAGE_ITEMS }, item_navigator: "shipped" } },
+  { name: "arxiv", row: { site: "https://arxiv.org/search/*", keymap: { item: ARXIV_ITEMS }, item_navigator: "shipped" } },
   // A question page holds no post summary, so the pattern may cover every /questions address.
-  { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", keymap: { item: STACKOVERFLOW_ITEMS }, item_navigator: true } },
+  { name: "stackoverflow", row: { site: "https://stackoverflow.com/questions*", keymap: { item: STACKOVERFLOW_ITEMS }, item_navigator: "shipped" } },
   // Tildes has no keys of its own logged out. A topic page holds no `article.topic`, so j and k scroll there.
-  { name: "tildes", row: { site: "https://tildes.net/*", keymap: { item: TILDES_ITEMS }, item_navigator: true } },
-  { name: "amazon", row: { site: "https://www.amazon.com/s?*", keymap: { item: AMAZON_ITEMS }, item_navigator: true } },
-  { name: "amazon", row: { site: "https://www.amazon.com/s/*", keymap: { item: AMAZON_ITEMS }, item_navigator: true } },
-  { name: "reddit", row: { site: "https://www.reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: true } },
-  { name: "reddit", row: { site: "https://reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: true } },
-  { name: "drive", row: { site: "https://drive.google.com/drive/*", keymap: { item: DRIVE_BIND }, item_navigator: true } },
+  { name: "tildes", row: { site: "https://tildes.net/*", keymap: { item: TILDES_ITEMS }, item_navigator: "shipped" } },
+  { name: "amazon", row: { site: "https://www.amazon.com/s?*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
+  { name: "amazon", row: { site: "https://www.amazon.com/s/*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
+  { name: "reddit", row: { site: "https://www.reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
+  { name: "reddit", row: { site: "https://reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
+  { name: "drive", row: { site: "https://drive.google.com/drive/*", keymap: { item: DRIVE_BIND }, item_navigator: "shipped" } },
 ];
 
 export const default_rows_left_on = (rows: readonly DefaultSiteRow[], off_names: readonly string[]): DefaultSiteRow[] => rows.filter(({ name }) => !off_names.includes(name));

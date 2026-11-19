@@ -490,10 +490,11 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
   {
     "name": "item_navigator",
     "settable": true,
-    "is_toggle": true,
+    "is_toggle": false,
     "is_list": false,
-    "expectation": "true or false",
+    "expectation": "\"shipped\", true or false",
     "values": [
+      "shipped",
       "true",
       "false"
     ]
