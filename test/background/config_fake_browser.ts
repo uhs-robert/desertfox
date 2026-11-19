@@ -25,7 +25,8 @@ function write_config_file(host: { files: Files; old_host?: boolean; settings_on
 }
 
 // A browser that keeps storage in memory and answers the native host from `host`. A test rewrites `host.files` between reloads.
-export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; refuse?: string[] }) {
+// `no_folder` answers as a host whose config folder is missing, and `autoconfig_fails` refuses every autoconfig.toml write.
+export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; no_folder?: boolean; autoconfig_fails?: boolean; old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; refuse?: string[] }) {
   const local: Record<string, unknown> = {};
   const session: Record<string, unknown> = {};
   const area = (store: Record<string, unknown>) => ({
@@ -51,9 +52,9 @@ export function install_fake_browser(host: { files: Files; reply?: () => Promise
       sendNativeMessage: async (_name: string, message: WriteMessage & { toml?: string }) => {
         sent.push(message);
         if (host.reply) return host.reply();
-        if (message.cmd === "write_autoconfig") return { ok: true };
+        if (message.cmd === "write_autoconfig") return host.autoconfig_fails ? { ok: false, error: "disk full" } : { ok: true };
         if (message.cmd === "write_config_file" || message.cmd === "write_settings") return write_config_file(host, message);
-        return { ok: true, config_dir: "/home/u/.config/desertfox", config_dir_exists: true, files: host.files };
+        return { ok: true, config_dir: "/home/u/.config/desertfox", config_dir_exists: host.no_folder !== true, files: host.no_folder ? {} : host.files };
       },
     },
     permissions: { contains: async () => host.granted !== false },

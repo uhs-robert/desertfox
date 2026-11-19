@@ -18,7 +18,7 @@ const failure_of = (error: unknown): NativeFailure | "other" => (error as { fail
 
 export function create_autoconfig_mirror(deps: AutoconfigMirrorDeps) {
   // Writes go out one at a time, so the file ends at the newest edits and never at an older write that finished last.
-  let write_queue: Promise<void> = Promise.resolve();
+  let write_queue: Promise<unknown> = Promise.resolve();
   const warned = new Set<string>();
 
   function warn_once(error: unknown): void {
@@ -30,17 +30,23 @@ export function create_autoconfig_mirror(deps: AutoconfigMirrorDeps) {
   }
 
   return {
-    // Returns at once. The promise it gives back is for tests: it settles when this write has run, and never rejects.
-    mirror(key_edits: KeymapEdits): Promise<void> {
+    // Returns at once. The promise it gives back settles when this write has run, true when the host wrote the file, and never rejects.
+    mirror(key_edits: KeymapEdits): Promise<boolean> {
       // Serialized now, so a later edit cannot change what this write holds. A value TOML cannot hold only warns.
       let toml: string;
       try {
         toml = Object.keys(key_edits).length > 0 ? `${KEY_EDITS_NOTE}\n${stringify(key_edits)}` : KEY_EDITS_NOTE;
       } catch (error) {
         warn_once(error);
-        return Promise.resolve();
+        return Promise.resolve(false);
       }
-      const written = write_queue.then(() => deps.write_autoconfig(toml)).catch(warn_once);
+      const written = write_queue.then(() => deps.write_autoconfig(toml)).then(
+        () => true,
+        (error: unknown) => {
+          warn_once(error);
+          return false;
+        },
+      );
       write_queue = written;
       return written;
     },
