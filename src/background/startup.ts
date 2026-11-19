@@ -51,7 +51,7 @@ import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
+import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
 import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
@@ -69,6 +69,16 @@ const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.writ
 // A change to the saved layer rewrites the file with the key edits, so the first one after an update clears the settings an older version mirrored there.
 async function mirror_key_edits(): Promise<void> {
   void autoconfig.mirror((await load_layers()).keymap);
+}
+
+// Older versions mirrored the saved settings too, consent values included, and a profile that changes no saved setting or key edit after the update would keep them in the file.
+// So the first start whose host finds the folder writes the file once. The mark waits for a write the host confirmed, so a failed one is tried again at the next start.
+// A missing folder writes nothing: the host would create the folder for this file alone.
+async function rewrite_old_mirror(folder_exists: boolean): Promise<void> {
+  if (!folder_exists || (await browser.storage.local.get(AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY))[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] === true) return;
+  // Queued in the change queue, so a key edit that commits after it writes after it too. The host write itself waits outside the queue.
+  const { written } = await in_change_queue(async () => ({ written: autoconfig.mirror((await load_layers()).keymap) }));
+  if (await written) await browser.storage.local.set({ [AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY]: true });
 }
 
 // Everything a load (the first one, or a `config.reload`) works out and `publish` reuses. Browser edits are not part of it: they change while this stays.
@@ -1084,6 +1094,8 @@ export async function reload_config_at_start(): Promise<void> {
     await in_change_queue(clear_host_pending).catch(warn_and_go("clear host pending"));
     return;
   }
+  // Not awaited, so the start read never waits on this write.
+  void rewrite_old_mirror(reply.config_dir_exists).catch(warn_and_go("rewrite autoconfig.toml with the key edits alone"));
   // The swap count once the copy stands for the folder with no question open, or undefined: the only state where the saved settings can join the copy without a later "use the folder" dropping them.
   const settled = await in_change_queue(async (): Promise<number | undefined> => {
     await get_config();

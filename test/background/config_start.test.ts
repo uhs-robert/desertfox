@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
 import { IMPORT_DIR_LABEL } from "../../src/background/config_import.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { answer_host_start_choice, CHOICE_SETTLED, CHOICE_STALE } from "../../src/background/host_start.ts";
 import type { HostStartChoice, HostStartPending } from "../../src/shared/messages.ts";
-import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");
 const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?start_${tag}`)) as Startup;
@@ -123,6 +123,8 @@ test("a start with the same files builds and publishes nothing, whatever autocon
   // An editor save leaves the label empty and the host rewrites autoconfig.toml on every saved `:set`: neither is a difference.
   local[FILES_SOURCE_STORAGE_KEY] = { files: settings_file('hint_letters = "ab"\n'), dir_label: "" };
   host.files = { ...settings_file('hint_letters = "ab"\n'), "autoconfig.toml": "# new mirror\n" };
+  // An earlier start already rewrote autoconfig.toml with the key edits alone, so this one writes nothing.
+  local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] = true;
   const restarted = await fresh_startup("same_restart");
   // The start's own publish has run. Only a rebuild from the host files would write again.
   await restarted.get_config();
@@ -438,4 +440,35 @@ test("a broken settings.toml adopted into an empty browser copy keeps the stored
     assert.equal(toasts.length, 1);
     assert.match(toasts[0]!, /Config not reloaded, the current one stays\..*settings\.toml/);
   }
+});
+
+const mirror_writes = (sent: { cmd: string; toml?: string }[]) => sent.filter((message) => message.cmd === "write_autoconfig").map((message) => message.toml);
+
+test("the first start that finds the folder rewrites autoconfig.toml with the key edits alone, once, and retries a failed write", async () => {
+  const host: { files: Files; autoconfig_fails?: boolean } = { files: settings_file('hint_letters = "ab"\n'), autoconfig_fails: true };
+  const { local, sent } = install_fake_browser(host);
+  await stored_run("old_mirror");
+  // A profile whose saved layer holds only a consent setting: no fold and no edit rewrites the file it mirrored before.
+  local[SAVED_SETTINGS_STORAGE_KEY] = { bridge: true };
+  await (await fresh_startup("old_mirror_failed")).reload_config_at_start();
+  await until(() => mirror_writes(sent).length === 1, "the first rewrite");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY], undefined, "a refused write leaves no mark");
+
+  host.autoconfig_fails = false;
+  await (await fresh_startup("old_mirror_written")).reload_config_at_start();
+  await until(() => local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] === true, "the mark after the written rewrite");
+  assert.deepEqual(mirror_writes(sent), [...Array(2)].map(() => "# The key edits made in the browser, as keymap.d mode tables. Settings live in settings.toml.\n"));
+
+  await (await fresh_startup("old_mirror_done")).reload_config_at_start();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(mirror_writes(sent).length, 2, "a later start writes nothing");
+});
+
+test("a start with no config folder never writes autoconfig.toml, which would create the folder", async () => {
+  const { local, sent } = install_fake_browser({ files: {}, no_folder: true });
+  await (await fresh_startup("old_mirror_no_folder")).reload_config_at_start();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(mirror_writes(sent), []);
+  assert.equal(local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY], undefined);
 });

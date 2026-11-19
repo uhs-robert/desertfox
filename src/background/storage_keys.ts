@@ -37,6 +37,9 @@ export const FIREFOX_PAGE_NOTICE_STORAGE_KEY = "desertfox_firefox_page_notice";
 // Setting name to the value a saved browser edit gave it: a consent setting (`:set`), or a value an older version saved that the start has not moved into settings.toml (`saved_fold.ts`). Global, private windows included.
 export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
 
+// True once a start rewrote autoconfig.toml with the key edits alone, which drops the settings an older version mirrored there (`rewrite_old_mirror` in `startup.ts`).
+export const AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY = "desertfox_autoconfig_key_edits_only";
+
 // Mode to key sequence to command text, the key edits the settings page saved (`edit_layers.ts`). Global, private windows included.
 export const KEYMAP_EDITS_STORAGE_KEY = "desertfox_keymap_edits";
 
