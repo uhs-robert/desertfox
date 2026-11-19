@@ -311,7 +311,7 @@ async function apply_files(source: FilesSource, action: ApplyAction, setting?: {
   const edits = await load_edits();
   const swapped_keys = [FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY];
   const local_before = await browser.storage.local.get(swapped_keys);
-  const unsynced_after = setting ? setting.unsynced : await unsynced_kept_by(action, files);
+  const unsynced_after = setting ? setting.unsynced : await unsynced_kept_by(action, source);
   let local_written = false;
   // From here the registry holds the new snippets while the tabs still run the old keymap.
   // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
@@ -367,10 +367,12 @@ async function restore_local(keys: string[], before: Record<string, unknown>): P
 }
 
 // The record of a setting the folder has not got survives an editor save or a snippet change that leaves settings.toml as it was: the setting is still the only change to that file.
-// A reload or an import replaces the copy from elsewhere, and a save of settings.toml itself changes what the folder would get, so those drop it.
-async function unsynced_kept_by(action: ApplyAction, files: ConfigFiles): Promise<UnsyncedSettingsFile | undefined> {
-  if (action !== "edit" && action !== "remove") return undefined;
-  const settings_unchanged = (await load_files_source()).files[SETTINGS_FILE] === files[SETTINGS_FILE];
+// A reload or an import that replaces the config brings the copy from elsewhere, and a save of settings.toml itself changes what the folder would get, so those drop it.
+async function unsynced_kept_by(action: ApplyAction, source: FilesSource): Promise<UnsyncedSettingsFile | undefined> {
+  // An import of snippets alone keeps the config files, so it is a snippet change too.
+  const keeps_config = action === "edit" || action === "remove" || (action === "import" && !source.imported);
+  if (!keeps_config) return undefined;
+  const settings_unchanged = (await load_files_source()).files[SETTINGS_FILE] === source.files[SETTINGS_FILE];
   return settings_unchanged ? read_unsynced() : undefined;
 }
 

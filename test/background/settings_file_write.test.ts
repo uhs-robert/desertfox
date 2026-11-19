@@ -428,3 +428,16 @@ test("`,r` while a write is out waits for it and keeps the pick", async () => {
   assert.equal(stored_settings(local), with_theme("oasis_night"));
   assert.equal(unsynced_of(local), undefined);
 });
+
+test("an import of a snippet alone keeps the record of a waiting pick, and an import of config files drops it", async () => {
+  const host = { files: { "settings.toml": MINE }, old_host: true };
+  const { local, startup } = await reloaded(host);
+  await startup.set_in_settings_file("theme", "oasis_night");
+  const snippet = "// id: mine.one\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\nglobalThis.ran_mine = true;\n";
+  const result = await startup.import_config({ kind: "folder", entries: [{ path: "snippets/one.js", text: snippet }] }, { "snippets/one.js": snippet });
+  assert.equal(result.replaces_config, false);
+  assert.deepEqual(unsynced_of(local), { base: MINE });
+
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  assert.equal(unsynced_of(local), undefined);
+});
