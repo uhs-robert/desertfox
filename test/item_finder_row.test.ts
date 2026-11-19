@@ -261,7 +261,7 @@ test("which-key, the site rules view and help agree with the page on a site wher
 });
 
 test("toggling item_navigator flips the global value only", () => {
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",j"], { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle the item navigator" });
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.["I"], { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle item navigator" });
   assert.equal(compiled({ item_navigator: true, site_rules: [off_at_a] }).compiled.item_navigator, true);
   assert.equal(compiled({ item_navigator: false, site_rules: [off_at_a] }).compiled.item_navigator, undefined);
 });

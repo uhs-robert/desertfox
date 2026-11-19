@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 497 (normal 266, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 496 (normal 265, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -170,7 +170,7 @@ bound: 497 (normal 266, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `]c` | `url.increment --up` | Change URL number |
 | `[c` | `url.increment --down` | Change URL number |
 | `gi` | `page.focus_input` | Focus input |
-| `I` | `page.focus_input` | Focus input |
+| `I` | `toggle item_navigator` | Toggle item navigator |
 | `i` | `mode.insert` | Insert mode |
 | `pp` | `paste` | Open clipboard |
 | `pt` | `paste --tab` | Open clipboard |
@@ -215,7 +215,6 @@ bound: 497 (normal 266, media 58, grab 11, hint 8, cmdline 19, caret 36, visual 
 | `,h` | `help` | Help |
 | `,s` | `help settings` | Settings page |
 | `,t` | `toggle` (prompts) | Toggle a setting |
-| `,j` | `toggle item_navigator` | Toggle the item navigator |
 | `,i` | `mode ignore` | Set mode |
 | `,,` | `anything` (prompts) | Find anything |
 | `,b` | `page.blur` | Blur |

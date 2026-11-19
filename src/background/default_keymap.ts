@@ -269,7 +269,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "]c": { id: "url.increment", args: { direction: "up" } },
     "[c": { id: "url.increment", args: { direction: "down" } },
     gi: { id: "page.focus_input" },
-    I: { id: "page.focus_input" },
+    I: { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle item navigator" },
     i: { id: "mode.insert" },
 
     pp: { id: "open.clipboard", args: { where: "here" } },
@@ -319,7 +319,6 @@ const BASE_SECTIONS: KeymapConfig = {
     ",h": { id: "help.open" },
     ",s": { id: "help.open", args: { name: "settings" }, label: "Settings page" },
     ",t": { id: "settings.toggle", prompt: { param: "name" } },
-    ",j": { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle the item navigator" },
     ",i": { id: "mode.set", args: { mode: "ignore" } },
     ",,": { id: "open.anything", prompt: { param: "query" }, label: "Find anything" },
     ",b": { id: "page.blur" },
