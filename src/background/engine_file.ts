@@ -16,8 +16,9 @@ export const PAGE_FILE_MARKER = "# Written by the DesertFox Engines page, which 
 
 export type EngineTables = Record<string, Record<string, unknown>>;
 
-// Whether a file at the page's path was written by hand: its first line is not the page's marker.
-export const page_path_is_hand_file = (files: ConfigFiles): boolean => files[ENGINE_FILE] !== undefined && files[ENGINE_FILE].split(/\r?\n/, 1)[0] !== PAGE_FILE_MARKER;
+// Whether a file at `path`, one of the page's two files, was written by hand: its first line is not the whole `marker`.
+export const is_hand_file_at = (files: ConfigFiles, path: string, marker: string): boolean => files[path] !== undefined && files[path].split(/\r?\n/, 1)[0] !== marker;
+export const page_path_is_hand_file = (files: ConfigFiles): boolean => is_hand_file_at(files, ENGINE_FILE, PAGE_FILE_MARKER);
 
 const is_table = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 

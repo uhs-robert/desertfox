@@ -3,6 +3,7 @@
 
 import { NATIVE_HOST_NAME, NATIVE_PERMISSION } from "../shared/native_host.ts";
 import { ENGINE_FILE } from "./engine_file.ts";
+import { KEYS_FILE } from "./engine_keys_file.ts";
 
 // "host_outdated": the host answered with an error and is older than the extension. The message says whether it is updating.
 // "file_changed": `write_config_file` found the file changed on disk since the extension read it, and wrote nothing.
@@ -40,12 +41,13 @@ export type EditorCollectReply = { pending: true } | { done: true; changed: fals
 
 // How the host's `write_config_file` names each file the extension writes: its kind table builds the path from these, so the request carries none.
 // The theme name pattern is the host's check and `theme_name_shape_problem`'s (src/shared/theme/base16.ts).
-export type HostFile = { kind: "settings" } | { kind: "engines" } | { kind: "theme"; name: string };
+export type HostFile = { kind: "settings" } | { kind: "engines" } | { kind: "search_keys" } | { kind: "theme"; name: string };
 const THEME_FILE_PATTERN = /^themes\/([a-z0-9][a-z0-9_-]{0,47})\.toml$/;
 
 export function host_file_of(path: string): HostFile | undefined {
   if (path === "settings.toml") return { kind: "settings" };
   if (path === ENGINE_FILE) return { kind: "engines" };
+  if (path === KEYS_FILE) return { kind: "search_keys" };
   const theme = THEME_FILE_PATTERN.exec(path);
   return theme ? { kind: "theme", name: theme[1]! } : undefined;
 }
@@ -165,7 +167,7 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     },
     // Replaces the file at `path` with `text`, or deletes it for null, while the file on disk still has the digest `base_sha256` (null: no file).
     // The request names the file by the host's kind and name, never by path. A host from before the verb answers `unknown cmd`: settings.toml then goes through its older `write_settings`, and any other file reads as outdated, so the caller waits for an update.
-    // A host from before a kind (engines) reads as outdated too.
+    // A host from before a kind (engines, search_keys) reads as outdated too.
     write_config_file: async (path: string, text: string | null, base_sha256: string | null): Promise<void> => {
       const file = host_file_of(path);
       if (file === undefined) throw new Error(`The native host writes no file at ${path}`);
