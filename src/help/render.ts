@@ -346,7 +346,7 @@ function settings_page(model: HelpModel): HTMLElement[] {
   return [
     // Empty unless a host start waits on the user: `main.ts` fills it.
     el("div", "desertfox-host-start"),
-    el("p", undefined, "Change how DesertFox looks and behaves. Each change is saved as soon as you make it. Press Reset to remove a setting from settings.toml and drop your browser changes. A value set in a settings.d file stays."),
+    el("p", undefined, "Change how DesertFox looks and behaves. Each change is saved as soon as you make it. Press Reset to drop your browser changes. For a setting kept in settings.toml, Reset also removes it there. A value set in a settings.d file stays. Change it in that file."),
     only_changed_toggle(),
     el(
       "div",
