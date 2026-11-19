@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import "../../src/background/command_modules.ts";
 import { load_layers } from "../../src/background/edit_layers.ts";
-import { holds_engine, PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
+import { holds_engine, PAGE_FILE_MARKER, page_path_is_hand_file } from "../../src/background/engine_file.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
 import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { build_files_config } from "../../src/background/config_reload.ts";
@@ -563,4 +563,11 @@ test("a write that lands between the gate's folder read and its check makes the 
   held.shift()!();
   assert.equal((await saving).ok, true);
   assert.match(host.files[FILE]!, /^\[wiki\]/m);
+});
+
+test("only a first line that is the whole marker makes the page's path the page's file", () => {
+  assert.equal(page_path_is_hand_file({ [FILE]: MARK + "[a]\n" }), false);
+  assert.equal(page_path_is_hand_file({ [FILE]: `${PAGE_FILE_MARKER}\r\n[a]\r\n` }), false);
+  assert.equal(page_path_is_hand_file({ [FILE]: PAGE_FILE_MARKER }), false);
+  assert.equal(page_path_is_hand_file({ [FILE]: `${PAGE_FILE_MARKER} and my notes\n[a]\n` }), true);
 });
