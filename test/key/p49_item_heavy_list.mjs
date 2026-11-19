@@ -5,9 +5,13 @@ export const areas = ["keys", "config", "bundles"];
 const CARDS = 500;
 
 export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+  const enter_item_mode = async () => {
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+  };
   await run_case("on a long list a press of j focuses the title link of the first card", async () => {
     await open_page("page", "finder_heavy", { new_tab: true });
-    await press_keys("I");
     await in_active_tab(`(() => {
       const card = (index) => '<div class="card" style="margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="f' + index + '" href="#f' + index + '">Finder result number ' + index + ' title</a></h3><div class="meta">' + '<span class="tag">tag</span>'.repeat(8) + '</div><span class="snippet">snippet ' + index + '</span></div>';
       const list = document.createElement("div");
@@ -19,6 +23,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
       return document.body.getBoundingClientRect().height;
     })()`);
     await sleep(300);
+    await enter_item_mode();
     let walked = false;
     for (let press = 0; press < 3 && !walked; press++) {
       await press_keys("j");

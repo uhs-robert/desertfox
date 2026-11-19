@@ -8,6 +8,11 @@ export const areas = ["keys", "config", "bundles"];
 const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until }) {
+  // I takes effect once the badge says ITEM, so the key after it lands in item mode.
+  const enter_item_mode = async () => {
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+  };
   await setup("load the shipped amazon row for the amazon_ pages", async () => {
     const dir = config_copy();
     const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "amazon").row;
@@ -23,7 +28,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   const tile = (id, ad) => `<div data-component-type="s-search-result" class="${ad ? "AdHolder" : ""}" style="width:100px;height:60px;margin:0 10px 40px 0"><a class="s-no-outline" tabindex="-1" href="#img_${id}" style="display:block;height:20px">image</a><div data-cy="title-recipe"><a id="${id}" href="#${id}" style="display:block;height:20px"><h2>title ${id}</h2></a></div></div>`;
   const open_grid = async (id) => {
     await open_page("controls", `amazon_${id}`, { new_tab: true });
-    await press_keys("I");
+    await enter_item_mode();
     await in_active_tab(`(() => {
       const slot = document.createElement("div");
       slot.style.cssText = "display:flex;flex-wrap:wrap;width:330px";
