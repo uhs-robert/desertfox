@@ -45,6 +45,7 @@ if (!item_window.desertfox_item_ready && host) {
     when_idle_: (run) => requestIdleCallback(run, { timeout: 1000 }),
     later_: (run, ms) => setTimeout(run, ms),
     now_: Date.now,
+    on_unload_: (run, on) => (on ? addEventListener : removeEventListener)("beforeunload", run),
   });
   host.register_handler_("item.start", (args) => start(args.selectors as string[] | undefined));
   // The shared focus mark, asked for by the hints bundle after a focus move. The focus can have left by the time this bundle loads, and then there is nothing to mark.

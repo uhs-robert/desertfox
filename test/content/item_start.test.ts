@@ -8,6 +8,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
   const timers: { run: () => void; ms: number }[] = [];
   // The fake clock, which `pass` moves by each look's delay, and `late` adds to.
   const clock = { now: 0, late: 0 };
+  const unload_listeners = new Set<() => void>();
   let entered = 0;
   const state = { mode: "normal", active: false, field: false, list: true };
   const start = create_item_start({
@@ -19,6 +20,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
     when_idle_: (run) => void idle.push(run),
     later_: (run, ms) => void timers.push({ run, ms }),
     now_: () => clock.now,
+    on_unload_: (run, on) => void (on ? unload_listeners.add(run) : unload_listeners.delete(run)),
     ...overrides,
   });
   // Runs the looks put off until `ms` have passed, or until none is left.
@@ -30,7 +32,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
       next.run();
     }
   };
-  return { start, state, idle, timers, pass, clock, entered: () => entered };
+  return { start, state, idle, timers, pass, clock, unload_listeners, entered: () => entered };
 }
 
 test("a page with a list in normal mode enters item mode once it is idle, and not before", () => {
@@ -157,3 +159,22 @@ test("the wait for a row's items ends by the clock, so late timers do not stretc
   assert.equal(slow.timers.length, 0);
 });
 
+
+test("a page that starts to unload during the wait does not enter, and the unload listener is on only during the wait", () => {
+  const leaving = make();
+  leaving.state.list = false;
+  leaving.start(["div.file"]);
+  assert.equal(leaving.unload_listeners.size, 1);
+  leaving.idle[0]!();
+  leaving.pass(500);
+  for (const run of leaving.unload_listeners) run();
+  leaving.state.list = true;
+  leaving.pass(250);
+  assert.equal(leaving.entered(), 0);
+  assert.equal(leaving.unload_listeners.size, 0, "the wait removed its listener");
+  const found = make();
+  found.start();
+  found.idle[0]!();
+  assert.equal(found.entered(), 1);
+  assert.equal(found.unload_listeners.size, 0);
+});

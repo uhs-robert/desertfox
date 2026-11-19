@@ -11,6 +11,8 @@ export type StartDeps = {
   when_idle_: (run: () => void) => void;
   later_: (run: () => void, ms: number) => void;
   now_: () => number;
+  // Adds or removes the listener for the page starting to unload. It is on only during the wait, since an unload listener can keep a page out of the back-forward cache.
+  on_unload_: (run: () => void, on: boolean) => void;
 };
 
 // A site row names its items, and a site such as Drive draws them well after the load completes, so the start looks again for this long.
@@ -26,12 +28,18 @@ export function create_item_start(deps: StartDeps): (selectors?: readonly string
     const user_got_there_first = () => deps.mode_() !== "normal" || deps.user_active_() || deps.in_field_();
     // A late timer must not stretch the wait, so it ends by the clock, counted from the ask.
     const deadline = deps.now_() + ROW_ITEMS_WAIT_MS;
+    // A page that navigates on its own during the wait stays live while the next page loads, and must not enter then.
+    let unloading = false;
+    const unload = () => (unloading = true);
     // Each look reads the gate again right before it enters, so a mode the user picked during the wait stands.
     const look = () => {
-      if (user_got_there_first() || deps.now_() > deadline) return;
-      if (deps.has_list_(selectors)) return deps.enter_();
-      if (selectors[0]) deps.later_(look, ROW_ITEMS_LOOK_EVERY_MS);
+      if (!unloading && !user_got_there_first() && deps.now_() <= deadline) {
+        if (deps.has_list_(selectors)) deps.enter_();
+        else if (selectors[0]) return deps.later_(look, ROW_ITEMS_LOOK_EVERY_MS);
+      }
+      deps.on_unload_(unload, false);
     };
+    deps.on_unload_(unload, true);
     deps.when_idle_(look);
   };
 }
