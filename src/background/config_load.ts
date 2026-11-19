@@ -104,7 +104,11 @@ export function pick_config(files: unknown): LoadedConfig {
 export type FilesSlot = { config: MergedConfig; warnings: string[] };
 
 // The raw files the slot's config was built from. `dir_label` prefixes the paths in problem messages.
-export type FilesSource = { files: ConfigFiles; dir_label: string };
+// `imported` holds while the files came from an import, through any later browser edit, until a folder read replaces them. A copy from an import never seeds the folder's settings.toml.
+export type FilesSource = { files: ConfigFiles; dir_label: string; imported: boolean };
+
+// Problem messages and origins of an import name this folder instead of the host's config folder. A source stored before `imported` existed counts as an import by this label alone.
+export const IMPORT_DIR_LABEL = "import";
 
 export async function load_config(): Promise<LoadedConfig> {
   const stored = await browser.storage.local.get(FILES_CONFIG_STORAGE_KEY);
@@ -120,7 +124,8 @@ export async function load_files_source(): Promise<FilesSource> {
   const source = stored[FILES_SOURCE_STORAGE_KEY] as Partial<FilesSource> | undefined;
   const raw = source?.files;
   const is_file_map = typeof raw === "object" && raw !== null && !Array.isArray(raw) && Object.values(raw).every((text) => typeof text === "string");
-  return { files: is_file_map ? raw : {}, dir_label: typeof source?.dir_label === "string" ? source.dir_label : "" };
+  const dir_label = typeof source?.dir_label === "string" ? source.dir_label : "";
+  return { files: is_file_map ? raw : {}, dir_label, imported: source?.imported === true || dir_label === IMPORT_DIR_LABEL };
 }
 
 // Keeps what the schema accepts. A stored value that no longer passes, from an older version, is dropped rather than trusted.

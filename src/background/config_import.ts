@@ -11,11 +11,11 @@ import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, Impor
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
+import { IMPORT_DIR_LABEL } from "./config_load.ts";
 import { CONSENT_SETTINGS, import_reach, no_reach } from "./import_reach.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
-// Problem messages and origins of an import name this folder instead of the host's config folder.
-export const IMPORT_DIR_LABEL = "import";
+export { IMPORT_DIR_LABEL };
 
 const refuse = (reason: string) => new ConfigRefusal(`${KEPT_CURRENT.import} ${reason}`);
 
