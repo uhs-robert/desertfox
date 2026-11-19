@@ -492,6 +492,32 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertIn(aside, reply["error"])
         self.assertEqual(self.read_settings(os.path.join(self.config, aside)), b"a = 9\n")
 
+    def test_a_save_renamed_over_the_new_text_is_not_overwritten_by_the_put_back(self):
+        path = self.put("settings.toml", "a = 1\n")
+        real_replace = os.replace
+        calls = []
+
+        def edit_replace_then_rename_save(source, destination):
+            calls.append(destination)
+            if len(calls) > 1:
+                return real_replace(source, destination)
+            # One editor writes into the old file, the host renames, and a second editor renames its save over the result.
+            with open(path, "r+b") as file:
+                file.write(b"a = 9\n")
+            real_replace(source, destination)
+            newer = os.path.join(self.config, "newer.toml")
+            with open(newer, "wb") as file:
+                file.write(b"a = 7\n")
+            real_replace(newer, path)
+
+        with mock.patch.object(host.os, "replace", side_effect=edit_replace_then_rename_save):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertFalse(reply["ok"])
+        self.assertEqual(self.read_settings(), b"a = 7\n")
+        [aside] = [name for name in self.entries() if name.endswith(".old")]
+        self.assertIn(aside, reply["error"])
+        self.assertEqual(self.read_settings(os.path.join(self.config, aside)), b"a = 9\n")
+
     def test_a_folder_that_takes_no_lock_is_refused_with_a_reply(self):
         self.put("settings.toml", "a = 1\n")
         with mock.patch.object(host.fcntl, "flock", side_effect=OSError(37, "No locks available")):
