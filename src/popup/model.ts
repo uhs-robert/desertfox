@@ -42,6 +42,24 @@ export function host_dot(has_native_host: boolean, host_connected: boolean): Hos
   return host_connected ? { connected: true, label: "Native host: connected" } : { connected: false, label: "Native host: not connected" };
 }
 
+// The latest host flag, read by every paint. An event that lands while the startup read is in flight wins over that read, and a draw never keeps a value it read earlier.
+export function create_host_flag() {
+  let connected = false;
+  let heard = false;
+  return {
+    get: (): boolean => connected,
+    // A change event from storage.
+    set(value: boolean): void {
+      connected = value;
+      heard = true;
+    },
+    // The one read at startup. It is older than any event, so an event that came first stays.
+    seed(value: boolean): void {
+      if (!heard) connected = value;
+    },
+  };
+}
+
 // How long a success notice stays. An error notice stays until the next action.
 export const NOTICE_MS = 4000;
 
@@ -74,8 +92,6 @@ export type PopupInputs = {
   warning_count: number;
   version: string;
   has_native_host: boolean;
-  // The bridge port is up and the host has said ready.
-  host_connected: boolean;
   // Names of the local and imported themes, and the theme in force.
   extra_theme_names: readonly string[];
   theme: string;
