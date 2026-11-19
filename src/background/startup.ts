@@ -17,7 +17,7 @@ import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engin
 import type { EngineState } from "./engine_message.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
-import { build_config_status, load_config, load_edits, load_files_source, store_edits, with_edits } from "./config_load.ts";
+import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
 import type { FilesSource, LoadedConfig } from "./config_load.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
@@ -254,6 +254,11 @@ export function change_layers<K extends LayerKind>(kind: K, decide: (current: La
 async function keymap_state(config: MergedConfig, layers: EditLayers): Promise<KeymapState> {
   const input = await compile_input(config, layers);
   return { config, layers, slot_map: await read_slot_map(), compile: (other) => compile_config({ ...input, keymap_edits: other.keymap }) };
+}
+
+// What the settings page reads, in the change queue so a change still storing or rolling back is not seen half done.
+export function read_settings_layers(): ReturnType<typeof load_effective_config> {
+  return in_change_queue(() => load_effective_config());
 }
 
 // What the key editor reads, in the change queue so a change still writing or rolling back is not seen half done.

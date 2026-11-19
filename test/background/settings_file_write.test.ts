@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
-import { load_effective_config } from "../../src/background/config_load.ts";
 import { create_settings_messages } from "../../src/background/settings_message.ts";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
@@ -219,7 +218,7 @@ test("a theme set in settings.d is refused, and nothing changes", async () => {
 test("the settings message takes layer file for every scalar and list but the consents, and says where the value went", async () => {
   const host = { files: { "settings.toml": MINE }, granted: true };
   const { startup, local } = await reloaded(host);
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
 
   const written = await messages.change({ type: "change_setting", name: "theme", action: "set", value: "oasis_night", layer: "file" });
   assert.ok(written.ok, written.message);
@@ -289,7 +288,7 @@ test("the settings message says an imported theme is saved in the browser", asyn
   const host = { files: { "settings.toml": MINE } };
   const { startup } = await reloaded(host);
   await startup.change_layers("themes", () => ({ my_import: imported_theme() }));
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const answer = await messages.change({ type: "change_setting", name: "theme", action: "set", value: "my_import", layer: "file" });
   assert.ok(answer.ok, answer.message);
   assert.equal(answer.message, 'theme = "my_import", saved in the browser because the theme is not in your files');
