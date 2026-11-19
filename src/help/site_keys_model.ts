@@ -17,7 +17,7 @@ export type SiteKeysDeps = {
 export type PickRow = { keys: string; command: string };
 
 export const SITE_PROBLEM = "Write the site as an address pattern, for example *://*.example.com/*";
-export const OFF_NOTE = "DesertFox is off on this site, so the keys stay with DesertFox until a rule turns it back on.";
+export const OFF_NOTE = "This site is off, so the page already gets every key. The keys you keep apply once the site is on again.";
 
 const words_of = (row: SiteRuleRow | undefined): string[] => (row?.pass === undefined ? [] : row.pass.split(/\s+/).filter((word) => word !== ""));
 
@@ -56,13 +56,15 @@ export function create_site_keys_session(deps: SiteKeysDeps) {
     rules = await deps.read_rules();
   }
 
+  // The site is set before the reads, so a key pressed while they run joins the chips and is not lost to the stored row.
   async function load(prefill: string | undefined): Promise<void> {
+    if (prefill !== undefined) site = prefill;
     await read_rules();
     const answer = (await deps.send({ type: "list_bindings" })) as ListBindingsAnswer;
     const seen = new Set<string>();
     bindings = answer.ok ? answer.bindings.filter((row: BindingRow) => row.mode === "normal" && row.text !== "" && !seen.has(row.keys) && seen.add(row.keys)).map((row) => ({ keys: row.keys, command: row.text })) : [];
-    if (prefill !== undefined) set_site(prefill);
-    else changed();
+    if (chips.length === 0) set_chips(words_of(existing()));
+    changed();
   }
 
   // Another tab or a file write changed the rules. The form keeps what the reader typed unless the row it shows is the one that changed.

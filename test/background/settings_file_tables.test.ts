@@ -309,3 +309,21 @@ test("Save refuses a site an earlier rule already gives keys to, and names that 
   await assert.rejects(next.change_site_keys_in_file(NEWS, "j"), (error: unknown) => error instanceof RuntimeRefusal && /earlier rule for \*:\/\/\*\/\*/.test(error.message));
   assert.equal(blocked.files["settings.toml"], wide);
 });
+
+test("Save on a pass row that is the first rule replaces it in place twice, with no blank line gained and its comments kept", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { startup } = await reloaded(host);
+  assert.deepEqual(await startup.change_site_keys_in_file(FORUM, "j k c"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], MINE.replace('pass = "j k"', 'pass = "j k c"'));
+  assert.deepEqual(await startup.change_site_keys_in_file(FORUM, "j"), { kind: "written" });
+  assert.equal(host.files["settings.toml"], MINE.replace('pass = "j k"', 'pass = "j"'));
+});
+
+test("a pass row saved in the browser for the site joins the file on Remove and is gone after it", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, startup } = await reloaded(host);
+  local[SAVED_SETTINGS_STORAGE_KEY] = { site_rules: [{ site: NEWS, pass: "j" }] };
+  assert.deepEqual(await startup.change_site_keys_in_file(NEWS, null), { kind: "written" });
+  assert.equal(host.files["settings.toml"], MINE);
+  assert.equal((local[SAVED_SETTINGS_STORAGE_KEY] as { site_rules?: unknown } | undefined)?.site_rules, undefined);
+});
