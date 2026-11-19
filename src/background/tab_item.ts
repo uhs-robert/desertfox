@@ -30,10 +30,12 @@ export function create_tab_item(deps: TabItemDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<ItemHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as ItemHold | undefined;
+  // A step goes out without a wait: the queue is shared by every tab, and a frame that never answers (a page stuck in a loop) would hold every later report, join and keymap reply.
+  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number) => void best_effort(deps.send_step(tab_id, on, frame_id, from));
   // Every frame of the hold leaves the mode, the one that ended it excepted: it left already, and may sit in a field.
   const end = async (tab_id: number, hold: ItemHold, except?: number) => {
     await deps.storage.remove(key_of(tab_id));
-    await Promise.all(hold.frames.filter((frame_id) => frame_id !== except).map((frame_id) => best_effort(deps.send_step(tab_id, false, frame_id))));
+    for (const frame_id of hold.frames) if (frame_id !== except) step(tab_id, false, frame_id);
   };
 
   return {
@@ -48,10 +50,10 @@ export function create_tab_item(deps: TabItemDeps) {
             return;
           }
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
-          if (by_step && !hold) return void (await best_effort(deps.send_step(tab_id, false, frame_id)));
+          if (by_step && !hold) return step(tab_id, false, frame_id);
           await deps.storage.set({ [key_of(tab_id)]: { ...hold, frames: [...(hold?.frames ?? []), frame_id] } });
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
-          if (!hold) await best_effort(deps.send_step(tab_id, true, undefined, frame_id));
+          if (!hold) step(tab_id, true, undefined, frame_id);
           return;
         }
         if (!hold?.frames.includes(frame_id) || KEEPS_THE_MODE.includes(mode)) return;
