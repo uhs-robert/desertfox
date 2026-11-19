@@ -88,9 +88,9 @@ async function act(row: PopupRow): Promise<void> {
   await draw();
 }
 
-// The settings page's own request, so the one validator checks the name and `desktop` passes like any theme. The temp layer lasts until the browser restarts.
+// The settings page's own request, so the one validator checks the name and `desktop` passes like any theme. Layer `file` writes settings.toml, so the pick lasts and the file stays the one source.
 async function pick_theme(name: string): Promise<void> {
-  show_notice((await browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "set", layer: "temp", value: name } satisfies ChangeSetting)) as ToolbarAnswer);
+  show_notice((await browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "set", layer: "file", value: name } satisfies ChangeSetting)) as ToolbarAnswer);
   await draw();
 }
 

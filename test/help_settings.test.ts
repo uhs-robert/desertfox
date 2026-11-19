@@ -42,7 +42,7 @@ async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (
   const fake = install_fake_browser(file_settings);
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()) });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys(await startup.read_theme_edits()), set_in_file: startup.set_in_settings_file });
   const send = async (message: unknown) => {
     const request = message as { type: string };
     return request.type === "list_settings" ? messages.list() : messages.change(message as never);
@@ -255,7 +255,7 @@ test("the font settings suggest the names the background answers, and no other t
   install_fake_browser({});
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [] });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file });
   const send = async (message: unknown) => {
     const type = (message as { type: string }).type;
     return type === "list_font_names" ? names : type === "list_settings" ? messages.list() : messages.change(message as never);
@@ -271,7 +271,7 @@ test("a font ask that fails leaves the font settings with no suggestions", async
   install_fake_browser({});
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
-  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [] });
+  const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: load_effective_config, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file });
   const send = async (message: unknown) => {
     const type = (message as { type: string }).type;
     if (type === "list_font_names") throw new Error("background restarting");

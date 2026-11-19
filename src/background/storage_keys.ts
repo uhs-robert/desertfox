@@ -13,6 +13,9 @@ export const HOST_START_KEPT_STORAGE_KEY = "desertfox_host_start_kept";
 // The digest of the folder files the browser copy last took from the host (a start, Use the folder or `config.reload`). A browser copy that still matches it holds no browser change.
 export const HOST_START_APPLIED_STORAGE_KEY = "desertfox_host_start_applied";
 
+// Present while the browser copy of settings.toml holds a setting the native host has not written to the folder yet (`settings_file.ts`).
+export const SETTINGS_FILE_UNSYNCED_STORAGE_KEY = "desertfox_settings_file_unsynced";
+
 // Strings for the help page: config, keymap and shortcut slot problems from the last load.
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 

@@ -49,10 +49,14 @@ export function plan_set(name: keyof Settings, value_text: string, layer: EditLa
 
 // The settings page sends a typed value, so it skips the text guess of `plan_set`. The caller has run `SETTING_SPECS[name].check` on it.
 export function plan_set_value(name: keyof Settings, value: unknown, layer: EditLayer, current: SettingEdits, config: MergedConfig): SettingsPlan {
+  return { next: edit_with(current, layer, name, value), toast: set_toast(name, value, layer === "temp" ? UNTIL_RESTART : "", config) };
+}
+
+// `name = value`, then `note` (how long it lasts or where it went), then a warning when the value names nothing.
+export function set_toast(name: keyof Settings, value: unknown, note: string, config: MergedConfig): Toast {
   const unmatched = naming_nothing(name, value, config);
-  const until = layer === "temp" ? UNTIL_RESTART : "";
-  const message = unmatched === undefined ? `${show(name, value)}${until}` : `${show(name, value)}${until}, but ${unmatched}`;
-  return { next: edit_with(current, layer, name, value), toast: { kind: unmatched === undefined ? "success" : "warning", message } };
+  const message = unmatched === undefined ? `${show(name, value)}${note}` : `${show(name, value)}${note}, but ${unmatched}`;
+  return { kind: unmatched === undefined ? "success" : "warning", message };
 }
 
 export function plan_toggle(name: keyof Settings, layer: EditLayer, current: SettingEdits, config: MergedConfig): SettingsPlan {

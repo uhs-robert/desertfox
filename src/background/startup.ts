@@ -1,7 +1,7 @@
 // Loads the config, compiles the keymap and publishes the result.
 
 import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
-import type { MergedConfig, SettingEdits } from "../shared/config.ts";
+import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
@@ -41,7 +41,10 @@ import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "./storage_keys.ts";
-import { classify_host_start, clear_host_pending, has_config_files, read_host_memory, remember_applied, settle_host_start, store_host_pending } from "./host_start.ts";
+import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
+import { clear_unsynced, read_unsynced, SETTINGS_FILE, store_unsynced, text_sha256, with_setting_in_files, without_setting } from "./settings_file.ts";
+import type { FileWriteOutcome, UnsyncedSettingsFile } from "./settings_file.ts";
+import type { TomlScalar } from "./toml_key_edit.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
@@ -296,7 +299,8 @@ export function republish(): Promise<void> {
 
 // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
 // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
-async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyAction): Promise<{ warnings: number }> {
+// `edits_after` replaces the setting edits in the same swap, so one publish shows both and a failure restores both.
+async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyAction, edits_after?: SettingEdits): Promise<{ warnings: number }> {
   await get_config();
   const current_step = await (load_step as Promise<LoadStep>);
   // The build checks snippet ids against the built-in commands, so the snippets of the last load stay out.
@@ -313,10 +317,13 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     const snippet_warnings = snippets.register(loaded.config.snippets);
     // No slots: the new keymap can move the browser chords, so the publish plans them again.
     const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings], source: { files, dir_label } };
-    const published = await publish(step, edits);
+    const published = await publish(step, edits_after ?? edits);
     // One `set`, so the config and the files it was built from never part.
     await browser.storage.local.set({ [FILES_CONFIG_STORAGE_KEY]: stored, [FILES_SOURCE_STORAGE_KEY]: { files, dir_label } satisfies FilesSource });
+    if (edits_after) await store_edits(edits_after);
     await clear_host_pending();
+    // Any other swap replaces the browser copy of settings.toml from elsewhere, so the setting waiting for the folder is no longer the copy's only change.
+    if (action !== "setting") await clear_unsynced();
     load_step = Promise.resolve(step);
     commit(published.config);
     swap_count += 1;
@@ -331,6 +338,7 @@ async function apply_files(files: ConfigFiles, dir_label: string, action: ApplyA
     }
     // The failed publish may have stored a map planned from the new keymap.
     await store_slot_map(slot_map_before).catch(warn_and_go("rollback slot map"));
+    if (edits_after) await store_edits(edits).catch(warn_and_go("rollback edits"));
     await publish({ loaded: current_step.loaded, load_warnings: current_step.load_warnings }, edits).catch(warn_and_go("rollback publish"));
     commit(config_before);
     throw error;
@@ -343,9 +351,69 @@ function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
   return queued;
 }
 
+// Writes `value` into the browser copy of settings.toml, drops any saved or temp edit of `name` that would hide it, then asks the host to write the file.
+// The host write runs in the same queue turn, so two picks in a row reach the folder in order, each from the text the one before left.
+export function set_in_settings_file(name: keyof Settings, value: TomlScalar): Promise<FileWriteOutcome> {
+  return in_change_queue(async () => {
+    const current = await load_files_source();
+    const files = with_setting_in_files(current.files, name, value);
+    // An earlier edit the folder never got keeps its base: the folder still holds that text.
+    const unsynced = (await read_unsynced()) ?? { base: current.files[SETTINGS_FILE] ?? null };
+    const edits = await load_edits();
+    const edits_after = without_setting(edits, name);
+    await apply_files(files, current.dir_label, "setting", edits_after);
+    if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
+    await store_unsynced(unsynced);
+    return write_unsynced_settings_file(unsynced);
+  });
+}
+
+// Sends the browser copy of settings.toml to the host, which writes it only while the folder still holds `unsynced.base`. Runs in the change queue.
+async function write_unsynced_settings_file(unsynced: UnsyncedSettingsFile): Promise<FileWriteOutcome> {
+  const { files } = await load_files_source();
+  const text = files[SETTINGS_FILE];
+  if (text === undefined) {
+    await clear_unsynced();
+    return { kind: "failed", reason: `the browser copy holds no ${SETTINGS_FILE}` };
+  }
+  try {
+    await native_host.write_settings(text, unsynced.base === null ? null : await text_sha256(unsynced.base));
+  } catch (error) {
+    if (!(error instanceof NativeHostError)) throw error;
+    if (error.failure === "file_changed") {
+      // The copies-differ question owns this now: both sides changed, and only the user can choose.
+      await clear_unsynced();
+      await ask_when_folder_differs();
+      return { kind: "conflict" };
+    }
+    if (error.failure === "no_permission" || error.failure === "host_missing" || error.failure === "host_outdated") return { kind: "waiting" };
+    return { kind: "failed", reason: error.message };
+  }
+  await clear_unsynced();
+  // The folder now matches the copy wherever it matched before the edit, so a copy that held no other browser change still holds none, and the next start does not ask.
+  if ((await files_digest(before_unsynced_edit(files, unsynced))) === (await read_host_memory()).applied) await remember_applied(files);
+  return { kind: "written" };
+}
+
+// After a refused write: reads the folder and stores the copies-differ question the settings page shows, as a start would.
+async function ask_when_folder_differs(): Promise<void> {
+  const reply = await native_host.read_config().catch(warn_and_go("read the folder after a refused write"));
+  if (!reply) return;
+  const plan = await classify_host_start(reply, (await load_files_source()).files, await read_host_memory());
+  if (plan.kind === "ask") await store_host_pending(plan.pending);
+}
+
+// Writes settings.toml when the folder lags the browser copy. It runs before anything reads the folder, so the read finds the folder caught up.
+async function write_settings_file_if_behind(): Promise<void> {
+  const unsynced = await read_unsynced();
+  if (unsynced) await write_unsynced_settings_file(unsynced);
+}
+
 // Rereads the files through the native host and applies them. They replace an import too.
+// A setting still waiting for the folder is written first, so `,r` keeps it. When the host cannot write it, the folder wins as always.
 export function reload_config(): Promise<{ config_dir: string; warnings: number }> {
   return in_change_queue(async () => {
+    await write_settings_file_if_behind();
     const reply = await native_host.read_config().catch((error: unknown) => {
       throw error instanceof NativeHostError ? new ConfigRefusal(`${KEPT_CURRENT.reload} ${error.message}`) : error;
     });
@@ -363,6 +431,7 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
 // A broken file keeps the stored config too, and a toast names the problem so the user learns the edit failed.
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
+  await in_change_queue(write_settings_file_if_behind).catch(warn_and_go("write the waiting settings.toml at start"));
   const swaps_before = swap_count;
   let reply;
   try {
@@ -376,7 +445,12 @@ export async function reload_config_at_start(): Promise<void> {
   await in_change_queue(async () => {
     await get_config();
     if (swap_count !== swaps_before) return;
-    const plan = await classify_host_start(reply, (await load_files_source()).files, await read_host_memory());
+    const browser_files = (await load_files_source()).files;
+    // A setting the host could not write yet (an older host) is the copy's only change while the folder still holds the base text: no question, the write comes later.
+    const unsynced = await read_unsynced();
+    const only_unwritten_edit_differs = unsynced !== undefined && same_files(compared_files(reply.files), compared_files(before_unsynced_edit(browser_files, unsynced)));
+    if (only_unwritten_edit_differs) return;
+    const plan = await classify_host_start(reply, browser_files, await read_host_memory());
     if (plan.kind === "ask") {
       await store_host_pending(plan.pending);
       await toast_start(HOST_DIFFERS_MESSAGE, "warning");
@@ -396,6 +470,12 @@ export async function reload_config_at_start(): Promise<void> {
       await toast_start(error.message, "error");
     }
   }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
+}
+
+// The browser copy as it was before the edit the folder never got: settings.toml back at its base text.
+function before_unsynced_edit(files: ConfigFiles, unsynced: UnsyncedSettingsFile): ConfigFiles {
+  const { [SETTINGS_FILE]: _edited, ...others } = files;
+  return unsynced.base === null ? others : { ...others, [SETTINGS_FILE]: unsynced.base };
 }
 
 const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";

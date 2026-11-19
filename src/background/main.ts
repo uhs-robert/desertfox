@@ -69,7 +69,7 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, read_engine_state, read_keymap_state, read_theme_edits, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, set_in_settings_file, read_engine_state, read_keymap_state, read_theme_edits, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { load_edits, load_effective_config, load_files_source } from "./config_load.ts";
@@ -296,7 +296,7 @@ browser.permissions.onAdded.addListener(refresh_font_names);
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
 refresh_font_names();
-const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort() });
+const settings_messages = create_settings_messages({ change_edits, read_layers: load_effective_config, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort(), set_in_file: set_in_settings_file });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
   const missing = new ConfigRefusal("The starter engines file starter_engines.toml is missing from this build.");

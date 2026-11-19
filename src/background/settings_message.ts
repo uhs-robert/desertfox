@@ -1,6 +1,8 @@
 // The settings page's way to change a setting. It shares `:set`'s planners, check and `change_edits` queue, so a page edit and a `:set` publish the same way.
 
-import { plan_set_value, plan_unset } from "../commands/settings.ts";
+import { plan_set_value, plan_unset, set_toast } from "../commands/settings.ts";
+import { outcome_note, SETTINGS_FILE } from "./settings_file.ts";
+import type { FileWriteOutcome } from "./settings_file.ts";
 import type { ConfigSource } from "./config_load.ts";
 import { build_config_status } from "./config_load.ts";
 import { build_setting_list } from "../shared/setting_list.ts";
@@ -8,14 +10,16 @@ import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer } from "../shared/messages.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
+import { FILE_WRITTEN_SETTINGS, is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
 export type SettingsMessageDeps = {
   change_edits: (decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined) => Promise<void>;
   // The file layer and the stored edits, read fresh.
-  read_layers: () => Promise<{ source: ConfigSource; config_settings: MergedConfig["settings"]; edits: SettingEdits }>;
+  read_layers: () => Promise<{ source: ConfigSource; config_settings: MergedConfig["settings"]; edits: SettingEdits; config: MergedConfig }>;
   // The names of the imported themes, which the theme picker lists.
   read_theme_names: () => Promise<string[]>;
+  // Writes the value into settings.toml and drops its edits (`set_in_settings_file`).
+  set_in_file: (name: keyof Settings, value: string | number | boolean) => Promise<FileWriteOutcome>;
 };
 
 // The text `:set` or `:unset` gives for a name it does not take, from the same validator.
@@ -45,18 +49,22 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
   async function change(request: ChangeSetting): Promise<ChangeSettingAnswer> {
     const { name, action, layer = "saved" } = request;
     if (action !== "set" && action !== "reset") return { ok: false, message: `unknown action ${JSON.stringify(action)}` };
-    if (layer !== "saved" && layer !== "temp") return { ok: false, message: `unknown layer ${JSON.stringify(layer)}` };
+    if (layer !== "saved" && layer !== "temp" && layer !== "file") return { ok: false, message: `unknown layer ${JSON.stringify(layer)}` };
     const refusal = refusal_of(action === "reset" ? "settings.unset" : "settings.set", name);
     if (refusal !== undefined) return { ok: false, message: refusal };
     if (typeof name !== "string" || !is_setting_name(name)) return { ok: false, message: `unknown setting ${String(name)}` };
     const spec = SETTING_SPECS[name];
     if (action === "set" && !spec.check(request.value)) return { ok: false, message: `${name}: expected ${spec.expectation}` };
+    if (action === "set" && layer === "file") {
+      if (!FILE_WRITTEN_SETTINGS.has(name)) return { ok: false, message: `${name} is not written to ${SETTINGS_FILE} yet` };
+      return set_in_file(name, request.value as string | number | boolean);
+    }
 
     let message = "";
     let final_edits: SettingEdits | undefined;
     try {
       await deps.change_edits((current, config) => {
-        const plan = action === "reset" ? plan_unset(name as keyof Settings, false, current) : plan_set_value(name as keyof Settings, request.value, layer, current, config);
+        const plan = action === "reset" ? plan_unset(name as keyof Settings, false, current) : plan_set_value(name as keyof Settings, request.value, layer === "temp" ? "temp" : "saved", current, config);
         message = plan.toast.message;
         final_edits = plan.next ?? current;
         return plan.next;
@@ -65,6 +73,17 @@ export function create_settings_messages(deps: SettingsMessageDeps) {
       const { source, config_settings } = await deps.read_layers();
       const status = build_config_status(source, config_settings, final_edits!);
       return { ok: true, setting: build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!, message };
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async function set_in_file(name: keyof Settings, value: string | number | boolean): Promise<ChangeSettingAnswer> {
+    try {
+      const outcome = await deps.set_in_file(name, value);
+      const { source, config_settings, edits, config } = await deps.read_layers();
+      const status = build_config_status(source, config_settings, edits);
+      return { ok: true, setting: build_setting_list(status, await deps.read_theme_names()).find((row) => row.name === name)!, message: set_toast(name, value, outcome_note(outcome), config).message };
     } catch (error) {
       return failure(error);
     }

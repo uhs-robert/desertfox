@@ -1,12 +1,14 @@
 // The toolbar on/off switch: the Ctrl+Alt+D shortcut, the popup's messages, and what turning off does to open modes and to a restarted background.
 // Every case ends with DesertFox on again, because later pieces on the same Firefox need its keys.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["toolbar"];
 
 const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 
-export async function run_cases({ take_shot, rdp, extension_id, run_case, press_keys, poll_until, open_page, url_of, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
+export async function run_cases({ config_copy, load_config_dir, config_dir, take_shot, rdp, extension_id, run_case, press_keys, poll_until, open_page, url_of, wait_event, events, expect, sleep, scroll_delta_by_press, expect_no_scroll, hint_label_count, open_cmdline, wait_cmdline, wait_reinject_report, badge_is, in_active_tab }) {
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const flag = () => in_background(`browser.storage.local.get("desertfox_disabled").then((got) => got.desertfox_disabled === true)`);
   const title = () => in_background(`browser.browserAction.getTitle({})`);
@@ -188,6 +190,10 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
   await run_case("the popup draws the header, one On/Off radio group moved by the arrow keys, and the site card with its rule line, with shots under DESERTFOX_SHOT_DIR", async () => {
     await open_page("page", "rule_pass_look", { new_tab: true });
     const page_url = url_of("page", "rule_pass_look");
+    // The theme pick writes settings.toml, so the case runs on a copy of the config: later pieces start from config_dir as it was.
+    // The copy loads with ,r, which needs this page active, so it loads here and config_dir comes back after the popup closes.
+    const picked_dir = config_copy();
+    await load_config_dir(picked_dir);
     try {
       await close_popup();
       await in_background(`browser.tabs.create({ url: browser.runtime.getURL("popup.html"), active: true })`);
@@ -219,6 +225,11 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
         // Equal backgrounds mean the scheme switch did not take, and the two shots would be the same picture.
         expect(backgrounds[0] !== backgrounds[1], `the ${name} shots share the background ${backgrounds[0]}`);
       };
+      // Top to bottom: the site card, the theme, the notice, one section with Reload config and the page row, then the Support footer.
+      const layout = await popup_eval(`[...document.querySelector(".desertfox-popup").children].map((node) => node.className.split(" ").find((name) => name.startsWith("desertfox-popup-") && name !== "desertfox-popup-row") ?? node.className).join()`);
+      expect(layout === "desertfox-popup-header,desertfox-popup-segments,desertfox-popup-card,desertfox-popup-theme,desertfox-popup-notice,desertfox-popup-pages,desertfox-popup-support", `the popup layout is ${layout}`);
+      const section = await popup_eval(`[...document.querySelector(".desertfox-popup-pages").querySelectorAll("button")].map((button) => button.textContent).join("|")`);
+      expect(section === "Reload config|Settings|Help|Keys", `the bottom section holds ${section}`);
       // The Warnings row is absent while the page has no warnings, and Reload config is a button.
       expect((await popup_eval(`[...document.querySelectorAll(".desertfox-popup-row")].some((button) => button.textContent.startsWith("Warnings"))`)) === false, "the Warnings row shows with no warnings");
       expect((await popup_eval(`document.querySelector(".desertfox-popup-action")?.textContent`)) === "Reload config", "Reload config is a button");
@@ -230,24 +241,29 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
       await poll_until("On to be checked", async () => (await checked()) === "On");
       await poll_until("the state line to read enabled", async () => (await popup_eval(`document.querySelector(".desertfox-popup-state")?.textContent`)) === "Enabled on this site");
       await shoot("on");
-      // The extras: the host dot, the version link, the copy and keys rows, and a session-only theme pick.
+      // The extras: the host dot, the version link, the copy and keys rows, and a theme pick that writes settings.toml.
       const manifest_version = await in_background(`browser.runtime.getManifest().version`);
       expect((await popup_eval(`document.querySelector("a.desertfox-popup-version")?.href`)).startsWith("https://github.com/uhs-robert/desertfox/releases"), `the version links to the releases, got ${manifest_version}`);
       expect((await popup_eval(`document.querySelector(".desertfox-popup-host-dot")?.getAttribute("aria-label")`)).startsWith("Native host:"), "the header has a host dot");
       const row_text = () => popup_eval(`[...document.querySelectorAll(".desertfox-popup-row")].map((button) => button.textContent).join("|")`);
       const rows_now = await row_text();
       expect(rows_now.includes("Copy rule") && rows_now.includes("Keys"), `the popup has the Copy rule and Keys rows, got ${rows_now}`);
-      const saved_before = await in_background(`browser.storage.local.get("desertfox_saved_settings").then((got) => JSON.stringify(got.desertfox_saved_settings ?? {}))`);
+      const settings_text = () => readFileSync(join(picked_dir, "settings.toml"), "utf8");
+      const file_before = settings_text();
+      const edits = () => in_background(`Promise.all([browser.storage.local.get("desertfox_saved_settings"), browser.storage.session.get("desertfox_temp_settings")]).then(([saved, temp]) => JSON.stringify([saved.desertfox_saved_settings?.theme ?? null, temp.desertfox_temp_settings?.theme ?? null]))`);
+      // A saved theme from before is dropped by the pick, so it no longer hides the file.
+      await ask({ type: "change_setting", name: "theme", action: "set", value: "nord" });
       await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "catppuccin"; select.dispatchEvent(new Event("change")); return true; })()`);
-      await poll_until("the theme pick to reach the temp layer", async () => (await in_background(`browser.storage.session.get("desertfox_temp_settings").then((got) => got.desertfox_temp_settings?.theme)`)) === "catppuccin");
-      expect((await in_background(`browser.storage.local.get("desertfox_saved_settings").then((got) => JSON.stringify(got.desertfox_saved_settings ?? {}))`)) === saved_before, "the theme pick wrote the saved settings");
+      await poll_until("the pick to reach settings.toml", () => settings_text().includes('theme = "catppuccin"'), { timeout_ms: 8000 });
+      const written = settings_text();
+      expect(written.replace('theme = "catppuccin"\n', "") === file_before, "the write changed more of settings.toml than the theme line");
+      expect((await edits()) === "[null,null]", `the pick left a browser edit of the theme: ${await edits()}`);
       await poll_until("the popup select to show the pick", async () => (await popup_eval(`document.querySelector(".desertfox-popup-theme-select")?.value`)) === "catppuccin");
+      await poll_until("the notice to say where the pick went", async () => (await popup_eval(`document.querySelector(".desertfox-popup-notice")?.textContent`)) === 'theme = "catppuccin", saved to settings.toml');
       await shoot("theme");
-      // Back to the desktop entry through the same request, which the dropdown always offers.
+      // Back to the desktop entry, which the dropdown always offers. The last pick wins in the file.
       await popup_eval(`(() => { const select = document.querySelector(".desertfox-popup-theme-select"); select.value = "desktop"; select.dispatchEvent(new Event("change")); return true; })()`);
-      await poll_until("desktop to reach the temp layer", async () => (await in_background(`browser.storage.session.get("desertfox_temp_settings").then((got) => got.desertfox_temp_settings?.theme)`)) === "desktop");
-      // Through the settings path, so the edits status the cleanup waits on follows.
-      await ask({ type: "change_setting", name: "theme", action: "reset" });
+      await poll_until("desktop to reach settings.toml", () => settings_text().includes('theme = "desktop"') && !settings_text().includes("catppuccin"), { timeout_ms: 8000 });
       // Stub the tab creation so the click proves the URL without opening the Sponsors page. The click closes the popup, so the record lives in the background.
       await popup_eval(`(globalThis.support_tabs = [], popup_browser.tabs.create = async (options) => { globalThis.support_tabs.push(options.url); }, true)`);
       const support = `[...document.querySelectorAll(".desertfox-popup-row")].find((button) => button.textContent === "Support DesertFox")`;
@@ -257,6 +273,7 @@ export async function run_cases({ take_shot, rdp, extension_id, run_case, press_
     } finally {
       await turn_on();
       await close_popup();
+      await load_config_dir(config_dir);
     }
   });
 }
