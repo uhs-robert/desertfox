@@ -224,7 +224,7 @@ export const REPO_THEMES: Record<string, Theme> = {
       "mode_caret": "#e64553",
       "mode_visual": "#8839ef",
       "mode_item": "#209fb5",
-      "mode_media": "#d20f39",
+      "mode_media": "#fe640b",
       "search_bg": "#acb0be",
       "search_fg": "#4c4f69",
       "search_current_bg": "#df8e1d",

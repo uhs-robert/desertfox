@@ -7,6 +7,8 @@ import type { SettingOverrides } from "../shared/config.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { parse_base16, theme_name_problem, theme_name_shape_problem } from "../shared/theme/base16.ts";
+import { derive_roles } from "../shared/theme/derive.ts";
+import type { GivenColors } from "../shared/theme/derive.ts";
 import { ROLES } from "../shared/theme/roles.ts";
 import type { RoleColors, Theme } from "../shared/theme/roles.ts";
 import { local_theme_problem, parse_color } from "../shared/theme/theme_file.ts";
@@ -90,11 +92,29 @@ export function create_theme_messages(deps: ThemeMessageDeps) {
 
 const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
+// A stored table from before a role was added lacks it, so the missing roles derive from the rest. A table with no valid required roles is left as it is for the check to refuse.
+function with_derived_roles(theme: unknown): unknown {
+  if (!is_record(theme)) return theme;
+  const filled: Record<string, unknown> = { ...theme };
+  for (const variant of ["dark", "light"] as const) {
+    const table = theme[variant];
+    if (!is_record(table)) continue;
+    const given = Object.fromEntries(Object.entries(table).filter(([, value]) => parse_color(value) !== undefined));
+    try {
+      filled[variant] = { ...derive_roles(given as GivenColors, variant), ...table };
+    } catch {
+      continue;
+    }
+  }
+  return filled;
+}
+
 // The imports an older version kept in browser storage, whole and well named only, with only the role keys, as #rrggbb. A broken one is dropped, as that version dropped it.
 export function stored_imports_of(stored: unknown): Record<string, Theme> {
   if (!is_record(stored)) return {};
   const kept: Record<string, Theme> = {};
-  for (const [name, theme] of Object.entries(stored)) {
+  for (const [name, stored_theme] of Object.entries(stored)) {
+    const theme = with_derived_roles(stored_theme);
     if (theme_name_shape_problem(name) !== undefined || local_theme_problem(theme) !== undefined) continue;
     const table = (variant: "dark" | "light") => Object.fromEntries(ROLES.map((role) => [role, parse_color((theme as Record<string, Record<string, unknown>>)[variant]![role])])) as RoleColors;
     kept[name] = { dark: table("dark"), light: table("light") };
