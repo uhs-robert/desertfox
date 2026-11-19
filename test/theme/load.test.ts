@@ -53,6 +53,8 @@ test("every built-in theme gives visual mode its own color in both variants", ()
       const colors_of = theme[variant];
       assert.notEqual(colors_of.mode_visual, colors_of.mode_caret, `${name} ${variant} caret`);
       assert.notEqual(colors_of.mode_visual, colors_of.mode_normal, `${name} ${variant} normal`);
+      assert.notEqual(colors_of.mode_item, colors_of.mode_visual, `${name} ${variant} item vs visual`);
+      assert.notEqual(colors_of.mode_item, colors_of.mode_caret, `${name} ${variant} item vs caret`);
     }
   }
 });
@@ -61,6 +63,7 @@ test("moonlight keeps its mode colors, caret from the cursor color, and its Sear
   const { dark, light } = load_theme("oasis_moonlight", 3)!;
   assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#f0e68c", "#ffba75", "#717a84"]);
   assert.deepEqual([light.mode_caret, light.mode_visual], ["#817613", "#85460e"]);
+  assert.equal(dark.mode_item, "#c695ff");
   assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], ["#666666", "#f5f5dc", "#cdc673", "#0c0e13"]);
   assert.deepEqual([light.search_bg, light.search_fg, light.search_current_bg, light.search_current_fg], ["#e1b69d", "#4e260e", "#dd6f6f", "#350808"]);
 });
