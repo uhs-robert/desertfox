@@ -7,14 +7,14 @@ export const areas = ["keys", "config", "bundles"];
 const CARDS = 10;
 
 export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, on_teardown, run_line, config_dir }) {
-  // I writes item_navigator into settings.toml of the base config, which every later piece reads, so the piece removes it again and waits for the host's write.
-  on_teardown(async () => {
-    const settings_file = join(config_dir, "settings.toml");
-    if (!readFileSync(settings_file, "utf8").includes("item_navigator")) return;
-    await run_line(":unset item_navigator");
-    await poll_until("item_navigator to leave settings.toml", async () => !readFileSync(settings_file, "utf8").includes("item_navigator"));
-  });
   const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
+  // I writes item_navigator into settings.toml of the base config, which every later piece reads, so the piece removes it again.
+  // The unset always runs: a toggle write still out can add the key after a look at the file. Its toast comes after its own write, and the queue runs it after every earlier toggle.
+  on_teardown(async () => {
+    await run_line(":unset item_navigator");
+    await poll_until("the unset of item_navigator to answer", async () => /^(Unset item_navigator|item_navigator is not set)/.test(await toast_text()));
+    await poll_until("item_navigator to leave settings.toml", async () => !readFileSync(join(config_dir, "settings.toml"), "utf8").includes("item_navigator"));
+  });
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
   const add_cards = () =>
     in_active_tab(`(() => {
