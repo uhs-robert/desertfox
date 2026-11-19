@@ -7,7 +7,7 @@ import { effective_settings } from "../shared/config.ts";
 import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
-import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "../background/storage_keys.ts";
+import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY } from "../background/storage_keys.ts";
 import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
 import type { HostDot, PopupRow } from "./model.ts";
 
@@ -203,7 +203,7 @@ async function draw(): Promise<void> {
   const mine = ++draw_generation;
   const [tab, stored, host, loaded] = await Promise.all([
     active_tab(),
-    browser.storage.local.get([DISABLED_STORAGE_KEY, WARNINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY]),
+    browser.storage.local.get([DISABLED_STORAGE_KEY, WARNINGS_STORAGE_KEY]),
     browser.permissions.contains({ permissions: ["nativeMessaging"] }),
     load_effective_config(),
   ]);
@@ -217,7 +217,7 @@ async function draw(): Promise<void> {
     version: browser.runtime.getManifest().version,
     has_native_host: host,
     theme: effective_settings(loaded.config.settings).theme,
-    extra_theme_names: [...Object.keys(loaded.config.local_themes ?? {}), ...Object.keys((stored[THEME_EDITS_STORAGE_KEY] as object | undefined) ?? {})],
+    extra_theme_names: Object.keys(loaded.config.local_themes ?? {}),
   };
   const rows = build_rows(inputs);
   const by_id = (id: PopupRow["id"]) => rows.find((row) => row.id === id)!;
