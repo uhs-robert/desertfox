@@ -19,6 +19,8 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const watch_user_ = () => watch_user_left(document, window, host.pressed_keys_);
+  // Set by the hints bundle's pick, which holds a typed-ahead key until the next landing.
+  let landed: (() => void) | undefined;
   const overlay = create_item_overlay(host.get_mode, watch_user_, follow_item);
   const page = {
     doc: document,
@@ -35,7 +37,11 @@ if (!item_window.desertfox_item_ready && host) {
     now_: Date.now,
     watch_user_,
   };
-  host.register_handler_("page.item", (args) => move_item(page, args as unknown as ItemArgs));
+  host.register_handler_("page.item", (args) => {
+    const moved = move_item(page, args as unknown as ItemArgs);
+    if (args.direction === "current") (landed?.(), (landed = undefined));
+    return moved;
+  });
   // The background asks when a load completes. The handler answers at once, so no key waits for the idle time.
   const start = create_item_start({
     mode_: host.get_mode,
@@ -56,17 +62,15 @@ if (!item_window.desertfox_item_ready && host) {
     // With no row selector the box is the focus mark.
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
-  host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined) : (args.take as (regions: unknown) => void)(lists_with_row(page.derived.lists_(), args.selector as string | undefined))));
+  host.register_handler_("item.lists", (args) => void (args.region ? ((landed = args.landed as typeof landed), pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined)) : (args.take as (regions: unknown) => void)(lists_with_row(page.derived.lists_(), args.selector as string | undefined))));
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }
 
-// A site row's items are one more list, and the finder lists that hold any of them drop out, so the row's own list is the one candidate for its items. The finder finds nothing on some rows (Drive's files hold no title link).
+// While a site row's items show, they are the only list the picker offers: the row's keys walk its own selector, so another list could not be walked. The finder finds nothing on some rows (Drive's files hold no title link).
 function lists_with_row(lists: Region<Element>[], selector: string | undefined): Region<Element>[] {
   const items = selector ? Array.from(document.querySelectorAll(selector)).filter(is_shown) : [];
-  if (!items[0]) return lists;
-  const overlaps = (region: Region<Element>) => region.items.some((own) => items.some((item) => item.contains(own) || own.contains(item)));
-  return [{ kind: "list", items, links: new Map() }, ...lists.filter((region) => !overlaps(region))];
+  return items[0] ? [{ kind: "list", items, links: new Map() }] : lists;
 }
 
 // Making another list active puts the focus on the first item the pick showed. Picking the list that is active already leaves the focus and the last move alone, so the landing goes on from the current item.

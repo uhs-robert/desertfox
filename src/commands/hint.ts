@@ -129,7 +129,7 @@ define("hint.run", {
       },
     },
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
-    { name: "items", type: "string", default: "", when: { filter: ["lists"] }, description: "With lists: a site row's items, as one more list." },
+    { name: "items", type: "string", default: "", when: { filter: ["lists"] }, description: "With lists: a site row's items, the only list offered." },
     { name: "text", type: "string", optional: true, description: "Keep only the links whose text holds this." },
     { name: "command", type: "string", default: "open", pattern: "^[a-z][a-z0-9_.-]*( --?[a-z][a-z0-9-]*)*$", when: { action: ["prompt"] }, description: "Type this command and its flags before the address." },
     // `all` is a value of `filter`, and an enum value is a flag of its own, so the word must differ.

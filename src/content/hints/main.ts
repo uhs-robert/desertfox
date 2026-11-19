@@ -242,6 +242,11 @@ type PickArgs = Pick<Session, "args" | "action" | "rapid" | "collected_" | "with
 // `hand_over` is for a pick another frame owns: the text that would be copied, or the line that would open, goes to the keyboard frame instead.
 type HandOver = (text: string, what?: string) => void;
 
+// A key typed right behind the pick of `enter_item` waits for the landing step that follows, so it moves on from the landing and not before it. The item bundle calls `landed` when it lands, and the timer frees the key where no landing comes.
+const LANDING_WAIT_MS = 1000;
+let landing: Promise<void> | undefined;
+let landed: (() => void) | undefined;
+
 // Set while a pick performs, so the address change the pick makes (a table-of-contents anchor) does not end the session that made it.
 let picking = false;
 
@@ -249,7 +254,12 @@ const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandO
   // A list's pick makes the list active and focuses what j focuses, the title link, so Enter opens it.
   const region = current.args.filter === "lists" ? (list_targets.get(element) as { links: Map<Element, HTMLElement | undefined> } | undefined) : undefined;
   // For `enter_item` the bundle also focuses the link of the first item shown, when the pick makes another list active: the landing that follows starts from the focus, so it never takes an item a scroll box clips.
-  if (region) (void page.desertfox_host.run_command_("item.lists", "item", { region, focus: region.links.get(element) ?? element }), (element = region.links.get(element) ?? element));
+  if (region) {
+    const focus = region.links.get(element) ?? element;
+    if (current.action === "enter_item") landing = new Promise<void>((resolve) => ((landed = resolve), void setTimeout(resolve, LANDING_WAIT_MS)));
+    void page.desertfox_host.run_command_("item.lists", "item", { region, focus, landed });
+    element = focus;
+  }
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
   // A pick right after a jump is the user's own move, so the address change it makes records.
   arm_leave_watch(page.desertfox_host).quiet_(false);
@@ -352,6 +362,8 @@ function register(host: PageHostApi): void {
     const keys = current.waiting_tokens_.splice(0);
     host.escape_();
     after_leaving?.();
+    const landing_done = landing;
+    landing = undefined;
     if (owner_left) {
       void owner_left.then((rest) => rest.length > 0 && host.hold_keys_until_(Promise.resolve(rest)));
       return;
@@ -359,7 +371,7 @@ function register(host: PageHostApi): void {
     const focused_a_field = after_leaving && host.get_mode() === "insert";
     if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });
     const left = focused_a_field ? insert_into_focused_field(keys) : keys;
-    if (left.length > 0) host.hold_keys_until_(Promise.resolve(left));
+    if (left.length > 0) host.hold_keys_until_(landing_done ? landing_done.then(() => left) : Promise.resolve(left));
   }
 
   // Hands this frame's count to the background and waits for the labels of every frame. A background that does not answer leaves this frame's own labels.

@@ -848,3 +848,14 @@ test("normal-mode I on Drive lands on a file and selects it, in the page reply a
   const elsewhere = (await ask(compiled, "https://www.google.com/search?q=a"))!.keymap.modes.normal!.children["I"] as TreeLeaf;
   assert.deepEqual(elsewhere.steps.map((step) => step.invocation.id), ["hint.run", "page.item"]);
 });
+
+test("which-key reads the rewritten normal tree on a Drive address and the plain one elsewhere", async () => {
+  const compiled = with_defaults({});
+  const drive = "https://drive.google.com/drive/my-drive";
+  const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
+  // The rewritten I holds `page.send_key` steps, which this page cannot run, so the panel drops the row exactly where the rewrite applies.
+  const availability = { page: { url: drive }, requirement_of: (invocation: { id: string }) => (invocation.id === "page.send_key" ? ["no_such_slot"] : []) } as never;
+  const has_i = async (address: string) => (await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: [] }, { availability, addresses: [address] })).rows.some((row) => row.keys === "I");
+  assert.equal(await has_i(drive), false);
+  assert.equal(await has_i("https://example.test/"), true);
+});

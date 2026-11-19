@@ -107,7 +107,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const top_of = (pool: Group<N>[]) => pool.filter((group) => !pool.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
   const tops = top_of(gated);
   // A short list that sits in no list at all (gated or short) is a top-level list too, placed after the gated ones.
-  const short_tops = top_of(lists.filter((group) => !gated.includes(group))).filter((group) => !lists.some((outer) => outer !== group && nests(reader, group, outer)));
+  const short_tops = lists.filter((group) => !gated.includes(group) && !lists.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
   // An item with no title link of its own (a story with a short title) takes its longest link, so the focus never lands on a vote arrow.
   const longest_link = (item: N): N | undefined => links_of(item).reduce<N | undefined>((long, link) => (!long || link_text(link) > link_text(long) ? link : long), undefined);
   const region_of = (top: Group<N>): Region<N> | undefined => {
@@ -125,7 +125,13 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     return { kind: kind_of(best.boxes), items: best.items, links, ...(sections && { sections }) };
   };
   const regions = tops.map(region_of).filter((region) => region !== undefined);
-  const short_regions = short_tops.map(region_of).filter((region) => region !== undefined).map((region): Region<N> => ({ ...region, short_: true }));
+  // Each region reads the prose around it, so a page of many short lists stops adding them once the budget is spent. The long lists are already in.
+  const short_regions: Region<N>[] = [];
+  for (const group of short_tops) {
+    if (out_of_time()) break;
+    const region = region_of(group);
+    if (region) short_regions.push({ ...region, short_: true });
+  }
   const every = [...regions, ...short_regions];
   return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
 }
