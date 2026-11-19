@@ -6,6 +6,8 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
   const idle: (() => void)[] = [];
   // The looks the start put off, run in order by `pass`.
   const timers: { run: () => void; ms: number }[] = [];
+  // The fake clock, which `pass` moves by each look's delay, and `late` adds to.
+  const clock = { now: 0, late: 0 };
   let entered = 0;
   const state = { mode: "normal", active: false, field: false, list: true };
   const start = create_item_start({
@@ -16,6 +18,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
     enter_: () => void entered++,
     when_idle_: (run) => void idle.push(run),
     later_: (run, ms) => void timers.push({ run, ms }),
+    now_: () => clock.now,
     ...overrides,
   });
   // Runs the looks put off until `ms` have passed, or until none is left.
@@ -23,10 +26,11 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
     for (let passed = 0; timers.length > 0 && passed < ms; ) {
       const next = timers.shift()!;
       passed += next.ms;
+      clock.now += next.ms + clock.late;
       next.run();
     }
   };
-  return { start, state, idle, timers, pass, entered: () => entered };
+  return { start, state, idle, timers, pass, clock, entered: () => entered };
 }
 
 test("a page with a list in normal mode enters item mode once it is idle, and not before", () => {
@@ -138,3 +142,18 @@ test("each look reads the gate right before it enters, so a mode the user picked
   idle[0]!();
   assert.deepEqual(order, ["mode", "list", "enter"]);
 });
+
+test("the wait for a row's items ends by the clock, so late timers do not stretch it", () => {
+  const slow = make();
+  slow.state.list = false;
+  slow.clock.late = 750;
+  slow.start(["div.file"]);
+  slow.idle[0]!();
+  // Five looks at 1 s each: the clock passes 5 s while the looks count only 1.25 s.
+  slow.pass(1250);
+  slow.state.list = true;
+  slow.pass(250);
+  assert.equal(slow.entered(), 0);
+  assert.equal(slow.timers.length, 0);
+});
+
