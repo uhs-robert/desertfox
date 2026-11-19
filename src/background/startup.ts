@@ -11,12 +11,13 @@ import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } fr
 import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
-import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, nonempty_engine_edits, store_layers } from "./edit_layers.ts";
+import { alias_edits_of, engine_edits_of, has_build_edits, has_engine_edits, load_layers, nonempty_engine_edits, store_layers } from "./edit_layers.ts";
 import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
 import type { EngineFileOutcomes, EnginePlan, EngineState, EngineTurn } from "./engine_message.ts";
 import { ENGINE_FILE, engine_file_text, engine_resolves_without_owned, engines_in_text, holds_engine, owned_engines } from "./engine_file.ts";
 import { KEYS_FILE, letters_in_text } from "./engine_keys_file.ts";
+import { engine_layer_moved } from "./engine_layer_move.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -53,7 +54,7 @@ import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
 import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
-import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
+import type { TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
 import type { ThemeFileChange } from "./theme_message.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
@@ -432,13 +433,9 @@ export function set_in_settings_file(name: keyof Settings, value: TomlValue): Pr
   return change_setting_in_file<FileWriteOutcome>(name, async (files) => {
     if (name === "theme" && typeof value === "string" && !(await theme_in_files(value))) throw new RuntimeRefusal(`theme not changed: no theme named "${value}"`);
     if (name === "default_engine" && typeof value === "string") {
-      if (needs_page(with_fallback_engines((await get_config()).search_engines)[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
-      const home = await where_engine_named(value);
-      if (home === "nowhere") throw new RuntimeRefusal(`default_engine not changed: no search engine named "${value}"`);
-      if (home === "browser") {
-        await save_in_browser(name, value);
-        return { done: { kind: "saved_in_browser" } };
-      }
+      const engines = with_fallback_engines((await get_config()).search_engines);
+      if (!Object.hasOwn(engines, value)) throw new RuntimeRefusal(`default_engine not changed: no search engine named "${value}"`);
+      if (needs_page(engines[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
     }
     return { files: with_setting_in_files(files, name, value) };
   });
@@ -626,20 +623,6 @@ const theme_resolves_without_file = (name: string): boolean => name === DESKTOP_
 async function theme_in_files(value: string): Promise<boolean> {
   const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
   return theme_resolves_without_file(value) || Object.hasOwn(files_config.local_themes ?? {}, value);
-}
-
-// Where an engine name is known. `browser`: only in the browser (an engine added on the Engines page), so the files build refuses a settings.toml that names it.
-// An engine of the same name in the files is known to the build, so that name still goes to the file.
-async function where_engine_named(value: string): Promise<"files" | "browser" | "nowhere"> {
-  const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
-  if (Object.hasOwn(with_fallback_engines(files_config.search_engines), value)) return "files";
-  return Object.hasOwn(with_fallback_engines((await get_config()).search_engines), value) ? "browser" : "nowhere";
-}
-
-// The saved edit, as before the file write existed: it lasts, and it drops a temp edit of the name that would hide it.
-async function save_in_browser(name: keyof Settings, value: TomlScalar): Promise<void> {
-  const before = await load_edits();
-  await commit_setting_edits(before, { saved: { ...before.saved, [name]: value }, temp: without_setting(before, name).temp });
 }
 
 async function drop_edits_of(name: keyof Settings): Promise<void> {
@@ -1065,6 +1048,7 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
   await move_imported_themes().catch(warn_and_go("move the imported themes into theme files"));
+  await move_engine_layer().catch(warn_and_go("move the engines saved in the browser into the Engines page's files"));
   await write_waiting_files(in_change_queue).catch(warn_and_go("write the waiting config files at start"));
   const swaps_before = swap_count;
   let reply;
@@ -1119,6 +1103,29 @@ async function move_imported_themes(): Promise<void> {
     if (moved.paths.length > 0 || moved.saved !== edits.saved) await commit_folder_files(current, { files: moved.files, edits_after: { saved: moved.saved, temp: edits.temp }, paths: moved.paths });
     await browser.storage.local.remove(THEME_EDITS_STORAGE_KEY);
   });
+}
+
+// Moves the engines layer an older version kept in the browser into the Engines page's files (`engine_layer_moved`), and a saved `default_engine` edit into settings.toml. The waiting writes of the start send them to the folder, or a later start when the host is off.
+// What is left of the layer goes in the same storage write as the files and the record, so a stop at any point moves nothing twice and loses nothing. It stays in the build and on the Engines page as before. A start toasts what the user needs to know: a hand file that now wins, or a piece left in the layer.
+async function move_engine_layer(): Promise<void> {
+  const notes = await in_change_queue(async () => {
+    const stored = (await browser.storage.local.get(ENGINE_EDITS_STORAGE_KEY))[ENGINE_EDITS_STORAGE_KEY];
+    const edits = await load_edits();
+    if (stored === undefined && typeof edits.saved.default_engine !== "string") return [];
+    await get_config();
+    const current = await load_files_source();
+    const move = engine_layer_moved(stored, current.files, edits.saved, (files) => folder_build_problems(files, current.dir_label));
+    const left_changed = stored !== undefined && JSON.stringify(move.left) !== JSON.stringify(stored);
+    if (move.paths.length > 0 || move.saved !== edits.saved) {
+      await commit_folder_files(current, { files: move.files, edits_after: { saved: move.saved, temp: edits.temp }, paths: move.paths, ...(left_changed && { engines_after: move.left }) });
+    } else if (left_changed) {
+      // No file changed, so the layer has no write to share.
+      await browser.storage.local.set({ [ENGINE_EDITS_STORAGE_KEY]: move.left });
+    }
+    if (stored !== undefined && !has_engine_edits(move.left)) await browser.storage.local.remove(ENGINE_EDITS_STORAGE_KEY);
+    return move.notes;
+  });
+  if (notes.length > 0) await toast_start(`Moving the search engines saved in the browser into ${ENGINE_FILE}: ${notes.join(" ")}`, "warning");
 }
 
 const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";

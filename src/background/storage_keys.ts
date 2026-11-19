@@ -40,7 +40,7 @@ export const SAVED_SETTINGS_STORAGE_KEY = "desertfox_saved_settings";
 // Mode to key sequence to command text, the key edits the settings page saved (`edit_layers.ts`). Global, private windows included.
 export const KEYMAP_EDITS_STORAGE_KEY = "desertfox_keymap_edits";
 
-// Engines the settings page added, and their key letters (`edit_layers.ts`). Global, private windows included.
+// Engines and key letters older versions of the settings page added in the browser that the start could not move into the page's files yet (`edit_layers.ts`, `engine_layer_move.ts`). Global, private windows included.
 export const ENGINE_EDITS_STORAGE_KEY = "desertfox_engine_edits";
 
 // Command aliases the settings page added (`edit_layers.ts`): alias name to command id. Global, private windows included.
