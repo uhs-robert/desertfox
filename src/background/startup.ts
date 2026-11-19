@@ -4,7 +4,7 @@ import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
 import { effective_settings, needs_page, with_fallback_engines } from "../shared/config.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
+import type { MergedConfig, SettingEdits, SettingOverrides, Settings } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
@@ -12,7 +12,7 @@ import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
 import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, store_layers } from "./edit_layers.ts";
-import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf, ThemeEdits } from "./edit_layers.ts";
+import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
 import type { EngineState } from "./engine_message.ts";
 import type { AliasState } from "./alias_message.ts";
@@ -46,11 +46,13 @@ import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_file_sets, store_unsynced, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
-import type { CopyReplacedBy, FileWriteOutcome, NamedKind, UnsyncedFiles } from "./settings_file.ts";
+import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
+import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
+import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
+import type { ThemeFileChange } from "./theme_message.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
@@ -113,9 +115,7 @@ async function compile_input(config: MergedConfig, layers: EditLayers): Promise<
 async function publish(step: LoadStep, edits: SettingEdits, layers?: EditLayers): Promise<{ config: MergedConfig; warnings: string[] }> {
   const in_force = layers ?? (await load_layers());
   const layered = has_build_edits(in_force) ? await layered_build(step, engine_edits_of(in_force), alias_edits_of(in_force)) : undefined;
-  const edited = with_edits(layered?.loaded.config ?? step.loaded.config, edits);
-  // An import wins over a theme file of the same name, as a browser edit wins over a file. The config the readers get holds both, so `:set theme` names either.
-  const config: MergedConfig = in_force.themes === undefined ? edited : { ...edited, local_themes: { ...edited.local_themes, ...in_force.themes } };
+  const config = with_edits(layered?.loaded.config ?? step.loaded.config, edits);
   const { compiled, theme, warnings } = compile_config(await compile_input(config, in_force));
   // The build repeats the warnings of the files build, which the load warnings hold already.
   const layer_warnings = layered ? [...layered.loaded.warnings.filter((warning) => !step.load_warnings.includes(warning)), ...layered.dropped.map(dropped_warning)] : [];
@@ -286,9 +286,9 @@ export function read_engine_state(): Promise<EngineState> {
   });
 }
 
-// The imported themes, read in the change queue so a change still writing is not seen half done.
-export function read_theme_edits(): Promise<ThemeEdits> {
-  return in_change_queue(async () => (await load_layers()).themes ?? {});
+// The browser copy of the config files, read in the change queue so a change still writing is not seen half done.
+export function read_stored_files(): Promise<ConfigFiles> {
+  return in_change_queue(async () => (await load_files_source()).files);
 }
 
 export function read_alias_state(): Promise<AliasState> {
@@ -400,14 +400,14 @@ function in_change_queue<T>(work: () => Promise<T>): Promise<T> {
 // Writes `value` into the browser copy of settings.toml, drops any saved or temp edit of `name` that would hide it, then asks the host to write the file.
 export function set_in_settings_file(name: keyof Settings, value: TomlValue): Promise<FileWriteOutcome> {
   return change_setting_in_file<FileWriteOutcome>(name, async (files) => {
-    const named = NAMED_KINDS[name];
-    if (named !== undefined && typeof value === "string") {
-      if (name === "default_engine" && needs_page(with_fallback_engines((await get_config()).search_engines)[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
-      const home = await where_named(named, value);
-      if (home === "nowhere") throw new RuntimeRefusal(`${name} not changed: no ${named} named "${value}"`);
+    if (name === "theme" && typeof value === "string" && !(await theme_in_files(value))) throw new RuntimeRefusal(`theme not changed: no theme named "${value}"`);
+    if (name === "default_engine" && typeof value === "string") {
+      if (needs_page(with_fallback_engines((await get_config()).search_engines)[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
+      const home = await where_engine_named(value);
+      if (home === "nowhere") throw new RuntimeRefusal(`default_engine not changed: no search engine named "${value}"`);
       if (home === "browser") {
         await save_in_browser(name, value);
-        return { done: { kind: "saved_in_browser", missing: named } };
+        return { done: { kind: "saved_in_browser" } };
       }
     }
     return { files: with_setting_in_files(files, name, value) };
@@ -470,57 +470,107 @@ export function change_site_rule_in_file(url: string, action: "disable" | "enabl
 }
 
 // One change of `name` in settings.toml. `plan` runs in the change queue on the browser copy's files and returns them changed, or a result that wrote no file.
-// Only the edit runs in the change queue. The host write runs outside it, so a slow host never holds up a `:set`.
+// The change drops the saved and temp edits of `name`, so no browser edit hides the file.
 async function change_setting_in_file<R>(name: keyof Settings, plan: (files: ConfigFiles) => Promise<{ files: ConfigFiles } | { done: R }>): Promise<FileWriteOutcome | R> {
-  const committed = await in_change_queue(async (): Promise<{ done: R } | { done: FileWriteOutcome } | { question_was_pending: boolean; pick: PickMark }> => {
+  const changed = await change_folder_files<R>(async (files) => {
+    const planned = await plan(files);
+    return "done" in planned ? planned : { files: planned.files, edits_after: without_setting(await load_edits(), name), paths: [SETTINGS_FILE] };
+  });
+  return "done" in changed ? changed.done : changed.outcomes[0]!;
+}
+
+// A change of config files the host writes: the browser copy's files after it, the setting edits after it, and the paths it changed, in the order they are written.
+type FolderFilesPlan = { files: ConfigFiles; edits_after: SettingEdits; paths: string[] };
+
+// One change of files the folder holds. `plan` runs in the change queue on the browser copy's files. The outcomes follow the plan's paths.
+// Only the edit runs in the change queue. The host writes run outside it, one path after the other, so a slow host never holds up a `:set`.
+async function change_folder_files<R>(plan: (files: ConfigFiles) => Promise<FolderFilesPlan | { done: R }>): Promise<{ done: R } | { outcomes: FileWriteOutcome[] }> {
+  const committed = await in_change_queue(async () => {
     const current = await load_files_source();
     const planned = await plan(current.files);
     if ("done" in planned) return planned;
-    // An earlier edit the folder never got keeps its base: the folder still holds that text.
-    const from_folder = await came_from_folder(current);
-    const unsynced = from_folder ? with_unsynced_path(await read_unsynced(), SETTINGS_FILE, current.files[SETTINGS_FILE] ?? null) : undefined;
-    const edits = await load_edits();
-    const edits_after = without_setting(edits, name);
-    const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
-    try {
-      await apply_files({ ...current, files: planned.files }, "setting", { edits_after, unsynced });
-    } catch (error) {
-      // The files build can refuse a value the setting's own check passes. The checks above catch the common ones with a clearer message.
-      throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
-    }
-    if (JSON.stringify(edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(edits_after.saved, (await load_layers()).keymap);
-    if (!from_folder) return { done: { kind: "browser_copy" } };
-    const writes = writes_of(SETTINGS_FILE);
-    writes.picks_made += 1;
-    return { question_was_pending, pick: { path: SETTINGS_FILE, seq: writes.picks_made, drops: writes.drops } };
+    return { paths: planned.paths, ...(await commit_folder_files(current, planned)) };
   });
-  if ("done" in committed) return committed.done;
+  if ("done" in committed) return committed;
+  if (committed.picks === undefined) return { outcomes: committed.paths.map((): FileWriteOutcome => ({ kind: "browser_copy" })) };
+  const outcomes: FileWriteOutcome[] = [];
   // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
-  const outcome = (await write_waiting_file(in_change_queue, SETTINGS_FILE, committed.pick)) ?? { kind: "written" };
+  for (const pick of committed.picks) outcomes.push((await write_waiting_file(in_change_queue, pick.path, pick)) ?? { kind: "written" });
   // The question was made against the copy before the pick. The folder may still differ in other files, so it is asked again or settled.
-  if (outcome.kind === "written" && committed.question_was_pending) {
+  if (outcomes.every((outcome) => outcome.kind === "written") && committed.question_was_pending) {
     const folder = await read_folder_after_write();
     if (folder) await in_change_queue(() => ask_when_folder_differs(folder, { clear_when_settled: true }));
   }
-  return outcome;
+  return { outcomes };
 }
+
+// In the change queue. Swaps in the planned files and edits, with each changed path in the record when the copy came from the folder, and numbers a pick for each path.
+// No picks: the copy did not come from the folder, so only the copy changed.
+async function commit_folder_files(current: FilesSource, planned: FolderFilesPlan): Promise<{ question_was_pending: boolean; picks?: PickMark[] }> {
+  // An earlier edit the folder never got keeps its base: the folder still holds that text.
+  const from_folder = await came_from_folder(current);
+  let unsynced = from_folder ? await read_unsynced() : undefined;
+  if (from_folder) for (const path of planned.paths) unsynced = with_unsynced_path(unsynced, path, current.files[path] ?? null);
+  const edits = await load_edits();
+  const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
+  try {
+    await apply_files({ ...current, files: planned.files }, "setting", { edits_after: planned.edits_after, unsynced });
+  } catch (error) {
+    // The files build can refuse a value the setting's own check passes. The checks before catch the common ones with a clearer message.
+    throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
+  }
+  if (JSON.stringify(planned.edits_after.saved) !== JSON.stringify(edits.saved)) void autoconfig.mirror(planned.edits_after.saved, (await load_layers()).keymap);
+  if (!from_folder) return { question_was_pending };
+  const picks = planned.paths.map((path) => {
+    const writes = writes_of(path);
+    writes.picks_made += 1;
+    return { path, seq: writes.picks_made, drops: writes.drops };
+  });
+  return { question_was_pending, picks };
+}
+
+// Saves the theme file `themes/<name>.toml` with `text`, or removes it with `text` null, in the browser copy and then through the host, as `set_in_settings_file` writes settings.toml.
+// A save over an existing file needs `replace`. A remove also takes `theme` out of settings.toml and drops the saved and temp edits when they name the theme, so nothing names a theme the files no longer have.
+// A `settings.d` file that sets `theme` to it refuses the remove, as the files build would refuse the config without the theme.
+export async function set_theme_file(name: string, text: string | null, replace: boolean): Promise<ThemeFileChange> {
+  const path = theme_file_path(name);
+  let replaced = false;
+  const changed = await change_folder_files<"needs_replace">(async (files) => {
+    replaced = Object.hasOwn(files, path);
+    const edits = await load_edits();
+    if (text !== null) {
+      if (replaced && !replace) return { done: "needs_replace" };
+      return { files: { ...files, [path]: text }, edits_after: edits, paths: [path] };
+    }
+    if (!replaced) throw new RuntimeRefusal(`No theme named ${name} is in the config files.`);
+    const naming_file = settings_d_files_naming(files, "theme", name)[0];
+    if (naming_file !== undefined) throw new RuntimeRefusal(`${naming_file} sets theme = "${name}". Change it there before you remove the theme.`);
+    const { [path]: _removed, ...others } = files;
+    const edits_after = { saved: without_theme_named(edits.saved, name), temp: without_theme_named(edits.temp, name) };
+    return settings_file_naming(files, "theme", name) ? { files: without_setting_in_files(others, "theme"), edits_after, paths: [path, SETTINGS_FILE] } : { files: others, edits_after, paths: [path] };
+  });
+  if ("done" in changed) return { kind: changed.done };
+  const [file, settings] = changed.outcomes;
+  return { kind: "changed", replaced, file: file!, ...(settings && { settings }) };
+}
+
+const without_theme_named = (layer: SettingOverrides, theme: string): SettingOverrides => (layer.theme === theme ? Object.fromEntries(Object.entries(layer).filter(([setting]) => setting !== "theme")) : layer);
 
 // The folder's text is the base only when the browser copy came from the folder: a copy from an import, or one that never read a folder, would seed the folder with a settings.toml of its own.
 async function came_from_folder(source: FilesSource): Promise<boolean> {
   return !source.imported && (await read_host_memory()).applied !== undefined;
 }
 
-// The settings whose value names a theme or a search engine, which the files build checks against the names it knows.
-const NAMED_KINDS: Partial<Record<keyof Settings, NamedKind>> = { theme: "theme", default_engine: "search engine" };
-
-// Where a theme or engine name is known. `browser`: only in the browser (an imported theme, an engine added on the Engines page), so the files build refuses a settings.toml that names it.
-// A theme file or an engine of the same name in the files is known to the build, so that name still goes to the file.
-async function where_named(kind: NamedKind, value: string): Promise<"files" | "browser" | "nowhere"> {
+// Whether the files build knows the theme, so a settings.toml that names it builds.
+async function theme_in_files(value: string): Promise<boolean> {
   const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
-  if (kind === "theme") {
-    if (value === DESKTOP_THEME || built_in_theme_names().includes(value) || Object.hasOwn(files_config.local_themes ?? {}, value)) return "files";
-    return Object.hasOwn((await load_layers()).themes ?? {}, value) ? "browser" : "nowhere";
-  }
+  return value === DESKTOP_THEME || built_in_theme_names().includes(value) || Object.hasOwn(files_config.local_themes ?? {}, value);
+}
+
+// Where an engine name is known. `browser`: only in the browser (an engine added on the Engines page), so the files build refuses a settings.toml that names it.
+// An engine of the same name in the files is known to the build, so that name still goes to the file.
+async function where_engine_named(value: string): Promise<"files" | "browser" | "nowhere"> {
+  const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
   if (Object.hasOwn(with_fallback_engines(files_config.search_engines), value)) return "files";
   return Object.hasOwn(with_fallback_engines((await get_config()).search_engines), value) ? "browser" : "nowhere";
 }
@@ -774,6 +824,7 @@ export function reload_config(): Promise<{ config_dir: string; warnings: number 
 // A broken file keeps the stored config too, and a toast names the problem so the user learns the edit failed.
 // The host read runs outside the queue so it never blocks a `:set` while the host starts. A swap that commits during the read is newer than the reply, so the reply is dropped.
 export async function reload_config_at_start(): Promise<void> {
+  await move_imported_themes().catch(warn_and_go("move the imported themes into theme files"));
   await write_waiting_files(in_change_queue).catch(warn_and_go("write the waiting config files at start"));
   const swaps_before = swap_count;
   let reply;
@@ -813,6 +864,21 @@ export async function reload_config_at_start(): Promise<void> {
       await toast_start(error.message, "error");
     }
   }).catch((error: unknown) => console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`));
+}
+
+// Moves the imports an older version kept in browser storage into theme files, and a saved `theme` edit that names one into settings.toml. The waiting writes of the start send them to the folder, or a later start when the host is off.
+// The stored list goes in the same queue turn, after the swap stored the files and the record together. A stop before that leaves the list, and the next start moves it again: a file that holds an import's text already counts as moved.
+async function move_imported_themes(): Promise<void> {
+  await in_change_queue(async () => {
+    const stored = (await browser.storage.local.get(THEME_EDITS_STORAGE_KEY))[THEME_EDITS_STORAGE_KEY];
+    if (stored === undefined) return;
+    await get_config();
+    const current = await load_files_source();
+    const edits = await load_edits();
+    const moved = imports_moved_to_files(stored, current.files, edits.saved);
+    if (moved.paths.length > 0 || moved.saved !== edits.saved) await commit_folder_files(current, { files: moved.files, edits_after: { saved: moved.saved, temp: edits.temp }, paths: moved.paths });
+    await browser.storage.local.remove(THEME_EDITS_STORAGE_KEY);
+  });
 }
 
 const HOST_DIFFERS_MESSAGE = "The config folder differs from the config stored in the browser, which stays for now. Open the Settings page to choose.";
