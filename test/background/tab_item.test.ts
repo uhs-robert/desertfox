@@ -180,3 +180,18 @@ test("reports that arrive together run one after another", async () => {
   await Promise.all([tab_item.reported(4, 0, "item"), tab_item.reported(4, 7, "item", true), tab_item.reported(4, 9, "item", true)]);
   assert.deepEqual(steps, ["4:on:all:from 0"], "one start for three frames");
 });
+
+test("a frame that never answers its step holds up no later report or join, in this tab or another", { timeout: 2000 }, async () => {
+  const data: Record<string, unknown> = {};
+  const storage = {
+    get: async (key: string) => (key in data ? { [key]: structuredClone(data[key]) } : {}),
+    set: async (items: Record<string, unknown>) => void Object.assign(data, structuredClone(items)),
+    remove: async (key: string) => void delete data[key],
+  };
+  const tab_item = create_tab_item({ storage: storage as never, send_step: () => new Promise(() => {}) });
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  await tab_item.reported(4, 0, "normal");
+  await tab_item.reported(5, 0, "item");
+  assert.equal(await tab_item.join(5, 3), true);
+});
