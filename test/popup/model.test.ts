@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_host_flag, create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
+import { create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
 import { parse_route } from "../../src/help/route.ts";
 
@@ -9,7 +9,7 @@ const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);
 const row = (inputs: PopupInputs, id: string) => build_rows(inputs).find((candidate) => candidate.id === id)!;
 
 test("the first row is the switch and the rows follow the layout: switch, site card, links", () => {
-  assert.deepEqual(ids(base), ["power", "site", "copy_rule", "warnings", "reload_config", "settings", "home", "keys", "support"]);
+  assert.deepEqual(ids(base), ["power", "site", "warnings", "reload_config", "settings", "home", "keys", "support"]);
   assert.ok(!ids({ ...base, warning_count: 0 }).includes("warnings"), "no Warnings row without warnings");
   assert.equal(ids({ ...base, warning_count: 0 }).at(-1), "support");
   assert.deepEqual(row(base, "power"), { id: "power", kind: "switch", label: "DesertFox is on", enabled: true, on: true });
@@ -89,17 +89,8 @@ test("the site card names the host and one state line", () => {
   assert.deepEqual(site_card({ kind: "unavailable" }, false), { host: "This page", state: "No site on this page" });
 });
 
-test("the copy rule row shows only for a page with a site, and the text is a rule with an empty pass", () => {
-  assert.ok(ids(base).includes("copy_rule"));
-  assert.ok(!ids({ ...base, site: { kind: "unavailable" } }).includes("copy_rule"));
-  assert.equal(rule_template("*://*.a.test/*"), '[[site_rules]]\nsite = "*://*.a.test/*"\npass = ""\n');
-});
-
-test("the copy rule jump lands on the edit files section, and the Keys button on the Commands page", async () => {
-  assert.deepEqual(parse_route(EDIT_FILES_HASH), { page: "settings", section: "advanced-edit-files" });
+test("the Keys button lands on the Commands page", () => {
   assert.deepEqual(parse_route(COMMANDS_HASH), { page: "commands" });
-  const { sections_from_titles } = await import("../../src/help/render.ts");
-  assert.equal(sections_from_titles(["Advanced: edit files"])[0]!.slug, "advanced-edit-files");
   assert.equal(row(base, "keys").kind, "link");
 });
 

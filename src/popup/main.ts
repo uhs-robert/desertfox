@@ -8,7 +8,7 @@ import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/mes
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "../background/storage_keys.ts";
-import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, rule_template, site_card, theme_options, COMMANDS_HASH, EDIT_FILES_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
+import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH } from "./model.ts";
 import type { HostDot, PopupRow } from "./model.ts";
 
 const root = document.getElementById("desertfox-popup")!;
@@ -58,14 +58,6 @@ async function open_page_beside(url: string): Promise<void> {
   window.close();
 }
 
-// The clipboard write comes first and the page opens only after it worked, so a refused write leaves the notice on screen.
-async function copy_rule(site: SiteState): Promise<void> {
-  if (site.kind === "unavailable") return;
-  await navigator.clipboard.writeText(rule_template(site.pattern));
-  show_notice({ ok: true, message: "Copied a rule for this site" });
-  return open_help_page(EDIT_FILES_HASH);
-}
-
 async function act(row: PopupRow): Promise<void> {
   const tab = await active_tab();
   if (row.id === "power") show_notice(await ask({ type: "toolbar_set_disabled", disabled: disabled_after_click(row) }));
@@ -73,13 +65,6 @@ async function act(row: PopupRow): Promise<void> {
   else if (row.id === "home") return open_help_page(HOME_HASH);
   else if (row.id === "keys") return open_help_page(COMMANDS_HASH);
   else if (row.id === "support") return open_page_beside(SUPPORT_URL);
-  else if (row.id === "copy_rule") {
-    try {
-      return await copy_rule(read_site(tab?.url, await load_effective_config()));
-    } catch (error) {
-      show_notice({ ok: false, message: error instanceof Error ? error.message : String(error) });
-    }
-  }
   else if (row.id === "warnings") return open_help_page(WARNINGS_HASH);
   else if (row.id === "rule") return open_help_page(SITE_RULES_HASH);
   else if (row.id === "site") {
@@ -125,7 +110,6 @@ const ICON_PATHS = {
   home: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
   reload: "M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6",
   keys: "M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM6 11h.01M10 11h.01M14 11h.01M18 11h.01M7 14.5h10",
-  copy: "M9 9h11v11H9zM5 15V4h11",
   support: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z",
 } as const;
 
@@ -216,8 +200,6 @@ function card_element(rows: PopupRow[], inputs: { site: SiteState; disabled: boo
   card.append(row_button(site, "desertfox-popup-site"));
   const rule = rows.find((row) => row.id === "rule");
   if (rule !== undefined) card.append(row_button(rule, "desertfox-popup-rule desertfox-popup-link"));
-  const copy = rows.find((row) => row.id === "copy_rule");
-  if (copy !== undefined) card.append(icon_button(copy, "copy", "desertfox-popup-copy"));
   return card;
 }
 
