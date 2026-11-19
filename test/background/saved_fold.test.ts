@@ -266,20 +266,41 @@ test("while the copies-differ question waits the saved settings stay, Use the fo
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
+test("an editor save that lands between the start read and the fold keeps the saved settings for a later start", async () => {
+  const { host, local, fake } = await old_profile({ which_key_delay_ms: 5 }, { "settings.toml": "", "keymap.toml": "" });
+  const old_host = host as typeof host & { old_host?: boolean };
+  // A host from before the write verbs, so a fold's write waits and only the copy holds the values.
+  old_host.old_host = true;
+  const startup = await fresh_startup();
+  let saved_by_editor: Promise<unknown> | undefined;
+  const remove = fake.storage.local.remove;
+  // The start read clears the question key in its own queue turn, so a save asked for then lands before the fold's turn.
+  fake.storage.local.remove = async (key: string | string[]) => {
+    if (saved_by_editor === undefined && [key].flat().includes(HOST_START_PENDING_STORAGE_KEY)) saved_by_editor = startup.save_config_file("keymap.toml", "# typed\n", "");
+    return remove(key);
+  };
+  await startup.reload_config_at_start();
+  assert.ok(saved_by_editor, "the start read never cleared the question");
+  await saved_by_editor;
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_delay_ms: 5 });
+  assert.equal(settings_of(stored_files(local)).which_key_delay_ms, undefined);
+  assert.equal((await startup.get_config()).settings.which_key_delay_ms, 5);
+});
+
 test("changes queued during the fold land after it, so a :set of a folded name wins", async () => {
   const { host, local, fake } = await old_profile({ which_key_delay_ms: 5, hint_letters: "qw" });
   const startup = await fresh_startup();
   const queued: Promise<unknown>[] = [];
-  const get = fake.storage.session.get;
-  // The fold reads its notes inside its queue turn, so changes asked for then wait behind it.
-  fake.storage.session.get = async (key?: string | string[]) => {
-    if (queued.length === 0 && key === SAVED_FOLD_NOTES_STORAGE_KEY) {
+  const get = fake.storage.local.get;
+  // The fold reads the question key alone first thing in its queue turn, so changes asked for then wait behind it.
+  fake.storage.local.get = async (key?: string | string[]) => {
+    if (queued.length === 0 && key === HOST_START_PENDING_STORAGE_KEY) {
       queued.push(startup.set_in_settings_file("which_key_delay_ms", 9), startup.set_in_settings_file("toast_ms", 900));
     }
     return get(key);
   };
   await startup.reload_config_at_start();
-  assert.equal(queued.length, 2, "the fold never read its notes");
+  assert.equal(queued.length, 2, "the fold never read the question key");
   for (const outcome of await Promise.all(queued)) assert.deepEqual(outcome, { kind: "written" });
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
   assert.deepEqual(settings_of(host.files), { which_key_delay_ms: 9, hint_letters: "qw", toast_ms: 900 });

@@ -1079,42 +1079,42 @@ export async function reload_config_at_start(): Promise<void> {
     await in_change_queue(clear_host_pending).catch(warn_and_go("clear host pending"));
     return;
   }
-  // Whether the copy now stands for the folder, with no question open: the only state where the saved settings can join the copy without a later "use the folder" dropping them.
-  const settled = await in_change_queue(async (): Promise<boolean> => {
+  // The swap count once the copy stands for the folder with no question open, or undefined: the only state where the saved settings can join the copy without a later "use the folder" dropping them.
+  const settled = await in_change_queue(async (): Promise<number | undefined> => {
     await get_config();
-    if (swap_count !== swaps_before) return false;
+    if (swap_count !== swaps_before) return undefined;
     const browser_files = (await load_files_source()).files;
     // A setting the host could not write yet (an older host) is the copy's only change while the folder still holds the base text: no question, the write comes later.
     const unsynced = await read_unsynced();
     const only_unwritten_edit_differs = unsynced !== undefined && same_files(compared_files(reply.files), compared_files(files_before_unsynced(browser_files, unsynced)));
-    if (only_unwritten_edit_differs) return true;
+    if (only_unwritten_edit_differs) return swap_count;
     const plan = await classify_host_start(reply, browser_files, await read_host_memory());
     if (plan.kind === "ask") {
       await store_host_pending(plan.pending);
       await toast_start(HOST_DIFFERS_MESSAGE, "warning");
-      return false;
+      return undefined;
     }
     if (plan.kind === "ignore") {
       if (plan.reason === "missing") console.warn(missing_folder_message(reply.config_dir));
       if (plan.reason === "empty") console.warn(empty_folder_message(reply.config_dir));
       if (plan.reason === "same") await remember_applied(reply.files);
       await clear_host_pending();
-      return plan.reason === "same";
+      return plan.reason === "same" ? swap_count : undefined;
     }
     try {
       await apply_host_files(reply.files, reply.config_dir);
-      return true;
+      return swap_count;
     } catch (error) {
       if (!(error instanceof ConfigRefusal)) throw error;
       await toast_start(error.message, "error");
-      return false;
+      return undefined;
     }
   }).catch((error: unknown) => {
     console.warn(`Config not reread at start: ${error instanceof Error ? error.message : String(error)}`);
-    return false;
+    return undefined;
   });
-  if (!settled) return;
-  const folded = await fold_saved_layer().catch(warn_and_go("move the settings saved in the browser into settings.toml"));
+  if (settled === undefined) return;
+  const folded = await fold_saved_layer(settled).catch(warn_and_go("move the settings saved in the browser into settings.toml"));
   // Only a fold adds a write. A path the first round left waiting waits for the next start, as before.
   if (folded === true) await write_waiting_files(in_change_queue).catch(warn_and_go("write the folded settings.toml at start"));
 }
@@ -1165,12 +1165,13 @@ async function move_engine_layer(): Promise<void> {
 // The smaller layer goes in the same storage write as the files and the record, so a stop at any point moves nothing twice and loses nothing.
 // A name that stays saved gets a Home warning at every start, and a start that moves something says so in a toast and on Home.
 // True when it moved something into the browser copy.
-async function fold_saved_layer(): Promise<boolean> {
+// `swaps_settled` is the swap count the start read reconciled. A swap since, for example an editor save, makes a difference the next start can ask about, so the fold waits for that start.
+async function fold_saved_layer(swaps_settled: number): Promise<boolean> {
   const moved_note = await in_change_queue(async () => {
     await get_config();
     const pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
     // A swap or a pick can land between the start read and this turn.
-    if (pending || !(await came_from_folder(await load_files_source()))) return undefined;
+    if (swap_count !== swaps_settled || pending || !(await came_from_folder(await load_files_source()))) return undefined;
     const edits = await load_edits();
     const notes_before = await read_fold_notes();
     const engine = edits.saved.default_engine;
