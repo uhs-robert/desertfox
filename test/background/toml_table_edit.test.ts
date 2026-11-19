@@ -135,3 +135,17 @@ test("thousands of rows change in one pass at the ends, and a large reorder in t
   assert.deepEqual(rows_of(set_table_rows(text, "site_rules", reversed)), reversed);
   assert.ok(performance.now() - started < 10_000, `took ${Math.round(performance.now() - started)} ms`);
 });
+
+test("10,000 adjacent rows go in one Reset, and 10,000 new rows after one kept row land in order, each well under a second", () => {
+  const rows = Array.from({ length: 10_000 }, (_, index) => ({ site: `*://*.s${index}.test/*` }));
+  // No blank lines between the rows, so every removed row is followed by another removed one.
+  const packed = `a = 1\n${rows.map((row) => `[[site_rules]]\nsite = "${row.site}"\n`).join("")}`;
+  let started = performance.now();
+  assert.equal(remove_table_rows(packed, "site_rules"), "a = 1\n");
+  assert.ok(performance.now() - started < 1000, `the Reset took ${Math.round(performance.now() - started)} ms`);
+  const one = 'a = 1\n\n[[site_rules]]\nsite = "*://*.kept.test/*"\n';
+  started = performance.now();
+  const grown = set_table_rows(one, "site_rules", [{ site: "*://*.kept.test/*" }, ...rows]);
+  assert.ok(performance.now() - started < 1000, `the append took ${Math.round(performance.now() - started)} ms`);
+  assert.deepEqual(rows_of(grown), [{ site: "*://*.kept.test/*" }, ...rows]);
+});

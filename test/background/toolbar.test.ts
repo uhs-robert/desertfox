@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { answer_toolbar_request, create_toolbar, OFF_KEYMAP, saved_popup_rows, site_pattern, site_rows_after, site_state, toolbar_look } from "../../src/background/toolbar.ts";
+import { answer_toolbar_request, create_toolbar, OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after, site_state, toolbar_look } from "../../src/background/toolbar.ts";
 import type { ToolbarDeps } from "../../src/background/toolbar.ts";
 import { PER_SITE_SETTING_NAMES } from "../../src/shared/settings_schema.ts";
 import { SETTINGS_TABLE } from "../../src/shared/settings_table.ts";
@@ -149,6 +149,17 @@ test("an off = false row covers the site, and so does another off row behind the
   const kept = [{ site: "*://www.example.com/*", off: false }, { site: "*://*.example.com/*", pass: "j" }];
   assert.deepEqual(site_state(www_url, kept), { kind: "config", pattern: "*://*.example.com/*", rule: "on, pass 1 key" });
   assert.equal(site_state(www_url, [{ site: "*://*.example.com/*", off: true }, { site: "*://www.example.com/*", off: true }]).kind, "config");
+});
+
+test("a popup row in front of an off = false row decides the site, so Enable is offered and turns the site on", () => {
+  const pattern = "*://*.example.com/*";
+  const rules = [{ site: pattern, off: true }, { site: pattern, off: false }];
+  assert.deepEqual(site_state(www_url, rules), { kind: "disabled", pattern, rule: "all off" });
+  const enabled = site_rows_after(rules, pattern, "enable")!;
+  assert.deepEqual(enabled, [{ site: pattern, off: false }]);
+  assert.equal(site_is_off(enabled, www_url), false);
+  // An off = false row in front of the popup row decides the site the other way, so the popup row does not.
+  assert.equal(site_state(www_url, [...rules].reverse()).kind, "config");
 });
 
 test("each column comes from the first matching row that sets it", () => {

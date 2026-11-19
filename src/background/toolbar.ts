@@ -112,7 +112,7 @@ export function describe_columns(columns: ResolvedSiteColumns<SiteRowKeys>): str
 }
 
 // The popup can turn a site off only while no row sets the off column: its appended row then decides it.
-// It can turn a site on again only while a popup row for the pattern decides the column and no other row decides it the same way. `rules` are the rules in force.
+// It can turn a site on again only while a popup row for the pattern decides the column and, without the popup rows, no row turns it off. `rules` are the rules in force.
 export function site_state(url: string | undefined, rules: readonly SiteRuleRow[]): SiteState {
   const pattern = site_pattern(url);
   if (pattern === undefined || url === undefined) return { kind: "unavailable" };
@@ -121,7 +121,8 @@ export function site_state(url: string | undefined, rules: readonly SiteRuleRow[
   const state = { pattern, ...(rule === undefined ? {} : { rule }) };
   if (columns.off === undefined) return { kind: "enabled", ...state };
   const own = is_popup_row(pattern);
-  const popup_decides = columns.off && rules.some(own) && columns_at(rules.filter((row) => !own(row)), url).off === undefined;
+  // Another row that sets off = false behind the popup row still lets Enable turn the site on.
+  const popup_decides = columns.off && rules.some(own) && columns_at(rules.filter((row) => !own(row)), url).off !== true;
   return { kind: popup_decides ? "disabled" : "config", ...state };
 }
 
