@@ -247,7 +247,7 @@ class WriteSettingsTest(ConfigDirCase):
 
     def entries(self):
         """The folder without the lock file, which stays between writes and which read_config skips."""
-        return sorted(name for name in os.listdir(self.config) if name != host.SETTINGS_LOCK_NAME)
+        return sorted(name for name in os.listdir(self.config) if name != host.CONFIG_WRITE_LOCK_NAME)
 
     def read_settings(self, path=None):
         with open(path or os.path.join(self.config, "settings.toml"), "rb") as file:
@@ -372,7 +372,7 @@ class WriteSettingsTest(ConfigDirCase):
         release = threading.Event()
 
         def hold():
-            with host.settings_lock(self.config):
+            with host.config_write_lock(self.config):
                 held.set()
                 release.wait(5)
 
@@ -610,6 +610,254 @@ class WriteSettingsTest(ConfigDirCase):
             reply = self.write("a = 2\n", None)
             self.assertIn("no hard links", reply["error"])
             self.assertEqual(self.entries(), [])
+
+
+class WriteConfigFileTest(ConfigDirCase):
+    def write(self, kind, name, text, base, **extra):
+        request = {"cmd": "write_config_file", "kind": kind, "text": text, "base_sha256": base, **extra}
+        if name is not None:
+            request["name"] = name
+        _, raw = run_in_process(frame(request))
+        return unframe(raw)
+
+    def tree(self):
+        """Every path under the config folder but the lock file, folders with a trailing slash."""
+        found = []
+        for root, folders, files in os.walk(self.config):
+            relative = os.path.relpath(root, self.config)
+            found += [os.path.normpath(os.path.join(relative, name)) + "/" for name in folders]
+            found += [os.path.normpath(os.path.join(relative, name)) for name in files if name != host.CONFIG_WRITE_LOCK_NAME]
+        return sorted(found)
+
+    def read(self, relative):
+        with open(os.path.join(self.config, relative), "rb") as file:
+            return file.read()
+
+    def test_a_new_theme_creates_the_themes_folder_and_read_config_sends_it_back(self):
+        reply = self.write("theme", "nord_dark", "[colors]\n", None)
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(reply["sha256"], sha("[colors]\n"))
+        self.assertEqual(reply["path"], os.path.join(self.config, "themes", "nord_dark.toml"))
+        self.assertEqual(self.tree(), ["themes/", "themes/nord_dark.toml"])
+        _, raw = run_in_process(frame({"cmd": "read_config"}))
+        self.assertEqual(unframe(raw)["files"], {"themes/nord_dark.toml": "[colors]\n"})
+
+    def test_the_settings_kind_writes_settings_toml(self):
+        self.put("settings.toml", "a = 1\n")
+        self.assertTrue(self.write("settings", None, "a = 2\n", sha("a = 1\n"))["ok"])
+        self.assertEqual(self.read("settings.toml"), b"a = 2\n")
+
+    def test_a_hand_edited_or_unknown_theme_file_is_never_overwritten(self):
+        self.put("themes/mine.toml", "hand = 1\n")
+        for base in (sha("read = 1\n"), None):
+            reply = self.write("theme", "mine", "new = 1\n", base)
+            self.assertIn(host.CHANGED_ON_DISK, reply["error"], base)
+        self.assertEqual(self.read("themes/mine.toml"), b"hand = 1\n")
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+
+    def test_a_theme_overwrite_with_the_read_base_replaces_it(self):
+        self.put("themes/mine.toml", "old = 1\n")
+        self.assertTrue(self.write("theme", "mine", "new = 1\n", sha("old = 1\n"))["ok"])
+        self.assertEqual(self.read("themes/mine.toml"), b"new = 1\n")
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+
+    def test_a_null_text_deletes_only_with_the_base_of_the_file_on_disk(self):
+        self.put("themes/mine.toml", "old = 1\n")
+        reply = self.write("theme", "mine", None, sha("other = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertIn("not deleted", reply["error"])
+        self.assertEqual(self.read("themes/mine.toml"), b"old = 1\n")
+        reply = self.write("theme", "mine", None, None)
+        self.assertFalse(reply["ok"])
+        self.assertIn("needs base_sha256", reply["error"])
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+        reply = self.write("theme", "mine", None, sha("old = 1\n"))
+        self.assertTrue(reply["ok"], reply)
+        self.assertTrue(reply["deleted"])
+        self.assertEqual(self.tree(), ["themes/"])
+        # Gone since the read: the base no longer matches anything, so the delete refuses.
+        self.assertIn(host.CHANGED_ON_DISK, self.write("theme", "mine", None, sha("old = 1\n"))["error"])
+
+    def test_a_delete_of_a_link_removes_the_link_and_keeps_its_target(self):
+        dotfiles = os.path.join(self.tmp.name, "dotfiles")
+        os.makedirs(dotfiles)
+        target = os.path.join(dotfiles, "mine.toml")
+        with open(target, "w", encoding="utf-8") as file:
+            file.write("old = 1\n")
+        os.makedirs(os.path.join(self.config, "themes"))
+        os.symlink(target, os.path.join(self.config, "themes", "mine.toml"))
+        self.assertIn(host.CHANGED_ON_DISK, self.write("theme", "mine", None, sha("other = 1\n"))["error"])
+        self.assertTrue(os.path.islink(os.path.join(self.config, "themes", "mine.toml")))
+        self.assertTrue(self.write("theme", "mine", None, sha("old = 1\n"))["ok"])
+        self.assertEqual(self.tree(), ["themes/"])
+        self.assertEqual(sorted(os.listdir(dotfiles)), ["mine.toml"])
+
+    def test_an_edit_saved_into_the_file_just_before_the_delete_is_put_back(self):
+        path = self.put("themes/mine.toml", "old = 1\n")
+        real_rename = os.rename
+
+        def edit_then_rename(source, destination):
+            if source == path:
+                with open(path, "r+b") as file:
+                    file.write(b"new = 9\n")
+            return real_rename(source, destination)
+
+        with mock.patch.object(host.os, "rename", side_effect=edit_then_rename):
+            reply = self.write("theme", "mine", None, sha("old = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read("themes/mine.toml"), b"new = 9\n")
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+
+    def test_a_file_saved_at_the_name_during_a_delete_stays_and_the_old_one_stays_aside(self):
+        path = self.put("themes/mine.toml", "old = 1\n")
+        real_rename = os.rename
+
+        def edit_rename_then_save(source, destination):
+            with open(path, "r+b") as file:
+                file.write(b"new = 9\n")
+            real_rename(source, destination)
+            with open(path, "wb") as file:
+                file.write(b"newer = 7\n")
+
+        with mock.patch.object(host.os, "rename", side_effect=edit_rename_then_save):
+            reply = self.write("theme", "mine", None, sha("old = 1\n"))
+        self.assertFalse(reply["ok"])
+        self.assertEqual(self.read("themes/mine.toml"), b"newer = 7\n")
+        [aside] = [name for name in os.listdir(os.path.join(self.config, "themes")) if name.endswith(".old")]
+        self.assertIn(aside, reply["error"])
+        self.assertEqual(self.read(os.path.join("themes", aside)), b"new = 9\n")
+
+    def test_names_that_could_leave_the_themes_folder_are_refused_and_nothing_is_written(self):
+        outside = os.path.join(self.tmp.name, "outside.toml")
+        for name in ("../outside", "../../outside", "a/b", "a\\b", "a.b", ".hidden", "", "-a", "_a", "Nord", "a\x00b", "a\n", "caf\u00e9", "x" * 49, 3, None, ["a"]):
+            request = {"cmd": "write_config_file", "kind": "theme", "name": name, "text": "a = 1\n", "base_sha256": None}
+            _, raw = run_in_process(frame(request))
+            reply = unframe(raw)
+            self.assertFalse(reply["ok"], name)
+            self.assertIn("needs a name", reply["error"], name)
+        self.assertEqual(self.tree(), [])
+        self.assertFalse(os.path.exists(outside))
+        self.assertTrue(self.write("theme", "x" * 48, "a = 1\n", None)["ok"])
+
+    def test_a_kind_outside_the_table_and_a_name_for_settings_are_refused(self):
+        for kind in ("keymap", "themes", "../settings", "Settings", "", None, 1):
+            reply = self.write(kind, "a", "a = 1\n", None)
+            self.assertFalse(reply["ok"], kind)
+            self.assertIn("has no kind", reply["error"], kind)
+        reply = self.write("settings", "a", "a = 1\n", None)
+        self.assertIn("takes no name", reply["error"])
+        _, raw = run_in_process(frame({"cmd": "write_config_file", "text": "a = 1\n", "base_sha256": None}))
+        self.assertIn("has no kind", unframe(raw)["error"])
+        self.assertEqual(self.tree(), [])
+
+    def test_rejects_bad_fields_and_a_path(self):
+        for request in (
+            {"cmd": "write_config_file", "kind": "theme", "name": "a", "base_sha256": None},
+            {"cmd": "write_config_file", "kind": "theme", "name": "a", "text": 3, "base_sha256": None},
+            {"cmd": "write_config_file", "kind": "theme", "name": "a", "text": "a = 1\n"},
+            {"cmd": "write_config_file", "kind": "theme", "name": "a", "text": "a = 1\n", "base_sha256": "abc"},
+            {"cmd": "write_config_file", "kind": "theme", "name": "a", "text": "a = 1\n", "base_sha256": None, "path": "/tmp/x"},
+        ):
+            _, raw = run_in_process(frame(request))
+            self.assertFalse(unframe(raw)["ok"], request)
+        self.assertEqual(self.tree(), [])
+
+    def test_a_linked_theme_stays_a_link_and_its_target_keeps_its_mode(self):
+        dotfiles = os.path.join(self.tmp.name, "dotfiles")
+        os.makedirs(dotfiles)
+        target = os.path.join(dotfiles, "mine.toml")
+        with open(target, "w", encoding="utf-8") as file:
+            file.write("a = 1\n")
+        os.chmod(target, 0o600)
+        os.makedirs(os.path.join(self.config, "themes"))
+        link = os.path.join(self.config, "themes", "mine.toml")
+        os.symlink(target, link)
+        self.assertTrue(self.write("theme", "mine", "a = 2\n", sha("a = 1\n"))["ok"])
+        self.assertTrue(os.path.islink(link))
+        with open(target, "rb") as file:
+            self.assertEqual(file.read(), b"a = 2\n")
+        self.assertEqual(os.stat(target).st_mode & 0o777, 0o600)
+        self.assertEqual(sorted(os.listdir(dotfiles)), ["mine.toml"])
+
+    def test_a_linked_themes_folder_is_written_through(self):
+        dotfiles = os.path.join(self.tmp.name, "dotfiles-themes")
+        os.makedirs(dotfiles)
+        os.symlink(dotfiles, os.path.join(self.config, "themes"))
+        self.assertTrue(self.write("theme", "mine", "a = 1\n", None)["ok"])
+        self.assertEqual(sorted(os.listdir(dotfiles)), ["mine.toml"])
+
+    def test_a_themes_entry_that_is_no_folder_and_a_theme_that_is_no_file_are_refused(self):
+        self.put("themes", "not a folder\n")
+        reply = self.write("theme", "mine", "a = 1\n", None)
+        self.assertIn("is not a folder", reply["error"])
+        os.unlink(os.path.join(self.config, "themes"))
+        os.makedirs(os.path.join(self.config, "themes", "mine.toml"))
+        reply = self.write("theme", "mine", "a = 1\n", sha("a = 1\n"))
+        self.assertIn("not a regular file", reply["error"])
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml/"])
+
+    def test_a_theme_that_is_not_utf8_or_over_1_mib_is_refused(self):
+        path = os.path.join(self.config, "themes", "mine.toml")
+        os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as file:
+            file.write(b"# caf\xe9\n")
+        _, raw = run_in_process(frame({"cmd": "read_config"}))
+        lossy = unframe(raw)["files"]["themes/mine.toml"]
+        self.assertIn("not UTF-8", self.write("theme", "mine", "a = 1\n", sha(lossy))["error"])
+        self.assertIn("not UTF-8", self.write("theme", "mine", None, sha(lossy))["error"])
+        self.assertEqual(self.read("themes/mine.toml"), b"# caf\xe9\n")
+        reply = self.write("theme", "big", "#" * (host.MAX_CONFIG_FILE_BYTES + 1), None)
+        self.assertIn("larger than 1 MiB", reply["error"])
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
+
+    def test_a_missing_config_folder_is_refused_and_not_created(self):
+        os.rmdir(self.config)
+        reply = self.write("theme", "mine", "a = 1\n", None)
+        self.assertIn("does not exist", reply["error"])
+        self.assertFalse(os.path.exists(self.config))
+
+    def test_a_theme_write_waits_for_the_lock_settings_writes_take(self):
+        import threading
+
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold():
+            with host.config_write_lock(self.config):
+                held.set()
+                release.wait(5)
+
+        holder = threading.Thread(target=hold)
+        holder.start()
+        held.wait(5)
+        replies = []
+        writer = threading.Thread(target=lambda: replies.append(self.write("theme", "mine", "a = 1\n", None)))
+        writer.start()
+        writer.join(0.3)
+        self.assertTrue(writer.is_alive(), "the write did not wait for the lock")
+        self.assertEqual(self.tree(), [])
+        release.set()
+        holder.join(5)
+        writer.join(5)
+        self.assertTrue(replies[0]["ok"], replies)
+
+    def test_an_edit_saved_into_a_theme_just_before_the_rename_is_put_back(self):
+        path = self.put("themes/mine.toml", "a = 1\n")
+        real_replace = os.replace
+        calls = []
+
+        def edit_then_replace(source, destination):
+            if not calls and destination == path:
+                with open(path, "r+b") as file:
+                    file.write(b"a = 9\n")
+            calls.append(destination)
+            return real_replace(source, destination)
+
+        with mock.patch.object(host.os, "replace", side_effect=edit_then_replace):
+            reply = self.write("theme", "mine", "a = 2\n", sha("a = 1\n"))
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(self.read("themes/mine.toml"), b"a = 9\n")
+        self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
 
 
 class ThunderbirdManifestTest(unittest.TestCase):
