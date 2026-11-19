@@ -35,7 +35,7 @@ import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
-let stop_site_keys: (() => void) | undefined;
+let site_keys_form: ReturnType<typeof mount_site_keys> | undefined;
 let stop_engines: (() => void) | undefined;
 let stop_aliases: (() => void) | undefined;
 let stop_quickmarks: (() => void) | undefined;
@@ -108,8 +108,8 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   stop_section_hold?.();
   stop_settings?.();
   stop_settings = undefined;
-  stop_site_keys?.();
-  stop_site_keys = undefined;
+  site_keys_form?.stop();
+  site_keys_form = undefined;
   stop_keys?.();
   stop_keys = undefined;
   stop_engines?.();
@@ -124,7 +124,7 @@ function show_route(model: HelpModel, guide: Block[], engines: string[], cause: 
   const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
   if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never, model.keys.reload, model.resolve_keys);
   const site_keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-site-keys") : null;
-  if (site_keys_box) stop_site_keys = mount_site_keys(site_keys_box, { send: (message) => browser.runtime.sendMessage(message), read_rules: async () => effective_settings((await load_effective_config()).config.settings).site_rules }, route.site_keys, key_capture, browser.storage.onChanged as never);
+  if (site_keys_box) site_keys_form = mount_site_keys(site_keys_box, { send: (message) => browser.runtime.sendMessage(message), read_rules: async () => effective_settings((await load_effective_config()).config.settings).site_rules }, route.site_keys, key_capture, browser.storage.onChanged as never);
   const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
   if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
   const engines_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-engines") : null;
@@ -235,9 +235,11 @@ window.addEventListener("blur", close_drawer_on_window_blur);
 window.addEventListener("hashchange", () => {
   if (!current) return;
   const route = parse_route(location.hash);
-  // A link that names a site draws the page again, so the form takes the site.
-  if (route.page === shown_page && KEEPS_STATE_PAGES.includes(route.page) && route.site_keys === undefined) land_on(route, "moved");
-  else show_route(current.model_, current.guide, current.engines, "moved");
+  if (route.page === shown_page && KEEPS_STATE_PAGES.includes(route.page)) {
+    // A link that names a site points the form at it and keeps the rest of the page as it is.
+    if (route.site_keys !== undefined) site_keys_form?.set_site(route.site_keys);
+    land_on(route, "moved");
+  } else show_route(current.model_, current.guide, current.engines, "moved");
 });
 listen_for_bundle_requests();
 follow_theme(":root, .desertfox-help");

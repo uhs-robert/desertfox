@@ -38,6 +38,7 @@ test("Remove takes out the form's row only", () => {
   const rows: SiteRuleRow[] = [{ site: MAIL, pass: "j" }, { site: MAIL, off: true }];
   assert.deepEqual(site_rows_without_pass(rows, MAIL), [rows[1]]);
   assert.equal(site_rows_without_pass([rows[1]!], MAIL), undefined);
+  assert.deepEqual(site_rows_without_pass([{ site: MAIL, pass: "j" }, rows[1]!, { site: MAIL, pass: "k" }], MAIL), [rows[1]]);
 });
 
 test("an earlier row that sets the key column refuses the Save and is named", () => {
@@ -57,12 +58,16 @@ test("an off rule on the site is reported", () => {
 
 test("the request is checked and the note of the file write ends the answer", async () => {
   const calls: unknown[] = [];
-  const deps = { change_site_keys: async (pattern: string, keys: string | null) => (calls.push([pattern, keys]), ", saved to settings.toml") };
+  const deps = { change_site_keys: async (pattern: string, keys: string | null) => (calls.push([pattern, keys]), { note: ", saved to settings.toml" }) };
   assert.deepEqual(await answer_site_keys_request({ type: "site_keys", pattern: MAIL, keys: "j k" }, deps), { ok: true, message: `Keys kept for ${MAIL}, saved to settings.toml` });
   assert.deepEqual(await answer_site_keys_request({ type: "site_keys", pattern: MAIL, keys: null }, deps), { ok: true, message: `Keys no longer kept for ${MAIL}, saved to settings.toml` });
   assert.equal((await answer_site_keys_request({ type: "site_keys", pattern: "mail", keys: "j" }, deps)).ok, false);
+  assert.equal((await answer_site_keys_request({ type: "site_keys", pattern: "*://exa*mple.com/*", keys: "j" }, deps)).ok, false);
+  assert.equal((await answer_site_keys_request({ type: "site_keys", pattern: "<all_urls>", keys: "j" }, deps)).ok, true);
+  const nothing = { change_site_keys: async () => ({ unchanged: true as const }) };
+  assert.deepEqual(await answer_site_keys_request({ type: "site_keys", pattern: MAIL, keys: null }, nothing), { ok: true, message: `No kept keys for ${MAIL} to remove` });
   assert.equal((await answer_site_keys_request({ type: "site_keys", pattern: MAIL, keys: "" }, deps)).ok, false);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   const failing = { change_site_keys: async () => Promise.reject(new Error("Not saved. no")) };
   assert.deepEqual(await answer_site_keys_request({ type: "site_keys", pattern: MAIL, keys: "j" }, failing), { ok: false, message: "Not saved. no" });
 });

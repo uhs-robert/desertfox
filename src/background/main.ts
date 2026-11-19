@@ -334,7 +334,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (page_request?.type === "site_keys") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change site rules" });
-    return answer_site_keys_request(page_request, { change_site_keys: async (pattern, keys) => site_rule_note(await change_site_keys_in_file(pattern, keys)) });
+    return answer_site_keys_request(page_request, { change_site_keys: async (pattern, keys) => { const outcome = await change_site_keys_in_file(pattern, keys); return outcome.kind === "unchanged" ? { unchanged: true } : { note: outcome_note(outcome) }; } });
   }
   if (page_request?.type === "list_font_names") {
     if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve([]);
