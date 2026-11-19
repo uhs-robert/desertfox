@@ -28,7 +28,7 @@ import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
 import { strip_patterns_for } from "./strip_patterns.ts";
-import { hint_selectors_reply, item_start_wanted, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, read_keymap_reply } from "./page_keymap.ts";
+import { hint_selectors_reply, item_start_for, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -60,7 +60,7 @@ import { tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
 import { create_tab_insert } from "./tab_insert.ts";
-import { create_tab_item } from "./tab_item.ts";
+import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -611,8 +611,12 @@ browser.storage.onChanged.addListener((changes, area) => {
 });
 
 const start_item_mode = async (tab_id: number, address: string | undefined) => {
-  if ((await read_disabled()) || !(await item_start_wanted(browser.storage.local, address))) return;
-  await best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "item.start", args: {}, bundle: "item" }] }, 0));
+  if (await read_disabled()) return;
+  await ask_item_start({
+    start_for: (at) => item_start_for(browser.storage.local, at),
+    tab_now: (id) => ignore_refusal(browser.tabs.get(id)),
+    send_start: (id, args) => best_effort(send_to_tab(id, { type: "run_in_content", invocations: [{ id: "item.start", args, bundle: "item" }] }, 0)),
+  }, tab_id, address);
 };
 
 const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.local), redraw_icon_png);

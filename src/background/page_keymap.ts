@@ -2,7 +2,7 @@
 
 import { current_keymap } from "../shared/prefix_tree.ts";
 import { stored_keymap } from "./keymap_source.ts";
-import { ANY_KEY } from "../shared/prefix_tree.ts";
+import { ANY_KEY, is_freed } from "../shared/prefix_tree.ts";
 import { HINT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS, QUALITY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
 import { is_default_value } from "../shared/keys/compiler.ts";
 import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, PageSiteMode, SiteBind, SiteRule, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
@@ -39,11 +39,17 @@ export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: 
 // The rows that fit the page, in table order.
 export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
 
-// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there.
-export async function item_start_wanted(storage: KeymapStorage, address: string | undefined): Promise<boolean> {
+// A row that binds or passes j or k in normal mode gives those keys to the site (Kagi moves its own highlight), and item mode would take them back.
+const site_claims_item_keys = (columns: PageSiteColumns): boolean =>
+  ["j", "k"].some((key) => Object.hasOwn(columns.bind ?? {}, key) || Object.hasOwn(columns.keymap?.["normal"] ?? {}, key) || (columns.keys !== undefined && is_freed(frees_of(columns.keys), key)));
+
+// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there or claims j or k. `selector` is the item selector of the row whose item keys apply, so the start looks for the row's items and not the finder's list.
+export async function item_start_for(storage: KeymapStorage, address: string | undefined): Promise<{ selector?: string } | undefined> {
   const keymap = current_keymap(await stored_keymap(storage));
   const columns = site_columns_for(keymap, [address]);
-  return keymap !== undefined && columns.off !== true && site_value(columns, "item_navigator", keymap.item_navigator === true);
+  if (keymap === undefined || columns.off === true || site_claims_item_keys(columns) || !site_value(columns, "item_navigator", keymap.item_navigator === true)) return undefined;
+  const selector = columns.keymap?.["item"]?.["j"]?.leaf.steps.find((step) => step.invocation.id === "page.item")?.invocation.args?.["selector"];
+  return typeof selector === "string" ? { selector } : {};
 }
 
 // A per-site setting on a page. The cast holds because the setting's own check accepted the value when the config loaded. The site's value beats the global value, which already holds `:set` and `:set --temp`: the row names the site and `:set` does not.

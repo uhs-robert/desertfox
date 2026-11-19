@@ -7,6 +7,7 @@ import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
 import { watch_user_left } from "../user_left.ts";
 import { create_item_start } from "./start.ts";
+import { is_shown } from "../shown.ts";
 
 type ItemWindow = { desertfox_host?: PageHostApi; desertfox_item_ready?: true };
 const item_window = window as unknown as ItemWindow;
@@ -37,13 +38,14 @@ if (!item_window.desertfox_item_ready && host) {
   // The background asks when a load completes. The handler answers at once, so no key waits for the idle time.
   const start = create_item_start({
     mode_: host.get_mode,
-    user_active_: () => navigator.userActivation.hasBeenActive,
+    // User activation misses most keys (Escape, the arrows, the function keys), so the key count of content.js decides for keys and the activation for clicks.
+    user_active_: () => host.pressed_keys_() > 0 || navigator.userActivation.hasBeenActive,
     in_field_: () => host.is_editable_(host.focused_()),
-    has_list_: () => page.derived.items_().length > 0,
+    has_list_: (selector) => (selector ? Array.from(document.querySelectorAll(selector)).some(is_shown) : page.derived.items_().length > 0),
     enter_: () => host.set_mode_("item"),
     when_idle_: (run) => requestIdleCallback(run, { timeout: 1000 }),
   });
-  host.register_handler_("item.start", start);
+  host.register_handler_("item.start", (args) => start(args.selector as string | undefined));
   // The shared focus mark, asked for by the hints bundle after a focus move. The focus can have left by the time this bundle loads, and then there is nothing to mark.
   host.register_handler_("item.mark", (args) => {
     const element = args.element as Element;
