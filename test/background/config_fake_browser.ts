@@ -7,9 +7,9 @@ export type Files = Record<string, string>;
 type WriteMessage = { cmd: string; kind?: string; name?: string; text?: string | null; base_sha256?: string | null };
 
 // What the real host's `write_config_file` does to the folder: replace or delete the file the kind and name give, only while it still has the base digest.
-// `old_host` answers as a host from before the write verbs. `refuse` refuses a write of the paths it names, as a host that cannot write that file.
-function write_config_file(host: { files: Files; old_host?: boolean; refuse?: string[] }, message: WriteMessage) {
-  if (host.old_host) return { ok: false, error: `unknown cmd: '${message.cmd}'` };
+// `old_host` answers as a host from before the write verbs, and `settings_only_host` as one that knows `write_settings` alone. `refuse` refuses a write of the paths it names, as a host that cannot write that file.
+function write_config_file(host: { files: Files; old_host?: boolean; settings_only_host?: boolean; refuse?: string[] }, message: WriteMessage) {
+  if (host.old_host || (host.settings_only_host && message.cmd === "write_config_file")) return { ok: false, error: `unknown cmd: '${message.cmd}'` };
   const path = message.cmd === "write_settings" || message.kind === "settings" ? "settings.toml" : `themes/${message.name}.toml`;
   if (host.refuse?.includes(path)) return { ok: false, error: `cannot write /home/u/.config/desertfox/${path}: Permission denied` };
   const on_disk = host.files[path];
@@ -21,7 +21,7 @@ function write_config_file(host: { files: Files; old_host?: boolean; refuse?: st
 }
 
 // A browser that keeps storage in memory and answers the native host from `host`. A test rewrites `host.files` between reloads.
-export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; old_host?: boolean; refuse?: string[] }) {
+export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; old_host?: boolean; settings_only_host?: boolean; refuse?: string[] }) {
   const local: Record<string, unknown> = {};
   const session: Record<string, unknown> = {};
   const area = (store: Record<string, unknown>) => ({
