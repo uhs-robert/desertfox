@@ -448,6 +448,70 @@ class WriteSettingsTest(ConfigDirCase):
         self.assertEqual(self.read_settings(), b"mine = 1\n")
         self.assertEqual(self.entries(), ["settings.toml"])
 
+    def edit_before_rename(self, path, data):
+        """os.replace that first writes `data` into settings.toml, as an editor saving in place after the host's last check."""
+        real_replace = os.replace
+        calls = []
+
+        def edit_then_replace(source, destination):
+            if not calls and destination == path:
+                with open(path, "r+b") as file:
+                    file.write(data)
+            calls.append(destination)
+            return real_replace(source, destination)
+
+        return mock.patch.object(host.os, "replace", side_effect=edit_then_replace)
+
+    def test_a_racing_edit_that_cannot_be_compared_is_put_back(self):
+        for data in (b"a = \xe9\n", b"#" * (host.MAX_CONFIG_FILE_BYTES + 1)):
+            path = self.put("settings.toml", "a = 1\n")
+            with self.edit_before_rename(path, data):
+                reply = self.write("a = 2\n", sha("a = 1\n"))
+            self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+            self.assertEqual(self.read_settings(), data)
+            self.assertEqual(self.entries(), ["settings.toml"])
+
+    def test_a_racing_edit_that_cannot_be_put_back_stays_aside(self):
+        path = self.put("settings.toml", "a = 1\n")
+        real_replace = os.replace
+        calls = []
+
+        def edit_then_replace_once(source, destination):
+            calls.append(destination)
+            if len(calls) == 1:
+                with open(path, "r+b") as file:
+                    file.write(b"a = 9\n")
+                return real_replace(source, destination)
+            raise OSError(5, "Input/output error")
+
+        with mock.patch.object(host.os, "replace", side_effect=edit_then_replace_once):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertFalse(reply["ok"])
+        self.assertNotIn(host.CHANGED_ON_DISK, reply["error"])
+        [aside] = [name for name in self.entries() if name.endswith(".old")]
+        self.assertIn(aside, reply["error"])
+        self.assertEqual(self.read_settings(os.path.join(self.config, aside)), b"a = 9\n")
+
+    def test_a_folder_that_takes_no_lock_is_refused_with_a_reply(self):
+        self.put("settings.toml", "a = 1\n")
+        with mock.patch.object(host.fcntl, "flock", side_effect=OSError(37, "No locks available")):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+        self.assertFalse(reply["ok"])
+        self.assertIn("cannot lock", reply["error"])
+        self.assertEqual(self.read_settings(), b"a = 1\n")
+
+    def test_a_filesystem_without_hard_links_refuses_and_writes_nothing(self):
+        self.put("settings.toml", "a = 1\n")
+        with mock.patch.object(host.os, "link", side_effect=OSError(1, "Operation not permitted")):
+            reply = self.write("a = 2\n", sha("a = 1\n"))
+            self.assertIn("no hard links", reply["error"])
+            self.assertEqual(self.read_settings(), b"a = 1\n")
+            self.assertEqual(self.entries(), ["settings.toml"])
+            os.unlink(os.path.join(self.config, "settings.toml"))
+            reply = self.write("a = 2\n", None)
+            self.assertIn("no hard links", reply["error"])
+            self.assertEqual(self.entries(), [])
+
 
 class ThunderbirdManifestTest(unittest.TestCase):
     def test_the_desertbird_host_manifest_names_the_thunderbird_id_and_this_script(self):
