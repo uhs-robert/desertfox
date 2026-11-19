@@ -213,7 +213,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
   await run_case("the chord shows the panel in insert mode with a field focused and leaves the field and the mode alone", async () => {
     await open_page("page", "wk_insert", { new_tab: true });
     await in_active_tab(`document.body.insertAdjacentHTML("afterbegin", '<input id="wk_input">'); 0`);
-    await press_keys("I");
+    await press_keys("gi");
     await poll_until("the INSERT badge", async () => events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT");
     const rows = await rows_after([...CHORD], "insert", "wk_insert");
     expect(rows > 0, "the insert panel listed no keys");
@@ -225,7 +225,7 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
   // keymap.d binds zq in insert mode. The first z is a half-typed sequence, which must not open the panel after the delay.
   await run_case("a half-typed insert sequence shows no panel after the pause", async () => {
     // The Escape of the case before left insert mode.
-    await press_keys("I");
+    await press_keys("gi");
     await poll_until("the INSERT badge", async () => events.filter((event) => event.type === "indicator" && event.page_id === "wk_insert").at(-1)?.label === "INSERT");
     const mark = events.length;
     await press_keys("z");

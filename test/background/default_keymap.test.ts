@@ -64,9 +64,9 @@ test("the approved keys are all bound", () => {
   assert.deepEqual(DEFAULT_KEYMAP.ignore?.["<S-Escape>"], { id: "mode.set", args: { mode: "normal" } });
 });
 
-test("i enters insert mode with no field and I focuses the first field", () => {
+test("i enters insert mode with no field and gi focuses the first field", () => {
   assert.deepEqual(DEFAULT_KEYMAP.normal?.i, { id: "mode.insert" });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, DEFAULT_KEYMAP.normal?.gi);
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.gi, { id: "page.focus_input" });
   assert.deepEqual(DEFAULT_KEYMAP.insert?.["<Escape>"], { id: "mode.escape" });
 });
 
@@ -84,7 +84,8 @@ test("the , group holds the DesertFox commands", () => {
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",b"], { id: "page.blur" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",s"], { id: "help.open", args: { name: "settings" }, label: "Settings page" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",t"], { id: "settings.toggle", prompt: { param: "name" } });
-  assert.deepEqual(DEFAULT_KEYMAP.normal?.[",j"], { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle the item navigator" });
+  assert.equal(DEFAULT_KEYMAP.normal?.[",j"], undefined);
+  assert.deepEqual(DEFAULT_KEYMAP.normal?.I, { id: "settings.toggle", args: { name: "item_navigator" }, label: "Toggle item navigator" });
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",?"], { id: "help.whichkey" });
   for (const mode of ["normal", "caret", "visual", "visual_line", "media", "insert", "hint"] as const) {
     assert.deepEqual(DEFAULT_KEYMAP[mode]?.["<A-?>"], { id: "help.whichkey", label: "Show the keys" }, mode);
