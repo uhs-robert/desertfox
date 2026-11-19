@@ -209,6 +209,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
     const [, right] = await labels_by_left();
     await press_keys(right.text);
+    await poll_until("focus on an item of the right-hand list", async () => /^b\d$/.test(await focused()));
     const picked = await in_active_tab("document.activeElement?.id ?? ''");
     expect(/^b[4-9]$/.test(picked), "the pick focused " + picked + ", not a shown item of the scrolled list");
     await press_keys("j");
