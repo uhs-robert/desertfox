@@ -137,6 +137,13 @@ test("a saved site_rules list folds into settings.toml under a settings.d site_r
   assert.deepEqual(fold_kept_notes(fold), []);
 });
 
+test("a saved kept-keys row stays unless a file has the same keys for the site", () => {
+  const files = { "settings.toml": "", "settings.d/60-knack.toml": '[[site_rules]]\nsite = "*://a.test/*"\npass = "j"\n\n[[site_rules]]\nsite = "*://b.test/*"\npass = "x"\n' };
+  const saved = { site_rules: [{ site: "*://a.test/*", pass: "j k" }, { site: "*://b.test/*", pass: "x" }] };
+  const fold = saved_layer_folded(saved, files, problems_of, nothing_stays);
+  assert.deepEqual(settings_of(fold.files).site_rules, [{ site: "*://a.test/*", pass: "j k" }]);
+});
+
 test("running the fold again over its own result, as after a stop before the layer shrank, adds no row", () => {
   const files = { "settings.toml": "", "settings.d/60-knack.toml": '[[site_rules]]\nsite = "*://b.test/*"\noff = true\n' };
   const saved = { site_rules: [{ site: "*://b.test/*", off: true }, { site: "*://c.test/*", off: true }, { site: "*://d.test/*", pass: "j" }] };

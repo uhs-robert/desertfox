@@ -29,7 +29,7 @@ import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after } from "./toolbar.ts";
-import { saved_pass_rows, site_rows_with_pass, site_rows_without_pass } from "./site_keys.ts";
+import { is_pass_shaped, saved_pass_rows, site_rows_with_pass, site_rows_without_pass } from "./site_keys.ts";
 import { matches_pattern, site_row_columns, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
@@ -531,7 +531,12 @@ export function change_site_keys_in_file(pattern: string, keys: string | null): 
     let rows_after: SiteRuleRow[];
     if (keys === null) {
       const removed = site_rows_without_pass(rows, pattern);
-      if (removed === undefined) return { done: { kind: "unchanged" } };
+      if (removed === undefined) {
+        // The form shows a settings.d row's keys from the combined list, so a Remove that finds none in settings.toml must not claim there is nothing to remove.
+        const held = settings_d_site_rules(files).find(({ row }) => row.site === pattern && is_pass_shaped(row));
+        if (held !== undefined) throw new RuntimeRefusal(`Not removed: ${held.file} keeps keys for ${pattern}. Change it there.`);
+        return { done: { kind: "unchanged" } };
+      }
       rows_after = removed;
     } else {
       const changed = site_rows_with_pass(rows, pattern, keys);
