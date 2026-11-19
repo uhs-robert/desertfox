@@ -62,15 +62,15 @@ if (!item_window.desertfox_item_ready && host) {
     // With no row selector the box is the focus mark.
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
-  host.register_handler_("item.lists", (args) => void (args.region ? ((landed = args.landed as typeof landed), pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined)) : (args.take as (regions: unknown) => void)(lists_with_row(page.derived.lists_(), args.selector as string | undefined))));
+  host.register_handler_("item.lists", (args) => void (args.region ? ((landed = args.landed as typeof landed), pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined)) : (args.take as (regions: unknown) => void)(lists_with_row(() => page.derived.lists_(), args.selector as string | undefined))));
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }
 
 // While a site row's items show, they are the only list the picker offers: the row's keys walk its own selector, so another list could not be walked. The finder finds nothing on some rows (Drive's files hold no title link).
-function lists_with_row(lists: Region<Element>[], selector: string | undefined): Region<Element>[] {
+function lists_with_row(read_lists: () => Region<Element>[], selector: string | undefined): Region<Element>[] {
   const items = selector ? Array.from(document.querySelectorAll(selector)).filter(is_shown) : [];
-  return items[0] ? [{ kind: "list", items, links: new Map() }] : lists;
+  return items[0] ? [{ kind: "list", items, links: new Map() }] : read_lists();
 }
 
 // Making another list active puts the focus on the first item the pick showed. Picking the list that is active already leaves the focus and the last move alone, so the landing goes on from the current item.

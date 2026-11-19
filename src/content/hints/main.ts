@@ -371,7 +371,7 @@ function register(host: PageHostApi): void {
     const focused_a_field = after_leaving && host.get_mode() === "insert";
     if (focused_a_field) mark_text_entry({ id: "hint.run", args: current.args });
     const left = focused_a_field ? insert_into_focused_field(keys) : keys;
-    if (left.length > 0) host.hold_keys_until_(landing_done ? landing_done.then(() => left) : Promise.resolve(left));
+    if (left.length > 0 || landing_done) host.hold_keys_until_(landing_done ? landing_done.then(() => left) : Promise.resolve(left));
   }
 
   // Hands this frame's count to the background and waits for the labels of every frame. A background that does not answer leaves this frame's own labels.
