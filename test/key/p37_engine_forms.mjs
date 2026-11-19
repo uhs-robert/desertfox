@@ -1,5 +1,6 @@
-// Key test cases of the Search engines section on the settings page: the add form saves an engine with a key letter, the letter searches in an open tab at once,
-// the starter set adds the sample engines, and the export carries the layer. Stored layers survive across cases, so the teardown clears the layer in storage and publishes twice.
+// Key test cases of the Search engines section on the settings page: the add form saves an engine into search_engines.d/zz-desertfox.toml with a key letter, the letter searches in an open tab at once,
+// the starter set adds the sample engines, and the export carries the file and the letters. The file and the letters survive across cases, so the teardown removes each engine through the page's own message,
+// then clears what is left of the letters layer in storage and publishes twice.
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["help", "config", "engines", "keys"];
@@ -10,6 +11,9 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
   const close_settings_tabs = () => in_background(`(async () => { for (const tab of await browser.tabs.query({})) if (tab.url.includes("/home.html")) await browser.tabs.remove(tab.id); })()`);
   const layer = () => in_background(`browser.storage.local.get("desertfox_engine_edits").then((got) => got.desertfox_engine_edits ?? {})`);
+  // The browser copy of the page's engine file. No native host runs, so the copy is the only place it lands.
+  const engine_file = () => in_background(`browser.storage.local.get("desertfox_files_source").then((got) => got.desertfox_files_source?.files?.["search_engines.d/zz-desertfox.toml"] ?? "")`);
+  const has_table = async (name) => new RegExp(`^\\[${name}\\]`, "m").test(await engine_file());
   const button_named = (label) => `[...view.document.querySelectorAll(".desertfox-engines button")].find((button) => button.textContent === ${JSON.stringify(label)})`;
 
   async function open_settings() {
@@ -20,6 +24,16 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
 
   // The layer is cleared in storage, then the toolbar switch goes off and on: two publishes, so no engine is removed one by one and no letter stays behind. The switch must end on, or every later piece would run with DesertFox off.
   on_teardown(async () => {
+    if ((await engine_file()) !== "") {
+      await open_settings();
+      // One remove per call: each one rebuilds the config, and the whole starter set takes longer than one call may.
+      const listed = await in_page(`return view.browser.runtime.sendMessage({ type: "list_engines" }).then((answer) => (answer.engines ?? []).map((row) => row.name));`);
+      for (const name of listed) {
+        const answer = await in_page(`return view.browser.runtime.sendMessage({ type: "change_engines", action: "remove", name: ${JSON.stringify(name)} });`);
+        expect(answer.ok, `the remove of ${name} answered ${JSON.stringify(answer)}`);
+      }
+      expect((await engine_file()) === "", "the engine file stayed after every engine was removed");
+    }
     const stored = await layer();
     if (Object.keys(stored.engines ?? {}).length + Object.keys(stored.letters ?? {}).length > 0) {
       await open_settings();
@@ -49,7 +63,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await type_field("Key letter (optional)", "W");
     await poll_until("Save to turn on", () => in_page(`return !${button_named("Save engine")}.disabled;`));
     await in_page(`${button_named("Save engine")}.click();`);
-    await poll_until("the engine to be stored", async () => (await layer()).engines?.p37wiki !== undefined && (await layer()).letters?.W === "p37wiki");
+    await poll_until("the engine to be stored", async () => (await has_table("p37wiki")) && (await layer()).letters?.W === "p37wiki");
+    expect((await layer()).engines?.p37wiki === undefined, "the engine went to the browser layer");
     await poll_until("the row to list the engine", () => in_page(`return view.document.querySelector(".desertfox-engines").textContent.includes("p37wiki");`));
   });
 
@@ -74,17 +89,17 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await type_field("Search word (optional)", "g");
     await poll_until("Save to turn on", () => in_page(`return !${button_named("Save engine")}.disabled;`));
     await in_page(`${button_named("Save engine")}.click();`);
-    await poll_until("the form to show the refusal", () => in_page(`const text = view.document.querySelector(".desertfox-engines").textContent; return text.includes("Edit not saved") && text.includes("keyword") && text.includes("Search engines section");`));
-    expect((await layer()).engines?.p37clash === undefined, "a refused engine was stored");
+    await poll_until("the form to show the refusal", () => in_page(`const text = view.document.querySelector(".desertfox-engines").textContent; return text.includes("Edit not saved") && text.includes("keyword") && text.includes("zz-desertfox.toml");`));
+    expect(!(await has_table("p37clash")), "a refused engine was stored");
     await in_page(`${`view.document.querySelector('[aria-label="Remove the engine p37dup"]')`}.click();`);
-    await poll_until("Remove to drop the engine", async () => (await layer()).engines?.p37dup === undefined);
+    await poll_until("Remove to drop the engine", async () => !(await has_table("p37dup")));
   });
 
-  await run_case("engine form: the starter set adds the sample engines and the export carries the layer as .d files", async () => {
+  await run_case("engine form: the starter set adds the sample engines and the export carries the engine file and the letters", async () => {
     await open_settings();
     await in_page(`${button_named("Add the starter engines")}.click();`);
-    await poll_until("the starter engines to be stored", async () => (await layer()).engines?.stackoverflow !== undefined);
-    const exported = await in_page(`return view.browser.runtime.sendMessage({ type: "export_config" }).then((answer) => ({ ok: answer.ok, engines: answer.config_files?.["search_engines.d/zz-saved-edits.toml"], keys: answer.config_files?.["keymap.d/zz-saved-edits.toml"] }));`);
+    await poll_until("the starter engines to be stored", () => has_table("stackoverflow"));
+    const exported = await in_page(`return view.browser.runtime.sendMessage({ type: "export_config" }).then((answer) => ({ ok: answer.ok, engines: answer.config_files?.["search_engines.d/zz-desertfox.toml"], keys: answer.config_files?.["keymap.d/zz-saved-edits.toml"] }));`);
     expect(exported.ok && /stackoverflow/.test(exported.engines ?? "") && /W\s*=\s*"p37wiki"/.test(exported.keys ?? ""), `the export held ${JSON.stringify(exported)}`);
     await close_settings_tabs();
   });

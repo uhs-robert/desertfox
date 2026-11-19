@@ -69,7 +69,7 @@ import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
-import { native_host, choose_host_start, change_edits, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, change_site_rule_in_file, change_site_keys_in_file, set_in_settings_file, set_theme_file, unset_in_settings_file, read_settings_layers, read_engine_state, read_keymap_state, read_stored_files, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
+import { native_host, choose_host_start, change_edits, change_engine_file, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, change_site_rule_in_file, change_site_keys_in_file, set_in_settings_file, set_theme_file, unset_in_settings_file, read_settings_layers, read_engine_state, read_keymap_state, read_stored_files, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
 import { answer_config_import } from "./config_import.ts";
 import { answer_site_keys_request } from "./site_keys.ts";
 import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
@@ -313,7 +313,7 @@ async function read_starter_engines(): Promise<string> {
   }
   throw missing;
 }
-const engine_messages = create_engine_messages({ read_engine_state, change_layers, read_starter: read_starter_engines });
+const engine_messages = create_engine_messages({ read_engine_state, change_engine_file, read_starter: read_starter_engines });
 const alias_messages = create_alias_messages({ read_alias_state, change_layers });
 const theme_messages = create_theme_messages({ read_files: read_stored_files, set_theme_file });
 const quickmark_messages = create_quickmark_messages({ store: browser_quickmark_store, configured: async () => (await get_config()).quickmarks });

@@ -2,6 +2,7 @@
 // Every failure is a NativeHostError with a message that says what to do, so callers can show it as it is.
 
 import { NATIVE_HOST_NAME, NATIVE_PERMISSION } from "../shared/native_host.ts";
+import { ENGINE_FILE } from "./engine_file.ts";
 
 // "host_outdated": the host answered with an error and is older than the extension. The message says whether it is updating.
 // "file_changed": `write_config_file` found the file changed on disk since the extension read it, and wrote nothing.
@@ -39,11 +40,12 @@ export type EditorCollectReply = { pending: true } | { done: true; changed: fals
 
 // How the host's `write_config_file` names each file the extension writes: its kind table builds the path from these, so the request carries none.
 // The theme name pattern is the host's check and `theme_name_shape_problem`'s (src/shared/theme/base16.ts).
-export type HostFile = { kind: "settings" } | { kind: "theme"; name: string };
+export type HostFile = { kind: "settings" } | { kind: "engines" } | { kind: "theme"; name: string };
 const THEME_FILE_PATTERN = /^themes\/([a-z0-9][a-z0-9_-]{0,47})\.toml$/;
 
 export function host_file_of(path: string): HostFile | undefined {
   if (path === "settings.toml") return { kind: "settings" };
+  if (path === ENGINE_FILE) return { kind: "engines" };
   const theme = THEME_FILE_PATTERN.exec(path);
   return theme ? { kind: "theme", name: theme[1]! } : undefined;
 }
@@ -63,6 +65,8 @@ function describe_send_failure(error: unknown): NativeHostError {
 
 // Whether the host refused `cmd` itself as a verb it does not know. Its whole refusal ends the message, so a path in another error that holds the words does not count.
 const refuses_unknown_verb = (error: NativeHostError, cmd: string): boolean => error.message.endsWith(`refused: unknown cmd: '${cmd}'`);
+// Whether a host with `write_config_file` refused the request's kind as one its table lacks: a host from before that kind.
+const refuses_unknown_kind = (error: NativeHostError, kind: unknown): boolean => typeof kind === "string" && error.message.includes(`refused: write_config_file has no kind '${kind}'.`);
 
 export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
   // `watched: false` is the updater's own call: its reply must not start another update or wear the outdated label.
@@ -108,7 +112,7 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
       if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
       if (/could not be read back/.test(error.message)) throw new NativeHostError("file_not_read_back", error.message);
       if (refuses_unknown_verb(error, request.cmd) && older_verb) return older_verb();
-      if (refuses_unknown_verb(error, request.cmd)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
+      if (refuses_unknown_verb(error, request.cmd) || refuses_unknown_kind(error, request.kind)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
       throw error;
     }
   }
@@ -161,6 +165,7 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     },
     // Replaces the file at `path` with `text`, or deletes it for null, while the file on disk still has the digest `base_sha256` (null: no file).
     // The request names the file by the host's kind and name, never by path. A host from before the verb answers `unknown cmd`: settings.toml then goes through its older `write_settings`, and any other file reads as outdated, so the caller waits for an update.
+    // A host from before a kind (engines) reads as outdated too.
     write_config_file: async (path: string, text: string | null, base_sha256: string | null): Promise<void> => {
       const file = host_file_of(path);
       if (file === undefined) throw new Error(`The native host writes no file at ${path}`);

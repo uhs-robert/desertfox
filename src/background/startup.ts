@@ -14,7 +14,8 @@ import type { KeymapState } from "./keymap_message.ts";
 import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, store_layers } from "./edit_layers.ts";
 import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
-import type { EngineState } from "./engine_message.ts";
+import type { EnginePlan, EngineState, EngineTurn } from "./engine_message.ts";
+import { ENGINE_FILE, engine_resolves_without_owned, owned_engines } from "./engine_file.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -23,7 +24,7 @@ import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";
-import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, DISABLED_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "./storage_keys.ts";
 import { OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after } from "./toolbar.ts";
 import { saved_pass_rows, site_rows_with_pass, site_rows_without_pass } from "./site_keys.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
@@ -49,7 +50,7 @@ import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
-import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
+import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
@@ -281,10 +282,32 @@ async function read_layer_build(): Promise<{ config: MergedConfig; layers: EditL
 export function read_engine_state(): Promise<EngineState> {
   return in_change_queue(async () => {
     const { config, layers, current, source } = await read_layer_build();
-    const { files, dir_label } = source;
-    const aliases = alias_edits_of(layers);
-    return { config, engines: engine_edits_of(layers), aliases, kept: current?.kept ?? {}, kept_aliases: current?.kept_aliases ?? {}, dropped: current?.dropped ?? [], trial: (other) => build_layered(files, dir_label, built_in_commands(), other, aliases) };
+    return { config, files: source.files, engines: engine_edits_of(layers), aliases: alias_edits_of(layers), kept: current?.kept ?? {}, kept_aliases: current?.kept_aliases ?? {}, dropped: current?.dropped ?? [] };
   });
+}
+
+// One change of the Engines page: its engine file and the engines layer in one storage write, then the host write of the file.
+// `plan` runs in the change queue and gets a build of any files and layer over the aliases in force, so it refuses what a change breaks before anything is stored.
+// The answer has no `file` when the file stayed as it was.
+export async function change_engine_file<R>(plan: (turn: EngineTurn) => EnginePlan | { done: R }): Promise<{ done: R } | { file?: FileWriteOutcome }> {
+  let file_changed = false;
+  const changed = await change_folder_files<R>(async (files) => {
+    const config = await get_config();
+    const layers = await load_layers();
+    const layer = engine_edits_of(layers);
+    const aliases = alias_edits_of(layers);
+    const step = await (load_step as Promise<LoadStep>);
+    const dropped = has_build_edits(layers) ? (await layered_build(step, layer, aliases)).dropped : [];
+    step.source ??= await load_files_source();
+    const { dir_label } = step.source;
+    const planned = plan({ files, config, layer, dropped, trial: (next_files, next_layer) => build_layered(next_files, dir_label, built_in_commands(), next_layer, aliases) });
+    if ("done" in planned) return planned;
+    file_changed = planned.files[ENGINE_FILE] !== files[ENGINE_FILE];
+    const layer_changed = JSON.stringify(planned.layer) !== JSON.stringify(layer);
+    return { files: planned.files, edits_after: await load_edits(), paths: file_changed ? [ENGINE_FILE] : [], ...(layer_changed && { engines_after: planned.layer }) };
+  });
+  if ("done" in changed) return changed;
+  return file_changed ? { file: changed.outcomes[0]! } : {};
 }
 
 // The browser copy of the config files, read in the change queue so a change still writing is not seen half done.
@@ -311,16 +334,17 @@ export function republish(): Promise<void> {
 
 // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
 // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
-// A setting write passes `setting`: the edits that replace the setting edits, and the record of the folder's base texts (none when no file is written).
+// A setting write passes `setting`: the edits that replace the setting edits, the record of the folder's base texts (none when no file is written), and for an Engines page change the engines layer after it.
 // They go into the same storage write as the files, so a stop between writes never leaves one without the other, and a failure restores them all.
-async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedFiles | undefined }): Promise<{ warnings: number }> {
+async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedFiles | undefined; engines_after?: EngineEdits }): Promise<{ warnings: number }> {
   const { files, dir_label } = source;
   await get_config();
   const current_step = await (load_step as Promise<LoadStep>);
   // The build checks snippet ids against the built-in commands, so the snippets of the last load stay out.
   const { stored, loaded } = build_files_config(files, dir_label, built_in_commands(), action);
   const edits = await load_edits();
-  const swapped_keys = [FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY];
+  const engines_after = setting?.engines_after;
+  const swapped_keys = [FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, ...(engines_after ? [ENGINE_EDITS_STORAGE_KEY] : [])];
   const local_before = await browser.storage.local.get(swapped_keys);
   const unsynced_after = setting ? setting.unsynced : await unsynced_kept_by(action, source);
   let local_written = false;
@@ -335,7 +359,7 @@ async function apply_files(source: FilesSource, action: ApplyAction, setting?: {
     const snippet_warnings = snippets.register(loaded.config.snippets);
     // No slots: the new keymap can move the browser chords, so the publish plans them again.
     const step: LoadStep = { loaded, load_warnings: [...loaded.warnings, ...snippet_warnings], source };
-    const published = await publish(step, setting?.edits_after ?? edits);
+    const published = await publish(step, setting?.edits_after ?? edits, engines_after && { ...(await load_layers()), engines: engines_after });
     // One `set`, so the config, the files it was built from, the saved edits and the record of a lagging folder never part.
     // `null` drops the record within the same `set`.
     local_written = true;
@@ -344,6 +368,7 @@ async function apply_files(source: FilesSource, action: ApplyAction, setting?: {
       [FILES_SOURCE_STORAGE_KEY]: source satisfies FilesSource,
       [SETTINGS_FILE_UNSYNCED_STORAGE_KEY]: stored_unsynced(unsynced_after),
       ...(setting && { [SAVED_SETTINGS_STORAGE_KEY]: setting.edits_after.saved }),
+      ...(engines_after && { [ENGINE_EDITS_STORAGE_KEY]: engines_after }),
     });
     // Temp edits live in session storage, which no `set` of local storage covers.
     if (setting) await browser.storage.session.set({ [TEMP_SETTINGS_STORAGE_KEY]: setting.edits_after.temp });
@@ -503,7 +528,8 @@ async function change_setting_in_file<R>(name: keyof Settings, plan: (files: Con
 }
 
 // A change of config files the host writes: the browser copy's files after it, the setting edits after it, and the paths it changed, in the order they are written.
-type FolderFilesPlan = { files: ConfigFiles; edits_after: SettingEdits; paths: string[] };
+// `engines_after` replaces the engines layer in the same storage write, for an Engines page change that moves an engine or a key letter.
+type FolderFilesPlan = { files: ConfigFiles; edits_after: SettingEdits; paths: string[]; engines_after?: EngineEdits };
 
 // One change of files the folder holds. `plan` runs in the change queue on the browser copy's files. The outcomes follow the plan's paths.
 // Only the edit runs in the change queue. The host writes run outside it, one path after the other, so a slow host never holds up a `:set`.
@@ -537,7 +563,7 @@ async function commit_folder_files(current: FilesSource, planned: FolderFilesPla
   const edits = await load_edits();
   const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
   try {
-    await apply_files({ ...current, files: planned.files }, "setting", { edits_after: planned.edits_after, unsynced });
+    await apply_files({ ...current, files: planned.files }, "setting", { edits_after: planned.edits_after, unsynced, ...(planned.engines_after && { engines_after: planned.engines_after }) });
   } catch (error) {
     // The files build can refuse a value the setting's own check passes. The checks before catch the common ones with a clearer message.
     throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
@@ -714,20 +740,32 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
   }
 }
 
-// A settings.toml `theme` and the theme file it names reach the folder in the order that keeps the folder building: the file before a settings.toml that names it, and a settings.toml that names it no more before the file's delete.
+// A settings.toml `theme` or `default_engine` and the file that holds it reach the folder in the order that keeps the folder building: the file before a settings.toml that names it, and a settings.toml that names it no more before the file that drops it.
 // The path of the record whose write goes before the one at `path`, or undefined. In the change queue.
 async function path_to_write_first(path: string): Promise<string | undefined> {
   const unsynced = await read_unsynced();
   if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
   const { files } = await load_files_source();
-  if (path === SETTINGS_FILE) {
-    const named = theme_named_in(files[SETTINGS_FILE] ?? null);
-    const named_path = named === undefined ? undefined : theme_file_path(named);
-    return named_path !== undefined && Object.hasOwn(unsynced, named_path) && files[named_path] !== undefined ? named_path : undefined;
+  if (path === SETTINGS_FILE) return files_named_by_settings(files[SETTINGS_FILE] ?? null, files).find((named_path) => Object.hasOwn(unsynced, named_path));
+  return Object.hasOwn(unsynced, SETTINGS_FILE) && drops_what_settings_names(path, unsynced[SETTINGS_FILE] ?? null, files) ? SETTINGS_FILE : undefined;
+}
+
+// The files of the copy that hold what a settings.toml of `text` names: the theme file of its `theme`, and the Engines page's file when it defines the `default_engine`.
+function files_named_by_settings(text: string | null, files: ConfigFiles): string[] {
+  const theme = theme_named_in(text);
+  const engine = default_engine_named_in(text);
+  const theme_path = theme === undefined ? undefined : theme_file_path(theme);
+  return [...(theme_path !== undefined && files[theme_path] !== undefined ? [theme_path] : []), ...(engine !== undefined && Object.hasOwn(owned_engines(files), engine) ? [ENGINE_FILE] : [])];
+}
+
+// Whether the copy's file at `path` no longer holds the theme or engine a settings.toml of `text` names, which then names nothing in the folder once `path` lands.
+function drops_what_settings_names(path: string, text: string | null, files: ConfigFiles): boolean {
+  if (path === ENGINE_FILE) {
+    const engine = default_engine_named_in(text);
+    return engine !== undefined && !Object.hasOwn(owned_engines(files), engine) && !engine_resolves_without_owned(files, engine);
   }
-  const deleted_theme = files[path] === undefined ? theme_name_of_file(path) : undefined;
-  if (deleted_theme === undefined || theme_resolves_without_file(deleted_theme) || !Object.hasOwn(unsynced, SETTINGS_FILE)) return undefined;
-  return theme_named_in(unsynced[SETTINGS_FILE] ?? null) === deleted_theme ? SETTINGS_FILE : undefined;
+  const theme = theme_name_of_file(path);
+  return files[path] === undefined && theme !== undefined && theme === theme_named_in(text) && !theme_resolves_without_file(theme);
 }
 
 // In the change queue. Sends the browser copy of the file at `path` when the folder lags it, or hands back the write already out.
@@ -798,12 +836,11 @@ async function outcome_of_host_write(write: HostWrite, reply: HostWriteReply, fo
       const asked = await ask_when_folder_differs(folder, { clear_when_settled: false });
       const end: FileWriteOutcome = { kind: asked === "asked" ? "conflict" : "conflict_kept" };
       let kept = without_unsynced_path(unsynced, path);
-      // A theme delete waits behind this write. The folder's settings.toml still names that theme, so the delete goes to the question too, and the folder keeps building.
+      // A theme delete or an engine removal waits behind this write. The folder's settings.toml still names that theme or engine, so that file goes to the question too, and the folder keeps building.
       if (path === SETTINGS_FILE) {
-        const still_named = theme_named_in(folder.files[SETTINGS_FILE] ?? null);
         const { files } = await load_files_source();
         for (const other of Object.keys(kept ?? {})) {
-          if (files[other] !== undefined || still_named === undefined || theme_resolves_without_file(still_named) || theme_name_of_file(other) !== still_named) continue;
+          if (!drops_what_settings_names(other, folder.files[SETTINGS_FILE] ?? null, files)) continue;
           kept = without_unsynced_path(kept, other);
           writes_of(other).end = end;
         }
