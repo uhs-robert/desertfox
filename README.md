@@ -47,10 +47,11 @@ You can edit any text box in your own editor, such as Neovim: press `<C-o>` in i
 
 ## 📦 Install
 
-> [!NOTE]
-> DesertFox is not on addons.mozilla.org yet. Install the signed beta below.
-
 DesertFox runs in Firefox on desktop. The native host is Linux only.
+
+### From addons.mozilla.org
+
+Open the [DesertFox listing](https://addons.mozilla.org/en-US/firefox/addon/465571e2162d4af9894a/) and select Add to Firefox. Firefox updates the add-on itself.
 
 ### Beta
 
