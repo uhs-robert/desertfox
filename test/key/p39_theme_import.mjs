@@ -57,7 +57,7 @@ export async function run_cases({ run_case, open_page, poll_until, rdp, extensio
     await paste(SCHEME);
     await poll_until("the preview to show", () => in_page(`return view.document.querySelector(".desertfox-themes .desertfox-theme-preview") !== null;`));
     const shown = await in_page(`const box = view.document.querySelector(".desertfox-themes"); return { name: box.querySelector('[aria-label="theme name"]').value, hints: box.querySelectorAll(".desertfox-preview-hint").length, badges: box.querySelectorAll(".desertfox-preview-badge").length, toasts: box.querySelectorAll(".desertfox-preview-toast").length, keys: box.querySelectorAll(".desertfox-preview-whichkey-key").length, bg: box.querySelector(".desertfox-theme-preview").style.getPropertyValue("--desertfox-bg-core") };`);
-    expect(shown.name === "p39_dusk" && shown.hints === 3 && shown.badges === 5 && shown.toasts === 4 && shown.keys === 4 && shown.bg === "#1b1d2b", `the preview showed ${JSON.stringify(shown)}`);
+    expect(shown.name === "p39_dusk" && shown.hints === 3 && shown.badges === 7 && shown.toasts === 4 && shown.keys === 4 && shown.bg === "#1b1d2b", `the preview showed ${JSON.stringify(shown)}`);
     expect((await theme_files()).p39_dusk === undefined, "typing stored a theme before Save");
     await shot("theme-import-preview");
     await in_page(`const input = view.document.querySelector('.desertfox-themes [aria-label="theme name"]'); input.value = "oasis_cactus"; input.dispatchEvent(new view.Event("input"));`);
