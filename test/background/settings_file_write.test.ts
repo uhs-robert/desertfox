@@ -5,6 +5,7 @@ import { load_effective_config } from "../../src/background/config_load.ts";
 import { create_settings_messages } from "../../src/background/settings_message.ts";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
+import { outcome_note, replayed_on_folder } from "../../src/background/settings_file.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 import { files_digest } from "../../src/background/host_start.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
@@ -15,6 +16,9 @@ const fresh_startup = async () => (await import(`../../src/background/startup.ts
 
 const MINE = '# My settings\n\nhint_letters = "abc" # home row\n\n# Rules\n[[site_rules]]\nsite = "*://x.test/*"\noff = true\n';
 const with_theme = (theme: string) => MINE.replace('hint_letters = "abc" # home row\n', `hint_letters = "abc" # home row\ntheme = "${theme}"\n`);
+// A hand edit of another key than the theme, and the same file once a pick joined it.
+const HAND = MINE.replace('"abc"', '"hand"');
+const hand_with_theme = (theme: string) => with_theme(theme).replace('"abc"', '"hand"');
 
 // `apply_files` drops the record by storing null in its one storage write.
 const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
@@ -69,13 +73,13 @@ test("`,r` after a written pick keeps the pick", async () => {
   assert.equal((await startup.get_config()).settings.theme, "oasis_night");
 });
 
-test("a hand edit since the last read is never overwritten: the folder stays, and the copies-differ question is stored", async () => {
+test("a hand edit of the same key since the last read is never overwritten: the folder stays, and the copies-differ question is stored", async () => {
   const host = { files: { "settings.toml": MINE } };
   const { local, startup } = await reloaded(host);
-  host.files = { "settings.toml": MINE.replace('"abc"', '"hand"') };
+  host.files = { "settings.toml": with_theme("nord") };
 
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "conflict" });
-  assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
+  assert.equal(host.files["settings.toml"], with_theme("nord"));
   assert.equal(stored_settings(local), with_theme("oasis_night"));
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal(unsynced_of(local), undefined);
@@ -120,16 +124,50 @@ test("an older host without the verb keeps the pick, asks nothing at start, and 
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
-test("a waiting pick meets a hand edit at start: nothing is written and the start asks", async () => {
+test("a waiting pick meets a hand edit of another key at start: the start writes both and asks nothing", async () => {
   const host = { files: { "settings.toml": MINE }, old_host: true };
   const { local, startup } = await reloaded(host);
   await startup.set_in_settings_file("theme", "oasis_night");
 
   host.old_host = false;
-  host.files = { "settings.toml": MINE.replace('"abc"', '"hand"') };
+  host.files = { "settings.toml": HAND };
   const restarted = await fresh_startup();
   await restarted.reload_config_at_start();
-  assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"hand"'));
+  assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
+  assert.equal(stored_settings(local), hand_with_theme("oasis_night"));
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
+  const { settings } = await restarted.get_config();
+  assert.deepEqual([settings.theme, settings.hint_letters], ["oasis_night", "hand"]);
+
+  // The applied digest followed both, so the copy still counts as unedited.
+  await (await fresh_startup()).reload_config_at_start();
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("`,r` writes a waiting pick onto a hand edit of another key and reads both back", async () => {
+  const host = { files: { "settings.toml": MINE }, old_host: true };
+  const { local, startup } = await reloaded(host);
+  await startup.set_in_settings_file("theme", "oasis_night");
+  host.old_host = false;
+  host.files = { "settings.toml": HAND };
+  await startup.reload_config();
+  assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
+  assert.equal(stored_settings(local), hand_with_theme("oasis_night"));
+  assert.equal((await startup.get_config()).settings.hint_letters, "hand");
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("a waiting pick meets a hand edit of the same key at start: nothing is written and the start asks", async () => {
+  const host = { files: { "settings.toml": MINE }, old_host: true };
+  const { local, startup } = await reloaded(host);
+  await startup.set_in_settings_file("theme", "oasis_night");
+
+  host.old_host = false;
+  host.files = { "settings.toml": with_theme("nord") };
+  const restarted = await fresh_startup();
+  await restarted.reload_config_at_start();
+  assert.equal(host.files["settings.toml"], with_theme("nord"));
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal((await restarted.get_config()).settings.theme, "oasis_night");
 });
@@ -440,4 +478,102 @@ test("an import of a snippet alone keeps the record of a waiting pick, and an im
 
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
   assert.equal(unsynced_of(local), undefined);
+});
+
+const pause = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("an editor save of another key during a write keeps both: the picks are put onto the saved text and written again", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, fake, startup } = await reloaded(host);
+  const send = fake.runtime.sendNativeMessage;
+  const held = hold_writes(fake);
+  const first = startup.set_in_settings_file("theme", "nord");
+  await pause();
+  const second = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  host.files = { "settings.toml": HAND };
+  fake.runtime.sendNativeMessage = send;
+  held.shift()!();
+
+  assert.deepEqual(await Promise.all([first, second]), [{ kind: "written" }, { kind: "written" }]);
+  assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
+  assert.equal(stored_settings(local), hand_with_theme("oasis_night"));
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  assert.equal(unsynced_of(local), undefined);
+
+  await (await fresh_startup()).reload_config_at_start();
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("a refused write keeps the record of a pick made after Use the folder, and that pick is written from the folder's text", async () => {
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } as Files };
+  const { local, fake, startup: before_restart } = await reloaded(host);
+  // A browser change and a folder change, so the start stores the copies-differ question.
+  await before_restart.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
+  host.files = { ...host.files, "keymap.toml": '[normal]\n"zx" = "tab.next"\n' };
+  const startup = await fresh_startup();
+  await startup.reload_config_at_start();
+
+  const send = fake.runtime.sendNativeMessage;
+  const held = hold_writes(fake);
+  const dropped_pick = startup.set_in_settings_file("theme", "nord");
+  await pause();
+  host.files = { ...host.files, "settings.toml": HAND };
+  const use_folder = () => startup.choose_host_start("use_folder", local[HOST_START_PENDING_STORAGE_KEY] as { host_digest: string; browser_digest: string });
+  // The pick changed the copy after the question, so the first answer finds it stale and asks again.
+  await assert.rejects(use_folder(), /changed since the list was shown/);
+  await use_folder();
+  const later_pick = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  // A browser change beside the pick, so a refusal cannot put the pick onto the folder's text and has to leave the record for its own write.
+  await startup.save_config_file("keymap.toml", '[normal]\n"zy" = "tab.next"\n', '[normal]\n"zx" = "tab.next"\n');
+  fake.runtime.sendNativeMessage = send;
+  held.shift()!();
+
+  assert.deepEqual(await dropped_pick, { kind: "replaced", by: "reload", written: false });
+  assert.deepEqual(await later_pick, { kind: "written" });
+  assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("an import during a write: the pick reached the file, and the reply says the import replaced the browser copy", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { fake, startup } = await reloaded(host);
+  const held = hold_writes(fake);
+  const pick = startup.set_in_settings_file("theme", "oasis_night");
+  await pause();
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  held.shift()!();
+  const outcome = await pick;
+  assert.deepEqual(outcome, { kind: "replaced", by: "import", written: true });
+  assert.equal(outcome_note(outcome), ", saved to settings.toml. A config import replaced the browser copy during the write");
+  assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
+});
+
+test("an import that runs between a pick and its write: nothing is written, and the reply says so", async () => {
+  const host = { files: { "settings.toml": MINE } };
+  const { local, sent, startup } = await reloaded(host);
+  sent.length = 0;
+  const pick = startup.set_in_settings_file("theme", "oasis_night");
+  const imported = startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  await imported;
+  const outcome = await pick;
+  assert.deepEqual(outcome, { kind: "replaced", by: "import", written: false });
+  assert.equal(outcome_note(outcome), ". A config import replaced the browser copy before the write, so settings.toml was not written");
+  assert.ok(!sent.some((message) => message.cmd === "write_settings"));
+  assert.equal(host.files["settings.toml"], MINE);
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("the edits are put onto the folder's text only where the folder kept the base value", () => {
+  assert.equal(replayed_on_folder(MINE, with_theme("nord"), HAND), hand_with_theme("nord"));
+  assert.equal(replayed_on_folder(null, 'theme = "nord"\n', "a = 1\n"), 'a = 1\ntheme = "nord"\n');
+  assert.equal(replayed_on_folder(with_theme("nord"), MINE, hand_with_theme("nord")), HAND);
+  // The folder changed the same key, removed the file, or does not parse.
+  assert.equal(replayed_on_folder(MINE, with_theme("nord"), with_theme("dracula")), undefined);
+  assert.equal(replayed_on_folder(MINE, with_theme("nord"), null), undefined);
+  assert.equal(replayed_on_folder(MINE, with_theme("nord"), "theme = \n"), undefined);
+  // Nothing to put on, or a change this editor does not write.
+  assert.equal(replayed_on_folder(MINE, MINE, HAND), undefined);
+  assert.equal(replayed_on_folder("a = [1]\n", "a = [2]\n", "a = [1]\nb = 1\n"), undefined);
 });
