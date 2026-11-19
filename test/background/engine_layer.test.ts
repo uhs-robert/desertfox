@@ -46,7 +46,7 @@ const stored_keymap = (local: Record<string, unknown>) => local[COMPILED_KEYMAP_
 test("an added engine is in the config and binds its key letter, and survives a reload and a restart", async () => {
   const { startup, messages, local, host } = await started("add");
   const saved = await messages.change(wiki);
-  assert.deepEqual(saved, { ok: true, message: "Saved the engine wiki, saved to search_engines.d/zz-desertfox.toml. sw searches it." });
+  assert.deepEqual(saved, { ok: true, message: "Saved the engine wiki to search_engines.d/zz-desertfox.toml. sw searches it." });
   assert.equal((await startup.get_config()).search_engines.wiki?.url, "https://w.test/?q={query}");
   assert.ok(stored_keymap(local).modes.normal?.children.s, "s is bound");
   assert.ok((await load_effective_config()).config.search_engines.wiki, "a page reads the engine");

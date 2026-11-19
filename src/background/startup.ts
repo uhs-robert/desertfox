@@ -15,7 +15,7 @@ import { alias_edits_of, engine_edits_of, has_build_edits, load_layers, store_la
 import type { AliasEdits, EditLayers, EngineEdits, LayerKind, LayerOf } from "./edit_layers.ts";
 import { build_layered, dropped_warning, fresh_drops, refusal_of } from "./engine_layer.ts";
 import type { EnginePlan, EngineState, EngineTurn } from "./engine_message.ts";
-import { ENGINE_FILE, engine_resolves_without_owned, owned_engines } from "./engine_file.ts";
+import { ENGINE_FILE, engine_file_text, engine_resolves_without_owned, engines_in_text, holds_engine, owned_engines } from "./engine_file.ts";
 import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "./config_load.ts";
@@ -704,7 +704,8 @@ async function write_waiting_files(in_queue: QueueRunner): Promise<void> {
 
 // Writes the browser copy of the file at `path` to the folder while the folder lags it, and again for a pick made during a write. Undefined when nothing waited.
 // With `pick` it stops at the outcome of that pick: the write that holds it, or the swap that replaced it.
-async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: PickMark): Promise<FileWriteOutcome | undefined> {
+// `waiting_above` holds the paths of the outer loops that wait for this one to land first.
+async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: PickMark, waiting_above: string[] = []): Promise<FileWriteOutcome | undefined> {
   const writes = writes_of(path);
   let outcome: FileWriteOutcome | undefined;
   writes.replays_in_a_row = 0;
@@ -715,12 +716,23 @@ async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: Pi
   // The outcome of the one write this loop makes of a path that must land first. A path still behind it after that waits for a later loop, so two files never chase each other.
   let first_outcome: FileWriteOutcome | undefined;
   let wrote_first = false;
+  let bridges = 0;
   for (;;) {
     const first = await in_queue(() => path_to_write_first(path));
+    // Each waits for the other: settings.toml names an engine only the copy's page file has, and that file drops an engine the folder's settings.toml names.
+    // The bridge file holds both, so settings.toml can land, then the page file as the copy has it.
+    if (first !== undefined && waiting_above.includes(first)) {
+      if (bridges === MAX_BRIDGES) return replaced() ?? { kind: "waiting" };
+      bridges += 1;
+      const bridged = await write_engine_bridge(in_queue);
+      if (bridged.kind !== "written" && bridged.kind !== "superseded") return replaced() ?? bridged;
+      if (path === ENGINE_FILE) await write_waiting_file(in_queue, first, undefined, [...waiting_above, path]);
+      continue;
+    }
     if (first !== undefined) {
       if (wrote_first) return replaced() ?? (first_outcome?.kind === "waiting" ? first_outcome : { kind: "waiting" });
       wrote_first = true;
-      first_outcome = await write_waiting_file(in_queue, first);
+      first_outcome = await write_waiting_file(in_queue, first, undefined, [...waiting_above, path]);
       continue;
     }
     const started = await in_queue(async () => replaced() ?? (await start_host_write(path)));
@@ -746,37 +758,62 @@ async function path_to_write_first(path: string): Promise<string | undefined> {
   const unsynced = await read_unsynced();
   if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
   const { files } = await load_files_source();
-  if (path === SETTINGS_FILE) return files_named_by_settings(files[SETTINGS_FILE] ?? null, files).find((named_path) => Object.hasOwn(unsynced, named_path));
-  return Object.hasOwn(unsynced, SETTINGS_FILE) && drops_what_settings_names(path, unsynced[SETTINGS_FILE] ?? null, files) ? SETTINGS_FILE : undefined;
+  if (path === SETTINGS_FILE) return files_named_by_settings(files[SETTINGS_FILE] ?? null, files, unsynced).find((named_path) => Object.hasOwn(unsynced, named_path));
+  if (!Object.hasOwn(unsynced, SETTINGS_FILE)) return undefined;
+  // The folder holds the base, or soon the text of a settings.toml write that is out, so neither may name what `path` drops.
+  const out = writes_of(SETTINGS_FILE).out;
+  const folder_settings = [unsynced[SETTINGS_FILE] ?? null, ...(out ? [out.text] : [])];
+  return folder_settings.some((text) => drops_what_settings_names(path, text, files)) ? SETTINGS_FILE : undefined;
 }
 
-// The files of the copy that hold what a settings.toml of `text` names: the theme file of its `theme`, and the Engines page's file when it defines the `default_engine`.
-function files_named_by_settings(text: string | null, files: ConfigFiles): string[] {
+// The files of the copy that hold what a settings.toml of `text` names and the folder lacks: the theme file of its `theme`, and the Engines page's file when it defines the `default_engine` and the folder's page file (the record's base) does not.
+function files_named_by_settings(text: string | null, files: ConfigFiles, unsynced: UnsyncedFiles): string[] {
   const theme = theme_named_in(text);
   const engine = default_engine_named_in(text);
   const theme_path = theme === undefined ? undefined : theme_file_path(theme);
-  return [...(theme_path !== undefined && files[theme_path] !== undefined ? [theme_path] : []), ...(engine !== undefined && Object.hasOwn(owned_engines(files), engine) ? [ENGINE_FILE] : [])];
+  const engine_file_needed = engine !== undefined && holds_engine(owned_engines(files), engine) && !holds_engine(engines_in_text(unsynced[ENGINE_FILE] ?? null), engine);
+  return [...(theme_path !== undefined && files[theme_path] !== undefined ? [theme_path] : []), ...(engine_file_needed ? [ENGINE_FILE] : [])];
 }
 
 // Whether the copy's file at `path` no longer holds the theme or engine a settings.toml of `text` names, which then names nothing in the folder once `path` lands.
 function drops_what_settings_names(path: string, text: string | null, files: ConfigFiles): boolean {
   if (path === ENGINE_FILE) {
     const engine = default_engine_named_in(text);
-    return engine !== undefined && !Object.hasOwn(owned_engines(files), engine) && !engine_resolves_without_owned(files, engine);
+    return engine !== undefined && !holds_engine(owned_engines(files), engine) && !engine_resolves_without_owned(files, engine);
   }
   const theme = theme_name_of_file(path);
   return files[path] === undefined && theme !== undefined && theme === theme_named_in(text) && !theme_resolves_without_file(theme);
 }
 
+// The writes of a bridge file one write loop makes before it gives up and waits.
+const MAX_BRIDGES = 3;
+
+// Writes the bridge page file: the folder's engines (the record's base) with the copy's over them. It drops nothing the folder's settings.toml names and holds what the copy's settings.toml names.
+// The record keeps the page file at the bridge text as its base, so the copy's own text follows.
+async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite> {
+  const started = await in_queue(async () => {
+    const unsynced = await read_unsynced();
+    if (!unsynced || !Object.hasOwn(unsynced, ENGINE_FILE)) return undefined;
+    const bridge = { ...engines_in_text(unsynced[ENGINE_FILE] ?? null), ...owned_engines((await load_files_source()).files) };
+    return start_host_write(ENGINE_FILE, engine_file_text(bridge));
+  });
+  if (started === undefined) return { kind: "written" };
+  if ("kind" in started) return started;
+  const reply = await started.reply;
+  const landed_before_read = writes_landed;
+  const folder = changed_on_disk(reply) ? await read_folder_after_write() : undefined;
+  return in_queue(() => settle_host_write(started, reply, folder && { ...folder, current: writes_landed === landed_before_read }));
+}
+
 // In the change queue. Sends the browser copy of the file at `path` when the folder lags it, or hands back the write already out.
-// A file the copy no longer has is deleted from the folder, through the same base check.
-async function start_host_write(path: string): Promise<HostWrite | FileWriteOutcome | undefined> {
+// A file the copy no longer has is deleted from the folder, through the same base check. `bridge_text` replaces the copy's text, and such a write holds no pick.
+async function start_host_write(path: string, bridge_text?: string): Promise<HostWrite | FileWriteOutcome | undefined> {
   const writes = writes_of(path);
   if (writes.out) return writes.out;
   const unsynced = await read_unsynced();
   if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
   const base = unsynced[path] as string | null;
-  const text = (await load_files_source()).files[path] ?? null;
+  const text = bridge_text ?? (await load_files_source()).files[path] ?? null;
   if (text === null && base === null) {
     // Neither side has the file, so there is nothing to write.
     await store_unsynced(without_unsynced_path(unsynced, path));
@@ -784,7 +821,7 @@ async function start_host_write(path: string): Promise<HostWrite | FileWriteOutc
   }
   const base_sha256 = base === null ? null : await text_sha256(base);
   const reply = native_host.write_config_file(path, text, base_sha256).then((): HostWriteReply => ({ ok: true }), (error: unknown): HostWriteReply => ({ ok: false, error }));
-  writes.out = { path, base, text, covers: writes.picks_made, drops: writes.drops, reply };
+  writes.out = { path, base, text, covers: bridge_text === undefined ? writes.picks_made : -1, drops: writes.drops, reply };
   return writes.out;
 }
 

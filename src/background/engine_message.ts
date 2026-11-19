@@ -75,6 +75,9 @@ function checked(turn: EngineTurn, plan: EnginePlan): EnginePlan {
 
 const hand_managed = (path: string, name: string, verb: string) => new ConfigRefusal(`The engine ${name} is in ${path}, which this page does not change. ${verb} it there.`);
 
+// The end of a save's reply about the page's file.
+const save_note = (file: FileWriteOutcome): string => (file.kind === "written" ? ` to ${ENGINE_FILE}` : outcome_note(file, ENGINE_FILE));
+
 // The end of a remove's reply about the page's file.
 function removal_note(file: FileWriteOutcome, deleted: boolean): string {
   if (file.kind !== "written") return outcome_note(file, ENGINE_FILE);
@@ -115,7 +118,7 @@ export function create_engine_messages(deps: EngineMessageDeps) {
     });
     if ("done" in change) throw new ConfigRefusal(`The engine ${name} was not saved.`);
     const searches = letter === undefined ? "" : ` s${letter} searches it${taken !== undefined && taken !== name ? `, where it searched ${taken}` : ""}.`;
-    return `Saved the engine ${name}${change.file ? outcome_note(change.file, ENGINE_FILE) : ""}.${searches}`;
+    return `Saved the engine ${name}${change.file ? save_note(change.file) : ""}.${searches}`;
   }
 
   async function remove(name: string): Promise<string> {
@@ -171,7 +174,7 @@ export function create_engine_messages(deps: EngineMessageDeps) {
       return added.length > 0 ? planned(added) : { done: "none" };
     });
     const { added, skipped, left_out } = result;
-    const where = "done" in change || !change.file ? "" : change.file.kind === "written" ? ` to ${ENGINE_FILE}` : outcome_note(change.file, ENGINE_FILE);
+    const where = "done" in change || !change.file ? "" : save_note(change.file);
     const notes = [
       added.length === 0 ? "No starter engine was added." : `Added ${added.length} starter engine table(s)${where}.`,
       ...(skipped > 0 ? [`Skipped ${skipped} whose name already exists.`] : []),
