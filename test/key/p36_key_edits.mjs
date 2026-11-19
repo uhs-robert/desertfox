@@ -15,8 +15,8 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
   const layer = () => in_background(`browser.storage.local.get("desertfox_keymap_edits").then((got) => got.desertfox_keymap_edits ?? {})`);
   // The row's Edit button, found by its accessible name. \`.closest("tr")\` gives the row.
   const row_of = (mode, keys) => `view.document.querySelector(${JSON.stringify(`[aria-label="Edit ${keys} in ${mode} mode"]`)})`;
-  const shown_keys = () => in_page(`return [...view.document.querySelectorAll(".desertfox-keys-capture kbd")].map((kbd) => kbd.textContent);`);
-  const capture_focused = () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('.desertfox-keys-capture');`);
+  const shown_keys = () => in_page(`return [...view.document.querySelectorAll(".desertfox-keys-editor .desertfox-keys-capture kbd")].map((kbd) => kbd.textContent);`);
+  const capture_focused = () => in_page(`return view.document.hasFocus() && view.document.activeElement === view.document.querySelector('.desertfox-keys-editor .desertfox-keys-capture');`);
 
   // Key edits are stored state, and a failed case can leave some. The reset goes through the background's own message, so the compiled keymap follows the stored layer.
   const reset_edits = () => in_page(`return view.browser.storage.local.get("desertfox_keymap_edits").then(async (got) => { for (const [mode, table] of Object.entries(got.desertfox_keymap_edits ?? {})) for (const keys of Object.keys(table)) await view.browser.runtime.sendMessage({ type: "change_keymap", mode, keys, action: "reset" }); return true; });`);
@@ -39,7 +39,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     if (keys === undefined) await in_page(`view.document.querySelector('[aria-label="Add a key in ${mode} mode"]').click();`);
     else await in_page(`${row_of(mode, keys)}.click();`);
     await poll_until("the editor to open", () => in_page(`return !!view.document.querySelector('.desertfox-keys-editor')?.isConnected;`).catch(() => false));
-    await in_page(`view.document.querySelector('.desertfox-keys-capture').focus();`);
+    await in_page(`view.document.querySelector('.desertfox-keys-editor .desertfox-keys-capture').focus();`);
     await poll_until("the capture box to hold the focus", capture_focused);
   }
 
@@ -64,7 +64,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await press_keys("-k", "Escape");
     await poll_until("Escape to cancel the capture", async () => !(await capture_focused()) && (await shown_keys()).length === 0);
 
-    await in_page(`view.document.querySelector('.desertfox-keys-capture').focus();`);
+    await in_page(`view.document.querySelector('.desertfox-keys-editor .desertfox-keys-capture').focus();`);
     await poll_until("the capture box to take the focus again", capture_focused);
     await press_keys("x");
     await poll_until("x to be captured", async () => (await shown_keys()).length === 1);
@@ -126,7 +126,7 @@ export async function run_cases({ run_case, open_page, press_keys, poll_until, r
     await poll_until("the new key to replace the old", async () => JSON.stringify(await shown_keys()) === JSON.stringify(["Q"]));
     await press_keys("-k", "Tab");
     await poll_until("Tab to leave the box and not be captured", async () => !(await capture_focused()) && (await shown_keys()).length === 1);
-    await in_page(`view.document.querySelector('.desertfox-keys-capture').focus();`);
+    await in_page(`view.document.querySelector('.desertfox-keys-editor .desertfox-keys-capture').focus();`);
     await poll_until("the box to take the focus again", capture_focused);
     await press_keys("-k", "Return");
     await poll_until("Enter to store the move", async () => (await layer()).normal?.Q === "tab.prev" && (await layer()).normal?.K === "");
