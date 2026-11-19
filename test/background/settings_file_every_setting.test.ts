@@ -302,6 +302,24 @@ test("a default engine of the Engines page's file goes to settings.toml, and an 
   assert.deepEqual(toasts, ['success default_engine = "page_one", saved to settings.toml']);
 });
 
+test("an engine added in the browser saves as the default in the browser, and an engine in the files goes to the file", async () => {
+  const host = { files: { "settings.toml": MINE, "search_engines.toml": 'files_one = { url = "https://f.test/?q={query}" }\n' } };
+  const { local, sent, startup } = await reloaded(host);
+  await startup.change_layers("engines", () => ({ engines: { browser_one: { url: "https://b.test/?q={query}" } } }));
+  sent.length = 0;
+  const { handlers, toasts } = commands(startup);
+  await handlers.set(ctx, { name: "default_engine", value: "browser_one" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { default_engine: "browser_one" });
+  assert.equal(stored_settings(local), MINE);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
+  assert.equal((await startup.get_config()).settings.default_engine, "browser_one");
+
+  await handlers.set(ctx, { name: "default_engine", value: "files_one" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
+  assert.match(host.files["settings.toml"]!, /^default_engine = "files_one"$/m);
+  assert.deepEqual(toasts, ['success default_engine = "browser_one", saved in the browser because the search engine is not in your files', 'success default_engine = "files_one", saved to settings.toml']);
+});
+
 test("a default engine that needs the current page is refused by name before any build, and the dropdown leaves it out", async () => {
   const host = { files: { "settings.toml": MINE, "search_engines.toml": 'repo_one = { url = "https://r.test/{repo}?q={query}" }\nplain = { url = "https://p.test/?q={query}" }\n' } };
   const { local, sent, startup } = await reloaded(host);
