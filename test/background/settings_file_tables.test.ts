@@ -146,6 +146,17 @@ test("the keys form writes its row to settings.toml with a settings.d site_rules
   assert.equal(host.files["settings.toml"], MINE);
 });
 
+test("Remove in the keys form on a pass row only a settings.d file holds is refused by file name, and writes nothing", async () => {
+  const host = { files: { "settings.toml": MINE, [D_FILE]: d_row(NEWS, 'pass = "q"') } };
+  const { local, sent, startup } = await reloaded(host);
+  sent.length = 0;
+  await assert.rejects(startup.change_site_keys_in_file(NEWS, null), (error: unknown) => error instanceof RuntimeRefusal && error.message === `Not removed: ${D_FILE} keeps keys for ${NEWS}. Change it there.`);
+  assert.equal(stored_settings(local), MINE);
+  assert.deepEqual(written(sent), []);
+  // A site no file has keys for still reports nothing to remove.
+  assert.deepEqual(await startup.change_site_keys_in_file(FORUM.replace("forum", "none"), null), { kind: "unchanged" });
+});
+
 test("a popup write and a reload that picks up a new settings.d file, in either order, leave one popup row and the combined list in force", async () => {
   const blocker = d_row("*://*.news.test/*", "off = true");
   for (const write_first of [true, false]) {
@@ -157,8 +168,6 @@ test("a popup write and a reload that picks up a new settings.d file, in either 
     const reload = () => startup.reload_config();
     const [first, second] = write_first ? [click(), reload()] : [reload(), click()];
     await Promise.all([first, second]);
-    // A second reload settles whatever the order left in the browser copy.
-    await startup.reload_config();
     const rows = (parse(host.files["settings.toml"]!) as { site_rules: { site: string }[] }).site_rules;
     assert.equal(rows.filter((row) => row.site === NEWS).length, 1, `write_first ${write_first}`);
     assert.deepEqual(await site_rules_in_force(startup), [{ site: FORUM, pass: "j k" }, { site: NEWS, off: true }, { site: NEWS, off: true }]);
