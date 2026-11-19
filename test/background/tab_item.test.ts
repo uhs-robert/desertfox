@@ -110,6 +110,31 @@ test("a frame that reloads in the hold joins again, and the report of normal tha
   assert.deepEqual(steps, ["4:off:0"]);
 });
 
+test("a child frame of the hold that commits a new document keeps the hold through the normal report that comes before its join", async () => {
+  const { tab_item, steps, data } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  steps.length = 0;
+  await tab_item.committed(4, 7);
+  await tab_item.reported(4, 7, "normal");
+  assert.deepEqual(steps, []);
+  assert.equal(await tab_item.join(4, 7), true);
+  await tab_item.reported(4, 7, "item", true);
+  assert.deepEqual(data["desertfox_tab_item_4"], { frames: [0, 7], rejoined: [] });
+  await tab_item.reported(4, 7, "normal");
+  assert.deepEqual(steps, ["4:off:0"], "back in the mode, a normal is the user leaving");
+});
+
+test("a commit marks only a child frame of a live hold", async () => {
+  const { tab_item, data } = make();
+  await tab_item.committed(4, 7);
+  assert.equal(data["desertfox_tab_item_4"], undefined);
+  await tab_item.reported(4, 0, "item");
+  await tab_item.committed(4, 0);
+  await tab_item.committed(4, 9);
+  assert.deepEqual(data["desertfox_tab_item_4"], { frames: [0] });
+});
+
 test("the start goes to the tab only while it still shows the completed address", async () => {
   const sent: unknown[] = [];
   const ask = (wanted: { selector?: string } | undefined, now: { url?: string; status?: string } | undefined) =>

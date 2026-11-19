@@ -39,8 +39,8 @@ function covered_rect(item: Element) {
   return new DOMRect(left, top, right - left, bottom - top);
 }
 
-// `still_wanted` answers false once the mode is one where the box does not belong. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to.
-export function create_item_overlay(still_wanted: () => boolean, watch_user: () => UserLeft, on_follow: (item: Element) => void) {
+// `mode` is the frame's mode. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to.
+export function create_item_overlay(mode: () => string, watch_user: () => UserLeft, on_follow: (item: Element) => void) {
   const host = document.createElement("div");
   const box = document.createElement("div");
   box.className = "desertfox-item-box";
@@ -63,6 +63,9 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
   let hover_timer: ReturnType<typeof setTimeout> | undefined;
   let unhover: (() => void) | undefined;
   let watch: ReturnType<typeof setInterval> | undefined;
+  let drawn_in: string | undefined;
+  // The box belongs to item mode and to normal mode, where a row of the user's binds j and k and the focus mark shows. A box drawn in item mode clears once the frame leaves it by any route, a step from another frame included, which no input in this frame shows.
+  const still_wanted = () => mode() === "item" || (mode() === "normal" && drawn_in !== "item");
 
   const reposition = () => {
     const rect = item && covered_rect(item);
@@ -109,6 +112,7 @@ export function create_item_overlay(still_wanted: () => boolean, watch_user: () 
       if (hover) hover_timer = setTimeout(() => target.isConnected && hover() && (unhover = hover_at(target)), HOVER_DELAY_MS);
     }
     hovers = hover;
+    drawn_in = mode();
     item = target;
     item_selector = selector;
     focus_at_show = document.activeElement;

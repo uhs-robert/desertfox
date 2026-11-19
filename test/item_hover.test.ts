@@ -122,8 +122,8 @@ test("only a picture at least 96 px wide is a thumbnail", () => {
 });
 
 // The overlay drives the hover: `show` with the hover flag waits, a change of item or a clear undoes it.
-function overlay() {
-  return create_item_overlay(() => true, () => ({ left_: () => false, stop_: () => {} }), () => {});
+function overlay(mode: () => string = () => "item") {
+  return create_item_overlay(mode, () => ({ left_: () => false, stop_: () => {} }), () => {});
 }
 const entered = () => events.filter((event) => event.startsWith("mouseenter"));
 const left = () => events.filter((event) => event.startsWith("mouseleave"));
@@ -232,6 +232,27 @@ test("the 100 ms watch that clears a box with a removed item also unhovers it", 
   item.isConnected = false;
   mock.timers.tick(100);
   assert.ok(left().includes("mouseleave@a-img"), events.join());
+});
+
+test("a box drawn in item mode clears and unhovers once the frame leaves item mode, and one drawn in normal mode stays in both", () => {
+  let mode = "item";
+  const box = overlay(() => mode);
+  box.show(as_element(tile("a", true)), "div", () => true);
+  mock.timers.tick(300);
+  events = [];
+  // A step from another frame ends the mode here, with no input in this frame.
+  mode = "normal";
+  mock.timers.tick(100);
+  assert.ok(left().includes("mouseleave@a-img"), events.join());
+  box.show(as_element(tile("b", true)), "div", () => true);
+  mock.timers.tick(300);
+  events = [];
+  mode = "item";
+  mock.timers.tick(100);
+  mode = "normal";
+  mock.timers.tick(1000);
+  assert.deepEqual(left(), []);
+  box.clear();
 });
 
 // move_item hands the hover to highlight as its third argument.
