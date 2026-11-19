@@ -495,7 +495,7 @@ test("an editor save of another key during a write keeps both: the picks are put
   const first = startup.set_in_settings_file("theme", "nord");
   await until(() => held.length === 1, "the first write did not go out");
   const second = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => stored_settings(local)?.includes('theme = "oasis_night"') === true, "the pick did not store its record");
   host.files = { "settings.toml": HAND };
   fake.runtime.sendNativeMessage = send;
   held.shift()!();
@@ -529,7 +529,7 @@ test("a refused write keeps the record of a pick made after Use the folder, and 
   await assert.rejects(use_folder(), /changed since the list was shown/);
   await use_folder();
   const later_pick = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => stored_settings(local)?.includes('theme = "oasis_night"') === true, "the pick did not store its record");
   // A browser change beside the pick, so a refusal cannot put the pick onto the folder's text and has to leave the record for its own write.
   await startup.save_config_file("keymap.toml", '[normal]\n"zy" = "tab.next"\n', '[normal]\n"zx" = "tab.next"\n');
   fake.runtime.sendNativeMessage = send;
@@ -604,13 +604,13 @@ test("a refused write whose folder also changed keymap.toml takes that file too,
 
 test("each pick a swap dropped names the swap that dropped it", async () => {
   const host = { files: { "settings.toml": MINE } };
-  const { fake, startup } = await reloaded(host);
+  const { local, fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const saved_over = startup.set_in_settings_file("theme", "nord");
   await until(() => held.length === 1, "the first write did not go out");
   await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
   const imported_over = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => stored_settings(local)?.includes('theme = "oasis_night"') === true, "the pick did not store its record");
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
   held.shift()!();
   assert.deepEqual(await saved_over, { kind: "replaced", by: "edit", written: true });
@@ -627,7 +627,7 @@ test("a refusal older than a new record with the same base leaves that record, a
   // An editor save puts settings.toml back to the folder's text, so the next pick's record has the same base as the first.
   await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
   const later_pick = startup.set_in_settings_file("theme", "oasis_night");
-  await pause();
+  await until(() => stored_settings(local)?.includes('theme = "oasis_night"') === true, "the pick did not store its record");
   // A browser change beside the pick, so the refusal cannot put the pick onto the folder's text.
   await startup.save_config_file("keymap.toml", '[normal]\n"zy" = "tab.next"\n', "");
   // The folder differs while the first write is checked and read again, then is back to the base before the next write.
