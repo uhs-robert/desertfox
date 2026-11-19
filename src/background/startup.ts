@@ -54,7 +54,7 @@ import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
 import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_sets, settings_d_files_naming, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
-import type { TomlValue } from "./toml_key_edit.ts";
+import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
 import type { ThemeFileChange } from "./theme_message.ts";
 import type { HostStartChoice } from "../shared/messages.ts";
@@ -433,9 +433,13 @@ export function set_in_settings_file(name: keyof Settings, value: TomlValue): Pr
   return change_setting_in_file<FileWriteOutcome>(name, async (files) => {
     if (name === "theme" && typeof value === "string" && !(await theme_in_files(value))) throw new RuntimeRefusal(`theme not changed: no theme named "${value}"`);
     if (name === "default_engine" && typeof value === "string") {
-      const engines = with_fallback_engines((await get_config()).search_engines);
-      if (!Object.hasOwn(engines, value)) throw new RuntimeRefusal(`default_engine not changed: no search engine named "${value}"`);
-      if (needs_page(engines[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
+      if (needs_page(with_fallback_engines((await get_config()).search_engines)[value])) throw new RuntimeRefusal(`default_engine not changed: ${value} needs the current page, so it cannot be the default engine`);
+      const home = await where_engine_named(value);
+      if (home === "nowhere") throw new RuntimeRefusal(`default_engine not changed: no search engine named "${value}"`);
+      if (home === "browser") {
+        await save_in_browser(name, value);
+        return { done: { kind: "saved_in_browser" } };
+      }
     }
     return { files: with_setting_in_files(files, name, value) };
   });
@@ -623,6 +627,20 @@ const theme_resolves_without_file = (name: string): boolean => name === DESKTOP_
 async function theme_in_files(value: string): Promise<boolean> {
   const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
   return theme_resolves_without_file(value) || Object.hasOwn(files_config.local_themes ?? {}, value);
+}
+
+// Where an engine name is known. `browser`: only in the browser (an engine added on the Engines page), so the files build refuses a settings.toml that names it.
+// An engine of the same name in the files is known to the build, so that name still goes to the file.
+async function where_engine_named(value: string): Promise<"files" | "browser" | "nowhere"> {
+  const files_config = (await (load_step as Promise<LoadStep>)).loaded.config;
+  if (Object.hasOwn(with_fallback_engines(files_config.search_engines), value)) return "files";
+  return Object.hasOwn(with_fallback_engines((await get_config()).search_engines), value) ? "browser" : "nowhere";
+}
+
+// The saved edit, as before the file write existed: it lasts, and it drops a temp edit of the name that would hide it.
+async function save_in_browser(name: keyof Settings, value: TomlScalar): Promise<void> {
+  const before = await load_edits();
+  await commit_setting_edits(before, { saved: { ...before.saved, [name]: value }, temp: without_setting(before, name).temp });
 }
 
 async function drop_edits_of(name: keyof Settings): Promise<void> {

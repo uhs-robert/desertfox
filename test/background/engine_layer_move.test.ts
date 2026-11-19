@@ -338,3 +338,26 @@ test("a merge by path takes the fields of a path whole from the top table and ke
   const over = { url: "u2", news: { deep: { url: "d" } } };
   assert.deepEqual(merged_by_path(under, over), { url: "u2", img: { url: "i1" }, news: { url: "n1", old: { url: "o" }, deep: { url: "d" } } });
 });
+
+test("an engine left in the layer can be the default engine, keeps it across a restart, and the default moves to settings.toml with the engine", async () => {
+  const hand = '[mine]\nurl = "https://m.test/?q={query}"\n';
+  const { host, local } = await old_profile(LAYER, { "settings.toml": "", [FILE]: hand });
+  const warnings = start_warnings();
+  let startup = await first_start();
+  assert.deepEqual(await startup.set_in_settings_file("default_engine", "wiki"), { kind: "saved_in_browser" });
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { default_engine: "wiki" });
+  startup = await first_start();
+  assert.equal((await startup.get_config()).settings.default_engine, "wiki");
+  assert.equal(host.files["settings.toml"], "");
+
+  // The user renames the hand file, so the page's path is free and the next start moves the layer.
+  host.files = { "settings.toml": "", "search_engines.d/10-mine.toml": hand };
+  await startup.reload_config();
+  startup = await first_start();
+  warnings.restore();
+  assert.equal(local[ENGINE_EDITS_STORAGE_KEY], undefined);
+  assert.match(host.files[FILE]!, /^\[wiki\]$/m);
+  assert.equal(host.files["settings.toml"], 'default_engine = "wiki"\n');
+  assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
+  assert.equal((await startup.get_config()).settings.default_engine, "wiki");
+});
