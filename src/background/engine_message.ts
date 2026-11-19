@@ -117,7 +117,8 @@ export function create_engine_messages(deps: EngineMessageDeps) {
       return checked(turn, { files: with_owned_engines(turn.files, { ...owned, [name]: table }), layer });
     });
     if ("done" in change) throw new ConfigRefusal(`The engine ${name} was not saved.`);
-    const searches = letter === undefined ? "" : ` s${letter} searches it${taken !== undefined && taken !== name ? `, where it searched ${taken}` : ""}.`;
+    // A replaced browser copy dropped the letter with the rest of the copy, so it searches nothing yet.
+    const searches = letter === undefined || change.file?.kind === "replaced" ? "" : ` s${letter} searches it${taken !== undefined && taken !== name ? `, where it searched ${taken}` : ""}.`;
     return `Saved the engine ${name}${change.file ? save_note(change.file) : ""}.${searches}`;
   }
 
