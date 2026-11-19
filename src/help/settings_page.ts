@@ -3,9 +3,10 @@
 import { el } from "./render.ts";
 import { site_rule_effects } from "./site_rule_effect.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
-import { create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
+import { can_reset, create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
+import { FILE_WRITTEN_SETTINGS } from "../shared/settings_schema.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
 
 // One control: how to read the value it shows and how to put a value in without recreating it, which would drop focus and a half-typed edit.
@@ -275,7 +276,7 @@ function build_row(field: Field, session: SettingsSession, reload_key: string): 
   message.setAttribute("role", "status");
   const reset = el("button", "desertfox-settings-reset", "Reset") as HTMLButtonElement;
   reset.type = "button";
-  reset.title = "Undo your change. The setting goes back to its default, or to the value in your settings file.";
+  reset.title = FILE_WRITTEN_SETTINGS.has(name) ? "Remove the setting from settings.toml and drop your browser changes. The setting goes back to its default." : "Undo your change. The setting goes back to its default, or to the value in your settings file.";
   reset.addEventListener("click", () => void session.reset(name).then(() => keep_focus_after_reset(node)));
   const widget = widget_of(field, { typing: (value) => session.draft(name, value), commit: (value) => void session.commit(name, value) });
   const doc = el("p", "desertfox-help-muted desertfox-settings-doc", field.summary);
@@ -305,8 +306,7 @@ export function update_row(row: Row, field: Field): void {
   row.tag.title = LAYER_TITLE[field.row.top_layer];
   // The changed-only filter reads this attribute in CSS (home.html), so a row that becomes changed stays shown.
   row.node.setAttribute("data-changed", String(is_changed(field.row)));
-  const edited = field.row.top_layer === "saved" || field.row.top_layer === "temp";
-  row.reset.disabled = !edited && field.draft === undefined;
+  row.reset.disabled = !can_reset(field.row) && field.draft === undefined;
   row.message.textContent = field.error ?? field.note ?? "";
   row.message.classList.toggle("desertfox-settings-error", field.error !== undefined);
   if (!row.widget) return;

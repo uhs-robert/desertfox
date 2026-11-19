@@ -1,11 +1,13 @@
 // Sets or removes one top-level key in TOML text and keeps every other byte: comments, blank lines, order and line endings.
 // smol-toml's `stringify` would rewrite the whole file and drop the comments, so the edit works on lines. A parse of the
 // text before and after then proves that nothing but the one key changed, and refuses the edit otherwise.
+// A value is a scalar or a list of strings: every shape a setting outside the tables takes.
 
 import { parse, TomlError } from "smol-toml";
 import { RuntimeRefusal } from "../shared/command.ts";
 
 export type TomlScalar = string | number | boolean;
+export type TomlValue = TomlScalar | readonly string[];
 
 const BARE_KEY = /^[A-Za-z0-9_-]+$/;
 // `[name]` or `[[name]]` with an optional comment. A line of a multi-line array that starts with `[` carries a comma, so it
@@ -28,8 +30,8 @@ function key_line_pattern(key: string): RegExp {
   return new RegExp(`^(\\s*)(${key}|"${key}"|'${key}')(\\s*=\\s*)(.*)$`);
 }
 
-// The end of the value that starts `rest`, or undefined for a value this editor does not rewrite (a multi-line string, an array or an inline table).
-function value_length(rest: string): number | undefined {
+// The end of the scalar that starts `rest`, or undefined for one this editor does not rewrite (a multi-line string, an array or an inline table).
+function scalar_length(rest: string): number | undefined {
   if (rest.startsWith('"""') || rest.startsWith("'''") || rest.startsWith("[") || rest.startsWith("{")) return undefined;
   if (rest.startsWith("'")) {
     const close = rest.indexOf("'", 1);
@@ -46,8 +48,48 @@ function value_length(rest: string): number | undefined {
   return (comment < 0 ? rest : rest.slice(0, comment)).trimEnd().length;
 }
 
+// The value that sets a key: the line it ends on, the text after it there, and whether a comment sits inside it.
+type ValueEnd = { last: number; after: string; commented: boolean };
+
+// Where the array that opens `rest`, the text after `=` on line `at`, closes. Undefined for an array that never closes or
+// holds a multi-line string, which this scan does not follow.
+function array_end(lines: Line[], at: number, rest: string): ValueEnd | undefined {
+  let depth = 0;
+  let commented = false;
+  for (let index = at; index < lines.length; index += 1) {
+    const body = index === at ? rest : lines[index]!.body;
+    for (let column = 0; column < body.length; column += 1) {
+      const char = body[column]!;
+      if (body.startsWith('"""', column) || body.startsWith("'''", column)) return undefined;
+      if (char === "#") {
+        commented = true;
+        break;
+      }
+      if (char === '"' || char === "'") {
+        let close = column + 1;
+        while (close < body.length && body[close] !== char) close += char === '"' && body[close] === "\\" ? 2 : 1;
+        if (close >= body.length) return undefined;
+        column = close;
+      } else if (char === "[") {
+        depth += 1;
+      } else if (char === "]") {
+        depth -= 1;
+        if (depth === 0) return { last: index, after: body.slice(column + 1), commented };
+      }
+    }
+  }
+  return undefined;
+}
+
+function value_end(lines: Line[], at: number, rest: string): ValueEnd | undefined {
+  if (rest.startsWith("[")) return array_end(lines, at, rest);
+  const length = scalar_length(rest);
+  return length === undefined ? undefined : { last: at, after: rest.slice(length), commented: false };
+}
+
 // JSON escapes every control character but DEL, which a TOML basic string also refuses unescaped.
-function toml_value(value: TomlScalar): string {
+function toml_value(value: TomlValue): string {
+  if (typeof value === "object") return `[${value.map(toml_value).join(", ")}]`;
   if (typeof value === "string") return JSON.stringify(value).replace(/\x7f/g, "\\u007f");
   if (typeof value === "number" && !Number.isFinite(value)) throw new RuntimeRefusal(`${value} is not a TOML number`);
   return String(value);
@@ -86,7 +128,7 @@ function find_key(lines: Line[], key: string, label: string): { header: number; 
 }
 
 // Proves the edit: `key` holds `value` (or is gone for undefined) and every other key parses as before.
-function checked(before: string, after: string, key: string, value: TomlScalar | undefined, label: string): string {
+function checked(before: string, after: string, key: string, value: TomlValue | undefined, label: string): string {
   const old_data = parsed(before, label);
   let new_data: Record<string, unknown>;
   try {
@@ -104,7 +146,8 @@ function checked(before: string, after: string, key: string, value: TomlScalar |
 
 // Replaces the value of the top-level `key`, or adds `key = value` after the last top-level line when the text lacks it.
 // The added line goes above the comment and blank lines that lead into the first table, so those stay with their table.
-export function set_top_level_key(text: string, key: string, value: TomlScalar, label = "The file"): string {
+// An array over several lines becomes one line, unless a comment sits inside it, which the one line would lose.
+export function set_top_level_key(text: string, key: string, value: TomlValue, label = "The file"): string {
   parsed(text, label);
   const lines = split_lines(text);
   const { header, at } = find_key(lines, key, label);
@@ -112,10 +155,9 @@ export function set_top_level_key(text: string, key: string, value: TomlScalar, 
   const assignment = `${key} = ${toml_value(value)}`;
   if (at !== undefined) {
     const [, indent, name, equals, rest] = key_line_pattern(key).exec(lines[at]!.body)!;
-    const length = value_length(rest!);
-    const after_value = length === undefined ? undefined : rest!.slice(length);
-    if (after_value === undefined || !BLANK_OR_COMMENT.test(after_value)) throw new RuntimeRefusal(`${label} gives ${key} a value DesertFox does not rewrite. Set it there by hand.`);
-    lines[at] = { body: `${indent}${name}${equals}${toml_value(value)}${after_value}`, eol: lines[at]!.eol };
+    const end = value_end(lines, at, rest!);
+    if (end === undefined || end.commented || !BLANK_OR_COMMENT.test(end.after)) throw new RuntimeRefusal(`${label} gives ${key} a value DesertFox does not rewrite. Set it there by hand.`);
+    lines.splice(at, end.last - at + 1, { body: `${indent}${name}${equals}${toml_value(value)}${end.after}`, eol: lines[end.last]!.eol });
     return checked(text, join_lines(lines), key, value, label);
   }
   if (text === "") return checked(text, `${assignment}\n`, key, value, label);
@@ -130,12 +172,15 @@ export function set_top_level_key(text: string, key: string, value: TomlScalar, 
   return checked(text, join_lines(lines), key, value, label);
 }
 
-// Drops the line that sets the top-level `key`. Text without the key comes back as it is.
+// Drops the lines that set the top-level `key`, comments inside its value included. Text without the key comes back as it is.
 export function remove_top_level_key(text: string, key: string, label = "The file"): string {
   parsed(text, label);
   const lines = split_lines(text);
   const { at } = find_key(lines, key, label);
   if (at === undefined) return text;
-  lines.splice(at, 1);
+  const rest = key_line_pattern(key).exec(lines[at]!.body)![4]!;
+  const last = rest.startsWith("[") ? array_end(lines, at, rest)?.last : at;
+  if (last === undefined) throw new RuntimeRefusal(`${label} gives ${key} a value DesertFox does not rewrite. Remove it there by hand.`);
+  lines.splice(at, last - at + 1);
   return checked(text, join_lines(lines), key, undefined, label);
 }

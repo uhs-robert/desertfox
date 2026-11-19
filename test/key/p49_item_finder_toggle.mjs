@@ -1,9 +1,19 @@
 // `,j` flips item_navigator in an open tab with no reload: on a page with no site row, j walks cards after the first press and scrolls after the second.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 export const areas = ["keys", "config", "bundles"];
 
 const CARDS = 10;
 
-export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect }) {
+export async function run_cases({ run_case, open_page, press_keys, in_active_tab, poll_until, expect, on_teardown, run_line, config_dir }) {
+  // ,j writes item_navigator into settings.toml of the base config, which every later piece reads, so the piece removes it again and waits for the host's write.
+  on_teardown(async () => {
+    const settings_file = join(config_dir, "settings.toml");
+    if (!readFileSync(settings_file, "utf8").includes("item_navigator")) return;
+    await run_line(":unset item_navigator");
+    await poll_until("item_navigator to leave settings.toml", async () => !readFileSync(settings_file, "utf8").includes("item_navigator"));
+  });
   const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
   const add_cards = () =>

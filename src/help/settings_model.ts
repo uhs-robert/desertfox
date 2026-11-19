@@ -243,20 +243,20 @@ export function create_settings_session(deps: SessionDeps) {
     await answered(name, field, sequence, request, answer);
   }
 
-  // Saves at once, like `:set`, unless the check refuses the value. A setting the popup also picks goes into settings.toml, so both controls keep one value.
+  // Saves at once, like `:set`, unless the check refuses the value. A scalar or list goes into settings.toml, a consent or table setting into the saved edits.
   async function commit(name: string, value: unknown): Promise<void> {
     draft(name, value);
     if (fields.get(name)?.error !== undefined) return;
     await send_change(name, { action: "set", value, ...(FILE_WRITTEN_SETTINGS.has(name) && { layer: "file" as const }) });
   }
 
-  // Drops the saved and the temp edit, so the file value shows. Also discards a draft.
+  // Drops the saved and the temp edit and, for a setting written to settings.toml, removes it there, so the default shows. Also discards a draft.
   async function reset(name: string): Promise<void> {
     const field = fields.get(name);
     if (!field) return;
     delete field.draft;
     delete field.error;
-    await send_change(name, { action: "reset" });
+    await send_change(name, { action: "reset", ...(FILE_WRITTEN_SETTINGS.has(name) && { layer: "file" as const }) });
   }
 
   return {
@@ -279,3 +279,9 @@ export function create_settings_session(deps: SessionDeps) {
 }
 
 export type SettingsSession = ReturnType<typeof create_settings_session>;
+
+// Whether Reset has something to undo: a browser edit, or a value in the config files that a reset removes from settings.toml.
+// A value from a `settings.d` file shows the same tag, and its reset answers with that file's name.
+export function can_reset(row: SettingListRow): boolean {
+  return row.top_layer === "saved" || row.top_layer === "temp" || (row.top_layer === "settings.toml" && FILE_WRITTEN_SETTINGS.has(row.name));
+}
