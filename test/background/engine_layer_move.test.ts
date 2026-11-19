@@ -384,3 +384,24 @@ test("a moved narrowing that shares its name with a page child stays in the laye
   assert.match(move.notes.join(" "), /The engine gh saved in the browser stays there.*repo/);
   assert.throws(() => merged_by_path({ repo: { only: ["code"] } }, { repo: { url: "u" } }), /repo/);
 });
+
+test("a move that only shrinks the layer puts the layer back when its publish fails", async () => {
+  const files = { "settings.toml": "", "search_engines.toml": 'docs = { url = "https://d.test/?q={query}" }\nother = { url = "https://o.test/?q={query}" }\n', "keymap.d/zzz.toml": '[search_keys]\nd = "other"\n' };
+  const layer = { letters: { d: "docs" } };
+  const { local, fake } = await old_profile(layer, files);
+  const store_set = fake.storage.local.set;
+  let failed = false;
+  fake.storage.local.set = async (values: Record<string, unknown>) => {
+    if (!failed && COMPILED_KEYMAP_STORAGE_KEY in values && local[ENGINE_EDITS_STORAGE_KEY] === undefined) {
+      failed = true;
+      throw new Error("disk full");
+    }
+    await store_set(values);
+  };
+  const warnings = start_warnings();
+  const startup = await first_start();
+  warnings.restore();
+  assert.ok(failed);
+  assert.deepEqual(local[ENGINE_EDITS_STORAGE_KEY], layer);
+  assert.equal((await startup.get_config()).keymap.search_keys?.d, "docs");
+});
