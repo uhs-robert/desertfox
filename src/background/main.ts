@@ -611,15 +611,14 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
 
-const start_item_mode = async (tab_id: number, address: string | undefined) => {
-  if (await read_disabled()) return;
-  await ask_item_start({
-    start_for: (at) => item_start_for(browser.storage.local, at),
+const start_item_mode = (tab_id: number, address: string | undefined) =>
+  ask_item_start({
+    // After the document read, which comes first so that a reload during these reads cannot hand the start to the new document.
+    start_for: async (at) => ((await read_disabled()) ? undefined : item_start_for(browser.storage.local, at)),
     top_document: (id) => refused_as(browser.webNavigation.getFrame({ tabId: id, frameId: 0 }) as Promise<{ url?: string; documentId?: string } | null>, null).then((frame) => frame ?? undefined),
     // The bundled types do not list `documentId`.
     send_start: (id, document_id, start) => best_effort(browser.tabs.sendMessage(id, { type: "run_in_content", invocations: [{ id: "item.start", args: start, bundle: "item" }] } satisfies BackgroundToContent, { frameId: 0, documentId: document_id } as { frameId: number })),
   }, tab_id, address);
-};
 
 const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.local), redraw_icon_png);
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {

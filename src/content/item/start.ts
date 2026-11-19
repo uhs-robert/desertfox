@@ -10,6 +10,7 @@ export type StartDeps = {
   enter_: () => void;
   when_idle_: (run: () => void) => void;
   later_: (run: () => void, ms: number) => void;
+  now_: () => number;
 };
 
 // A site row names its items, and a site such as Drive draws them well after the load completes, so the start looks again for this long.
@@ -23,14 +24,13 @@ export function create_item_start(deps: StartDeps): (selectors?: readonly string
     if (asked) return;
     asked = true;
     const user_got_there_first = () => deps.mode_() !== "normal" || deps.user_active_() || deps.in_field_();
-    let waited_ms = 0;
+    // A late timer must not stretch the wait, so it ends by the clock, counted from the ask.
+    const deadline = deps.now_() + ROW_ITEMS_WAIT_MS;
     // Each look reads the gate again right before it enters, so a mode the user picked during the wait stands.
     const look = () => {
-      if (user_got_there_first()) return;
+      if (user_got_there_first() || deps.now_() > deadline) return;
       if (deps.has_list_(selectors)) return deps.enter_();
-      if (!selectors[0] || waited_ms >= ROW_ITEMS_WAIT_MS) return;
-      waited_ms += ROW_ITEMS_LOOK_EVERY_MS;
-      deps.later_(look, ROW_ITEMS_LOOK_EVERY_MS);
+      if (selectors[0]) deps.later_(look, ROW_ITEMS_LOOK_EVERY_MS);
     };
     deps.when_idle_(look);
   };
