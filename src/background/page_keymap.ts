@@ -49,13 +49,23 @@ const item_navigator_on = (columns: PageSiteColumns, global: CompiledKeymap["ite
   return own === undefined ? global === true : own === true || (own === "shipped" && global !== undefined);
 };
 
-// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there or claims j or k. `selector` is the item selector of the row whose item keys apply, so the start looks for the row's items and not the finder's list.
-export async function item_start_for(storage: KeymapStorage, address: string | undefined): Promise<{ selector?: string } | undefined> {
+// The item selectors of `page.item` steps in a leaf and in the choices behind its guards. Which guard holds is a question for the page, so every choice counts. The last fallback is the item section's own key, which has no selector.
+const item_selectors_of = (leaf: TreeLeaf | undefined): string[] => {
+  const selectors: string[] = [];
+  for (let at = leaf; at; at = at.otherwise) {
+    for (const { invocation } of at.steps) if (invocation.id === "page.item" && typeof invocation.args?.["selector"] === "string") selectors.push(invocation.args["selector"]);
+  }
+  return selectors;
+};
+
+export type ItemStart = { selectors: string[] };
+
+// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there or claims j or k. `selectors` are the item selectors of every item key the page's rows bind, so the start looks for the rows' items and not the finder's list. With none, the finder reads the page.
+export async function item_start_for(storage: KeymapStorage, address: string | undefined): Promise<ItemStart | undefined> {
   const keymap = current_keymap(await stored_keymap(storage));
   const columns = site_columns_for(keymap, [address]);
   if (keymap === undefined || columns.off === true || site_claims_item_keys(columns) || !item_navigator_on(columns, keymap.item_navigator)) return undefined;
-  const selector = columns.keymap?.["item"]?.["j"]?.leaf.steps.find((step) => step.invocation.id === "page.item")?.invocation.args?.["selector"];
-  return typeof selector === "string" ? { selector } : {};
+  return { selectors: [...new Set(Object.values(columns.keymap?.["item"] ?? {}).flatMap(({ leaf }) => item_selectors_of(leaf)))] };
 }
 
 // A per-site setting on a page. The cast holds because the setting's own check accepted the value when the config loaded. The site's value beats the global value, which already holds `:set` and `:set --temp`: the row names the site and `:set` does not.

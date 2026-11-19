@@ -2,6 +2,7 @@
 // A page that should start opens without the key probe, since any key pressed before the start wins over it. The probe runs once the badge says ITEM.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ROW_ITEMS_WAIT_MS } from "../../src/content/item/start.ts";
 
 export const areas = ["keys", "config", "bundles"];
 
@@ -12,6 +13,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     // A top-level setting goes above the first table.
     writeFileSync(file, `item_navigator = true\n${readFileSync(file, "utf8")}`);
     appendFileSync(file, '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_off*"\nitem_navigator = false\n');
+    // A row that names its items, as the shipped rows do, for the pages that draw them late.
+    appendFileSync(file, '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_late*"\nitem_navigator = "shipped"\nkeymap.item.j = { id = "page.item", args = { selector = "div.late", direction = "down" } }\n');
     await load_config_dir(dir);
   });
 
@@ -60,6 +63,31 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
     await sleep(2500);
     expect((await badge()) === "NORMAL", `the page started item mode after a key, the badge is ${await badge()}`);
+  });
+
+  // Drive draws its files well after the load completes. The start looks for the row's items for about 5 s.
+  const draw_late_items = () => in_active_tab(`(() => { const cards = Array.from({ length: 10 }, (_, index) => '<div class="late" style="height:80px;width:500px;margin:0 0 20px 20px"><a id="l' + index + '" href="#l' + index + '">Late result ' + index + '</a></div>').join(""); document.body.insertAdjacentHTML("afterbegin", cards); return 0; })()`);
+  await run_case("a row's items drawn 2 s after the load start item mode", async () => {
+    await open_untouched("page", "is_late_draw");
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete");
+    await sleep(2000);
+    expect((await badge()) === "NORMAL", `the badge is ${await badge()} before the items exist`);
+    await draw_late_items();
+    await expect_started("is_late_draw");
+    await press_keys("j");
+    await poll_until("focus on l0", async () => (await focused()) === "l0");
+  });
+
+  await run_case("a key pressed while the start waits for a row's items ends the wait", async () => {
+    await open_untouched("page", "is_late_key");
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete");
+    await poll_until("the page to hold the focus", async () => (await in_active_tab("document.hasFocus()")) === true);
+    await sleep(1000);
+    await press_keys("-k", "Escape");
+    await sleep(300);
+    await draw_late_items();
+    await sleep(ROW_ITEMS_WAIT_MS);
+    expect((await badge()) === "NORMAL", `the badge is ${await badge()}`);
   });
 
   await run_case("a page with no list stays in normal mode", async () => {

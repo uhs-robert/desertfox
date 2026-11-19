@@ -4,6 +4,7 @@
 import type { Mode } from "../shared/command.ts";
 import { TAB_ITEM_STORAGE_PREFIX } from "./storage_keys.ts";
 import { best_effort, keep_chain } from "../shared/swallow.ts";
+import type { ItemStart } from "./page_keymap.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -90,15 +91,18 @@ export type TabItem = ReturnType<typeof create_tab_item>;
 
 export type ItemStartAsk = {
   // The start for a page at this address, undefined where none is wanted (`item_start_for`).
-  start_for: (address: string | undefined) => Promise<{ selector?: string } | undefined>;
-  tab_now: (tab_id: number) => Promise<{ url?: string | undefined; status?: string | undefined } | undefined>;
-  send_start: (tab_id: number, args: { selector?: string }) => Promise<unknown>;
+  start_for: (address: string | undefined) => Promise<ItemStart | undefined>;
+  // The tab's top document now, from `webNavigation.getFrame`.
+  top_document: (tab_id: number) => Promise<{ url?: string | undefined; documentId?: string | undefined } | undefined>;
+  // Sends the start to that document only. Firefox refuses the send once another document has replaced it (docs/firefox-behavior.md).
+  send_start: (tab_id: number, document_id: string, start: ItemStart) => Promise<unknown>;
 };
 
-// Asks the top frame of a tab whose load completed at `address` to start item mode. The read takes a while, and a tab that has left the address or loads again meanwhile holds another document, which must not take this page's start.
+// Asks the top frame of a tab whose load completed at `address` to start item mode. The read takes a while, so the ask is tied to the document that completed: a tab that loads again meanwhile, even at the same address, holds another document, which must not take this page's start.
 export async function ask_item_start(deps: ItemStartAsk, tab_id: number, address: string | undefined): Promise<void> {
+  const completed = await deps.top_document(tab_id);
+  const document_id = completed?.documentId;
+  if (address === undefined || completed?.url !== address || document_id === undefined) return;
   const start = await deps.start_for(address);
-  if (!start) return;
-  const tab = await deps.tab_now(tab_id);
-  if (address !== undefined && tab?.url === address && tab.status === "complete") await deps.send_start(tab_id, start);
+  if (start) await deps.send_start(tab_id, document_id, start);
 }

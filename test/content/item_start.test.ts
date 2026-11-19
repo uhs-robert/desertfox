@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_item_start } from "../../src/content/item/start.ts";
+import { create_item_start, ROW_ITEMS_WAIT_MS } from "../../src/content/item/start.ts";
 
 function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) {
   const idle: (() => void)[] = [];
+  // The looks the start put off, run in order by `pass`.
+  const timers: { run: () => void; ms: number }[] = [];
   let entered = 0;
   const state = { mode: "normal", active: false, field: false, list: true };
   const start = create_item_start({
@@ -13,9 +15,18 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
     has_list_: () => state.list,
     enter_: () => void entered++,
     when_idle_: (run) => void idle.push(run),
+    later_: (run, ms) => void timers.push({ run, ms }),
     ...overrides,
   });
-  return { start, state, idle, entered: () => entered };
+  // Runs the looks put off until `ms` have passed, or until none is left.
+  const pass = (ms: number) => {
+    for (let passed = 0; timers.length > 0 && passed < ms; ) {
+      const next = timers.shift()!;
+      passed += next.ms;
+      next.run();
+    }
+  };
+  return { start, state, idle, timers, pass, entered: () => entered };
 }
 
 test("a page with a list in normal mode enters item mode once it is idle, and not before", () => {
@@ -67,13 +78,63 @@ test("the finder is not read until the page is idle", () => {
   assert.equal(reads, 1);
 });
 
-test("a row's item selector goes to the list read, and with none the finder reads", () => {
-  const read_with: (string | undefined)[] = [];
-  const row = make({ has_list_: (selector) => (read_with.push(selector), true) });
-  row.start("tr.athing");
+test("the row's item selectors go to the list read, and with none the finder reads", () => {
+  const read_with: (readonly string[])[] = [];
+  const row = make({ has_list_: (selectors) => (read_with.push(selectors), true) });
+  row.start(["tr.athing", "li"]);
   row.idle[0]!();
-  const finder = make({ has_list_: (selector) => (read_with.push(selector), true) });
+  const finder = make({ has_list_: (selectors) => (read_with.push(selectors), true) });
   finder.start();
   finder.idle[0]!();
-  assert.deepEqual(read_with, ["tr.athing", undefined]);
+  assert.deepEqual(read_with, [["tr.athing", "li"], []]);
+});
+
+test("a row's items drawn after the load start the mode within the wait, and the finder looks only once", () => {
+  const late = make();
+  late.state.list = false;
+  late.start(["div.file"]);
+  late.idle[0]!();
+  late.pass(2000);
+  assert.equal(late.entered(), 0);
+  late.state.list = true;
+  late.pass(250);
+  assert.equal(late.entered(), 1);
+  assert.equal(late.timers.length, 0, "the wait ends once the mode starts");
+  const finder = make();
+  finder.state.list = false;
+  finder.start();
+  finder.idle[0]!();
+  assert.equal(finder.timers.length, 0);
+});
+
+test("the wait for a row's items gives up after about 5 s, and a key or a field ends it at once", () => {
+  const none = make();
+  none.state.list = false;
+  none.start(["div.file"]);
+  none.idle[0]!();
+  none.pass(ROW_ITEMS_WAIT_MS + 1000);
+  assert.equal(none.timers.length, 0);
+  none.state.list = true;
+  none.start(["div.file"]);
+  assert.equal(none.idle.length, 1, "the ask is spent");
+  assert.equal(none.entered(), 0);
+  for (const change of [{ active: true }, { field: true }, { mode: "insert" }]) {
+    const keyed = make();
+    keyed.state.list = false;
+    keyed.start(["div.file"]);
+    keyed.idle[0]!();
+    keyed.pass(500);
+    Object.assign(keyed.state, change, { list: true });
+    keyed.pass(250);
+    assert.equal(keyed.entered(), 0, JSON.stringify(change));
+    assert.equal(keyed.timers.length, 0, "the wait stops");
+  }
+});
+
+test("each look reads the gate right before it enters, so a mode the user picked during the wait stands", () => {
+  const order: string[] = [];
+  const { start, state, idle } = make({ mode_: () => (order.push("mode"), state.mode), has_list_: () => (order.push("list"), true), enter_: () => void order.push("enter") });
+  start();
+  idle[0]!();
+  assert.deepEqual(order, ["mode", "list", "enter"]);
 });

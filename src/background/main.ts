@@ -1,6 +1,6 @@
 import "./command_modules.ts";
 import { best_effort, ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
-import type { ContentToBackground, DevtoolsHello, FocusedFrameMode, FocusPage, PageToBackground } from "../shared/messages.ts";
+import type { BackgroundToContent, ContentToBackground, DevtoolsHello, FocusedFrameMode, FocusPage, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
 import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
@@ -615,8 +615,9 @@ const start_item_mode = async (tab_id: number, address: string | undefined) => {
   if (await read_disabled()) return;
   await ask_item_start({
     start_for: (at) => item_start_for(browser.storage.local, at),
-    tab_now: (id) => ignore_refusal(browser.tabs.get(id)),
-    send_start: (id, args) => best_effort(send_to_tab(id, { type: "run_in_content", invocations: [{ id: "item.start", args, bundle: "item" }] }, 0)),
+    top_document: (id) => refused_as(browser.webNavigation.getFrame({ tabId: id, frameId: 0 }) as Promise<{ url?: string; documentId?: string } | null>, null).then((frame) => frame ?? undefined),
+    // The bundled types do not list `documentId`.
+    send_start: (id, document_id, start) => best_effort(browser.tabs.sendMessage(id, { type: "run_in_content", invocations: [{ id: "item.start", args: start, bundle: "item" }] } satisfies BackgroundToContent, { frameId: 0, documentId: document_id } as { frameId: number })),
   }, tab_id, address);
 };
 
