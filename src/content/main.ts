@@ -77,7 +77,8 @@ const key_flow = create_key_flow({
   take_pass_next_: page_mode.take_pass_next_,
   run_leaf_: (bound_leaf, count, repeat) => {
     const leaf = leaf_for_page(bound_leaf, document.activeElement, document.body, document);
-    if (!leaf) return;
+    // No leaf runs when every guard fails and nothing is left to fall back to: the page keeps the key.
+    if (!leaf) return true;
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
