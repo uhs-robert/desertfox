@@ -156,7 +156,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_drive("list_fetch", "list", 250, 100);
     await press_keys("G");
     // The stand-in redraws its rows on each scroll and drops the focus a redraw replaces, so only the end of the follow is stable: the select lands on the last file.
-    await poll_until("G to select the last file", async () => (await selected_file()) === 249);
+    // Three parts load 300 ms apart, then the follow waits out its 1 s stall before the select goes out, so the default 5 s leaves too little margin on a loaded machine.
+    await poll_until("G to select the last file", async () => (await selected_file()) === 249, { timeout_ms: 15000 });
     await expect_focus("f249");
   });
 
