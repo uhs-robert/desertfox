@@ -149,3 +149,18 @@ test("10,000 adjacent rows go in one Reset, and 10,000 new rows after one kept r
   assert.ok(performance.now() - started < 1000, `the append took ${Math.round(performance.now() - started)} ms`);
   assert.deepEqual(rows_of(grown), [{ site: "*://*.kept.test/*" }, ...rows]);
 });
+
+test("a first row that starts the file is edited in place twice with the blank line under it kept", () => {
+  const text = '[[links]]\nlabel = "Docs"\nurl = "https://a.test/"\n\n[[links]]\nlabel = "Mail"\nurl = "https://b.test/"\n';
+  const rows = (parse(text) as { links: Record<string, string>[] }).links;
+  const once = set_table_rows(text, "links", [{ ...rows[0]!, label: "Manual" }, rows[1]!] as never);
+  assert.equal(once, text.replace('"Docs"', '"Manual"'));
+  const twice = set_table_rows(once, "links", [{ ...rows[0]!, label: "Guide" }, rows[1]!] as never);
+  assert.equal(twice, text.replace('"Docs"', '"Guide"'));
+});
+
+test("two new rows above a replaced first row are each followed by one blank line", () => {
+  const text = '# c\n[[links]]\nlabel = "a"\n\n[[links]]\nlabel = "b"\n';
+  const next = [{ label: "x" }, { label: "y" }, { label: "a2" }, { label: "b" }];
+  assert.equal(set_table_rows(text, "links", next as never), '# c\n[[links]]\nlabel = "x"\n\n[[links]]\nlabel = "y"\n\n[[links]]\nlabel = "a2"\n\n[[links]]\nlabel = "b"\n');
+});
