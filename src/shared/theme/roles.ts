@@ -23,6 +23,8 @@ export const ROLES = [
   "mode_ignore",
   "mode_caret",
   "mode_visual",
+  "mode_item",
+  "mode_media",
   "search_bg",
   "search_fg",
   "search_current_bg",

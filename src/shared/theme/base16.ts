@@ -1,4 +1,4 @@
-// Reads a base16 or base24 scheme (classic YAML or tinted-theming YAML) and maps its slots onto the 25 roles.
+// Reads a base16 or base24 scheme (classic YAML or tinted-theming YAML) and maps its slots onto the 27 roles.
 // No YAML library: a scheme is a flat list of `baseNN: "hex"` lines, and a parser for the whole language would add size and attack surface to read them.
 // The slot-to-role table is the one place that decides which slot fills which role. A role with no slot derives in `derive.ts`.
 
