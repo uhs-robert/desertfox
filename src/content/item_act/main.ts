@@ -4,7 +4,7 @@ import { RuntimeRefusal } from "../../shared/command.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { click_like_a_hint } from "../hints/actions.ts";
 import { checkbox_in } from "./checkbox.ts";
-import { focused_child, focusables_in, next_focus } from "./focus.ts";
+import { focusables_in, next_focus } from "./focus.ts";
 
 type ItemActWindow = { desertfox_host?: PageHostApi; desertfox_item_act_ready?: true };
 const item_act = window as unknown as ItemActWindow;
@@ -13,6 +13,8 @@ const item_act = window as unknown as ItemActWindow;
 const host = item_act.desertfox_host;
 if (!item_act.desertfox_item_act_ready && host) {
   item_act.desertfox_item_act_ready = true;
+  // The element `page.item_focus` focused last. Enter clicks it only while it still has the focus, so a focus from a click or Space leaves Enter on the link.
+  let tabbed: Element | null = null;
   const current_item = async () => {
     let current: { item?: Element | undefined; link?: Element | undefined } = {};
     await host.run_command_("item.current", "item", { take: (item?: Element, link?: Element) => (current = { item, link }) });
@@ -22,13 +24,13 @@ if (!item_act.desertfox_item_act_ready && host) {
   host.register_handler_("page.item_action", async (args) => {
     const current = await current_item();
     const toggle = args.action === "toggle";
-    const clicked = toggle ? checkbox_in(current.item, args.target as string) : (focused_child(current.item, current.link, document.activeElement, host.is_editable_) ?? current.link);
+    const clicked = toggle ? checkbox_in(current.item, args.target as string) : (document.activeElement === tabbed ? tabbed : current.link);
     if (!clicked) throw new RuntimeRefusal(toggle ? "No checkbox in this item" : "This item has no link");
     click_like_a_hint(clicked as HTMLElement);
   });
   host.register_handler_("page.item_focus", async (args) => {
-    const target = next_focus((await current_item()).item, document.activeElement, args.direction as "next" | "prev", () => focusables_in(document));
+    const target = next_focus((await current_item()).item, document.activeElement, args.direction as "next" | "prev", () => focusables_in(document.documentElement));
     if (!target) throw new RuntimeRefusal("Nothing to focus in this item");
-    (target as HTMLElement).focus();
+    (tabbed = target as HTMLElement).focus();
   });
 }

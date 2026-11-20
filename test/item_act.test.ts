@@ -65,14 +65,14 @@ test("an item that is itself a checkbox is the checkbox", () => {
 });
 
 // Focus ring. An element is a fake with a `tabIndex`, a `disabled` flag and a `shown` flag, and the item holds its children.
-import { focused_child, next_focus } from "../src/content/item_act/focus.ts";
+import { next_focus } from "../src/content/item_act/focus.ts";
 type Ring = { name: string; tabIndex: number; disabled: boolean; shown: boolean };
 const ring_el = (name: string, over: Partial<Ring> = {}) => ({ name, tabIndex: 0, disabled: false, shown: true, ...over }) as Ring;
 type Fake_el = Element & Ring;
-const as_el = (fake: Ring) => Object.assign(fake, { matches: (selector: string) => selector === ":disabled" && fake.disabled, checkVisibility: () => fake.shown, getClientRects: () => (fake.shown ? [{}] : []) }) as unknown as Fake_el;
-const ring_item = (children: Ring[]) => {
+const as_el = (fake: Ring) => Object.assign(fake, { matches: (selector: string) => (selector === ":disabled" ? fake.disabled : true), checkVisibility: () => fake.shown, getClientRects: () => (fake.shown ? [{}] : []) }) as unknown as Fake_el;
+const ring_item = (children: Ring[], own_focusable = false) => {
   const els = children.map(as_el);
-  return { els, item: { querySelectorAll: () => els, contains: (other: unknown) => els.includes(other as never) } as unknown as Element };
+  return { els, item: { matches: () => own_focusable, querySelectorAll: () => els, contains: (other: unknown) => els.includes(other as never) } as unknown as Element };
 };
 const step = (item: Element, active: Element | null, direction: "next" | "prev", page: Element[] = []) => (next_focus(item, active, direction, () => page) as Fake_el | undefined)?.name;
 
@@ -113,14 +113,14 @@ test("an item with only its link steps on through the page's focusables", () => 
   assert.equal(step(item, els[0]!, "prev", page), "previous result");
 });
 
-test("Enter takes the focused child, but not the item, its link or a field", () => {
-  const { els, item } = ring_item([ring_el("link"), ring_el("button"), ring_el("field")]);
-  const none = () => false;
-  const field_only = (element: Element | null) => (element as Fake_el | null)?.name === "field";
-  assert.equal((focused_child(item, els[0], els[1]!, none) as Fake_el).name, "button");
-  assert.equal(focused_child(item, els[0], els[0]!, none), undefined);
-  assert.equal(focused_child(item, els[0], item, none), undefined);
-  assert.equal(focused_child(item, els[0], null, none), undefined);
-  assert.equal(focused_child(item, els[0], as_el(ring_el("outside")), none), undefined);
-  assert.equal(focused_child(item, els[0], els[2]!, field_only), undefined);
+test("a step from a page control after the item's link goes on from that control, not from the link again", () => {
+  const { els, item } = ring_item([ring_el("link")]);
+  const page = [els[0]!, as_el(ring_el("second")), as_el(ring_el("third"))];
+  assert.equal(step(item, page[1]!, "next", page), "third");
+  assert.equal(step(item, page[2]!, "prev", page), "second");
+});
+
+test("a focusable item root joins the ring", () => {
+  const { els, item } = ring_item([ring_el("button")], true);
+  assert.equal(next_focus(item, null, "next", () => [item, els[0]!]), item, "an item whose root and one child are focusable has a ring of two, starting at the root");
 });

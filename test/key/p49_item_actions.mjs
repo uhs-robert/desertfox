@@ -44,19 +44,28 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await toggled()) === "", `Space clicked ${await toggled()}`);
   });
 
-  await run_case("Enter opens the link of the current item, and clicks the checkbox that Space left focused", async () => {
+  await run_case("Enter opens the link of the current item, also after Space moved the focus into the item", async () => {
     await open_boxes("ia_enter");
     await press_keys("-k", "space");
     await poll_until("the native box clicked", async () => (await toggled()) === "box0");
-    // The click moved the focus onto the checkbox, a child of the item that is not its link, so Enter clicks it.
+    // The click moved the focus onto the checkbox, so a native Enter would do nothing.
     await expect_focus("box0");
     await press_keys("-k", "Return");
-    await poll_until("the focused box clicked again", async () => (await toggled()) === "box0,box0");
-    expect((await hash()) === "", `Enter opened ${await hash()}`);
+    await poll_until("the link opened", async () => (await hash()) === "#c0");
     await press_keys("j");
     await expect_focus("c1");
     await press_keys("-k", "Return");
     await poll_until("the second link opened", async () => (await hash()) === "#c1");
+  });
+
+  await run_case("a site row's target replaces the generic search, so Space clicks the span", async () => {
+    await open_boxes("ia_star");
+    await press_keys("jj");
+    await expect_focus("c2");
+    await press_keys("-k", "space");
+    await poll_until("the span clicked", async () => (await toggled()) === "box2");
+    await sleep(200);
+    expect((await toggled()) === "box2", `Space clicked ${await toggled()}`);
   });
 
   const shift_tab = () => press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
@@ -90,6 +99,22 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("c2");
   });
 
+  await run_case("Tab into a text field of the item starts typing, Enter stays the field's, and Escape leaves it", async () => {
+    await open_page("item_list", "ia_tfield", { new_tab: true });
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await press_keys("5j");
+    await expect_focus("c5");
+    await press_keys("-k", "Tab");
+    await expect_focus("in5");
+    await expect_badge("INSERT");
+    await press_keys("-k", "Return");
+    await sleep(300);
+    expect((await hash()) === "", `Enter opened ${await hash()}`);
+    await press_keys("-k", "Escape");
+    await poll_until("the field left", async () => (await badge()) !== "INSERT");
+  });
+
   await run_case("an item with only its link lets Tab go on to the next link, as the browser does", async () => {
     await open_boxes("ia_tab_single");
     await press_keys("3j");
@@ -98,6 +123,11 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("c4");
     await shift_tab();
     await expect_focus("c3");
+    // Each Tab goes on from where the focus is, so the second one does not pick the same link again.
+    await press_keys("-k", "Tab");
+    await expect_focus("c4");
+    await press_keys("-k", "Tab");
+    await expect_focus("c5");
   });
 
   // Auto-start and `mode item` record no move. The focused item is still the current one.
