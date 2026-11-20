@@ -180,7 +180,7 @@ const DRIVE_BIND: BindingTable = {
   ...end_binds(DRIVE_ANY_ITEM, undefined),
   h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left (scrolls sideways in the list view)"),
   l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right (scrolls sideways in the list view)"),
-  // An Enter the row does not bind reaches the page at once, so one typed right behind G reaches the page before G finishes. A bound Enter waits for the end key.
+  // An Enter the row does not bind reaches the page at once, so one typed right behind G reaches the page before G finishes, at the focus G has not yet reached. A bound Enter waits for the end key and opens what Drive has selected.
   "<Enter>": { id: "page.send_key", args: { key: "Enter", key_code: 13 }, when_present: DRIVE_ANY_ITEM, intent: "Open the selected file" },
 };
 

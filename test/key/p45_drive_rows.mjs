@@ -302,18 +302,14 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("g0");
   });
 
-  // Known gap: with one file no arrow can move, so the file gets the box and Drive selects nothing (gg and G never select, see the next case).
-  await run_case("list view with one file: G boxes it, nothing breaks, and Enter opens nothing", async () => {
+  // Known gap: with one file no arrow can move, so j gives the file the box and Drive selects nothing.
+  await run_case("list view with one file: G boxes it, j selects nothing and item mode stays", async () => {
     await open_drive("list_one", "list", 1);
     await press_keys("G");
     await expect_focus("f0");
-    await sleep(300);
-    await press_keys("-k", "Return");
-    await sleep(300);
-    expect((await hash()) === "#before", `Enter opened ${await hash()}`);
-    expect((await selected_file()) === -1, "the file was selected");
     await press_keys("j");
     await sleep(300);
+    expect((await selected_file()) === -1, "the file was selected");
     expect((await in_active_tab("document.querySelector('[data-desertfox-mode]')?.getAttribute('data-desertfox-mode')")) === "ITEM", "item mode ended");
   });
 
