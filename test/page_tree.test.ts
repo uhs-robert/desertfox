@@ -53,3 +53,25 @@ test("the Hacker News row binds the tree keys to comments only, and keeps the it
     assert.equal(table["gg"]?.id, "page.item");
   }
 });
+
+test("the Reddit thread rows come before the feed rows, bind the tree keys to comment heads and keep item mode off", () => {
+  const entries = DEFAULT_SITE_ROWS.filter((entry) => entry.name === "reddit");
+  const thread = entries.filter(({ row }) => row.site.includes("/comments/"));
+  assert.deepEqual(thread.map(({ row }) => row.site), ["https://www.reddit.com/r/*/comments/*", "https://reddit.com/r/*/comments/*"]);
+  assert.ok(entries.indexOf(thread.at(-1)!) < entries.findIndex(({ row }) => !row.site.includes("/comments/")), "the feed rows would otherwise decide the thread page");
+  const expected = { h: "parent", l: "child", "}": "next", "{": "prev", za: "toggle", zc: "fold", zo: "unfold" };
+  for (const { row } of thread) {
+    assert.equal(row.item_navigator, false);
+    const table = row.keymap!.item! as Record<string, { id: string; args: Record<string, unknown>; when_present?: string }>;
+    for (const [key, action] of Object.entries(expected)) {
+      assert.equal(table[key]?.id, "page.tree", key);
+      assert.equal(table[key]?.args["action"], action, key);
+      assert.equal(table[key]?.args["depth_from"], "above", key);
+      assert.equal(table[key]?.when_present, "shreddit-comment > details > summary", key);
+      assert.equal(check_args(command, table[key]!.args).ok, true, key);
+    }
+    assert.equal(table["j"]?.id, "page.item");
+  }
+  const feed = entries.find(({ row }) => row.site === "https://www.reddit.com/*")!.row.keymap!.item!;
+  assert.equal(feed["h"], undefined, "the feed rows keep h and l as they are");
+});
