@@ -1,5 +1,5 @@
 // Key cases of the Practice page (#/practice in the help document). Each case does one lesson with the keys its steps name, on the extension page, and waits for the check lines the page turns done.
-// Set DESERTFOX_SHOT_DIR to also save stills of the first screen of the page and of lessons 3, 7, 10 and 11, in the default theme and in catppuccin.
+// Set DESERTFOX_SHOT_DIR to also save stills of the first screen of the page and of lessons 3, 7, 11 and 12, in the default theme and in catppuccin.
 import { SHIFT_ESCAPE } from "./harness.mjs";
 import { evaluate_in_background, evaluate_in_chrome } from "./rdp.mjs";
 
@@ -110,7 +110,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   await poll_until("the Practice page to render and take focus", async () => await in_page(`return !!view && !!${by_id("practice-end")} && view.document.hasFocus();`).catch(() => false), { timeout_ms: 10000 });
   await wait_view_takes_keys("home.html");
 
-  await run_case("the page opens on one welcome line with lesson 1 right below it, fourteen lessons, no jump links and no section list", async () => {
+  await run_case("the page opens on one welcome line with lesson 1 right below it, fifteen lessons, no jump links and no section list", async () => {
     const shape = await in_page(`
       const doc = view.document;
       const intro = doc.querySelector(".desertfox-practice-intro");
@@ -131,7 +131,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
         leaving_steps: [step_of("practice-command-line", 3), step_of("practice-tabs", 1), step_of("practice-video", 0)],
         hash: view.location.hash,
       };`);
-    expect(shape.lessons.length === 14 && shape.lessons[0] === "practice-scroll" && shape.lessons[13] === "practice-ignore", `the lessons are ${JSON.stringify(shape.lessons)}`);
+    expect(shape.lessons.length === 15 && shape.lessons[0] === "practice-scroll" && shape.lessons[14] === "practice-ignore", `the lessons are ${JSON.stringify(shape.lessons)}`);
     expect(shape.intro === "Welcome! These lessons will teach you the basic keys needed for web browsing.", `the welcome line is ${JSON.stringify(shape.intro)}`);
     expect(shape.gap >= 0 && shape.gap < 60, `lesson 1 starts ${shape.gap} px under the welcome line, so a gap sits between them`);
     expect(shape.jump_links === 0 && shape.sidebar_sections === 0, `jump links ${shape.jump_links}, sidebar sections ${shape.sidebar_sections}`);
@@ -309,7 +309,28 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await leave_to_normal();
   });
 
-  await run_case("lesson 8: / finds a word, n moves to the next match and N to the one before", async () => {
+  await run_case("lesson 8: I picks the list, j and k walk it, Enter opens an item and Escape leaves", async () => {
+    await to_lesson("list");
+    await press_keys("I");
+    await wait_mode("hint");
+    await pick("#practice-list-1");
+    await wait_done("list", "picked");
+    await press_keys("j");
+    await wait_focus("practice-list-2-link");
+    await press_keys("k");
+    await wait_focus("practice-list-1-link");
+    await press_keys("3j");
+    await wait_done("list", "walked");
+    expect(!(await is_done("list", "opened")), "walking ticked the open check");
+    await press_keys("-k", "Return");
+    await wait_done("list", "opened");
+    expect(!(await is_done("list", "left")), "Enter ticked the leave check");
+    await press_keys("-k", "Escape");
+    await wait_done("list", "left");
+    await wait_badge(["NORMAL"]);
+  });
+
+  await run_case("lesson 9: / finds a word, n moves to the next match and N to the one before", async () => {
     await to_lesson("find");
     await type_line_and_run("/", "fox");
     await wait_done("find", "found");
@@ -323,7 +344,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await leave_to_normal();
   });
 
-  await run_case("lesson 9: ;yt copies a paragraph, ;V as y copies one sentence, and Escape, gi and Ctrl+V paste it", async () => {
+  await run_case("lesson 10: ;yt copies a paragraph, ;V as y copies one sentence, and Escape, gi and Ctrl+V paste it", async () => {
     await to_lesson("copy");
     await hint(";yt", "#practice-copy-2");
     await wait_mode("normal");
@@ -351,7 +372,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await leave_to_normal();
   });
 
-  await run_case("lesson 10: the command line shows the theme, changes it and sets it back, keeps the page state, and :help commands with H returns to the lesson", async () => {
+  await run_case("lesson 11: the command line shows the theme, changes it and sets it back, keeps the page state, and :help commands with H returns to the lesson", async () => {
     await to_lesson("command-line");
     await in_page(`const input = ${by_id("practice-name")}; input.value = "keep me"; input.dataset.kept = "yes"; input.setSelectionRange(2, 6);`);
     // The toast text sits in a closed shadow root. The extension's own world reads it with openOrClosedShadowRoot.
@@ -396,7 +417,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
   await run_case("a reload lands on the lesson in the address and keeps the done checks", async () => {
     await in_page(`view.document.documentElement.dataset.before_reload = "yes"; view.location.reload();`);
     await poll_until("the page to load again", async () => await in_page(`return !!view && view.document.documentElement.dataset.before_reload === undefined && !!${by_id("practice-end")} && view.document.hasFocus();`).catch(() => false), { timeout_ms: 10000 });
-    await poll_until("the reload to land on lesson 10", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line" && Math.abs(await heading_top("command-line")) < 12);
+    await poll_until("the reload to land on lesson 11", async () => (await in_page(`return view.location.hash;`)) === "#section=practice/command-line" && Math.abs(await heading_top("command-line")) < 12);
     expect((await is_done("command-line", "returned")) && (await is_done("form", "sent")), "the done checks were lost in the reload");
     await wait_view_takes_keys("home.html");
   });
@@ -419,7 +440,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await poll_until("the Settings tab to close", async () => (await tab_indexes()).settings === null);
   });
 
-  await run_case("lesson 11: F opens two tabs in the background, T jumps to one, dd closes it and lands back here, and Alt+X closes the other from the list", async () => {
+  await run_case("lesson 12: F opens two tabs in the background, T jumps to one, dd closes it and lands back here, and Alt+X closes the other from the list", async () => {
     const open_pages = () => evaluate(`browser.tabs.query({}).then((tabs) => ["#/settings", "#/commands"].filter((hash) => tabs.some((tab) => tab.url.endsWith(hash))).length)`);
     await to_lesson("tabs");
     await hint("F", "#practice-open-settings");
@@ -464,7 +485,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_done("tabs", "closed");
   });
 
-  await run_case("lesson 12: f on the video link leaves for the watch page in this tab, and the return turns its check done", async () => {
+  await run_case("lesson 13: f on the video link leaves for the watch page in this tab, and the return turns its check done", async () => {
     await to_lesson("video");
     const link = await in_page(`const link = ${by_id("practice-video-link")}; return { href: link.href, target: link.target };`);
     expect(link.href === "https://www.youtube.com/watch?v=dQw4w9WgXcQ" && link.target === "", `the video link is ${JSON.stringify(link)}`);
@@ -476,7 +497,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_done("video", "returned");
   });
 
-  await run_case("lesson 13: a mark and Ctrl+O both return to the lesson, and scrolling back does not count", async () => {
+  await run_case("lesson 14: a mark and Ctrl+O both return to the lesson, and scrolling back does not count", async () => {
     await to_lesson("marks");
     await press_keys("G");
     await poll_until("G to leave the lesson", async () => (await heading_top("marks")) < 0);
@@ -505,7 +526,7 @@ export async function run_cases({ run_case, expect, press_keys, poll_until, wait
     await wait_done("marks", "jumped");
   });
 
-  await run_case("lesson 14: j stays with DesertFox, Ctrl+V passes one, and ignore mode passes them all", async () => {
+  await run_case("lesson 15: j stays with DesertFox, Ctrl+V passes one, and ignore mode passes them all", async () => {
     await to_lesson("ignore");
     const count = () => in_page(`return ${by_id("practice-j-count")}.textContent;`);
     await press_keys("j");

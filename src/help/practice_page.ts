@@ -20,6 +20,8 @@ const COPY_PROSE = [`${COPY_FIRST_SENTENCE} When it comes, seeds that waited for
 const CHOICES = ["Sand", "Dune", "Oasis"];
 const SLIDER_GOAL = "7";
 const STRIP_WORDS = 60;
+const LIST_TITLES = ["The first sample item", "The second sample item", "The third sample item", "The fourth sample item"];
+const LIST_DETAIL = "A short line under the title, as a result page has.";
 
 // The highlight the page search paints on its current match (`SEARCH_NAMES.current` in `src/content/caret/find_paint.ts`). The help page does not import the content bundle, so the name is repeated here.
 const FIND_CURRENT_HIGHLIGHT = "oasis-find-current";
@@ -259,6 +261,33 @@ const BUILDERS: Record<LessonSlug, Builder> = {
     // A drop or a blur sends `change`, so a value passed on the way does not count.
     range.addEventListener("change", () => { if (range.value === SLIDER_GOAL) mark("seven"); });
     return { targets: [el("p", undefined, range, " ", reading), work_board(mark)] };
+  },
+  list: (mark) => {
+    const items = LIST_TITLES.map((title, index) => {
+      const link = el("a", undefined, title) as HTMLAnchorElement;
+      link.href = "#";
+      link.id = `practice-list-${index + 1}-link`;
+      link.addEventListener("click", (event) => { event.preventDefault(); mark("opened"); });
+      const item = el("li", "desertfox-practice-list-item", el("h3", undefined, link), el("p", undefined, LIST_DETAIL));
+      item.id = `practice-list-${index + 1}`;
+      return item;
+    });
+    const list = el("ul", "desertfox-practice-list", ...items);
+    list.id = "practice-list";
+    let in_list = false;
+    return {
+      targets: [list],
+      // Item mode puts the focus on the current item, so the focus is the page's only sign of the walk. Escape ends the mode and drops that focus.
+      watch: () => {
+        const focused = document.activeElement;
+        const on_item = focused !== null && list.contains(focused);
+        if (on_item) {
+          mark("picked");
+          if (focused.closest("li") === items.at(-1)) mark("walked");
+        } else if (in_list && focused === document.body) mark("left");
+        in_list = on_item;
+      },
+    };
   },
   find: (mark) => {
     let first: string | undefined;

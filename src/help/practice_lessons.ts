@@ -14,7 +14,7 @@ export const PRACTICE_VIDEO_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 type LessonSource = { slug: string; title: string; goal: string; steps: string[]; notes?: string[]; checks: Record<string, string> };
 
 // `{name}` is a key and `[text]` is text to type, as in `sentence`. A note with an "and wait" key is dropped when a pause on that key opens no which-key panel.
-// Lesson 14 keeps `[j]` literal because the page counts presses of j itself.
+// Lesson 15 keeps `[j]` literal because the page counts presses of j itself.
 const LESSONS = [
   {
     slug: "scroll",
@@ -108,8 +108,21 @@ const LESSONS = [
     checks: { seven: "set the slider to 7", moved: "moved Review the PR to Done" },
   },
   {
+    slug: "list",
+    title: "8. Walk a list",
+    goal: "Move through a list of results, posts or files one item at a time.",
+    steps: [
+      "Press [I]. The page marks each list it finds with a letter. Type the letter on the first item of the list below. The badge says ITEM and a box surrounds that item.",
+      "Press [j] to move to the next item, and [k] to move back. Walk down to \"The fourth sample item\".",
+      "Press Enter. It opens the item's link.",
+      "Press {escape}. The badge returns to NORMAL, and [j] scrolls the page again.",
+    ],
+    notes: ["[gg] goes to the first item and [G] to the last. A number before [j] skips that many items."],
+    checks: { picked: "picked the list", walked: "walked to the fourth item", opened: "opened an item", left: "left item mode" },
+  },
+  {
     slug: "find",
-    title: "8. Find text on the page",
+    title: "9. Find text on the page",
     goal: "Jump to a word.",
     steps: ["Press {find}, type [fox] and press Enter.", "Press {next} to jump to the next match, and {previous} to the one before."],
     notes: ["{find_back} searches backward."],
@@ -117,7 +130,7 @@ const LESSONS = [
   },
   {
     slug: "copy",
-    title: "9. Copy text",
+    title: "10. Copy text",
     goal: "Copy a paragraph, or one exact sentence, without the mouse.",
     steps: [
       "Press {hint_copy_text} and type the letters on the second paragraph below. Its text is copied.",
@@ -130,7 +143,7 @@ const LESSONS = [
   },
   {
     slug: "command-line",
-    title: "10. The command line",
+    title: "11. The command line",
     goal: "Run any command by name, and look up every key.",
     steps: [
       "Press {cmdline}. Type [set theme] and press Enter. A note shows the theme you have now. Remember its name.",
@@ -143,7 +156,7 @@ const LESSONS = [
   },
   {
     slug: "tabs",
-    title: "11. Tabs",
+    title: "12. Tabs",
     goal: "Open pages in the background and jump between tabs.",
     steps: [
       "Press {hint_background} and type the letters on \"Settings\". It opens in a new tab behind this one. Do the same for \"Commands\".",
@@ -155,7 +168,7 @@ const LESSONS = [
   },
   {
     slug: "video",
-    title: "12. Video",
+    title: "13. Video",
     goal: "Drive a video player with the keyboard.",
     steps: [
       "{back} goes back one page, so it brings you back here from the video. Read all the steps first, because this text is gone on YouTube.",
@@ -169,7 +182,7 @@ const LESSONS = [
   },
   {
     slug: "marks",
-    title: "13. Come back to a place",
+    title: "14. Come back to a place",
     goal: "Leave a spot on a long page and return to it.",
     steps: [
       "Press {mark}, then [a]. This place is now mark a.",
@@ -180,7 +193,7 @@ const LESSONS = [
   },
   {
     slug: "ignore",
-    title: "14. Let the page have the keys",
+    title: "15. Let the page have the keys",
     goal: "Use a page that has its own keyboard shortcuts.",
     steps: [
       "The box below counts every j the page receives. Press [j]. The page scrolls and the count stays 0, because DesertFox takes the key.",
