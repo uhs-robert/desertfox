@@ -44,6 +44,16 @@ const ROLE_VARIABLES: Record<Role, string[]> = {
   search_current_fg: ["ui-match-fg"],
 };
 
+// Every Oasis dark file has the same yellow cursor, which lands on the yellow primary or string of five themes and clashes with their badges.
+// So the caret badge is gold in every dark theme, and no longer matches the Neovim cursor.
+const DARK_MODE_CARET = "#f7d46c";
+
+// Light sets whose badge color sits too close to a sibling badge, by theme and light level. Values come from the nearest color that keeps text contrast and clears the distance floor.
+const LIGHT_BADGE_OVERRIDES: Record<string, Partial<Record<LightIntensity, Partial<RoleColors>>>> = {
+  oasis_desert: { 1: { mode_caret: "#926804" }, 2: { mode_caret: "#8a6413" }, 4: { mode_caret: "#835f16" } },
+  oasis_scorpion: { 4: { mode_insert: "#7c0315" } },
+};
+
 const root = new URL("../", import.meta.url);
 const out_flag = process.argv.indexOf("--out");
 const module_path = out_flag >= 0 ? process.argv[out_flag + 1]! : fileURLToPath(new URL("src/shared/themes.ts", root));
@@ -63,7 +73,7 @@ function clamp_fg_dim(colors: RoleColors): string {
   return colors.fg_dim;
 }
 
-function colors_of_css(path: string): RoleColors | undefined {
+function colors_of_css(path: string, name: string, light_level: LightIntensity | undefined): RoleColors | undefined {
   const text = readFileSync(path, "utf8");
   const problems_before = problems.length;
   const colors = {} as RoleColors;
@@ -79,6 +89,12 @@ function colors_of_css(path: string): RoleColors | undefined {
   const clamped = clamp_fg_dim(colors);
   if (colors.mode_ignore === colors.fg_dim) colors.mode_ignore = clamped;
   colors.fg_dim = clamped;
+  if (light_level === undefined) colors.mode_caret = DARK_MODE_CARET;
+  else {
+    Object.assign(colors, LIGHT_BADGE_OVERRIDES[name]?.[light_level]);
+    // The visual badge is the theme's own secondary: canyon's brown visual sits on its brown primary at every level.
+    if (name === "oasis_canyon") colors.mode_visual = colors.secondary;
+  }
   return problems.length === problems_before ? colors : undefined;
 }
 
@@ -92,7 +108,7 @@ function read_oasis_css(dir: string): Record<string, OasisTheme> {
       problems.push(`${join(dir, file)}: unexpected file name, expected oasis_<name>_dark.css or oasis_<name>_light_<1-5>.css`);
       continue;
     }
-    const colors = colors_of_css(join(dir, file));
+    const colors = colors_of_css(join(dir, file), match[1]!, match[2] ? (Number(match[2]) as LightIntensity) : undefined);
     if (!colors) continue;
     const entry = (found[match[1]!] ??= { dark: undefined, light: {} });
     if (match[2]) entry.light[Number(match[2]) as LightIntensity] = colors;
