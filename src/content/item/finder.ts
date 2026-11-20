@@ -4,6 +4,7 @@
 import { ancestors, descendants, once, signature, stacked_items } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
 import { in_chrome, list_groups, plain_block } from "./groups.ts";
+import { find_menus } from "./menus.ts";
 import type { Group, GroupRules } from "./groups.ts";
 
 export type FinderKind = "list" | "grid" | "none";
@@ -132,7 +133,8 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const region = region_of(group);
     if (region) short_regions.push({ ...region, pick_only_: true });
   }
-  const every = [...regions, ...short_regions];
+  // The menus come last, so a spent budget loses them first.
+  const every = [...regions, ...short_regions, ...find_menus(reader, out_of_time)];
   return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
 }
 
