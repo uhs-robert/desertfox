@@ -1,5 +1,5 @@
 import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
-import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
+import type { KeyBinding } from "../shared/invocation.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
@@ -515,25 +515,14 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys and `gi`, and any other key goes to the page. The hints label the whole page. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys and `gi`, and any other key goes to the page. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
 const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L"];
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
-// Item mode copies the hint keys with `scope: item`, so they label the current item. The all-frames `;fF` stays out, as the schema refuses it with an item scope, and so does `;fe`.
-const in_item_scope = (binding: KeyBinding): KeyBinding => {
-  // `;;` and `;u` open the command line on a typed hint command, which takes the scope as a flag.
-  const scoped = (step: BoundInvocation) =>
-    step.id === "hint.run"
-      ? { ...step, args: { ...step.args, scope: "item" } }
-      : step.id === "cmdline.open" && typeof step.args?.["text"] === "string" && step.args["text"].startsWith("hint ")
-        ? { ...step, args: { ...step.args, text: step.args["text"].replace("hint ", "hint --item ") } }
-        : step;
-  return Array.isArray(binding) ? binding.map(scoped) : scoped(binding);
-};
 const keys_copied_to_item = Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence));
 const ITEM_KEYS: ModeBindings = {
-  ...Object.fromEntries(keys_copied_to_item.map(([sequence, binding]) => [sequence, in_item_scope(binding as KeyBinding)])),
+  ...Object.fromEntries(keys_copied_to_item),
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },

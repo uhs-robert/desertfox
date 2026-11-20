@@ -19,6 +19,13 @@ export function make_labels(count: number, letters: readonly string[]): string[]
   return labels.slice(0, count);
 }
 
+// `make_labels` hands out the shortest labels first, so putting the item's targets first gives them those. The rest keep their order.
+export function item_first<T extends { element: Element }>(found: T[], item: Element | undefined): T[] {
+  if (!item) return found;
+  const inside = found.filter((target) => item.contains(target.element));
+  return [...inside, ...found.filter((target) => !inside.includes(target))];
+}
+
 export type Narrowed = { still_possible_: number[]; complete: number | undefined };
 
 // Which labels still start with what was typed, by index. `complete` is set once exactly one label equals the typed text.

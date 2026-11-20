@@ -17,7 +17,7 @@ import { copy_yank } from "../caret/copy_text.ts";
 import { keeps_narrowing, drop_targets_of } from "./drop_targets.ts";
 import { list_targets, collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
-import { clean_letters, make_labels, narrow } from "./labels.ts";
+import { clean_letters, item_first, make_labels, narrow } from "./labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
 import type { KeyOutcome } from "./pick.ts";
 import { is_hint_char } from "./hint_keys.ts";
@@ -71,8 +71,9 @@ type Session = {
   with_background_: boolean;
   custom_selector_: string | undefined;
   site_selectors_: SiteSelectors;
-  // The item `scope: item` narrows the labels to. Rapid rebuilds read it again.
-  root_: Element | undefined;
+  // Set when the run starts in item mode: the labels of the current item's targets come first. Rapid rebuilds read the item again.
+  ranks_item_: boolean;
+  item_: Element | undefined;
   // The element a grab holds, for the `drop` filter, which labels where it can likely go.
   drop_source_: Element | undefined;
   // The `text` param as typed, and lower-cased for the match. Both are undefined without it.
@@ -111,17 +112,17 @@ function windows_of(found: Found[]): Window[] {
 }
 
 // A double-click skips links. Opening in another place needs an address, and an inline one cannot open. The images filter always needs one, so no label promises an image that a copy or an open cannot use.
-function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors, drop_source: Element | undefined, root: ParentNode = document, only_in_view = true): Found[] {
+function find_candidates(filter: HintFilter, custom_selector: string | undefined, action: HintAction, site_selectors: SiteSelectors, drop_source: Element | undefined, only_in_view = true): Found[] {
   const opens_elsewhere = OPEN_PLACES.includes(action);
   const with_background = filter === "images";
-  const found = with_site_selectors(root, filter, collect(root, query_for(filter, custom_selector, drop_source), weak_test_for(filter), only_in_view), site_selectors, only_in_view);
+  const found = with_site_selectors(document, filter, collect(document, query_for(filter, custom_selector, drop_source), weak_test_for(filter), only_in_view), site_selectors, only_in_view);
   const outside_links = action === "double_click" ? found.filter((item) => !is_inside_link(item.element)) : found;
   return outside_links.filter((item) => (!opens_elsewhere && !with_background) || has_usable_address(item.element as HTMLElement, with_background, opens_elsewhere));
 }
 
-const none_message = (text: string | undefined, filter?: string, in_item?: boolean): string => (text !== undefined ? `No link matches ${text}` : filter === "lists" ? "No list on this page" : in_item ? "No hints in this item" : "No hints on this page");
+const none_message = (text: string | undefined, filter?: string): string => (text !== undefined ? `No link matches ${text}` : filter === "lists" ? "No list on this page" : "No hints on this page");
 
-// The item that `scope: item` narrows the labels to. The item bundle holds it, so the answer is the one it hands to `take`: undefined when no item was moved to, and the page is then labeled whole.
+// The item that item mode treats as current, whose targets are labeled first. The item bundle holds it, so the answer is the one it hands to `take`: undefined when no item was moved to, and the labels then keep document order.
 async function current_item(): Promise<Element | undefined> {
   let item: Element | undefined;
   await page.desertfox_host.run_command_("item.current", "item", { take: (found: Element | undefined) => (item = found) });
@@ -427,7 +428,7 @@ function register(host: PageHostApi): void {
       if (current.cancelled) return;
     }
     strip_patterns = patterns;
-    const labeled = current.across_frames_ ? await label_across(current, parent_labels_me() ? [] : shown, letters) : single_frame(shown, letters);
+    const labeled = current.across_frames_ ? await label_across(current, parent_labels_me() ? [] : shown, letters) : single_frame(item_first(shown, current.item_), letters);
     if (current.cancelled) return;
     if (!labeled) {
       current.finish(cancelled_outcome);
@@ -494,10 +495,10 @@ function register(host: PageHostApi): void {
     performed(run);
     if (current.cancelled) return;
     const started_ms = performance.now();
-    // The pick may have replaced the item, so an item scope reads the current item again.
+    // The pick may have replaced the item, so the rank reads the current item again.
     const rebuild = async () => {
-      if (current.args.scope === "item") current.root_ = await current_item();
-      if (!current.cancelled) await build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_, current.drop_source_, current.root_), false, started_ms);
+      if (current.ranks_item_) current.item_ = await current_item();
+      if (!current.cancelled) await build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_, current.drop_source_), false, started_ms);
     };
     void rebuild();
   }
@@ -603,14 +604,14 @@ function register(host: PageHostApi): void {
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     // Read after an await: content.js names the running leaf only once its run call has returned, and a loaded bundle reaches this point inside that call.
     const leaf_end_ = action === "enter_item" ? host.leaf_end_() : undefined;
-    const item_root_ = args.scope === "item" ? await current_item() : undefined;
-    const root = item_root_ ?? document;
+    const ranks_item_ = host.get_mode() === "item";
+    const item_ = ranks_item_ ? await current_item() : undefined;
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
     try {
       // A source with no structure to read gets every element at once, so the key line does not offer Tab.
       if (filter === "drop" && !(drop_source_ && drop_targets_of(drop_source_))) filter = "every";
-      candidates = find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_, root);
+      candidates = find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_);
       if (filter === "drop" && !keeps_narrowing(candidates.length)) {
         filter = "every";
         candidates = find_candidates(filter, custom_selector_, action, site_selectors_, undefined);
@@ -621,11 +622,11 @@ function register(host: PageHostApi): void {
     // With nothing to label the mode never changes, so keys held during the load run as normal keys. A page with candidates only out of view still flips it, as before the view cut.
     const text = (args.text as string | undefined) || undefined;
     // Across frames the other frames can still have hints, and the build gives the notice when no frame has one.
-    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_, root, false).length === 0) return { ok: false, message: none_message(text, filter, !!item_root_) };
+    if (candidates.length === 0 && args.frames !== "all_frames" && !host.frame_parked_() && find_candidates(filter, custom_selector_, action, site_selectors_, drop_source_, false).length === 0) return { ok: false, message: none_message(text, filter) };
     // Pending until the user picks a label or leaves hint mode.
     const picked = new Promise<Outcome>((finish) => {
       // A caret start ends hint mode on the first pick, so rapid has nothing to repeat.
-      const current: Session = { cancelled: false, args, finish, action, leaf_end_, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, drop_source_, root_: item_root_, text, lower_text_: text?.toLowerCase(), collected_: [] };
+      const current: Session = { cancelled: false, args, finish, action, leaf_end_, waiting_tokens_: [], waiting_physical_: [], rapid: args.rapid === true && !starts_mode(action) && action !== "prompt", across_frames_: args.frames === "all_frames" || host.frame_parked_(), filter, with_background_: filter === "images", custom_selector_, site_selectors_, drop_source_, ranks_item_, item_, text, lower_text_: text?.toLowerCase(), collected_: [] };
       session = current;
       host.set_mode_("hint");
       void build(current, candidates, true, started_ms);

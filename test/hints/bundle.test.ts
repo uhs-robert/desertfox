@@ -70,6 +70,7 @@ async function with_session(opened_from: "normal" | "media", link_tops: number[]
     register_handler_: (id: string, handler: never) => void handlers.set(id, handler),
     hold_keys_until_: () => {},
     frame_parked_: () => false,
+    get_mode: () => state.get_mode_(),
     set_mode_: (mode: string) => {
       modes.push(mode);
       const left = state.get_mode_();

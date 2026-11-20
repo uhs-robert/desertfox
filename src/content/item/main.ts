@@ -57,7 +57,7 @@ if (!item_window.desertfox_item_ready && host) {
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
   host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined, !!args.selector) : (args.take as (regions: unknown) => void)(lists_with_row(document, () => page.derived.lists_(), args.selector as string | undefined, !!args.row_only))));
-  // The hints bundle (`scope: item`) and the item actions call this through `run_command_` and hand a callback that takes the item and its link.
+  // The hints bundle (item-first labels) and the item actions call this through `run_command_` and hand a callback that takes the item and its link.
   host.register_handler_("item.current", (args) => {
     const current = current_item(page);
     (args.take as (item: Element | undefined, link: Element | undefined) => void)(current?.item_, current?.link_);

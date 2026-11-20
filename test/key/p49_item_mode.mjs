@@ -221,21 +221,28 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
 
   const hint_labels = () => in_active_tab(`[...document.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0)`);
 
-  await run_case("f in item mode labels only the current item, and after Escape f labels the page", async () => {
+  // The label texts with the top edge of each, in the order of the page.
+  const hint_tops = () => in_active_tab(`JSON.stringify([...document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => [node.textContent, node.getBoundingClientRect().top])))`).then((text) => JSON.parse(text));
+
+  await run_case("f in item mode labels the page too, with the item's targets on the first labels, and after Escape f labels in page order", async () => {
     await open_list("im_scope");
     await press_keys("I");
     await expect_badge("ITEM");
     await press_keys("jj");
     await expect_focus("c2");
+    const link_top = Number(await in_active_tab(`document.getElementById("c2").getBoundingClientRect().top`));
     await press_keys("f");
-    await poll_until("the labels", async () => (await hint_labels()) > 0);
-    expect((await hint_labels()) === 1, `${await hint_labels()} labels in the item`);
+    await poll_until("the labels", async () => (await hint_labels()) > 1);
+    const ranked = await hint_tops();
+    expect(ranked[0] !== undefined && ranked[0][0].length === 1 && Math.abs(ranked[0][1] - link_top) < 40, `the item's label comes first and is the shortest: ${JSON.stringify(ranked)} against ${link_top}`);
     await press_keys("-k", "Escape");
     await expect_badge("ITEM");
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
     await press_keys("f");
     await poll_until("the page labels", async () => (await hint_labels()) > 1);
+    const in_order = await hint_tops();
+    expect(in_order[0] !== undefined && Math.abs(in_order[0][1] - link_top) > 40, "in normal mode the first label stays on the first link");
     await press_keys("-k", "Escape");
   });
 

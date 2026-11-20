@@ -95,16 +95,16 @@ test("Space toggles the current item's checkbox and Enter opens its link", () =>
   assert.equal(compiled_with().modes.normal!.children["<Space>"], undefined, "normal mode keeps Space for the page");
 });
 
-// Every copied hint key labels the current item, the modifier variants (;Bl) too. The two normal-only keys are absent because the schema refuses an item scope with all frames.
-test("every hint key of item mode carries the item scope, and ;fF and ;fe stay out of it", () => {
+// The item section copies the hint keys as they are: the hints rank the item at run time, by mode.
+test("hint keys of item mode are the normal-mode steps, and ;fF and ;fe stay out of it", () => {
   const compiled = compiled_with();
   const leaves = (node: { kind: string; children?: Record<string, unknown> }, prefix: string): [string, { steps: { invocation: { id: string; args?: Record<string, unknown> } }[] }][] =>
     node.kind === "branch" ? Object.entries(node.children!).flatMap(([key, child]) => leaves(child as never, prefix + key)) : [[prefix, node as never]];
   const hint_keys = leaves(compiled.modes.item as never, "").filter(([, leaf]) => leaf.steps.some((step) => step.invocation.id === "hint.run" && step.invocation.args?.["filter"] !== "lists"));
   assert.ok(hint_keys.length > 40, `${hint_keys.length} hint keys`);
-  for (const [key, leaf] of hint_keys) for (const step of leaf.steps.filter((step) => step.invocation.id === "hint.run")) assert.equal(step.invocation.args?.["scope"], "item", key);
+  for (const [key, leaf] of hint_keys) for (const step of leaf.steps.filter((step) => step.invocation.id === "hint.run")) assert.equal(step.invocation.args?.["scope"], undefined, key);
   const typed = (key: string) => String(leaves(compiled.modes.item as never, "").find(([found]) => found === key)?.[1].steps[0]?.invocation.args?.["text"]);
-  assert.deepEqual([typed(";;"), typed(";u")], ["hint --item ", "hint --item --custom "], "the typed hint commands carry the scope too");
+  assert.deepEqual([typed(";;"), typed(";u")], ["hint ", "hint --custom "], "the typed hint commands are the normal ones");
   assert.ok(hint_keys.some(([key]) => key === ";Bl"), ";Bl is a hint key of item mode");
   for (const key of [";fF", ";fe"]) assert.ok(!hint_keys.some(([found]) => found === key), `${key} is not an item key`);
 });
