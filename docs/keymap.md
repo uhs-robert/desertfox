@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 590 (normal 264, media 58, item 95, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 591 (normal 264, media 58, item 96, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -406,6 +406,7 @@ Which-key group names:
 | `K` | `tab.prev` | Previous tab |
 | `gt` | `tab.goto` | Next tab |
 | `gT` | `tab.prev` | Previous tab |
+| `am` | `tab.mute` | Toggle mute |
 | `aa` | `media enter` | Start media mode |
 | `ap` | `media play_pause` | Play or pause |
 | `as` | `media speed up` | Speed up |
