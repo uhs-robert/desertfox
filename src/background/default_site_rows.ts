@@ -173,8 +173,8 @@ const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
 // Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll.
 const drive_move = (guard: string, direction: "down" | "up" | "left" | "right", intent: string): BoundInvocation => ({ ...item_step(guard, undefined, direction), when_present: guard, intent });
-// Enter opens the selected file, but while a dialog is open (rename, share, move) the Enter belongs to the dialog's own button. The guard fails then, and `otherwise = "page"` gives the real key to the page instead of the mode's own open.
-const DRIVE_FILES_WITHOUT_DIALOG = [DRIVE_GRID_ITEM, DRIVE_LIST_ITEM].map((item) => `body:not(:has([role="dialog"])) ${item}`).join(", ");
+// Enter opens the selected file, but while a dialog holds focus (rename, share, move). A mounted dialog that is hidden does not count the Enter belongs to the dialog's own button. The guard fails then, and `otherwise = "page"` gives the real key to the page instead of the mode's own open.
+const DRIVE_FILES_WITHOUT_DIALOG = [DRIVE_GRID_ITEM, DRIVE_LIST_ITEM].map((item) => `body:not(:has([role="dialog"]:focus-within)) ${item}`).join(", ");
 // A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
 const DRIVE_BIND: BindingTable = {
   j: drive_move(DRIVE_ANY_ITEM, "down", "Move to the file below (scrolls the page when no file shows)"),

@@ -153,6 +153,15 @@ test("otherwise = \"page\" keeps the replaced key off the chain, so a failed gua
   assert.deepEqual(page.steps[0]?.invocation, { id: "page.back", args: {} }, "the field is not an argument of the step");
 });
 
+test("the site rules view says a failed otherwise = page bind passes the key to the page", () => {
+  const action = (extra: object) => {
+    const [row] = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { h: [{ id: "page.back", when_present: GRID, ...extra }] } }] }), "https://a.test/").rows;
+    return row!.changes.find(({ keys }) => keys === "h")!.action;
+  };
+  assert.match(action({ otherwise: "page" }), /, else the key goes to the page$/);
+  assert.match(action({}), /, else the key without the row$/);
+});
+
 test("the build stores otherwise on the first step, and refuses a value other than page", () => {
   const bind = (build_with_bind(`h = { run = "page.back", when_present = "${GRID}", otherwise = "page" }`).settings.site_rules?.[0] as { bind: Record<string, unknown> }).bind;
   assert.deepEqual(bind.h, { id: "page.back", when_present: GRID, otherwise: "page" });

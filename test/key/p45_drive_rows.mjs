@@ -86,7 +86,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
         const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
-        if (event.key === "Enter") { if (selected >= 0) location.hash = "opened-" + prefix() + selected; }
+        if (event.key === "Enter") { panel.dataset.enter_trusted = String(event.isTrusted); if (selected >= 0) location.hash = "opened-" + prefix() + selected; }
         else if (steps[event.key]) {
           if (${drop_fast_arrows} && performance.now() - (window.last_arrow ?? -1000) < 100) { window.last_arrow = performance.now(); event.preventDefault(); return; }
           window.last_arrow = performance.now();
@@ -392,6 +392,26 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("the dialog button to be clicked", async () => (await in_active_tab(`document.body.dataset.dialog_clicks ?? 0`)) === "1");
     await sleep(300);
     expect((await hash()) === "#before", `Enter opened a file: ${await hash()}`);
+  });
+
+  // A dialog Drive keeps mounted and hidden holds no focus, so it must not turn the bind off.
+  await run_case("list view: Enter with a hidden dialog mounted and the focus on the files still opens the selected file", async () => {
+    await open_drive("list_hidden_dialog", "list");
+    await press_keys("j");
+    await poll_until("a file selected", async () => (await selected_file()) >= 1);
+    await in_active_tab(`(() => {
+      const dialog = document.createElement("div");
+      dialog.setAttribute("role", "dialog");
+      dialog.style.display = "none";
+      dialog.innerHTML = '<button>OK</button>';
+      document.body.append(dialog);
+      return true;
+    })()`);
+    const wanted = `#opened-f${await selected_file()}`;
+    await press_keys("-k", "Return");
+    await poll_until("Enter to open the selected file", async () => (await hash()) === wanted);
+    // The bind sends its own Enter, which is not trusted. A trusted one means the guard failed and the page got the real key.
+    expect((await in_active_tab(`document.getElementById("panel").dataset.enter_trusted`)) === "false", "the Drive bind did not run: the page got the real Enter");
   });
 
   for (const view of ["list", "grid"]) {

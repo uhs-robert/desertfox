@@ -798,7 +798,7 @@ test("the drive row binds plain item moves, and the page reply turns them into f
   }
   // Enter is bound so that one typed behind G or gg waits for the select. While a dialog is open the guard fails, and the real Enter goes to the page: no leaf stays behind it, not even the mode's item action open.
   const enter = await leaf_at("<Enter>");
-  assert.equal(enter.when_present, `body:not(:has([role="dialog"])) ${grid}, body:not(:has([role="dialog"])) ${list}`);
+  assert.equal(enter.when_present, `body:not(:has([role="dialog"]:focus-within)) ${grid}, body:not(:has([role="dialog"]:focus-within)) ${list}`);
   assert.deepEqual([enter.steps.map((step) => step.invocation.id), enter.steps[0]?.invocation.args?.["key"]], [["page.send_key"], "Enter"]);
   assert.deepEqual([enter.otherwise, enter.otherwise_page], [undefined, true]);
   // The row keeps its own keys beside the derived ones.

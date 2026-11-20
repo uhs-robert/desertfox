@@ -20,7 +20,7 @@ const leaf_text = (leaf: TreeLeaf): string => leaf.label ?? leaf.intent ?? leaf.
 
 const guard_text = (leaf: TreeLeaf): string | undefined => [leaf.when_present && `while the page shows ${leaf.when_present}`, leaf.when_focus && `while the focus is in ${leaf.when_focus}`].filter(Boolean).join(" and ") || undefined;
 
-// A bind as its chain of choices reads: each choice with its guards, until one with no guard. A chain that ends on a guard falls back to the key as the keymap has it.
+// A bind as its chain of choices reads: each choice with its guards, until one with no guard. A chain that ends on a guard falls back to the key as the keymap has it, or to the page when the bind says `otherwise = "page"`.
 function bind_text(leaf: TreeLeaf): string {
   const parts: string[] = [];
   for (let choice: TreeLeaf | undefined = leaf; choice; choice = choice.otherwise) {
@@ -28,7 +28,7 @@ function bind_text(leaf: TreeLeaf): string {
     parts.push(guard ? `${leaf_text(choice)} ${guard}` : leaf_text(choice));
     if (!guard) return parts.join(", else ");
   }
-  return [...parts, "the key without the row"].join(", else ");
+  return [...parts, leaf.otherwise_page ? "the key goes to the page" : "the key without the row"].join(", else ");
 }
 
 // The keymap's own meaning of a key sequence: a binding's label, a group's name, or nothing. A shorter key that is a binding on the way (`h` for `hq`) is what the sequence loses, so its label counts.
