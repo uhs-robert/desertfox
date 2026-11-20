@@ -81,6 +81,20 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_badge("ITEM");
   });
 
+  await run_case("i and v in item mode reach insert and caret mode", async () => {
+    await open_list("im_keys_modes");
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("i");
+    await expect_badge("INSERT");
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("v");
+    await expect_badge("CARET");
+  });
+
   await run_case("f labels the page and Escape returns to item mode, and gi focuses the field and leaves the mode", async () => {
     await open_list("im_keys_field");
     await run_line("mode item");

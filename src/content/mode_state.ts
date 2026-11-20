@@ -6,7 +6,8 @@ import { is_caret_mode } from "../shared/command.ts";
 
 // The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Only normal mode starts the media mode, so insert, ignore, hint and the reading modes win, and only the media mode ends with the fullscreen.
 // `held` is the mode the step is for: item mode takes the same step, started and ended by the background (`tab_item.ts`).
-export const fullscreen_step = (mode: Mode, has_fullscreen_element: boolean, held: Mode = "media"): Mode | undefined => (has_fullscreen_element ? (mode === "normal" ? held : undefined) : mode === held ? "normal" : undefined);
+// `from_item` lets a media step of another frame take a frame in item mode, which `aa` there needs. A fullscreen of the frame's own never does.
+export const fullscreen_step = (mode: Mode, has_fullscreen_element: boolean, held: Mode = "media", from_item = false): Mode | undefined => (has_fullscreen_element ? (mode === "normal" || (from_item && mode === "item" && held === "media") ? held : undefined) : mode === held ? "normal" : undefined);
 
 // A frame skips the step that its own report of the mode caused. That step can arrive after the frame left the mode (a site key that ends its fullscreen at once), and would put it back.
 export const takes_media_step = (step: MediaStep, frame_id: number): boolean => step.from !== frame_id;
@@ -21,6 +22,8 @@ export function create_mode_state(initial: Mode = "normal") {
   let manual_insert = false;
   // Where hint and command line mode return to: media mode when they were opened from it, else normal.
   let back_mode: Mode = "normal";
+  // The media mode began in item mode, so Escape goes back to item mode.
+  let media_from_item = false;
   let on_change: (mode: Mode) => void = () => {};
   let on_display_change: () => void = () => {};
 
@@ -33,6 +36,8 @@ export function create_mode_state(initial: Mode = "normal") {
 
   const set_mode_ = (next: Mode) => {
     manual_insert = next === "insert";
+    if (next === "media") media_from_item ||= mode === "item" || (is_line(mode) && back_mode === "item");
+    else if (!is_line(next)) media_from_item = false;
     if (is_line(next) && !is_line(mode)) back_mode = mode === "media" || mode === "item" ? mode : "normal";
     follow_focus_to_(next);
   };
@@ -64,7 +69,8 @@ export function create_mode_state(initial: Mode = "normal") {
     },
     // Ignore mode is left only by its own binding, never by Escape. Hint and command line mode return to where they began.
     escape: () => {
-      if (mode !== "ignore") set_mode_(is_line(mode) ? back_mode : "normal");
+      if (mode === "ignore") return;
+      set_mode_(is_line(mode) ? back_mode : mode === "media" && media_from_item ? "item" : "normal");
     },
     arm_pass_next_: () => {
       pass_next_armed = true;

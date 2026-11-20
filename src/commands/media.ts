@@ -50,7 +50,7 @@ define("media.act", {
     { name: "times", type: "int", min: 1, default: [{ value: 1, when: { value: ["up", "down"] } }], when: { value: ["up", "down", "percent"] }, description: "Steps to move, or the percent to go to." },
   ],
   count: { param: "times" },
-  modes: ["normal", "media"],
+  modes: ["normal", "media", "item"],
   needs: ["content"],
   bridge: true,
   runs_in: "background",

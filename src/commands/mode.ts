@@ -45,7 +45,7 @@ define("mode.insert", {
   bridge: true,
   runs_in: "background",
   repeatable: false,
-  modes: ["normal", "caret", "visual", "visual_line"],
+  modes: ["normal", "caret", "visual", "visual_line", "item"],
   run: (ctx) => enter_tab_insert?.(require_tab_id(ctx)),
 });
 
@@ -66,6 +66,7 @@ define("mode.pass_next", {
   bridge: false,
   runs_in: "content",
   repeatable: false,
+  modes: ["normal", "item"],
 });
 
 // Defined here with the mode commands because both change what has the focus.
