@@ -3,14 +3,15 @@
 
 import { ancestors, descendants, once, signature, stacked_items } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
+import { find_aria_lists } from "./aria_lists.ts";
 import { in_chrome, list_groups, plain_block } from "./groups.ts";
 import { find_menus } from "./menus.ts";
 import type { Group, GroupRules } from "./groups.ts";
 
 export type FinderKind = "list" | "grid" | "none";
 
-// `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `row_` marks the list of a site row's items, which the picker offers (`lists_with_row` in `main.ts`) and which is no finder list. `timed_out_` marks a `none` that only says the time budget ran out.
-export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; pick_only_?: true; row_?: true };
+// `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `row_` marks the list of a site row's items, which the picker offers (`lists_with_row` in `main.ts`) and which is no finder list. `timed_out_` marks a `none` that only says the time budget ran out. The last three fields belong to the ARIA lists (`aria_lists.ts`): `home_` is the widget, which names the region again after the page replaced its rows, `box_selector_` is what the box follows a page script's focus by (their items are often classless), and `focus_none_` says the widget names its own active row, so a pick or a move leaves the focus where it is.
+export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; pick_only_?: true; row_?: true; home_?: N; box_selector_?: string; focus_none_?: true };
 // The answer is its first region (the one with the most area) plus every top-level list of the page in `regions`, from the largest down, so the derived row can follow the one in view.
 export type Found<N> = Region<N> & { regions: Region<N>[]; timed_out_?: true };
 
@@ -133,8 +134,9 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const region = region_of(group);
     if (region) short_regions.push({ ...region, pick_only_: true });
   }
-  // The menus come last, so a spent budget loses them first.
-  const every = [...regions, ...short_regions, ...find_menus(reader, out_of_time)];
+  // The ARIA lists come before the menus, so a spent budget loses the menus first.
+  const every = [...regions, ...short_regions];
+  every.push(...find_aria_lists(reader, out_of_time, every), ...find_menus(reader, out_of_time));
   return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
 }
 
