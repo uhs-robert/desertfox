@@ -34,10 +34,11 @@ A count repeats a move, as in normal mode. The first press moves to an item that
 
 | Key | What it does |
 | --- | --- |
-| `Enter` | Open the item's link |
+| `Enter` | Open the item's link, or click the element that `Tab` focused |
 | `Space` | Click the item's checkbox |
+| `Tab` `Shift-Tab` | Focus the next or previous element inside the item |
 
-Each key shows a notice when the item has no link or no checkbox.
+`Tab` and `Shift-Tab` step through the links, buttons, fields and checkboxes of the item that show (the item itself too when it can take focus), and wrap at the item's edges, so the focus stays in the item. An item whose only focusable element is its link has nothing to step through, so the keys move on through the page's focusable elements from the focus, as the browser's `Tab` does. `Tab` skips text fields, because focusing one starts insert mode and that ends item mode. Checkboxes, radio buttons, buttons, links and selects stay in the ring. `j`, `k` and the other moves land the focus on the new item's link, so the next `Tab` starts there. `Enter` clicks the element only while `Tab` has left the focus on it. After a click, `Space` or any other focus it opens the item's link as before. Each key shows a notice when the item has no link, no checkbox or nothing to focus.
 
 The hint keys work in item mode. `f`, `F` and the `;` group label the whole page and give the shortest hints to the current item, so a page with many links stays quick to use. In normal mode the hints keep their usual order.
 

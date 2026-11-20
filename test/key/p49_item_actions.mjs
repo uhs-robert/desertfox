@@ -1,4 +1,4 @@
-// Space and Enter in item mode. Space toggles the checkbox of the current item (a native one, a role=checkbox div, and with a site row's `target` a plain span) and shows a notice on an item with none. Enter opens the item's link, also after Space moved the focus into the item. A row's `target` replaces the generic search.
+// Space, Enter and Tab in item mode. Space toggles the checkbox of the current item (a native one, a role=checkbox div, and with a site row's `target` a plain span) and shows a notice on an item with none. Enter opens the item's link, also after Space moved the focus into the item. A row's `target` replaces the generic search.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -66,6 +66,64 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("the span clicked", async () => (await toggled()) === "box2");
     await sleep(200);
     expect((await toggled()) === "box2", `Space clicked ${await toggled()}`);
+  });
+
+  const shift_tab = () => press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
+
+  await run_case("Tab and Shift-Tab step through the item's controls, wrap both ways and stay in the item", async () => {
+    await open_boxes("ia_tab_ring");
+    await press_keys("-k", "Tab");
+    await expect_focus("box0");
+    await press_keys("-k", "Tab");
+    await expect_focus("c0");
+    await shift_tab();
+    await expect_focus("box0");
+    await shift_tab();
+    await expect_focus("c0");
+    // The box stays on the first item the whole time.
+    expect((await in_active_tab(`document.activeElement.closest(".card") === document.querySelector(".card")`)) === true, "the focus left the item");
+  });
+
+  await run_case("Enter clicks the control that Tab focused, and j puts the focus back on the next item's link", async () => {
+    await open_boxes("ia_tab_enter");
+    await press_keys("-k", "Tab");
+    await expect_focus("box0");
+    await press_keys("-k", "Return");
+    await poll_until("the box clicked", async () => (await toggled()) === "box0");
+    expect((await hash()) === "", `Enter opened ${await hash()}`);
+    await press_keys("j");
+    await expect_focus("c1");
+    await press_keys("-k", "Tab");
+    await expect_focus("box1");
+    await press_keys("j");
+    await expect_focus("c2");
+  });
+
+  await run_case("Tab passes over a text field of the item, so it never starts insert mode", async () => {
+    await open_page("item_list", "ia_tfield", { new_tab: true });
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await press_keys("5j");
+    await expect_focus("c5");
+    // The card holds its link and a text field, so the ring is the link alone and Tab goes on to the next link.
+    await press_keys("-k", "Tab");
+    await expect_focus("c6");
+    await expect_badge("ITEM");
+  });
+
+  await run_case("an item with only its link lets Tab go on to the next link, as the browser does", async () => {
+    await open_boxes("ia_tab_single");
+    await press_keys("3j");
+    await expect_focus("c3");
+    await press_keys("-k", "Tab");
+    await expect_focus("c4");
+    await shift_tab();
+    await expect_focus("c3");
+    // Each Tab goes on from where the focus is, so the second one does not pick the same link again.
+    await press_keys("-k", "Tab");
+    await expect_focus("c4");
+    await press_keys("-k", "Tab");
+    await expect_focus("c5");
   });
 
   // Auto-start and `mode item` record no move. The focused item is still the current one.

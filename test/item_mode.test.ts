@@ -178,6 +178,14 @@ test("Space toggles the current item's checkbox and Enter opens its link", () =>
   assert.equal(compiled_with().modes.normal!.children["<Space>"], undefined, "normal mode keeps Space for the page");
 });
 
+test("Tab and Shift-Tab of item mode step the focus inside the item, and normal mode keeps them for the page", () => {
+  const item = compiled_with().modes.item!;
+  const action = (key: string) => (item.children[key] as { steps: { invocation: { id: string; args: Record<string, unknown> }; bundle?: string }[] }).steps[0]!;
+  assert.deepEqual([action("<Tab>").invocation.id, action("<Tab>").invocation.args["direction"], action("<Tab>").bundle], ["page.item_focus", "next", "item_act"]);
+  assert.deepEqual([action("<S-Tab>").invocation.id, action("<S-Tab>").invocation.args["direction"]], ["page.item_focus", "prev"]);
+  assert.equal(compiled_with().modes.normal!.children["<Tab>"], undefined);
+});
+
 // The item section copies the hint keys as they are: the hints rank the item at run time, by mode.
 test("hint keys of item mode are the normal-mode steps, and ;fF and ;fe stay out of it", () => {
   const compiled = compiled_with();

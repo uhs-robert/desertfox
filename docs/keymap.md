@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 591 (normal 264, media 58, item 96, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 593 (normal 264, media 58, item 98, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -479,7 +479,9 @@ Which-key group names:
 | `zz` | `page.item --current ; scroll.align` | Back to the current item, in the middle |
 | `zb` | `page.item --current ; scroll.align --bottom` | Back to the current item, at the bottom |
 | `<Space>` | `item_action --toggle` | Toggle the item's checkbox |
-| `<Enter>` | `item_action --open` | Open the item's link |
+| `<Enter>` | `item_action --open` | Open the item's link, or click the focused element in it |
+| `<Tab>` | `item_focus next` | Focus the next element in the item |
+| `<S-Tab>` | `item_focus prev` | Focus the previous element in the item |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
 | `h` | `page.item --left --hover` | Item to the left, or scroll left |
