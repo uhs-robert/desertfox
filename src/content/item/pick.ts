@@ -77,7 +77,7 @@ export type ItemPage = EndPage & {
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
-  derived?: { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean };
+  derived?: { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; focus_none_?: () => boolean };
 };
 
 const SCROLL_PX = 50;
@@ -184,7 +184,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
 
 // Focuses the item, brings it into view (unless `reveal` is false) and draws the box. `]]` lands here too, on the first item a load added. The page-scroller ends skip the reveal so gg stays at the page top and G at the bottom, with the box on an item that may lie off screen.
 function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, pin = false): void {
-  focus_target(item, args.link || undefined, args.selector ? undefined : page.derived?.link_of_(item)).focus({ preventScroll: true });
+  if (args.selector || !page.derived?.focus_none_?.()) focus_target(item, args.link || undefined, args.selector ? undefined : page.derived?.link_of_(item)).focus({ preventScroll: true });
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };

@@ -733,3 +733,52 @@ test("a pin keeps its list through two reads in a row that run out of time, and 
   comments.forEach((entry) => (entry.isConnected = false));
   assert.equal(row.pinned_(), false, "a whole read without the list drops it");
 });
+
+// A virtual list: the page replaces the row nodes as the widget scrolls, so only the widget (`home_`) says it is the same list.
+function with_virtual_list() {
+  const state = { widget: { name: "widget" }, rows: [item("a1"), item("a2")], long: [item("l1"), item("l2")] };
+  const region_of = (entries: Fake[], home?: object) => ({ kind: "list", items: entries, links: new Map(), pick_only_: true, ...(home && { home_: home }) });
+  const row = create_derived_row({
+    find_: () => ({ kind: "list", items: state.long, links: new Map(), regions: [{ kind: "list", items: state.long, links: new Map() }, region_of(state.rows, state.widget)] }) as unknown as Found<Element>,
+    url_: () => "https://a.test/",
+    now_: () => 0,
+    is_shown_: (element) => (element as unknown as Fake).shown,
+    in_view_: (element) => ((element as unknown as Fake).shown ? 1 : 0),
+    tail_: () => [],
+  });
+  return { state, row };
+}
+
+test("a picked list stays active through a read after the page replaced every row, when its widget is the same", () => {
+  const { state, row } = with_virtual_list();
+  row.pick_(row.lists_()[1]!);
+  state.rows[0]!.isConnected = false;
+  state.rows = [item("b1"), item("b2")];
+  assert.deepEqual(names(row.items_()), ["b1", "b2"]);
+  state.widget = { name: "other widget" };
+  state.rows[0]!.isConnected = false;
+  state.rows = [item("c1")];
+  assert.deepEqual(names(row.items_()), ["l1", "l2"], "a list with another widget is another list");
+});
+
+test("a pin on such a list holds through the replaced rows", () => {
+  const { state, row } = with_virtual_list();
+  row.items_();
+  row.pin_(row.lists_()[1]!);
+  state.rows[0]!.isConnected = false;
+  state.rows = [item("b1"), item("b2")];
+  assert.equal(row.pinned_(), true);
+  assert.deepEqual(names(row.active_()!.items), ["b1", "b2"]);
+});
+
+test("the derived row says whether the active list keeps the focus, and gives the box its own selector", () => {
+  const widget = { name: "widget" };
+  const rows = [item("a1"), item("a2")];
+  const aria = { kind: "list", items: rows, links: new Map(), pick_only_: true, home_: widget, focus_none_: true, box_selector_: "[role=option]" };
+  const row = create_derived_row({ find_: () => ({ kind: "none", items: [], links: new Map(), regions: [aria] }) as unknown as Found<Element>, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [] });
+  assert.deepEqual(row.items_(), [], "a pick-only list is no answer before a pick");
+  assert.equal(row.focus_none_(), false);
+  row.pick_(row.lists_()[0]!);
+  assert.equal(row.focus_none_(), true);
+  assert.equal(row.selector_(), "[role=option]");
+});
