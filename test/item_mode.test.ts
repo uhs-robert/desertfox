@@ -102,6 +102,8 @@ test("every hint key of item mode carries the item scope, and ;fF and ;fe stay o
   const hint_keys = leaves(compiled.modes.item as never, "").filter(([, leaf]) => leaf.steps.some((step) => step.invocation.id === "hint.run" && step.invocation.args?.["filter"] !== "lists"));
   assert.ok(hint_keys.length > 40, `${hint_keys.length} hint keys`);
   for (const [key, leaf] of hint_keys) for (const step of leaf.steps.filter((step) => step.invocation.id === "hint.run")) assert.equal(step.invocation.args?.["scope"], "item", key);
+  const typed = (key: string) => String(leaves(compiled.modes.item as never, "").find(([found]) => found === key)?.[1].steps[0]?.invocation.args?.["text"]);
+  assert.deepEqual([typed(";;"), typed(";u")], ["hint --item ", "hint --item --custom "], "the typed hint commands carry the scope too");
   assert.ok(hint_keys.some(([key]) => key === ";Bl"), ";Bl is a hint key of item mode");
   for (const key of [";fF", ";fe"]) assert.ok(!hint_keys.some(([found]) => found === key), `${key} is not an item key`);
 });

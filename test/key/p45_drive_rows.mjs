@@ -85,7 +85,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
         if (event.key === "Enter") { if (selected >= 0) location.hash = "opened-" + prefix() + selected; }
-        else if (steps[event.key]) { panel.dataset.arrows = String(Number(panel.dataset.arrows ?? 0) + 1); select(index + steps[event.key]()); }
+        else if (steps[event.key]) { panel.dataset.arrows = String(Number(panel.dataset.arrows ?? 0) + 1); panel.dataset.order = (panel.dataset.order ?? "") + event.key.slice(5) + " "; select(index + steps[event.key]()); }
         else return;
         event.preventDefault();
       });
@@ -102,6 +102,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
   const selected_file = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.selected ?? -1`));
   const arrows_sent = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.arrows ?? 0`));
   const hash = () => in_active_tab("location.hash");
+  const arrow_order = () => in_active_tab(`document.getElementById("panel").dataset.order ?? ""`);
   const view_of = () => in_active_tab(`document.querySelector('[role="gridcell"]') !== null ? "grid" : "list"`);
 
   await run_case("list view: j takes the focus into the files from nowhere and moves down, and k moves up", async () => {
@@ -141,10 +142,25 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("j to select the second file", async () => (await selected_file()) === 1 && (await arrows_sent()) === 3);
     await sleep(500);
     expect((await selected_file()) === 1 && (await arrows_sent()) === 3, `the select ended on ${await selected_file()} after ${await arrows_sent()} arrows`);
+    expect((await arrow_order()) === "Down Up Down ", `the arrows went out as ${await arrow_order()}`);
     expect((await badge()) === "ITEM", "item mode ended");
   });
 
   // Where the Escape lands depends on timing: in the pick it cancels the picker, behind the pick it waits for the leaf and then leaves item mode. Either way the mode ends and no key stays held.
+  // The first I loaded hints.js into the frame. A second I then reaches the hint handler inside the call that starts its leaf, so the leaf it must wait for is the one still being named.
+  await run_case("list view: a second I with hints.js already loaded still holds j until the select has landed", async () => {
+    await open_drive_in_normal_mode("list_pick_warm");
+    await press_keys("I");
+    await poll_until("the first landing", async () => (await arrows_sent()) === 2);
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await badge()) === "NORMAL");
+    await press_keys("I", "j");
+    await poll_until("j to select the next file", async () => (await arrows_sent()) === 5);
+    await sleep(500);
+    expect((await arrow_order()) === "Down Up Down Up Down ", `the arrows went out as ${await arrow_order()}`);
+    expect((await badge()) === "ITEM", "item mode ended");
+  });
+
   await run_case("list view: Escape typed behind I and j leaves item mode and holds nothing back", async () => {
     await open_drive_in_normal_mode("list_pick_escape");
     await press_keys("I", "j", "-k", "Escape");
