@@ -35,6 +35,9 @@ const is_live_hold = (hold: MediaHold | undefined): hold is MediaHold => !!hold 
 // The end of a fullscreen reaches every frame of it at once. Firefox spends the Escape that closes a line in fullscreen on leaving the fullscreen, so the line's frame returns to the mode while the others report normal, in any order. A normal report this soon after a line closed, from a frame without the focus, is that same end. A normal report carries no cause, and content.js has no room for one.
 export const LINE_CLOSE_GRACE_MS = 500;
 
+// More steps than this waiting behind one frame are dropped.
+const MAX_PENDING_STEPS = 16;
+
 export function create_tab_media(deps: TabMediaDeps) {
   // One read-then-write at a time per background, so two reports together do not drop each other's change.
   let chain: Promise<unknown> = Promise.resolve();
@@ -44,8 +47,25 @@ export function create_tab_media(deps: TabMediaDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
-  // A step goes out without a wait: the queue is shared by every tab, and a frame that never answers (a page stuck in a loop) would hold every later report, join and keymap reply. Two steps to one frame may then arrive out of order, and the stored hold stays in charge: a frame that took a stale step reports it, and the report corrects it.
-  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number) => void best_effort(deps.send_step(tab_id, on, frame_id, from));
+  // Steps to one frame go out one after another, in the order the hold sent them, so an off step of an ended hold cannot land after the on step of the next one. A lane is that order for one frame (the key `all` is the lane of steps to every frame). The shared queue never waits on a lane: a frame that never answers (a page stuck in a loop) blocks its own lane, and the steps behind it in this tab, and nothing in another tab.
+  // A step to every frame waits for the lane of each frame the tab has, and a step to one frame waits for the last step to every frame. When the lanes are idle the step is sent at once.
+  const lanes = new Map<number, Map<number | "all", { tail: Promise<unknown>; pending: number }>>();
+  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number): void => {
+    const tab_lanes = lanes.get(tab_id) ?? new Map();
+    lanes.set(tab_id, tab_lanes);
+    const own = tab_lanes.get(frame_id ?? "all") ?? { tail: Promise.resolve(), pending: 0 };
+    tab_lanes.set(frame_id ?? "all", own);
+    // A frame that never answers would grow its lane for as long as the hold starts and ends. Storage stays in charge, so a step dropped here is corrected by the frame's next report.
+    if (own.pending >= MAX_PENDING_STEPS) return;
+    const every_frame = tab_lanes.get("all");
+    const waits = frame_id === undefined ? [...tab_lanes.values()] : every_frame && every_frame !== own ? [own, every_frame] : [own];
+    const send = () => best_effort(deps.send_step(tab_id, on, frame_id, from));
+    own.pending++;
+    const idle = waits.every((lane) => lane.pending === (lane === own ? 1 : 0));
+    const run = idle ? send() : Promise.all(waits.map((lane) => lane.tail)).then(send);
+    own.tail = run;
+    void run.then(() => void own.pending--);
+  };
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
   // The reporter gets no step off, because it left the mode already. No step on reaches a frame of the hold late: each frame joins by reporting the mode, so its step came first, and the step of a first report skips the reporter (`from`).
   const end = async (tab_id: number, hold: MediaHold, except?: number) => {
@@ -132,12 +152,14 @@ export function create_tab_media(deps: TabMediaDeps) {
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps the hold and drops the pin, so the keys act on the new main video: a `pushState` (YouTube's next video) sends a bare `url`, and a `replaceState` before the load event sends `status: "loading"` with the `url`.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
+        // The frames of the old page are gone, so the steps still waiting for them are dropped with their lanes.
+        if (change.status === "loading" && change.url === undefined) lanes.delete(tab_id);
         const hold = await read(tab_id);
         if (!hold) return;
         if (change.status === "loading" && change.url === undefined) await end(tab_id, hold);
         else if (hold.pin_frame !== undefined) await write(tab_id, without_pin(hold));
       }),
-    forget: (tab_id: number): Promise<void> => in_turn(() => deps.storage.remove(key_of(tab_id))),
+    forget: (tab_id: number): Promise<void> => in_turn(() => (lanes.delete(tab_id), deps.storage.remove(key_of(tab_id)))),
   };
 }
 

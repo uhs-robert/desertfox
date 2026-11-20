@@ -772,3 +772,47 @@ test("two steps to one frame that arrive out of order leave the stored hold in c
   assert.equal(store.has("desertfox_tab_media_4"), false, "no hold starts from the stale step");
   assert.deepEqual(steps.map((step) => step.on), [false], "the frame is stepped back off");
 });
+
+test("an off step still on its way when the tab enters again cannot reach the frame after the new on step", async () => {
+  const delivered: string[] = [];
+  const release: (() => void)[] = [];
+  const store = new Map<string, unknown>();
+  const media = create_tab_media({
+    storage: {
+      get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
+      set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
+      remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
+    } as never,
+    // The off step is slow: it is delivered only when released.
+    send_step: (_tab_id, on, frame_id) => (on ? (delivered.push(`on:${frame_id ?? "all"}`), Promise.resolve()) : new Promise<void>((resolve) => release.push(() => (delivered.push(`off:${frame_id}`), resolve())))),
+    frame_alive: async () => true,
+    now: () => 0,
+  });
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  delivered.length = 0;
+  await media.reported(4, 7, "normal", true);
+  await media.enter(4, 0);
+  await Promise.resolve();
+  assert.deepEqual(delivered, [], "the new on step waits behind the slow off step");
+  release.shift()!();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(delivered, ["off:0", "on:all"]);
+  assert.ok(store.get("desertfox_tab_media_4"), "the new hold survives");
+});
+
+test("a frame that never answers drops steps past a bound, and a navigation clears its queue", { timeout: 2000 }, async () => {
+  let calls = 0;
+  const media = create_tab_media({
+    storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
+    send_step: () => (calls++, new Promise(() => {})),
+    frame_alive: async () => true,
+    now: () => 0,
+  });
+  for (let index = 0; index < 40; index++) await media.enter(4, 0);
+  assert.equal(calls, 1, "one step reached the stuck frame, the rest wait or are dropped");
+  await media.reported(4, 0, "media", false);
+  await media.navigated(4, LOAD_START);
+  await media.enter(4, 0);
+  assert.equal(calls, 2, "after the navigation the lane starts fresh");
+});
