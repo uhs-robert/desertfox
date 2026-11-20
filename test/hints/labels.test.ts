@@ -71,14 +71,11 @@ test("rotate sends the top to the bottom, and leaves short stacks alone", () => 
 });
 
 test("item_first puts the item's targets first, also those in a shadow root, and keeps every other order", () => {
-  const item = { contains: (other: unknown) => other === item || other === inner_host } as unknown as Element;
+  const [a, c, d] = [0, 1, 2].map(() => ({ getRootNode: () => ({}) }) as unknown as Element) as [Element, Element, Element];
   const inner_host = {};
-  const plain = (): Element => ({ getRootNode: () => ({}) }) as unknown as Element;
-  const [a, b, c, d] = [plain(), plain(), plain(), plain()] as [Element, Element, Element, Element];
   const in_shadow = { getRootNode: () => ({ host: inner_host }) } as unknown as Element;
-  (item as unknown as { contains: (x: unknown) => boolean }).contains = (other) => other === a || other === inner_host;
+  const item = { contains: (other: unknown) => other === a || other === inner_host } as unknown as Element;
   const found = [c, a, d, in_shadow].map((element) => ({ element }));
   assert.deepEqual(item_first(found, item).map((target) => target.element), [a, in_shadow, c, d]);
   assert.equal(item_first(found, undefined), found);
-  void b;
 });
