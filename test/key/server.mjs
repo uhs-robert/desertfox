@@ -256,7 +256,15 @@ export function start_server() {
           if (!row) return;
           const folded = row.classList.toggle("coll");
           row.querySelector(".comment").classList.toggle("noshow", folded);
-          for (let next = row.nextElementSibling; next && depth_of(next) > depth_of(row); next = next.nextElementSibling) next.classList.toggle("noshow", folded);
+          // Opening a row keeps the replies of a descendant that is still folded hidden, as the site does.
+          let folded_depth = Infinity;
+          for (let next = row.nextElementSibling; next && depth_of(next) > depth_of(row); next = next.nextElementSibling) {
+            const depth = depth_of(next);
+            if (depth <= folded_depth) folded_depth = Infinity;
+            const under_fold = depth > folded_depth;
+            next.classList.toggle("noshow", folded || under_fold);
+            if (!folded && !under_fold && next.classList.contains("coll")) folded_depth = depth;
+          }
           document.documentElement.dataset.clicks += row.id + ",";
         });
       </script>`;

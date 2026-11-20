@@ -249,7 +249,7 @@ define("page.tree", {
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Move through the elements this CSS selector finds." },
     { name: "link", type: "string", optional: true, description: "Focus the element this CSS selector finds in the item." },
     { name: "depth", type: "string", pattern: "^[A-Za-z_][A-Za-z0-9_.:-]*$", description: "Read the depth from the attribute of this name." },
-    { name: "depth_from", type: "enum", values: ["item", "inside", "above"], default: "item", value_labels: { inside: "from inside the item", above: "from above the item" }, description: { inside: "Read it from inside the item, where depth-at finds it.", above: "Read it from the closest ancestor that depth-at finds." } },
+    { name: "depth_from", type: "enum", values: ["item", "inside", "above"], default: "item", description: { inside: "Read it from inside the item, where depth-at finds it.", above: "Read it from the closest ancestor that depth-at finds." } },
     // The arm never holds (the param needs `inside` or `above`), so the param is required once its `when` holds.
     { name: "depth_at", type: "string", default: [{ value: "", when: { depth_from: ["item"] } }], when: { depth_from: ["inside", "above"] }, description: "Find the element that holds the depth with this selector." },
     { name: "fold", type: "string", default: "", description: "Click what this CSS selector finds in the item to fold it." },
