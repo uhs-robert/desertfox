@@ -52,7 +52,10 @@ const MAX_BYTES = {
   // 18.5 KB: item mode: the list picker reads short lists and the items of a site row as the one list.
   // 19 KB: item mode: the list picker offers a site row's list with the finder's other lists, and a picked side list stays active for the row's keys (the pin).
   // 20 KB: item mode: the list picker offers navigation and sidebar menus as pick-only lists (the menu pass).
-  "item.js": 20 * 1024,
+  // 20.5 KB: item mode: the list picker offers role=listbox, grid, feed and tree widgets as pick-only lists (ARIA lists), through the ARIA pass.
+  // 21 KB: item mode: the ARIA lists take their own time limit and the tree branches.
+  // 21.5 KB: item mode: the ARIA lists skip the dialog, calendar and table-grid widgets.
+  "item.js": 21.5 * 1024,
   // 3 KB: the item actions (Space toggles the current item's checkbox, Enter opens its link), with the hint click they share with `hints.js`. The bundle loads on the first press.
   "item_act.js": 3 * 1024,
   // 4 KB: page.tree (h, l, { and } through the comments of a thread, and the fold keys), with the hint click it shares with `hints.js`. The bundle loads on the first press.
