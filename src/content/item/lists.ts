@@ -6,9 +6,9 @@ import { forget_move } from "./pick.ts";
 import { is_shown } from "../shown.ts";
 
 // While a picked side list is pinned, the row's selector and link mean nothing for it, so the move takes the finder path that walks the derived list. The pin is read first, because the read can drop it (its list left the page).
-export const args_for_pin = <A extends { selector?: string; link?: string }>(derived: DerivedRow, args: A): A => {
+export const args_for_pin = <A extends { selector?: string; link?: string; section?: string }>(derived: DerivedRow, args: A): A => {
   if (!derived.pinned_()) return args;
-  const { selector: _selector, link: _link, ...unbound } = args;
+  const { selector: _selector, link: _link, section: _section, ...unbound } = args;
   return unbound as A;
 };
 
