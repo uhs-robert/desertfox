@@ -98,6 +98,19 @@ export function read_cursor(page: ItemPage, shown_: boolean): ItemCursor | undef
   return args?.selector ? { item_: last_move!.item_.deref(), selector_: args.selector, shown_, land_: (item) => land_on(page, item, args) } : undefined;
 }
 
+const LINK = "a[href]";
+
+// The item that item mode treats as current, and its link, for an action on that item (the hints of `scope: item`, Space, Enter). The item that holds the focus wins over the last one moved to, as for a move, so a click or Tab into another item counts. Nothing before a first move, or once the last item has left the page.
+export function current_item(page: ItemPage): { item_: Element; link_: Element | undefined } | undefined {
+  const args = last_move?.args_;
+  const focused = page.focused();
+  if (!args) return undefined;
+  const item = items_of(page, args).find((candidate) => focused && candidate.contains(focused)) ?? last_move?.item_.deref();
+  if (!item?.isConnected) return undefined;
+  const link = args.link ? item.querySelector(args.link) : args.selector ? undefined : page.derived?.link_of_(item);
+  return { item_: item, link_: link ?? (item.matches(LINK) ? item : (item.querySelector(LINK) ?? undefined)) };
+}
+
 // A row that names a link and finds none in an item (a comment among stories) focuses the item itself. An item that is not focusable takes tabindex -1, so a script can focus it and the tab order stays as it was.
 function focus_target(item: Element, link_selector: string | undefined, found_link: Element | undefined): HTMLElement {
   const own = item as HTMLElement;
@@ -112,11 +125,13 @@ const row_selector = (page: ItemPage, args: ItemArgs): string => args.selector |
 // A row that names its selector asks for the hover outright. The finder's items get it only while one holds a thumbnail, checked again when the wait ends, so a text result gets no hover card opened.
 const hover_check = (args: ItemArgs, item: Element) => (args.hover ? () => !!args.selector || !!thumbnail(item) : undefined);
 
+const items_of = (page: ItemPage, args: ItemArgs, keep?: boolean): Element[] => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_(keep) ?? []));
+
 export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Promise<void> {
   // A selector the browser cannot parse throws its own error, which the host reports as a failed command.
   // A box the browser hides or that has no size cannot be moved to.
   // An end command reads on with `keep`, so its own scroll cannot hand the follow to another list.
-  const read_items = (keep?: boolean) => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_(keep) ?? []));
+  const read_items = (keep?: boolean) => items_of(page, args, keep);
   const items = read_items();
   const { direction } = args;
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then. With no selector (the finder's gg and G) they refuse instead, and content.js scrolls to the top or bottom.

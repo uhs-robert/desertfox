@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 562 (normal 264, media 58, item 67, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 560 (normal 264, media 58, item 65, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -408,40 +408,38 @@ Which-key group names:
 | `gT` | `tab.prev` | Previous tab |
 | `gi` | `page.focus_input` | Focus input |
 | `<F1>` | `help` | Help |
-| `f` | `hint` | Click element |
-| `F` | `hint --background` | Click element in background tab |
-| `;v` | `hint --caret --prose` | Start caret mode at text |
-| `;V` | `hint --visual --prose` | Start visual mode at text |
+| `f` | `hint --item` | Click element |
+| `F` | `hint --background --item` | Click element in background tab |
+| `;v` | `hint --caret --prose --item` | Start caret mode at text |
+| `;V` | `hint --visual --prose --item` | Start visual mode at text |
 | `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
 | `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
-| `;b` | `hint --buttons` | Click button |
-| `;a` | `hint --every` | Click every element |
-| `;t` | `hint --prose` | Click text |
-| `;s` | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |
-| `;i` | `hint --inputs` | Click input |
-| `;l` | `hint --links` | Click link |
-| `;I` | `hint --images` | Open image in new tab |
-| `;yl` | `hint --copy --links` | Copy link URL |
-| `;yi` | `hint --copy-image --images` | Copy picture |
-| `;yI` | `hint --copy --images` | Copy image URL |
-| `;ym` | `hint --copy --media` | Copy media URL |
-| `;yf` | `hint --copy --frames` | Copy frame URL |
-| `;yt` | `hint --copy-text --all` | Copy text |
-| `;yc` | `hint --copy-selector --every` | Copy CSS selector |
-| `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
-| `;yh` | `hint --copy-html --every` | Copy outer HTML |
-| `;ff` | `hint --frames` | Focus frame |
-| `;of` | `hint --inspect --frames` | Inspect frame |
-| `;hf` | `hint --hover --frames` | Hover frame |
-| `;xf` | `hint --delete --frames` | Delete frame |
-| `;fF` | `frame.exit` | Focus top page |
-| `;fs` | `hint --focus --scrollable` | Focus scroll box |
-| `;fe` | `page.focus_input` | Main input |
-| `;fh` | `hint --focus --headings` | Focus heading |
-| `;m` | `hint --media` | Play or pause media |
-| `;M` | `hint --enter-media --media` | Start media mode at a video |
-| `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |
-| `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
+| `;b` | `hint --buttons --item` | Click button |
+| `;a` | `hint --every --item` | Click every element |
+| `;t` | `hint --prose --item` | Click text |
+| `;s` | `hint --grab-swipe --swipeable --item` | Swipe a carousel or slider with the keys |
+| `;i` | `hint --inputs --item` | Click input |
+| `;l` | `hint --links --item` | Click link |
+| `;I` | `hint --images --item` | Open image in new tab |
+| `;yl` | `hint --copy --links --item` | Copy link URL |
+| `;yi` | `hint --copy-image --images --item` | Copy picture |
+| `;yI` | `hint --copy --images --item` | Copy image URL |
+| `;ym` | `hint --copy --media --item` | Copy media URL |
+| `;yf` | `hint --copy --frames --item` | Copy frame URL |
+| `;yt` | `hint --copy-text --all --item` | Copy text |
+| `;yc` | `hint --copy-selector --every --item` | Copy CSS selector |
+| `;Y` | `hint --copy --links --item --rapid` | Copy several link URLs |
+| `;yh` | `hint --copy-html --every --item` | Copy outer HTML |
+| `;ff` | `hint --frames --item` | Focus frame |
+| `;of` | `hint --inspect --frames --item` | Inspect frame |
+| `;hf` | `hint --hover --frames --item` | Hover frame |
+| `;xf` | `hint --delete --frames --item` | Delete frame |
+| `;fs` | `hint --focus --scrollable --item` | Focus scroll box |
+| `;fh` | `hint --focus --headings --item` | Focus heading |
+| `;m` | `hint --media --item` | Play or pause media |
+| `;M` | `hint --enter-media --media --item` | Start media mode at a video |
+| `;gg` | `hint --grab --draggable --item` | Grab an element and drop it on a target |
+| `;Gg` | `hint --grab-move --draggable --item` | Grab an element and move it with the keys |
 | `:` | `cmdline.open` | Command line |
 | `/` | `find` | Find forward |
 | `g?` | `help` | Help |

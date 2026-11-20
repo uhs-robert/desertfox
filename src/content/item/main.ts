@@ -1,7 +1,7 @@
 // The `item` bundle: the handler of `page.item`, which item mode and site rows bind to j and k on result pages, and `item.start`, which starts item mode on a list page. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { follow_item, move_item, read_cursor } from "./pick.ts";
+import { current_item, follow_item, move_item, read_cursor } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
@@ -57,6 +57,11 @@ if (!item_window.desertfox_item_ready && host) {
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
   host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined) : (args.take as (regions: unknown) => void)(lists_with_row(() => page.derived.lists_(), args.selector as string | undefined))));
+  // The hints bundle (`scope: item`) and the item actions call this through `run_command_` and hand a callback that takes the item and its link.
+  host.register_handler_("item.current", (args) => {
+    const current = current_item(page);
+    (args.take as (item: Element | undefined, link: Element | undefined) => void)(current?.item_, current?.link_);
+  });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }

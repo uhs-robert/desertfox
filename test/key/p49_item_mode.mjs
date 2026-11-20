@@ -217,6 +217,35 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await poll_until("the next j to move on", async () => (await focused()) !== first && (await focused()).startsWith("c"));
   });
 
+  const hint_labels = () => in_active_tab(`[...document.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0)`);
+
+  await run_case("f in item mode labels only the current item, and after Escape f labels the page", async () => {
+    await open_list("im_scope");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await press_keys("jj");
+    await expect_focus("c2");
+    await press_keys("f");
+    await poll_until("the labels", async () => (await hint_labels()) > 0);
+    expect((await hint_labels()) === 1, `${await hint_labels()} labels in the item`);
+    await press_keys("-k", "Escape");
+    await expect_badge("ITEM");
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    await press_keys("f");
+    await poll_until("the page labels", async () => (await hint_labels()) > 1);
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("f in item mode with no item moved to yet labels the page", async () => {
+    await open_list("im_scope_none");
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("f");
+    await poll_until("the page labels", async () => (await hint_labels()) > 1);
+    await press_keys("-k", "Escape");
+  });
+
   await run_case("H in item mode goes back in the tab history", async () => {
     await open_list("im_hist_a");
     await in_active_tab(`location.href = "/item_list?id=im_hist_b"; 0`);

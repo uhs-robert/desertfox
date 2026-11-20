@@ -1,5 +1,5 @@
 import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
-import type { KeyBinding } from "../shared/invocation.ts";
+import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.
@@ -520,8 +520,14 @@ const MEDIA_KEYS: ModeBindings = {
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
 const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L"];
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
+// Item mode copies the hint keys with `scope: item`, so they label the current item. The all-frames `;fF` stays out, as the schema refuses it with an item scope, and so does `;fe`.
+const in_item_scope = (binding: KeyBinding): KeyBinding => {
+  const scoped = (step: BoundInvocation) => (step.id === "hint.run" ? { ...step, args: { ...step.args, scope: "item" } } : step);
+  return Array.isArray(binding) ? binding.map(scoped) : scoped(binding);
+};
+const keys_copied_to_item = Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence));
 const ITEM_KEYS: ModeBindings = {
-  ...Object.fromEntries(Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";"))),
+  ...Object.fromEntries(keys_copied_to_item.map(([sequence, binding]) => [sequence, in_item_scope(binding as KeyBinding)])),
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
