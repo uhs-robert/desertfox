@@ -80,11 +80,23 @@ test("the item section holds the item keys and, of normal mode, only the tab, pa
   assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["?", "T", "g", "i", "t"], "the g group holds gg, gt, gT, g? and gi");
   for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children), [group], `${group}${group} alone`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
-  assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").sort(), "the whole ; family");
+  assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").filter((key) => key !== ";fF" && key !== ";fe").sort(), "the ; family but the normal-only keys");
   for (const key of ["o", "t", "<Space>", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
 });
 
 const step_ids = (node: unknown): string[] => (node as { steps: { invocation: { id: string } }[] }).steps.map((step) => step.invocation.id);
+
+// Every copied hint key labels the current item, the modifier variants (;Bl) too. The two normal-only keys are absent because the schema refuses an item scope with all frames.
+test("every hint key of item mode carries the item scope, and ;fF and ;fe stay out of it", () => {
+  const compiled = compiled_with();
+  const leaves = (node: { kind: string; children?: Record<string, unknown> }, prefix: string): [string, { steps: { invocation: { id: string; args?: Record<string, unknown> } }[] }][] =>
+    node.kind === "branch" ? Object.entries(node.children!).flatMap(([key, child]) => leaves(child as never, prefix + key)) : [[prefix, node as never]];
+  const hint_keys = leaves(compiled.modes.item as never, "").filter(([, leaf]) => leaf.steps.some((step) => step.invocation.id === "hint.run" && step.invocation.args?.["filter"] !== "lists"));
+  assert.ok(hint_keys.length > 40, `${hint_keys.length} hint keys`);
+  for (const [key, leaf] of hint_keys) for (const step of leaf.steps.filter((step) => step.invocation.id === "hint.run")) assert.equal(step.invocation.args?.["scope"], "item", key);
+  assert.ok(hint_keys.some(([key]) => key === ";Bl"), ";Bl is a hint key of item mode");
+  for (const key of [";fF", ";fe"]) assert.ok(!hint_keys.some(([found]) => found === key), `${key} is not an item key`);
+});
 
 test("I hints the lists and lands on the pick, in normal mode and in item mode, and ;j is gone", () => {
   const compiled = compiled_with();

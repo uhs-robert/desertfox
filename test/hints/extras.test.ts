@@ -677,8 +677,16 @@ test("an invalid custom selector shows a notice instead of throwing", async () =
 
 test("hint.run needs no text: it defaults to empty, which filters nothing", () => {
   const checked = check_args(registry.get("hint.run")!, { action: "here" });
-  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", text: "", frames: "same_origin", rapid: false, register: "" } });
+  assert.deepEqual(checked, { ok: true, args: { action: "here", filter: "clickable", scope: "page", text: "", frames: "same_origin", rapid: false, register: "" } });
   assert.equal(check_args(registry.get("hint.run")!, { action: "copy_text", text: "x", rapid: true }).ok, true);
+});
+
+test("the item scope refuses all frames and a list pick, and takes the other filters", () => {
+  const hint = registry.get("hint.run")!;
+  assert.equal(check_args(hint, { scope: "item", frames: "all_frames" }).ok, false);
+  assert.equal(check_args(hint, { scope: "item", filter: "lists" }).ok, false);
+  assert.equal(check_args(hint, { scope: "item", filter: "links", action: "tab" }).ok, true);
+  assert.equal(check_args(hint, { scope: "page", frames: "all_frames" }).ok, true);
 });
 
 test("text keeps links only: a sole matching button is not clicked", async () => {

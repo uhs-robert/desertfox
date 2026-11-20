@@ -5,7 +5,7 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { create_derived_row } from "../src/content/item/derived.ts";
-import { move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
+import { current_item, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
 
@@ -169,6 +169,18 @@ test("move_item focuses the link inside the next item, reveals it only when it i
   const off = fake_page(list, false);
   move_item(off.page, { selector: "li", link: "a.t", direction: "down" });
   assert.deepEqual(off.log, ["focus link 0", "scroll 0 center"]);
+});
+
+test("current_item is the item that holds the focus, else the last one moved to, with its link", () => {
+  const held = fake_page(list, true, 1);
+  move_item(held.page, { selector: "li", link: "a.t", direction: "down" });
+  assert.equal(current_item(held.page)?.item_, held.items[1], "the focused item wins over the one landed on");
+  const moved = fake_page(list);
+  move_item(moved.page, { selector: "li", link: "a.t", direction: "down" });
+  assert.equal(current_item(moved.page)?.item_, moved.items[0], "the last move");
+  assert.ok(current_item(moved.page)?.link_, "the row's link");
+  (moved.items[0] as unknown as { isConnected: boolean }).isConnected = false;
+  assert.equal(current_item(moved.page), undefined, "an item the page dropped is no current item");
 });
 
 // The two layouts of the saved Kagi pages. Tiles of a flex row share a height and differ in width, with a row below. Tiles of the column masonry have the heights of their grid-row spans and no shared row lines, and the DOM order fills the holes.
