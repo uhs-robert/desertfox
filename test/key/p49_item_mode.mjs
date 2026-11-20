@@ -275,12 +275,17 @@ export async function run_cases({ events, wait_event, run_line, config_dir, conf
 
   await run_case("H in item mode goes back in the tab history", async () => {
     await open_list("im_hist_a");
+    // The tab refuses scripts while it navigates, so each poll starts once the new document has read its keys.
+    const forward_mark = events.length;
     await in_active_tab(`location.href = "/item_list?id=im_hist_b"; 0`);
+    await wait_event(forward_mark, (event) => event.type === "tree_read" && event.page_id === "im_hist_b", "content script ready on the second page", 6000);
     await poll_until("the second page", async () => (await in_active_tab("location.search")) === "?id=im_hist_b" && (await in_active_tab("document.readyState")) === "complete");
     await sleep(800);
     await press_keys("I");
     await expect_badge("ITEM");
+    const back_mark = events.length;
     await press_keys("H");
+    await wait_event(back_mark, (event) => event.type === "tree_read" && event.page_id === "im_hist_a", "content script ready on the first page again", 6000);
     await poll_until("the first page again", async () => (await in_active_tab("location.search")) === "?id=im_hist_a" && (await in_active_tab("document.readyState")) === "complete");
   });
 
