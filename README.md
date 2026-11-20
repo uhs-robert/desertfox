@@ -268,6 +268,7 @@ DesertFox is free. If it saves you time, you can sponsor its development on [Git
 
 - [docs/design.md](docs/design.md): architecture, scope and what is not yet built.
 - [docs/keymap.md](docs/keymap.md): every default key.
+- [docs/item_mode.md](docs/item_mode.md): walk a page's lists and comments one item at a time.
 - [docs/site_rows.md](docs/site_rows.md): the keys DesertFox adds on named sites.
 - [docs/firefox-behavior.md](docs/firefox-behavior.md): what Firefox allows, measured.
 - [src/README.md](src/README.md): a code map for contributors.
