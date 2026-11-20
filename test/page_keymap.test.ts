@@ -796,11 +796,11 @@ test("the drive row binds plain item moves, and the page reply turns them into f
     assert.deepEqual(leaf.steps.map((step) => step.count_rule), [leaf.steps[0]!.count_rule], key);
     assert.deepEqual(leaf.steps.map((step) => step.jump), [true], key);
   }
-  // Enter is bound so that one typed behind G or gg waits for the select. The default Enter of the mode (item action open) stays behind it for a page with no file.
+  // Enter is bound so that one typed behind G or gg waits for the select. While a dialog is open the guard fails, and the real Enter goes to the page: no leaf stays behind it, not even the mode's item action open.
   const enter = await leaf_at("<Enter>");
-  assert.equal(enter.when_present, `${grid}, ${list}`);
+  assert.equal(enter.when_present, `body:not(:has([role="dialog"])) ${grid}, body:not(:has([role="dialog"])) ${list}`);
   assert.deepEqual([enter.steps.map((step) => step.invocation.id), enter.steps[0]?.invocation.args?.["key"]], [["page.send_key"], "Enter"]);
-  assert.deepEqual(enter.otherwise?.steps.map((step) => step.invocation.id), ["page.item_action"]);
+  assert.deepEqual([enter.otherwise, enter.otherwise_page], [undefined, true]);
   // The row keeps its own keys beside the derived ones.
   for (const key of ["I", "zz"]) assert.equal((await leaf_at(key)).steps[0]?.invocation.id === undefined, false, key);
   // The arrows cannot walk a list the row does not name, so the item-mode picker offers the row's list alone as well.

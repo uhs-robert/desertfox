@@ -173,6 +173,8 @@ const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
 const DRIVE_ANY_ITEM = `${DRIVE_GRID_ITEM}, ${DRIVE_LIST_ITEM}`;
 // Each key runs only while the page shows a file of its view, so a page with no file keeps the plain scroll.
 const drive_move = (guard: string, direction: "down" | "up" | "left" | "right", intent: string): BoundInvocation => ({ ...item_step(guard, undefined, direction), when_present: guard, intent });
+// Enter opens the selected file, but while a dialog is open (rename, share, move) the Enter belongs to the dialog's own button. The guard fails then, and `otherwise = "page"` gives the real key to the page instead of the mode's own open.
+const DRIVE_FILES_WITHOUT_DIALOG = [DRIVE_GRID_ITEM, DRIVE_LIST_ITEM].map((item) => `body:not(:has([role="dialog"])) ${item}`).join(", ");
 // A list has one file per row, so h and l keep the plain sideways scroll there, which a narrow window needs.
 const DRIVE_BIND: BindingTable = {
   j: drive_move(DRIVE_ANY_ITEM, "down", "Move to the file below (scrolls the page when no file shows)"),
@@ -181,7 +183,7 @@ const DRIVE_BIND: BindingTable = {
   h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left (scrolls sideways in the list view)"),
   l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right (scrolls sideways in the list view)"),
   // An Enter the row does not bind reaches the page at once, so one typed right behind G reaches the page before G finishes, at the focus G has not yet reached. A bound Enter waits for the end key and opens what Drive has selected.
-  "<Enter>": { id: "page.send_key", args: { key: "Enter", key_code: 13 }, when_present: DRIVE_ANY_ITEM, intent: "Open the selected file" },
+  "<Enter>": { id: "page.send_key", args: { key: "Enter", key_code: 13 }, when_present: DRIVE_FILES_WITHOUT_DIALOG, otherwise: "page", intent: "Open the selected file" },
 };
 
 // Each row that names its items in the `item` column marks its sites with `item_navigator = "shipped"`, so they start in item mode under the default global value `shipped` and under true, and not under false. A user row with its own value comes first in the table and decides the site.

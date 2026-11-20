@@ -38,6 +38,8 @@ export type TreeLeaf = {
   when_focus?: string;
   when_present?: string;
   otherwise?: TreeLeaf;
+  // The bind wrote `otherwise = "page"`: the graft keeps the replaced leaf off the chain, so a failed guard leaves the key to the page.
+  otherwise_page?: true;
   steps: LeafStep[];
 };
 

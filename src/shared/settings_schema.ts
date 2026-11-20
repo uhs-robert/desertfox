@@ -105,12 +105,13 @@ function bind_steps_problem(steps: unknown): string | undefined {
     if (is_text(step)) continue;
     if (is_run_table(step)) return 'mixes choices ({ run } tables) with steps, and a list holds only one kind';
     if (!is_table(step) || !is_text(step.id)) return 'has a step that is neither a command string nor a table with an "id"';
-    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", ...BIND_TEXT_FIELDS].includes(name));
+    const unknown_field = Object.keys(step).find((name) => !["id", "args", "prompt", OTHERWISE_FIELD, ...BIND_TEXT_FIELDS].includes(name));
     if (unknown_field !== undefined) return `has a step with the unknown field "${unknown_field}"`;
     if ((step.args !== undefined && !is_table(step.args)) || (step.prompt !== undefined && !is_table(step.prompt))) return 'has a step with "args" or "prompt" that is not a table';
     if (BIND_TEXT_FIELDS.some((name) => step[name] !== undefined && typeof step[name] !== "string")) return `has a step with ${TEXT_FIELDS_PHRASE} that is not text`;
     // A guard guards the whole bind and is read from its first step only, so on a later step it would be ignored.
-    const guard = index === 0 ? undefined : GUARD_FIELDS.find((name) => step[name] !== undefined);
+    if (otherwise_problem(step) !== undefined) return `has a step ${otherwise_problem(step)}`;
+    const guard = index === 0 ? undefined : [...GUARD_FIELDS, OTHERWISE_FIELD].find((name) => step[name] !== undefined);
     if (guard !== undefined) return `has "${guard}" on step ${index + 1}, but only the first step can carry a guard (for choices, write a list of { run, ${guard} } tables)`;
   }
   return undefined;
@@ -118,6 +119,9 @@ function bind_steps_problem(steps: unknown): string | undefined {
 
 const GUARD_FIELDS = ["when_focus", "when_present"];
 const BIND_TEXT_FIELDS = ["label", "intent", ...GUARD_FIELDS];
+// `otherwise = "page"` is the only value, and like a guard it counts on the first step only.
+const OTHERWISE_FIELD = "otherwise";
+const otherwise_problem = (fields: Record<string, unknown>): string | undefined => (fields[OTHERWISE_FIELD] === undefined || fields[OTHERWISE_FIELD] === "page" ? undefined : 'with an "otherwise" other than "page"');
 const TEXT_FIELDS_PHRASE = 'a "label", "intent", "when_focus" or "when_present"';
 
 // A choice's guards, on its `run` table or on its first step as the build stores it.
@@ -140,9 +144,11 @@ function binding_problem(binding: unknown): string | undefined {
     return undefined;
   }
   if (is_run_table(binding)) {
-    const unknown_field = Object.keys(binding).find((name) => !["run", ...BIND_TEXT_FIELDS].includes(name));
+    const unknown_field = Object.keys(binding).find((name) => !["run", OTHERWISE_FIELD, ...BIND_TEXT_FIELDS].includes(name));
     if (unknown_field !== undefined) return `with the unknown field "${unknown_field}"`;
     if (BIND_TEXT_FIELDS.some((name) => binding[name] !== undefined && typeof binding[name] !== "string")) return `with ${TEXT_FIELDS_PHRASE} that is not text`;
+    const wrong_otherwise = otherwise_problem(binding);
+    if (wrong_otherwise !== undefined) return wrong_otherwise;
   }
   const problem = bind_steps_problem(is_run_table(binding) ? binding.run : binding);
   return problem === undefined ? undefined : `to something that ${problem}`;

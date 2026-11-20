@@ -44,6 +44,7 @@ export function make_entry_resolver(registry: Registry, sources: EnumSources, pr
     }
     if (entry.when_focus !== undefined) [binding].flat()[0]!.when_focus = entry.when_focus;
     if (entry.when_present !== undefined) [binding].flat()[0]!.when_present = entry.when_present;
+    if (entry.otherwise !== undefined) [binding].flat()[0]!.otherwise = entry.otherwise;
     return binding;
   };
 }

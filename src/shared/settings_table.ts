@@ -15,7 +15,7 @@ type EnumValue = string | number | boolean;
 // A table from a key sequence to a binding, in the formats of a keymap entry: a command string, a list of steps, a `{ run, label, intent }` table. The build resolves the text into invocations (`BoundInvocation`), which is also what the shipped rows write. The compiler checks each command and its args with the registry validator.
 // A site row bind may also be a choice list: a list of `run` tables, each guarded by `when_present` or `when_focus`, of which the first whose guards hold runs. The build stores each choice as its list of invocations.
 export type BindStep = string | BoundInvocation;
-export type BindRun = { run: BindStep | readonly BindStep[]; label?: string; intent?: string; when_focus?: string; when_present?: string };
+export type BindRun = { run: BindStep | readonly BindStep[]; label?: string; intent?: string; when_focus?: string; when_present?: string; otherwise?: "page" };
 export type BindChoices = readonly BindRun[] | readonly (readonly BoundInvocation[])[];
 export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[] | BindRun | BindChoices>>;
 

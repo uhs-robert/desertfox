@@ -82,6 +82,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
       // Drive reads the keys on the page and acts on the file the event comes from, or on its selection when the focus left the files.
       const steps = { ArrowDown: () => per_line(), ArrowUp: () => -per_line(), ArrowLeft: () => -1, ArrowRight: () => 1 };
       document.addEventListener("keydown", (event) => {
+        if (event.target.closest?.('[role="dialog"]')) return;
         const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
@@ -371,6 +372,38 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("g3");
     expect((await view_of()) === "grid", "the view flipped");
   });
+
+  // A real Enter on the focused button clicks it. The sent Enter of the bind is not trusted and would click nothing.
+  await run_case("list view: Enter with a dialog open reaches the dialog's focused button and opens no file", async () => {
+    await open_drive("list_dialog", "list");
+    await press_keys("j");
+    await expect_focus("f1");
+    await in_active_tab(`(() => {
+      const dialog = document.createElement("div");
+      dialog.setAttribute("role", "dialog");
+      dialog.innerHTML = '<button id="dialog_ok">OK</button>';
+      document.body.append(dialog);
+      document.getElementById("dialog_ok").onclick = () => { document.body.dataset.dialog_clicks = String(Number(document.body.dataset.dialog_clicks ?? 0) + 1); };
+      document.getElementById("dialog_ok").focus();
+      return true;
+    })()`);
+    await expect_focus("dialog_ok");
+    await press_keys("-k", "Return");
+    await poll_until("the dialog button to be clicked", async () => (await in_active_tab(`document.body.dataset.dialog_clicks ?? 0`)) === "1");
+    await sleep(300);
+    expect((await hash()) === "#before", `Enter opened a file: ${await hash()}`);
+  });
+
+  for (const view of ["list", "grid"]) {
+    await run_case(`${view} view: Enter on a selected file with no dialog still opens it`, async () => {
+      await open_drive(`${view}_enter`, view);
+      await press_keys("j");
+      await poll_until("a file selected", async () => (await selected_file()) >= 1);
+      const wanted = `#opened-${view === "grid" ? "g" : "f"}${await selected_file()}`;
+      await press_keys("-k", "Return");
+      await poll_until("Enter to open the selected file", async () => (await hash()) === wanted);
+    });
+  }
 
   await run_case("on a page with no file list, gg and G scroll as usual", async () => {
     await open_page("controls", "drive_empty", { new_tab: true });
