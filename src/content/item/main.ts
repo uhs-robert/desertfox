@@ -32,7 +32,7 @@ if (!item_window.desertfox_item_ready && host) {
     overflow_y_: (element: Element) => getComputedStyle(element).overflowY,
     // A timer and not the next frame, because a hidden tab draws no frames.
     wait_: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-    now_: Date.now,
+    now_: () => performance.now(),
     watch_user_,
   };
   host.register_handler_("page.item", (args) => move_item(page, args_for_pin(page.derived, args as unknown as ItemArgs)));
@@ -46,7 +46,7 @@ if (!item_window.desertfox_item_ready && host) {
     enter_: () => (page.derived.unpin_(), host.set_mode_("item")),
     when_idle_: (run) => requestIdleCallback(run, { timeout: 1000 }),
     later_: (run, ms) => setTimeout(run, ms),
-    now_: Date.now,
+    now_: () => performance.now(),
     on_unload_: (run, on) => (on ? addEventListener : removeEventListener)("beforeunload", run),
   });
   host.register_handler_("item.start", (args) => start(args.selectors as string[] | undefined));

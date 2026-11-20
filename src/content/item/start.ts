@@ -19,26 +19,50 @@ export type StartDeps = {
 export const ROW_ITEMS_WAIT_MS = 5000;
 const ROW_ITEMS_LOOK_EVERY_MS = 250;
 
-// The ask is spent at once: a page where the user left item mode, or one that had no list, never starts again, however often the background asks. The checks run when the page is idle, after any key the user pressed meanwhile, so the user's first key wins: a page that took a key or a click, a field that holds the focus and a mode other than normal all mean the user got there first, and end the wait for a row's items too.
+// A leave that the user or the browser cancels fires `beforeunload` too, and the page stays. The flag clears this long after the event, and a real unload ends the page and its timer first.
+export const UNLOAD_SETTLE_MS = 1500;
+
+// The ask is spent at once: a page where the user left item mode, or one that had no list, never starts again, however often the background asks. The checks run when the page is idle, after any key the user pressed meanwhile, so the user's first key wins: a page that took a key or a click, a field that holds the focus and a mode other than normal all mean the user got there first, and end the wait for a row's items too. The one exception is a leave that came to nothing: the wait parks while the page may be leaving, and starts again when the page stays.
 export function create_item_start(deps: StartDeps): (selectors?: readonly string[]) => void {
   let asked = false;
   return (selectors = []) => {
     if (asked) return;
     asked = true;
     const user_got_there_first = () => deps.mode_() !== "normal" || deps.user_active_() || deps.in_field_();
-    // A late timer must not stretch the wait, so it ends by the clock, counted from the ask.
-    const deadline = deps.now_() + ROW_ITEMS_WAIT_MS;
+    // A late timer must not stretch the wait, so it ends by the clock, counted from the ask, or from the restart after a cancelled leave.
+    let deadline = deps.now_() + ROW_ITEMS_WAIT_MS;
     // A page that navigates on its own during the wait stays live while the next page loads, and must not enter then.
     let unloading = false;
-    const unload = () => (unloading = true);
+    // The look saw the flag and stopped, so only the settle timer can start it again. Without it the settle timer has nothing to restart.
+    let parked = false;
+    // Only the latest leave's timer clears the flag, so an earlier timer does not cut a later leave short.
+    let leaves = 0;
+    const settle = (leave: number) => {
+      if (leave !== leaves) return;
+      unloading = false;
+      if (!parked) return;
+      parked = false;
+      deadline = deps.now_() + ROW_ITEMS_WAIT_MS;
+      deps.on_unload_(unload, true);
+      deps.when_idle_(look);
+    };
+    const unload = () => {
+      unloading = true;
+      const leave = ++leaves;
+      deps.later_(() => settle(leave), UNLOAD_SETTLE_MS);
+    };
     // Each look reads the gate again right before it enters, so a mode the user picked during the wait stands.
-    const look = () => {
-      if (!unloading && !user_got_there_first() && deps.now_() <= deadline) {
+    function look() {
+      if (unloading) {
+        parked = true;
+        return deps.on_unload_(unload, false);
+      }
+      if (!user_got_there_first() && deps.now_() <= deadline) {
         if (deps.has_list_(selectors)) deps.enter_();
         else if (selectors[0]) return deps.later_(look, ROW_ITEMS_LOOK_EVERY_MS);
       }
       deps.on_unload_(unload, false);
-    };
+    }
     deps.on_unload_(unload, true);
     deps.when_idle_(look);
   };
