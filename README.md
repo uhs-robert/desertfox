@@ -22,7 +22,7 @@ DesertFox puts Vim keys in Firefox. Press `f` and a short label appears next to 
 
 If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, counts, registers, marks, macros and `.` work as you expect. If you do not know Vim, the first day needs five keys. If you come from another keyboard tool for the browser, see [Switching](#switching-from-tridactyl-vimium-or-vim).
 
-**The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `<A-?>` in normal, hint, caret or visual mode to open it with the top-level keys of that mode. A Quick Start page opens when you install DesertFox, and a Practice page has 14 short lessons that you do on the page. Press `g?` to open the help page, which lists every key.
+**The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `<A-?>` in normal, hint, caret or visual mode to open it with the top-level keys of that mode. A Quick Start page opens when you install DesertFox, and a Practice page has 15 short lessons that you do on the page. Press `g?` to open the help page, which lists every key.
 
 <p align="center"><img src="./docs/images/which-key.png" width="800" alt="The Practice page with the which-key popup open after the t key. The popup lists the tab keys, such as d for duplicate tab and T for switch tab."/></p>
 
@@ -77,7 +77,7 @@ See [AGENTS.md](AGENTS.md) for the build and install commands.
 
 After you install DesertFox, the Quick Start page opens. It teaches scrolling, hints, the command line, the which-key popup, modes, page search, caret and visual mode, and help, with the keys read from your keymap. It also sits in the help sidebar.
 
-Then open the Practice page from the help sidebar or the new tab page. It has 14 short lessons, from scrolling to keyboard drag and video. You do each task on the page, and the page ticks it off.
+Then open the Practice page from the help sidebar or the new tab page. It has 15 short lessons, from scrolling to keyboard drag, list walking and video. You do each task on the page, and the page ticks it off.
 
 The first day needs five keys: `j` and `k` to scroll, `f` to click, `:` for the command line and `g?` for help. Press `g?`, `,h` or `<F1>` on a normal page to open the help page. Press `g` and wait: a short pause after a key that starts a sequence shows the keys that can follow. Press `<A-?>` to see every top-level key.
 

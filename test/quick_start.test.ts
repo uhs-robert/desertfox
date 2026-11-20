@@ -183,7 +183,7 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
   const { practice_lessons, practice_intro, practice_outro } = await import("../src/help/practice_lessons.ts");
   const compiled = compile(DEFAULT_KEYMAP);
   const lessons = practice_lessons(compiled, all_commands);
-  assert.equal(lessons.length, 14);
+  assert.equal(lessons.length, 15);
   const inlines_of = (slug: string) => { const lesson = lessons.find((each) => each.slug === slug)!; return [...lesson.goal, ...lesson.steps.flat(), ...lesson.notes.flat()]; };
   const keys = (slug: string) => inlines_of(slug).filter((inline) => inline.kind === "keys").map((inline) => inline.text);
   // A default key that went missing would show as a command line or as "(no key bound)".
@@ -197,6 +197,7 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
     form: ["gi", "]i", "[i"],
     inputs: [";i", ";ri", ";b"],
     slider: [";Gg", ";gg", "l", "h", "<Enter>", "?"],
+    list: ["<Escape>"],
     copy: [";yt", ";V", "as", "y"],
     "command-line": [":", "H"],
     tabs: ["F", "T", "dd", "<A-x>", "gl"],
