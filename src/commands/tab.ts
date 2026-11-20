@@ -489,6 +489,7 @@ define("tab.mute", {
   intent: "Mute the tab, or unmute it when it is muted.",
   bridge: true,
   runs_in: "background",
+  modes: ["normal", "item"],
   run: (ctx) => handlers.mute(ctx),
 });
 

@@ -103,6 +103,19 @@ test("an own fullscreen from item mode starts media mode and its end goes to nor
   assert.equal(state.media_ended_(true, undefined), "normal");
 });
 
+test("a field that ends media mode drops the item origin, so a later media mode from normal ends in normal", () => {
+  const state = create_mode_state();
+  state.set_mode_("item");
+  state.set_mode_("media");
+  state.focus_entered_editable_();
+  assert.equal(state.get_mode_(), "insert");
+  state.focus_left_editable_();
+  assert.equal(state.get_mode_(), "normal");
+  state.set_mode_("media");
+  state.escape();
+  assert.equal(state.get_mode_(), "normal");
+});
+
 test("item mode follows the focus into a field and ends there, as media mode does", () => {
   const state = create_mode_state();
   state.set_mode_("item");
@@ -151,7 +164,7 @@ test("the item section holds the item keys and, of normal mode, only the tab, pa
   for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children), [group], `${group}${group} alone`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
   assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").filter((key) => key !== ";fF" && key !== ";fe").sort(), "the ; family but the normal-only keys");
-  assert.deepEqual(Object.keys((item.children["a"] as { children: object }).children).sort(), ["P", "S", "V", "a", "f", "h", "l", "p", "r", "s", "v"], "the a media group");
+  assert.deepEqual(Object.keys((item.children["a"] as { children: object }).children).sort(), ["P", "S", "V", "a", "f", "h", "l", "m", "p", "r", "s", "v"], "the a media group");
   for (const key of ["o", "t", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
 });
 

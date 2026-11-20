@@ -31,6 +31,8 @@ export function create_mode_state(initial: Mode = "normal") {
 
   const follow_focus_to_ = (next: Mode) => {
     if (next === mode) return;
+    // Focus ends media mode without set_mode_, so the origin is dropped here for every route out.
+    if (next !== "media" && !is_line(next)) media_from_item = false;
     mode = next;
     on_change(mode);
     on_display_change();
@@ -39,7 +41,6 @@ export function create_mode_state(initial: Mode = "normal") {
   const set_mode_ = (next: Mode) => {
     manual_insert = next === "insert";
     if (next === "media") media_from_item ||= mode === "item" || (is_line(mode) && back_mode === "item");
-    else if (!is_line(next)) media_from_item = false;
     if (is_line(next) && !is_line(mode)) back_mode = mode === "media" || mode === "item" ? mode : "normal";
     follow_focus_to_(next);
   };
