@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { ancestors, descendants } from "../../src/content/next_page/detect.ts";
 import type { PageReader } from "../../src/content/next_page/detect.ts";
 import { find_items } from "../../src/content/item/finder.ts";
+import { find_menus } from "../../src/content/item/menus.ts";
 import type { FinderKind, Found } from "../../src/content/item/finder.ts";
 import { FIXTURES, read_saved_page, saved_reader } from "../support/snapshot_page.ts";
 import type { SavedNode, SavedPage } from "../support/snapshot_page.ts";
@@ -82,8 +83,11 @@ for (const [name, label] of Object.entries(labels).filter(([, entry]) => entry.f
   });
 }
 
-// A label with no `regions` says the page has one list, or none when it answers none. The others name the lists the finder keeps besides the first, which the derived row switches between. Lists under 60% of the view are `pick_only_`: only a pick makes one active, so the labels leave them out and `SHORT_LISTS` counts them.
+// A label with no `regions` says the page has one list, or none when it answers none. The others name the lists the finder keeps besides the first, which the derived row switches between. Lists under 60% of the view are `pick_only_`: only a pick makes one active, so the labels leave them out and `SHORT_LISTS` counts them. The menus (`MENUS`) are pick-only too and come after the short lists.
 const SHORT_LISTS: Record<string, number> = { bing: 2, ddg: 2, ddg_news: 1, gh_repo: 1, guardian_world: 1, ikea_chairs: 1, ja_rakuten: 1, ru_ria: 2, stackoverflow_list: 2 };
+// The menus of nav, role navigation and aside blocks that hold a stack of four or more links, per page. A page not named has none.
+const MENUS: Record<string, number> = { bing: 1, books_toscrape: 1, devto: 3, discourse_latest: 1, gh_issues_list: 2, mdn_queryselectorall: 2, reddit_gallery: 1, reddit_new: 1, stackoverflow_list: 1, stackoverflow_q: 1, tildes: 1, wikipedia_article: 1, wikipedia_firefox: 2, youtube_search: 1, youtube_search_scrolled: 1 };
+const menus_on = (name: string) => find_menus(saved_reader(page_of(name)), () => false);
 const long_regions = (name: string) => finder_on(name).regions.filter((region) => !region.pick_only_);
 
 test("the finder keeps the lists that the labels count, the largest first", () => {
@@ -93,11 +97,24 @@ test("the finder keeps the lists that the labels count, the largest first", () =
 });
 
 test("the finder also keeps the lists under 60% of the view, after the long ones", () => {
-  const shorts = Object.fromEntries(saved.map((name) => [name, finder_on(name).regions.filter((region) => region.pick_only_).length]).filter(([, count]) => count !== 0));
+  const shorts = Object.fromEntries(saved.map((name) => [name, finder_on(name).regions.filter((region) => region.pick_only_).length - menus_on(name).length]).filter(([, count]) => count !== 0));
   assert.deepEqual(shorts, SHORT_LISTS);
   for (const name of saved) {
     const { regions } = finder_on(name);
     assert.equal(regions.findIndex((region) => region.pick_only_) === -1 || regions.slice(regions.findIndex((region) => region.pick_only_)).every((region) => region.pick_only_), true, `${name}: short lists come last`);
+  }
+});
+
+test("the finder keeps the navigation menus last, and no page shows more than two in one view", () => {
+  const counts = Object.fromEntries(saved.map((name) => [name, menus_on(name).length]).filter(([, count]) => count !== 0));
+  assert.deepEqual(counts, MENUS);
+  for (const name of saved) {
+    const { regions } = finder_on(name);
+    const menus = menus_on(name);
+    assert.deepEqual(regions.slice(regions.length - menus.length).map((region) => region.items), menus.map((region) => region.items), `${name}: menus come last`);
+    const view_h = page_of(name).view.h;
+    const first_boxes = menus.map((menu) => saved_reader(page_of(name)).box_(menu.items[0]!)!.y);
+    for (const top of first_boxes) assert.ok(first_boxes.filter((at) => at >= top && at < top + view_h).length <= 2, `${name}: more than two menus in one view`);
   }
 });
 
