@@ -819,6 +819,28 @@ test("the drive row binds plain item moves, and the page reply turns them into f
   assert.deepEqual(shape(await leaf_at("j", off)), ["item:down"]);
 });
 
+test("a thread row's own } and { keep their guard, and a failed guard falls through to the section jump of the item keys", async () => {
+  const compiled = with_defaults({});
+  const keys = (await ask(compiled, "https://news.ycombinator.com/item?id=1"))!.keymap.modes.item!.children as Record<string, TreeLeaf>;
+  for (const [key, direction, action] of [["}", "next_section", "next"], ["{", "prev_section", "prev"]] as const) {
+    const own = keys[key]!;
+    assert.deepEqual([own.steps[0]?.invocation.id, own.steps[0]?.invocation.args?.["action"], own.when_present], ["page.tree", action, "tr.comtr"], key);
+    const default_jump = own.otherwise!;
+    assert.deepEqual([default_jump.steps[0]?.invocation.id, default_jump.steps[0]?.invocation.args?.["direction"], default_jump.steps[0]?.invocation.args?.["selector"], default_jump.when_present], ["page.item", direction, "", undefined], key);
+  }
+  // A page with no row keeps the plain section jump.
+  const plain = (await ask(compiled, "https://example.test/"))!.keymap.modes.item!.children["}"] as TreeLeaf;
+  assert.deepEqual([plain.steps[0]?.invocation.args?.["direction"], plain.otherwise], ["next_section", undefined]);
+});
+
+test("with item_select arrows a section jump of a row selects through a Down and Up, as the current landing does", async () => {
+  const row = { site: "https://example.org/*", keymap: { item: { j: { id: "page.item", args: { selector: "li.hit", direction: "down" } }, "}": { id: "page.item", args: { selector: "li.hit", section: "h2", direction: "next_section" } } } } };
+  const compiled = with_defaults({ item_select: "arrows", site_rules: [row] });
+  const jump = (await ask(compiled, "https://example.org/"))!.keymap.modes.item!.children["}"] as TreeLeaf;
+  assert.deepEqual(jump.steps.map((step) => [step.invocation.args?.["direction"] ?? step.invocation.args?.["key"], step.count_rule === "ignore"]).slice(1), [["ArrowDown", true], ["ArrowUp", true]]);
+  assert.equal(jump.steps[0]?.invocation.args?.["section"], "h2");
+});
+
 test("a global item_select of arrows rewrites the item rows that name a selector and leaves the finder keys", async () => {
   const compiled = with_defaults({ item_select: "arrows" });
   const reply = (await ask(compiled, "https://news.ycombinator.com/news"))!;

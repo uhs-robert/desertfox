@@ -127,6 +127,18 @@ test("zt, zz and zb in item mode go back to the current item and then scroll it"
   for (const key of ["zt", "zz", "zb"]) assert.deepEqual(step_ids((compiled.modes.item!.children["z"] as { children: Record<string, unknown> }).children[key.slice(1)]), ["page.item", "scroll.align"], key);
 });
 
+test("a row with an item selector and no } or { gets guarded section jumps, and its own } and { stay", () => {
+  const down = { id: "page.item", args: { selector: "li.hit", direction: "down" } };
+  const plain = with_item_landings({ site: "https://example.org/*", keymap: { item: { j: down } } } as never).keymap?.["item"] as Record<string, { when_present?: string; args?: Record<string, unknown> }>;
+  for (const [key, direction] of [["}", "next_section"], ["{", "prev_section"]] as const) assert.deepEqual([plain[key]?.when_present, plain[key]?.args], ["li.hit", { selector: "li.hit", direction }], key);
+  const rich = with_item_landings({ site: "https://example.org/*", keymap: { item: { j: { id: "page.item", args: { selector: "li.hit", link: "a.t", hover: true, direction: "down" } } } } } as never).keymap?.["item"] as Record<string, { args?: Record<string, unknown> }>;
+  assert.deepEqual(rich["}"]?.args, { selector: "li.hit", link: "a.t", hover: true, direction: "next_section" }, "the row's link and hover stay");
+  const own = { id: "page.tree", args: { action: "next" }, when_present: "tr.c" };
+  const kept = with_item_landings({ site: "https://example.org/*", keymap: { item: { j: down, "}": own } } } as never).keymap?.["item"] as Record<string, unknown>;
+  assert.equal(kept["}"], own);
+  assert.equal((kept["{"] as { args?: Record<string, unknown> }).args?.["direction"], "prev_section");
+});
+
 test("a row with an item selector gets I and zt, zz and zb for its own items, a user row too, and its own binds win", () => {
   const google = compiled_with().site_rules?.find((rule) => rule.origin === "default" && rule.name === "google")!;
   const selector = "#search div.MjjYud:has(a > h3)";
