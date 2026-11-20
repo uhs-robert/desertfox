@@ -11,7 +11,7 @@ const WIDGETS = Object.keys(ITEM_ROLE)
   .join(",");
 // A date picker is a grid whose rows hold a week of short day numbers (seven two-digit days make 14 characters). A list row holds more text than that.
 const DATE_ROW_CHARS = 16;
-const TIMED_OUT = Symbol("timed out");
+const TIMED_OUT = Symbol();
 
 // The shown items of one widget. A tree is flat: a branch is an item too, and the box of its own label (its first child that holds no item) stands for it, since the branch's own box covers its children. The other widgets take their outermost items, so a reply inside a post is no item of the feed. A grid built of a native `table` has `tr` rows with no role.
 function items_of<N>(reader: PageReader<N>, widget: N, role: string, check: () => void): N[] {
