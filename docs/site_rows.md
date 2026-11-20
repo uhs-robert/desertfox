@@ -414,7 +414,7 @@ In item mode:
 
 ### `reddit`
 
-Addresses: `https://www.reddit.com/*`, `https://reddit.com/*`
+Addresses: `https://www.reddit.com/r/*/comments/*`, `https://reddit.com/r/*/comments/*`, `https://www.reddit.com/*`, `https://reddit.com/*`
 
 In item mode:
 
@@ -422,7 +422,15 @@ In item mode:
 | --- | --- |
 | `j` | Go to item below |
 | `k` | Go to item above |
+| `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
+| `h` | Go to the parent comment |
+| `l` | Go to the first reply, or unfold a folded comment |
+| `}` | Go to the next sibling comment |
+| `{` | Go to the previous sibling comment |
+| `za` | Fold or unfold the comment |
+| `zc` | Fold the thread, or the parent of a comment with no replies |
+| `zo` | Unfold the comment |
 
 ### `drive`
 

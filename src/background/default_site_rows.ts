@@ -146,6 +146,26 @@ const TILDES_ITEMS = item_binds("article.topic", "h1.topic-title > a");
 // Reddit unloads posts far above the view, so gg would stop at the first post still drawn and not at the top of the feed. The row leaves gg out and keeps G, which follows the loading to the end. Item mode's own gg then runs: the finder's first item, which can also be a post still drawn, or the scroll to the top where the finder reads no list. The descendant combinator reaches the later pages, which sit in `faceplate-batch`. Ads are `shreddit-ad-post`, which the selector does not match. A thread page holds no `shreddit-feed`, so j and k scroll there.
 // A user overview page mixes posts and `shreddit-profile-comment`, so both are items. A comment holds a permalink overlay instead of a full-post link, so Enter opens the comment. A post lists its full-post link first, so the post keeps that link.
 const { gg: _gg, ...REDDIT_ITEMS } = item_binds("shreddit-feed shreddit-post, shreddit-feed shreddit-profile-comment", 'a[slot="full-post-link"], a[href*="/comment/"]');
+// A comment head is the author line of a `shreddit-comment`, `shreddit-comment > details > summary`, and the summary is also the fold control: a click toggles the native `details`, and a folded comment is `details:not([open])`, a parent of the item. The depth is on the closest `shreddit-comment`. The replies of a folded comment keep their boxes but fail `checkVisibility()`, so they drop out of the walk. Replies that the page has not loaded (`faceplate-partial.more-comments-partial`) are not items.
+// The summary holds the author's profile link, which Enter would open. The `link` names a link no head holds, so Enter says there is none, as on a Hacker News comment. A thread page does not start item mode: the user presses I, which offers this list.
+const REDDIT_COMMENTS = "shreddit-comment > details > summary";
+const REDDIT_COMMENT_LINK = 'a[slot="full-post-link"]';
+const reddit_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", intent: string): BoundInvocation => ({
+  id: "page.tree",
+  intent,
+  args: { action, selector: REDDIT_COMMENTS, link: REDDIT_COMMENT_LINK, depth: "depth", depth_from: "above", depth_at: "shreddit-comment", fold: "summary", folded: "details:not([open])" },
+  when_present: REDDIT_COMMENTS,
+});
+const REDDIT_THREAD_ITEMS = {
+  ...item_binds(REDDIT_COMMENTS, REDDIT_COMMENT_LINK),
+  h: reddit_tree("parent", "Go to the parent comment"),
+  l: reddit_tree("child", "Go to the first reply, or unfold a folded comment"),
+  "}": reddit_tree("next", "Go to the next sibling comment"),
+  "{": reddit_tree("prev", "Go to the previous sibling comment"),
+  za: reddit_tree("toggle", "Fold or unfold the comment"),
+  zc: reddit_tree("fold", "Fold the thread, or the parent of a comment with no replies"),
+  zo: reddit_tree("unfold", "Unfold the comment"),
+};
 // Drive keeps its own selection, and Enter opens the selected file. `item_select = "arrows"` (`item_select.ts`) turns these plain `page.item` moves into Drive's own arrow keys, so j, k, h and l move the selection, scroll Drive's panel and draw more rows, and gg and G go to the ends and select the end file. `current` takes the focus into the files from the view toggle or from nowhere, so an arrow never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
@@ -225,6 +245,9 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "tildes", row: { site: "https://tildes.net/*", keymap: { item: TILDES_ITEMS }, item_navigator: "shipped" } },
   { name: "amazon", row: { site: "https://www.amazon.com/s?*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
   { name: "amazon", row: { site: "https://www.amazon.com/s/*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
+  // A thread page comes before the feed rows and shares their name, so `reddit` in `default_site_rows_off` turns both off. `item_navigator = false` keeps item mode off on the page.
+  { name: "reddit", row: { site: "https://www.reddit.com/r/*/comments/*", keymap: { item: REDDIT_THREAD_ITEMS }, item_navigator: false } },
+  { name: "reddit", row: { site: "https://reddit.com/r/*/comments/*", keymap: { item: REDDIT_THREAD_ITEMS }, item_navigator: false } },
   { name: "reddit", row: { site: "https://www.reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
   { name: "reddit", row: { site: "https://reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
   { name: "drive", row: { site: "https://drive.google.com/drive/*", keymap: { item: DRIVE_BIND }, item_navigator: "shipped", item_select: "arrows" } },
