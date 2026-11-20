@@ -716,3 +716,20 @@ test("a pin set before the first read still holds the list", () => {
   assert.equal(row.pinned_(), true);
   assert.deepEqual(active_names(row), ["c1"]);
 });
+
+test("a pin keeps its list through two reads in a row that run out of time, and drops only when a whole read lacks the list", () => {
+  const { state, row, comments } = pinned_setup();
+  state.fails = "timeout";
+  comments[0]!.isConnected = false;
+  row.items_();
+  row.items_();
+  row.items_();
+  state.fails = "";
+  assert.equal(row.pinned_(), true, "timeouts say nothing about the list");
+  state.clock += NONE_RECHECK_MS;
+  row.items_();
+  assert.deepEqual(active_names(row), ["c1", "c2"], "the next whole read finds the list through its items");
+  state.others = [];
+  comments.forEach((entry) => (entry.isConnected = false));
+  assert.equal(row.pinned_(), false, "a whole read without the list drops it");
+});
