@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_item_start, ROW_ITEMS_WAIT_MS } from "../../src/content/item/start.ts";
+import { create_item_start, ROW_ITEMS_WAIT_MS, UNLOAD_SETTLE_MS } from "../../src/content/item/start.ts";
 
 function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) {
   const idle: (() => void)[] = [];
@@ -124,7 +124,7 @@ test("the wait for a row's items gives up after about 5 s, and a key or a field 
   none.start(["div.file"]);
   assert.equal(none.idle.length, 1, "the ask is spent");
   assert.equal(none.entered(), 0);
-  for (const change of [{ active: true }, { field: true }, { mode: "insert" }]) {
+  for (const change of [{ active: true }, { field: true }, { mode: "insert" }, { mode: "item" }]) {
     const keyed = make();
     keyed.state.list = false;
     keyed.start(["div.file"]);
@@ -177,4 +177,69 @@ test("a page that starts to unload during the wait does not enter, and the unloa
   found.idle[0]!();
   assert.equal(found.entered(), 1);
   assert.equal(found.unload_listeners.size, 0);
+});
+
+test("a leave that is cancelled lets the wait start again once the settle timer passes", () => {
+  const { start, idle, state, timers, pass, unload_listeners, entered } = make();
+  state.list = false;
+  start(["div.file"]);
+  idle[0]!();
+  for (const run of unload_listeners) run();
+  state.list = true;
+  pass(UNLOAD_SETTLE_MS + 250);
+  assert.equal(entered(), 0, "the restart waits for the page to be idle");
+  idle[1]!();
+  assert.equal(entered(), 1);
+  assert.equal(unload_listeners.size, 0);
+  assert.equal(timers.length, 0);
+});
+
+test("a page that navigates itself stays out until the settle timer, and a real unload, which kills the timer, starts nothing", () => {
+  const leaving = make();
+  leaving.start();
+  for (const run of leaving.unload_listeners) run();
+  leaving.idle[0]!();
+  assert.equal(leaving.entered(), 0, "the page is leaving");
+  assert.equal(leaving.idle.length, 1, "nothing restarts before the timer");
+  // The page is gone: the timer never runs, so no look is queued and nothing enters.
+  assert.equal(leaving.timers.length, 1);
+  assert.equal(leaving.unload_listeners.size, 0);
+});
+
+test("a settle timer that fires after the user took the page starts nothing", () => {
+  const { start, idle, state, pass, unload_listeners, entered } = make();
+  start();
+  [...unload_listeners][0]!();
+  idle[0]!();
+  state.mode = "item";
+  pass(UNLOAD_SETTLE_MS);
+  idle[1]!();
+  assert.equal(entered(), 0, "the user's mode stands");
+});
+
+test("a settle timer that fires after the wait ended asks for no new look", () => {
+  const { start, idle, pass, unload_listeners, entered } = make();
+  start();
+  const unload = [...unload_listeners][0]!;
+  idle[0]!();
+  assert.equal(entered(), 1);
+  unload();
+  pass(UNLOAD_SETTLE_MS);
+  assert.equal(idle.length, 1);
+  assert.equal(entered(), 1);
+});
+
+test("an earlier leave's timer does not clear the flag of a later leave", () => {
+  const { start, idle, timers, unload_listeners, entered, state } = make();
+  start();
+  const unload = [...unload_listeners][0]!;
+  unload();
+  unload();
+  idle[0]!();
+  timers.shift()!.run();
+  state.list = true;
+  assert.equal(idle.length, 1, "still waiting for the later timer");
+  timers.shift()!.run();
+  idle[1]!();
+  assert.equal(entered(), 1);
 });
