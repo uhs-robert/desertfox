@@ -30,11 +30,13 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 <p align="center"><img src="./docs/images/drag.gif" width="800" alt="One card on the Practice page work board is grabbed with ;gg and dropped on the Doing column picked by hint, then grabbed again and dropped on Done."/></p>
 
+**Walk a page one item at a time.** Press `I` on a page with a list or a grid, such as search results. `j` and `k` move to the next and previous item, and `h` and `l` move across a grid. `Enter` opens the item's link and `Escape` goes back to normal mode. [Item mode guide](docs/item_mode.md).
+
+<p align="center"><img src="./docs/images/item_ddg_images.gif" width="800" alt="DuckDuckGo image results for desertfox. Pressing I starts item mode, and l, j, h and k move a box from picture to picture across the grid."/></p>
+
+<p align="center"><img src="./docs/images/item_ddg.gif" width="800" alt="DuckDuckGo web results for desertfox firefox. Pressing I starts item mode, and j and k move a box from result to result."/></p>
+
 You can edit any text box in your own editor, such as Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor (see [host/README.md](host/README.md)). Without it, `<C-o>` shows an error that says where to create the file.
-
-## 🧭 Item mode
-
-**Walk a page one item at a time.** A search result, a story, a file or a comment is an item. Press `I` and type the hint of a list. A page with one list starts at once. Then `j` and `k` move to the next and previous item with a box around it, `h` and `l` move across a grid, `}` and `{` jump between sections, `Enter` opens the item's link and `Space` ticks its checkbox. `Escape` goes back to normal mode. On some sites item mode starts by itself. [Item mode guide](docs/item_mode.md).
 
 ## 🏆 Why DesertFox
 
@@ -179,6 +181,7 @@ You lose:
 - Click anything with `f`, and scroll, search, select text and drag without the mouse.
 - Run any command by name with `:`, with completion for every flag and value.
 - Manage tabs, bookmarks, history, containers and tab sessions.
+- Walk a page's lists and grids one item at a time with `I`, `j` and `k`. [Item mode guide](docs/item_mode.md).
 - Repeat yourself with `.`, macros, registers and marks.
 - Control video and audio from the keyboard.
 - Set keys and settings per site, and keep your config in files.

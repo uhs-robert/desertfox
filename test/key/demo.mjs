@@ -17,6 +17,8 @@ const STILL_SIZE = "1280x800";
 const GIF_MAX_BYTES = 5 * 1024 * 1024;
 // The board scene alone, for a README section about dragging.
 const DRAG_GIF_MAX_BYTES = 2 * 1024 * 1024;
+// Each live item mode scene alone, for the README's "What it is" section.
+const ITEM_GIF_MAX_BYTES = 2 * 1024 * 1024;
 // Tried in order. The frame rate falls before the width, and the first that fits the cap wins.
 const GIF_SETTINGS = [{ fps: 12, width: 960 }, { fps: 10, width: 960 }, { fps: 8, width: 960 }, { fps: 10, width: 800 }, { fps: 8, width: 800 }, { fps: 8, width: 640 }];
 // A press stays on screen this long, or until the next press, and the overlay shows the last few presses together.
@@ -30,11 +32,11 @@ function run_tool(tool, args) {
 }
 
 // One drawtext per press, in the top right corner under the toolbar. The text goes through a file so no key needs escaping.
-function overlay_filter(key_presses, stage_dir) {
+function overlay_filter(key_presses, stage_dir, file_prefix = "") {
   const stops = key_presses.map((press, index) => Math.min(key_presses[index + 1]?.at_s ?? Infinity, press.at_s + OVERLAY_HOLD_S));
   return key_presses.map((press, index) => {
     const recent = key_presses.slice(0, index + 1).filter((earlier) => press.at_s - earlier.at_s <= OVERLAY_HOLD_S).slice(-OVERLAY_KEYS_SHOWN);
-    const text_path = join(stage_dir, `overlay_${index}.txt`);
+    const text_path = join(stage_dir, `${file_prefix}overlay_${index}.txt`);
     writeFileSync(text_path, recent.map((earlier) => earlier.label).join(" "));
     return `drawtext=textfile=${text_path}:expansion=none:fontfile=${process.env.DEMO_FONT ?? "/usr/share/fonts/TTF/DejaVuSansMono.ttf"}:fontsize=26:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=10:x=w-tw-28:y=104:enable='between(t,${press.at_s.toFixed(2)},${stops[index].toFixed(2)})'`;
   }).join(",");
@@ -78,15 +80,22 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const { film_seconds, key_presses, board_scene } = JSON.parse(readFileSync(join(scenes.stage_dir, "film.json"), "utf8"));
+    const { film_seconds, key_presses, board_scene, item_films } = JSON.parse(readFileSync(join(scenes.stage_dir, "film.json"), "utf8"));
     check_film_length(join(scenes.stage_dir, "film.mkv"), film_seconds);
     const burned_path = join(scenes.stage_dir, "film_with_keys.mkv");
     run_tool("ffmpeg", ["-y", "-v", "error", "-t", String(film_seconds), "-i", join(scenes.stage_dir, "film.mkv"), "-vf", overlay_filter(key_presses, scenes.stage_dir), "-c:v", "libx264", "-crf", "14", "-preset", "ultrafast", burned_path]);
     make_gif(burned_path, join(scenes.stage_dir, "demo.gif"));
     make_gif(burned_path, join(scenes.stage_dir, "drag.gif"), DRAG_GIF_MAX_BYTES, ["-ss", String(Math.max(0, board_scene.start_s - 0.3)), "-t", String(board_scene.end_s - board_scene.start_s + 0.3)]);
+    const item_gifs = [];
+    for (const item_film of item_films) {
+      const item_burned_path = join(scenes.stage_dir, `item_${item_film.name}_with_keys.mkv`);
+      run_tool("ffmpeg", ["-y", "-v", "error", "-t", String(item_film.film_seconds), "-i", join(scenes.stage_dir, `item_${item_film.name}.mkv`), "-vf", overlay_filter(item_film.key_presses, scenes.stage_dir, `${item_film.name}_`), "-c:v", "libx264", "-crf", "14", "-preset", "ultrafast", item_burned_path]);
+      make_gif(item_burned_path, join(scenes.stage_dir, `item_${item_film.name}.gif`), ITEM_GIF_MAX_BYTES);
+      item_gifs.push(`item_${item_film.name}.gif`);
+    }
     for (const name of STILL_NAMES) check_still_size(join(scenes.stage_dir, `${name}.png`));
     mkdirSync(output_dir, { recursive: true });
-    for (const file of [...STILL_NAMES.map((name) => `${name}.png`), "demo.gif", "drag.gif"]) copyFileSync(join(scenes.stage_dir, file), join(output_dir, file));
+    for (const file of [...STILL_NAMES.map((name) => `${name}.png`), "demo.gif", "drag.gif", ...item_gifs]) copyFileSync(join(scenes.stage_dir, file), join(output_dir, file));
   } finally {
     rmSync(scenes.stage_dir, { recursive: true, force: true });
   }
