@@ -266,6 +266,43 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await poll_until("the first page again", async () => (await in_active_tab("location.search")) === "?id=im_hist_a" && (await in_active_tab("document.readyState")) === "complete");
   });
 
+  const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
+  const expect_toast = (text) => poll_until(`the notice ${text}`, async () => (await toast_text()).includes(text));
+
+  // Three sections of two cards: c0 c1, c2 c3, c4 c5.
+  await run_case("} and { jump between the sections the finder nests, { first goes to the start of its own section, and a count jumps that many", async () => {
+    await open_list("im_sections");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await expect_focus("c0");
+    await press_keys("}");
+    await expect_focus("c2");
+    await press_keys("j", "{");
+    await expect_focus("c2");
+    await press_keys("{");
+    await expect_focus("c0");
+    await press_keys("2}");
+    await expect_focus("c4");
+    await press_keys("}");
+    await expect_toast("No next section");
+    await press_keys("9{");
+    await expect_focus("c0");
+    await press_keys("{");
+    await expect_toast("No previous section");
+  });
+
+  await run_case("} and { on a flat list say there are no sections and leave the page where it is", async () => {
+    await open_list("im_flat");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await expect_focus("c0");
+    await press_keys("}");
+    await expect_toast("No sections in this list");
+    await press_keys("{");
+    await expect_focus("c0");
+    expect(!(await scrolled()), "} scrolled a list with no sections");
+  });
+
   await run_case("zz in item mode goes back to the current item and centers it", async () => {
     await open_list("im_align");
     await press_keys("I");
