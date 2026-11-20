@@ -197,7 +197,7 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
     form: ["gi", "]i", "[i"],
     inputs: [";i", ";ri", ";b"],
     slider: [";Gg", ";gg", "l", "h", "<Enter>", "?"],
-    list: ["<Escape>"],
+    list: ["I", "j", "k", "<Enter>", "<Escape>", "gg", "G"],
     copy: [";yt", ";V", "as", "y"],
     "command-line": [":", "H"],
     tabs: ["F", "T", "dd", "<A-x>", "gl"],
