@@ -1,4 +1,4 @@
-// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a load of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
+// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a reload of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -174,7 +174,8 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_focus("c0");
   });
 
-  await run_case("a load of the page ends item mode, and a pushState keeps it", async () => {
+  // A link the page follows itself keeps item mode on the new page (p49_item_start), so a reload stands for the load here.
+  await run_case("a reload of the page ends item mode, and a pushState keeps it", async () => {
     await open_list("im_nav");
     await run_line("mode item");
     await expect_badge("ITEM");
@@ -183,8 +184,8 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_badge("ITEM");
     await press_keys("j");
     await expect_focus("c0");
-    await in_active_tab(`location.href = "/item_list?id=im_nav_loaded"; 0`);
-    await poll_until("the new page to load", async () => (await in_active_tab("location.search")) === "?id=im_nav_loaded" && (await in_active_tab("document.readyState")) === "complete");
+    await in_active_tab(`window.im_nav_old_page = true; location.reload(); 0`);
+    await poll_until("the page to load again", async () => (await in_active_tab("window.im_nav_old_page === undefined && document.readyState === 'complete'")) === true);
     await expect_badge("NORMAL");
     await sleep(500);
     await press_keys("j");

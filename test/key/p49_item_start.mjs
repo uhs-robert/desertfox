@@ -1,4 +1,4 @@
-// The item_navigator setting means that list pages start in item mode: when a page with a list has loaded, the badge says ITEM with no key pressed. A page with no list stays in normal mode, Escape leaves item mode for good on that page, a key pressed before the load completes keeps the page in normal mode, and a site row that sets the setting to false keeps its page in normal mode.
+// The item_navigator setting means that list pages start in item mode: when a page with a list has loaded, the badge says ITEM with no key pressed. A page with no list stays in normal mode, Escape leaves item mode for good on that page, a key pressed before the load completes keeps the page in normal mode, and a site row that sets the setting to false keeps its page in normal mode. With the setting at its default, a link followed in item mode opens a list page in item mode, and a reload or Back does not.
 // A page that should start opens without the key probe, since any key pressed before the start wins over it. The probe runs once the badge says ITEM.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -111,5 +111,37 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_badge("ITEM");
     await press_keys("j");
     await poll_until("focus on f0 in the frame", async () => (await in_active_tab(`document.getElementById("inner").contentDocument.activeElement?.id ?? ""`)) === "f0");
+  });
+
+  await setup("load the config with item_navigator at its default, which starts no test page", async () => {
+    // The reload key is a normal mode key, and the last page may sit in item mode.
+    await open_page("page", "is_sticky_setup", { new_tab: true });
+    await load_config_dir(config_copy());
+  });
+
+  await run_case("Enter on an item whose link opens a list page in the same tab lands in item mode, and a reload or Back does not", async () => {
+    await open_page("item_list", "is_sticky_from", { new_tab: true });
+    // An unload listener keeps the page out of the back-forward cache, so Back below loads it again.
+    await in_active_tab(`document.querySelectorAll(".card a").forEach((link) => (link.href = ${JSON.stringify(url_of("item_list", "is_sticky_to"))})); addEventListener("unload", () => {}); 0`);
+    await press_keys("I");
+    await expect_badge("ITEM");
+    const mark = events.length;
+    await press_keys("j", "-k", "Return");
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "is_sticky_to", "content script ready on is_sticky_to", 6000);
+    await expect_started("is_sticky_to");
+    await press_keys("j");
+    await poll_until("focus on c0", async () => (await focused()) === "c0");
+    const reload_mark = events.length;
+    await in_active_tab("location.reload(); 0");
+    await wait_event(reload_mark, (event) => event.type === "tree_read" && event.page_id === "is_sticky_to", "content script ready after the reload", 6000);
+    await sleep(2500);
+    expect((await badge()) === "NORMAL", `the reload kept item mode, the badge is ${await badge()}`);
+    await press_keys("I");
+    await expect_badge("ITEM");
+    const back_mark = events.length;
+    await in_active_tab("history.back(); 0");
+    await wait_event(back_mark, (event) => event.type === "tree_read" && event.page_id === "is_sticky_from", "content script ready after Back", 6000);
+    await sleep(2500);
+    expect((await badge()) === "NORMAL", `Back kept item mode, the badge is ${await badge()}`);
   });
 }

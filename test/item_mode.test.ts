@@ -289,6 +289,16 @@ test("a loaded page starts in item mode where the setting is on for its address,
   assert.equal(await starts_item_mode(stored(undefined), "https://a.test/"), false);
 });
 
+test("a resumed page starts wherever it has a list, unless its site row sets item_navigator to false", async () => {
+  const compiled = compiled_with({ item_navigator: false, site_rules: [{ site: "https://off.test/*", item_navigator: false }, { site: "https://shipped.test/*", item_navigator: "shipped" }, { site: "https://pass.test/*", pass: "j k" }] });
+  const resumes = async (address: string) => (await item_start_for(stored(compiled), address, { resume: true })) !== undefined;
+  assert.equal(await resumes("https://a.test/"), true);
+  assert.equal(await resumes("https://shipped.test/"), true);
+  assert.equal(await resumes("https://off.test/"), false);
+  assert.equal(await resumes("https://pass.test/"), false, "a row that claims j or k keeps them");
+  assert.equal(await starts_item_mode(stored(compiled), "https://a.test/"), false);
+});
+
 test("a page that a row turns all off does not start in item mode", async () => {
   const compiled = compiled_with({ item_navigator: true, site_rules: [{ site: "https://a.test/*", off: true }] });
   assert.equal(await starts_item_mode(stored(compiled), "https://a.test/"), false);

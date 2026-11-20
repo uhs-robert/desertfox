@@ -152,6 +152,8 @@ export const QUICKMARK_PRIVATE_STORAGE_KEY = "desertfox_private_quickmarks";
 export const TAB_MEDIA_STORAGE_PREFIX = "desertfox_tab_media_";
 // The frames of a tab that are in item mode, in `storage.session`. See `tab_item.ts`.
 export const TAB_ITEM_STORAGE_PREFIX = "desertfox_tab_item_";
+// The mark that a tab's load began in item mode, `{ at, kept? }`, in `storage.session`. See `tab_item.ts`.
+export const ITEM_RESUME_STORAGE_PREFIX = "desertfox_item_resume_";
 // The last mode the top frame of a tab reported and a counter of its changes, in `storage.session`. See `create_media_discovery`.
 export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";
 

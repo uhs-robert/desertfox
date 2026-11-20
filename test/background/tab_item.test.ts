@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ask_item_start, create_tab_item } from "../../src/background/tab_item.ts";
+import { ask_item_start, create_tab_item, RESUME_COMMIT_LIMIT_MS } from "../../src/background/tab_item.ts";
 
 // Each storage call takes a few ticks, like the real one, so operations that are not ordered interleave.
 const ticks = async () => {
@@ -9,6 +9,7 @@ const ticks = async () => {
 
 function make() {
   const data: Record<string, unknown> = {};
+  const clock = { ms: 0 };
   const steps: string[] = [];
   const storage = {
     get: async (key: string) => {
@@ -27,8 +28,9 @@ function make() {
   const tab_item = create_tab_item({
     storage: storage as never,
     send_step: async (tab_id, on, frame_id, from) => void steps.push(`${tab_id}:${on ? "on" : "off"}:${frame_id ?? "all"}${from === undefined ? "" : `:from ${from}`}`),
+    now: () => clock.ms,
   });
-  return { tab_item, steps, data };
+  return { tab_item, steps, data, clock };
 }
 
 test("the first frame to report item starts the mode in every other frame, and a second frame that reports it only joins", async () => {
@@ -294,4 +296,85 @@ test("steps still waiting when the tab closes never go out", async () => {
   await tab_item.forget(4);
   await release_all();
   assert.equal(calls(), 1);
+});
+
+const commit_as = (transitionType: string, transitionQualifiers: string[] = []) => ({ transitionType, transitionQualifiers });
+
+// The hold is on and the top frame starts a load: the tab item mode resumes on the new page only when the commit says link or form_submit.
+async function load_in_hold(transition: { transitionType: string; transitionQualifiers: string[] }) {
+  const made = make();
+  await made.tab_item.reported(4, 0, "item");
+  await made.tab_item.navigated(4, { status: "loading" });
+  await made.tab_item.committed(4, 0, transition);
+  return made;
+}
+
+test("a link load or a form submit in the hold resumes item mode on the new page, once", async () => {
+  for (const transition of [commit_as("link"), commit_as("form_submit"), commit_as("link", ["server_redirect"])]) {
+    const { tab_item } = await load_in_hold(transition);
+    assert.equal(await tab_item.take_resume(4), true, transition.transitionType);
+    assert.equal(await tab_item.take_resume(4), false, "the mark is spent");
+  }
+});
+
+test("a reload, back or forward and a typed address end item mode for good", async () => {
+  for (const transition of [commit_as("reload"), commit_as("link", ["forward_back"]), commit_as("typed"), commit_as("link", ["from_address_bar"]), commit_as("auto_bookmark"), commit_as("generated")]) {
+    const { tab_item, data } = await load_in_hold(transition);
+    assert.equal(Object.keys(data).some((key) => key.includes("resume")), false, `${transition.transitionType} ${transition.transitionQualifiers.join(" ")}`);
+    assert.equal(await tab_item.take_resume(4), false);
+  }
+});
+
+test("a load with no hold writes no mark", async () => {
+  const { tab_item } = make();
+  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("the completed load spends the mark, so a page with no list drops it and the next link load does not resume", async () => {
+  const { tab_item } = await load_in_hold(commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), true);
+  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("a load that never commits leaves no mark: the completion drops it, and so does a late commit", async () => {
+  const { tab_item, clock } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" });
+  assert.equal(await tab_item.take_resume(4), false, "a load cancelled before its commit completes the old page");
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" });
+  clock.ms += RESUME_COMMIT_LIMIT_MS + 1;
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false, "a commit long after the load started is another load");
+});
+
+test("closing the tab clears the mark", async () => {
+  const { tab_item, data } = await load_in_hold(commit_as("link"));
+  await tab_item.forget(4);
+  assert.deepEqual(data, {});
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("a child frame's commit leaves the mark alone", async () => {
+  const { tab_item } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.committed(4, 7, commit_as("link"));
+  await tab_item.committed(4, 0, commit_as("link"));
+  await tab_item.committed(4, 7, commit_as("reload"));
+  await tab_item.committed(4, 8, commit_as("auto_subframe"));
+  assert.equal(await tab_item.take_resume(4), true);
+});
+
+test("marks are per tab", async () => {
+  const { tab_item } = await load_in_hold(commit_as("link"));
+  assert.equal(await tab_item.take_resume(5), false);
+  assert.equal(await tab_item.take_resume(4), true);
 });

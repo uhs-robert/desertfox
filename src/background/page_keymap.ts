@@ -61,11 +61,15 @@ const item_selectors_of = (leaf: TreeLeaf | undefined): string[] => {
 
 export type ItemStart = { selectors: string[] };
 
-// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there or claims j or k. `selectors` are the item selectors of every item key the page's rows bind, so the start looks for the rows' items and not the finder's list. With none, the finder reads the page.
-export async function item_start_for(storage: KeymapStorage, address: string | undefined): Promise<ItemStart | undefined> {
+// A site row that sets `item_navigator` to false keeps its pages out of item mode, even when the user followed a link there in the mode.
+const item_navigator_refused = (columns: PageSiteColumns): boolean => Object.hasOwn(columns.values, "item_navigator") && columns.values["item_navigator"] === false;
+
+// Whether a page that finished loading starts in item mode: the `item_navigator` setting for its address, unless a row switches every key off there or claims j or k. `resume` says the tab was in item mode when this load began (`tab_item.ts`), which starts any page with a list unless its row refuses. `selectors` are the item selectors of every item key the page's rows bind, so the start looks for the rows' items and not the finder's list. With none, the finder reads the page.
+export async function item_start_for(storage: KeymapStorage, address: string | undefined, { resume = false } = {}): Promise<ItemStart | undefined> {
   const keymap = current_keymap(await stored_keymap(storage));
   const columns = site_columns_for(keymap, [address]);
-  if (keymap === undefined || columns.off === true || site_claims_item_keys(columns) || !item_navigator_on(columns, keymap.item_navigator)) return undefined;
+  if (keymap === undefined || columns.off === true || site_claims_item_keys(columns)) return undefined;
+  if (resume ? item_navigator_refused(columns) : !item_navigator_on(columns, keymap.item_navigator)) return undefined;
   return { selectors: [...new Set(Object.values(columns.keymap?.["item"] ?? {}).flatMap(({ leaf }) => item_selectors_of(leaf)))] };
 }
 
