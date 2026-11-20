@@ -18,8 +18,8 @@ On some sites item mode starts by itself when the page loads. See [Pages that st
 | --- | --- |
 | `j` | Next item |
 | `k` | Previous item |
-| `h` | Item to the left |
-| `l` | Item to the right |
+| `h` | Item to the left (in a grid, on a list it scrolls left) |
+| `l` | Item to the right (in a grid, on a list it scrolls right) |
 | `gg` | First item |
 | `G` | Last item |
 | `}` | First item of the next section |
@@ -37,9 +37,9 @@ A count repeats a move, as in normal mode. The first press moves to an item that
 
 Each key shows a notice when the item has no link or no checkbox.
 
-The hint keys work in item mode. `f`, `F` and the `;` group put the shortest hints on the current item, so a page with many links stays quick to use. Escape, then a hint key, hints the whole page again.
+The hint keys work in item mode. `f`, `F` and the `;` group label the whole page and give the shortest hints to the current item, so a page with many links stays quick to use. In normal mode the hints keep their usual order.
 
-Other keys that stay useful keep working: `H` and `L` for history, `]]` and `[[` for next and previous page, `J` and `K` for tabs, `<C-d>` and `<C-u>` to scroll, `/` to find and `:` for the command line. `gi` focuses a field and so leaves item mode. A key that item mode does not bind goes to the page.
+Many keys of normal mode keep working in item mode, for example `H` and `L` for history, `]]` and `[[` for next and previous page, `J` and `K` for tabs, `<C-d>` and `<C-u>` to scroll, `/` to find and `:` for the command line. The list is not complete. `gi` focuses a field and so leaves item mode. A key that item mode does not bind goes to the page.
 
 ## Comments on Hacker News and Reddit
 
@@ -65,7 +65,7 @@ The `item_navigator` setting decides which pages start in item mode when they lo
 
 | Value | Pages that start |
 | --- | --- |
-| `shipped` | The sites that have a site row (the default) |
+| `shipped` | The sites whose shipped row starts item mode (the default) |
 | `true` | Every page with a list |
 | `false` | None |
 
