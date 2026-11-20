@@ -57,11 +57,13 @@ const fake_link = (doc: unknown, top: number, reads: string[]) => ({
   getClientRects: () => (reads.push("client_rects"), []),
 });
 
-async function with_session(opened_from: "normal" | "media", link_tops: number[] = [], reads: string[] = []) {
+async function with_session(opened_from: "normal" | "media" | "item", link_tops: number[] = [], reads: string[] = []) {
   const { create_mode_state } = await import("../../src/content/mode_state.ts");
   const state = create_mode_state(opened_from);
   const exits: string[] = [];
   const modes: string[] = [];
+  const commands: string[] = [];
+  let current_item: unknown;
   const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
   const sinks = new Map<string, { exit: (next: string) => void }>();
   const navigation = new EventTarget();
@@ -70,7 +72,13 @@ async function with_session(opened_from: "normal" | "media", link_tops: number[]
     register_handler_: (id: string, handler: never) => void handlers.set(id, handler),
     hold_keys_until_: () => {},
     frame_parked_: () => false,
+    leaf_end_: () => undefined,
     get_mode: () => state.get_mode_(),
+    run_command_: (id: string, bundle: string, args: { take?: (found: unknown) => void }) => {
+      commands.push(`${id} ${bundle}`);
+      args.take?.(id === "item.current" ? current_item : []);
+      return Promise.resolve({ ok: true });
+    },
     set_mode_: (mode: string) => {
       modes.push(mode);
       const left = state.get_mode_();
@@ -98,7 +106,7 @@ async function with_session(opened_from: "normal" | "media", link_tops: number[]
     void handlers.get("hint.run")!({ action: "click", filter: "links", frames: "all_frames" });
     await new Promise((resolve) => setTimeout(resolve, 20));
   };
-  return { state, exits, commit, open, handlers, modes };
+  return { state, exits, commit, open, handlers, modes, commands, set_current_item: (item: unknown) => (current_item = item) };
 }
 
 test("a pushState that commits ends the hint session once and returns to normal mode", async () => {
@@ -149,4 +157,21 @@ test("copy.links in the viewport scope drops an off-screen link before it reache
   const outcome = await handlers.get("copy.links")!({ scope: "viewport", format: "plain" });
   assert.deepEqual(outcome, { ok: false, message: "No links on this page" });
   assert.deepEqual(reads, []);
+});
+
+test("a run in item mode reads the current item once, and takes no current item without failing", async () => {
+  const { handlers, commands } = await with_session("item", [10, 20]);
+  void handlers.get("hint.run")!({ action: "click", filter: "links", frames: "same_origin" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(commands, ["item.current item"]);
+});
+
+test("normal mode and the list pick never call item.current", async () => {
+  const normal = await with_session("normal", [10, 20]);
+  void normal.handlers.get("hint.run")!({ action: "click", filter: "links", frames: "same_origin" });
+  const in_item = await with_session("item", [10, 20]);
+  void in_item.handlers.get("hint.run")!({ action: "enter_item", filter: "lists", frames: "same_origin" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(normal.commands, []);
+  assert.deepEqual(in_item.commands.filter((command) => command.startsWith("item.current")), []);
 });

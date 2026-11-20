@@ -604,7 +604,8 @@ function register(host: PageHostApi): void {
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     // Read after an await: content.js names the running leaf only once its run call has returned, and a loaded bundle reaches this point inside that call.
     const leaf_end_ = action === "enter_item" ? host.leaf_end_() : undefined;
-    const ranks_item_ = host.get_mode() === "item";
+    // The list pick has no use for the item.
+    const ranks_item_ = host.get_mode() === "item" && filter !== "lists";
     const item_ = ranks_item_ ? await current_item() : undefined;
     if (run !== latest_run) return cancelled_outcome;
     let candidates: Found[];
