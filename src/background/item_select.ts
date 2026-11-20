@@ -19,19 +19,17 @@ export function item_select_keys(get_command: (id: string) => Pick<CommandDef, "
   return steps.every((entry) => entry !== undefined) ? (Object.fromEntries(steps) as ItemSelectKeys) : undefined;
 }
 
-type End = "first" | "last";
 const MOVES = ["down", "up", "left", "right"];
 
 // The validator fills a missing selector with an empty string, so the finder keys read as empty here.
 const names_selector = (step: LeafStep): boolean => step.invocation.id === "page.item" && typeof step.invocation.args?.["selector"] === "string" && step.invocation.args["selector"] !== "";
 const direction_of = (step: LeafStep): unknown => step.invocation.args?.["direction"];
 
-// Added steps ignore the count: the end steps go to one place, and a count would send the arrow pair that many times (or fail past the key limit).
+// The added step ignores the count: a counted move runs the arrow `times` times, not the refocus.
 const current_step = (step: LeafStep): LeafStep => {
   const { jump: _jump, ...rest } = step;
   return { ...rest, invocation: { ...step.invocation, args: { ...step.invocation.args, direction: "current" } }, count_rule: "ignore" };
 };
-const ignoring_count = (step: LeafStep): LeafStep => ({ ...step, count_rule: "ignore" });
 
 // A move of `times` items sends the arrow that many times. A typed count still replaces it at run time.
 const with_times_of = (move: LeafStep, arrow: LeafStep): LeafStep => {
@@ -39,18 +37,14 @@ const with_times_of = (move: LeafStep, arrow: LeafStep): LeafStep => {
   return typeof times === "number" ? { ...arrow, invocation: { ...arrow.invocation, args: { ...arrow.invocation.args, times } } } : arrow;
 };
 
-// A move becomes "focus the current item, then send the site's arrow", so the site moves its own selection. The end keys keep their scroll and follow, then come back to the end item with an arrow pair (only gg and G send it, never I). Up then Down at the last item: a Down on the last row can make the site load more rows and leave its selection on a new one. The `current` step first puts the focus back on the end item when the site redrew it during the follow, or the arrows would go to the body.
+// A move becomes "focus the current item, then send the site's arrow", so the site moves its own selection. The `current` step first puts the focus back on the item when the site redrew it, or the arrow would go to the body.
 const steps_after_rewrite = (step: LeafStep, keys: ItemSelectKeys): LeafStep[] => {
   // The arrows cannot walk a list the row does not name, so its picker offers the row's list alone.
   if (step.invocation.id === "hint.run" && step.invocation.args?.["items"]) return [{ ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, row_only: true } } }];
   if (!names_selector(step)) return [step];
   const direction = direction_of(step) as string;
   if (MOVES.includes(direction)) return [current_step(step), with_times_of(step, keys[direction as keyof ItemSelectKeys])];
-  if (direction === "first" || direction === "last") {
-    const pair = (direction as End) === "last" ? [keys.up, keys.down] : [keys.down, keys.up];
-    return [step, current_step(step), ...pair.map(ignoring_count)];
-  }
-  // `current` (the picker's landing) and the section jumps send no arrows: Drive drops an arrow that follows another within about 100 ms, and an unpaired landing keeps the file the focus is on selected.
+  // The end keys (gg, G), `current` (the picker's landing) and the section jumps send no arrows: Drive drops an arrow that follows another within about 100 ms. In Drive, gg and G move Desert Fox's focus but not Drive's selection.
   return [step];
 };
 

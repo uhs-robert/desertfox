@@ -166,7 +166,7 @@ const REDDIT_THREAD_ITEMS = {
   zc: reddit_tree("fold", "Fold the thread, or the parent of a comment with no replies"),
   zo: reddit_tree("unfold", "Unfold the comment"),
 };
-// Drive keeps its own selection, and Enter opens the selected file. `item_select = "arrows"` (`item_select.ts`) turns these plain `page.item` moves into Drive's own arrow keys, so j, k, h and l move the selection, scroll Drive's panel and draw more rows, and gg and G go to the ends and select the end file. `current` takes the focus into the files from the view toggle or from nowhere, so an arrow never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
+// Drive keeps its own selection, and Enter opens the selected file. `item_select = "arrows"` (`item_select.ts`) turns these plain `page.item` moves into Drive's own arrow keys, so j, k, h and l move the selection, scroll Drive's panel and draw more rows, and gg and G go to the ends with no arrow, so Drive's selection stays where it was. `current` takes the focus into the files from the view toggle or from nowhere, so an arrow never lands on the toggle. The pattern leaves the docs editors on docs.google.com and a file preview (drive.google.com/file/*) out.
 // Drive draws both views as a role=grid. The grid view puts every file in one role=row as a role=gridcell, the list view makes each file a role=row (a table row). Only the file itself carries data-id at that level: its thumbnail parts inside carry data-id too, so the selectors name the role.
 const DRIVE_GRID_ITEM = '[role="grid"] [role="gridcell"][data-id]';
 const DRIVE_LIST_ITEM = '[role="grid"] [role="row"][data-id]';
@@ -180,7 +180,7 @@ const DRIVE_BIND: BindingTable = {
   ...end_binds(DRIVE_ANY_ITEM, undefined),
   h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left (scrolls sideways in the list view)"),
   l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right (scrolls sideways in the list view)"),
-  // An Enter the row does not bind reaches the page at once, so one typed right behind G finds the old selection. A bound Enter waits for the end key and opens the file the select landed on.
+  // An Enter the row does not bind reaches the page at once, so one typed right behind G reaches the page before G finishes. A bound Enter waits for the end key.
   "<Enter>": { id: "page.send_key", args: { key: "Enter", key_code: 13 }, when_present: DRIVE_ANY_ITEM, intent: "Open the selected file" },
 };
 

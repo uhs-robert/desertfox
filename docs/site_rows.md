@@ -460,7 +460,7 @@ In item mode:
 | `l` | Move to the file on the right (scrolls sideways in the list view) |
 | `<Enter>` | Open the selected file |
 
-- Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. I and the section jumps send no arrow and keep the selected file. With no file selected, I focuses a file and selects none until j or k. gg and G go to the end and then send an arrow pair that comes back to it, so Enter opens that file. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
+- Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. I and the section jumps send no arrow and keep the selected file. With no file selected, I focuses a file and selects none until j or k. gg and G send no arrow and keep the focus on the end file. In Drive, gg and G move Desert Fox's focus but not Drive's selection. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
 
 <!-- END generated -->
 

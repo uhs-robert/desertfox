@@ -788,13 +788,13 @@ test("the drive row binds plain item moves, and the page reply turns them into f
     assert.equal(leaf.steps[0]?.invocation.args?.["selector"], guard, key);
     assert.equal(leaf.steps[1]?.invocation.args?.["target"], "", key);
   }
-  // Drive ignores a sent Home and End, so gg and G scroll through page.item and then come back to the end file with an arrow pair.
-  for (const [key, expected] of [["gg", ["item:first", "item:current", "ArrowDown", "ArrowUp"]], ["G", ["item:last", "item:current", "ArrowUp", "ArrowDown"]]] as const) {
+  // Drive ignores a sent Home and End, so gg and G scroll through page.item and send no arrow (Drive drops an arrow sent right after another).
+  for (const [key, expected] of [["gg", ["item:first"]], ["G", ["item:last"]]] as const) {
     const leaf = await leaf_at(key);
     assert.equal(leaf.when_present, `${grid}, ${list}`, key);
     assert.deepEqual(shape(leaf), expected, key);
-    assert.deepEqual(leaf.steps.map((step) => step.count_rule), [leaf.steps[0]!.count_rule, "ignore", "ignore", "ignore"], key);
-    assert.deepEqual(leaf.steps.map((step) => step.jump), [true, undefined, undefined, undefined], key);
+    assert.deepEqual(leaf.steps.map((step) => step.count_rule), [leaf.steps[0]!.count_rule], key);
+    assert.deepEqual(leaf.steps.map((step) => step.jump), [true], key);
   }
   // Enter is bound so that one typed behind G or gg waits for the select. The default Enter of the mode (item action open) stays behind it for a page with no file.
   const enter = await leaf_at("<Enter>");
