@@ -5,12 +5,16 @@ import { checkbox_in } from "../src/content/item_act/checkbox.ts";
 // An item of fake elements. A selector matches the elements whose `kind` it names, and `shown` stands for the visibility rule.
 type Fake = { name: string; kind: string; shown: boolean };
 const shown_box = (name: string, kind: string): Fake => ({ name, kind, shown: true });
-const item_of = (elements: Fake[]) =>
+const item_of = (elements: Fake[], own?: Fake) =>
   ({
+    matches: (selector: string) => !!own && selector.includes(own.kind),
+    name: own?.name,
+    checkVisibility: () => own?.shown ?? true,
+    getClientRects: () => (own?.shown === false ? [] : [{}]),
     querySelectorAll: (selector: string) =>
       elements
         .filter((element) => selector.includes(element.kind))
-        .map((element) => ({ name: element.name, checkVisibility: () => element.shown, getClientRects: () => (element.shown ? [{}] : []) })),
+        .map((element) => ({ matches: () => true, name: element.name, checkVisibility: () => element.shown, getClientRects: () => (element.shown ? [{}] : []) })),
   }) as unknown as Element;
 const name_of = (element: Element | undefined) => (element as unknown as { name: string } | undefined)?.name;
 
@@ -53,4 +57,9 @@ test("target goes with toggle only, and the action is required", async () => {
   assert.equal(check_args(command, { action: "open", target: ".star" }).ok, false);
   assert.equal(check_args(command, { action: "open" }).ok, true);
   assert.equal(check_args(command, {}).ok, false);
+});
+
+test("an item that is itself a checkbox is the checkbox", () => {
+  const item = item_of([], shown_box("self", 'role="checkbox"'));
+  assert.equal(name_of(checkbox_in(item)), "self");
 });

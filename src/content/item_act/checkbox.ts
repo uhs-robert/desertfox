@@ -6,6 +6,7 @@ const NATIVE_CHECKBOX = 'input[type="checkbox"]';
 const ARIA_CHECKBOX = '[role="checkbox"]';
 
 export const checkbox_in = (item: Element, target = ""): Element | undefined => {
-  const first_shown = (selector: string) => Array.from(item.querySelectorAll(selector)).find(is_shown);
+  // The item counts too: a row can walk the checkboxes themselves.
+  const first_shown = (selector: string) => [item, ...Array.from(item.querySelectorAll(selector))].find((element) => element.matches(selector) && is_shown(element));
   return target ? first_shown(target) : (first_shown(NATIVE_CHECKBOX) ?? first_shown(ARIA_CHECKBOX));
 };

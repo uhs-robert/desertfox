@@ -1,7 +1,7 @@
 // The `item` bundle: the handler of `page.item`, which item mode and site rows bind to j and k on result pages, and `item.start`, which starts item mode on a list page. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { current_item, follow_item, move_item, read_cursor } from "./pick.ts";
+import { current_item, follow_item, forget_move, move_item, read_cursor } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
@@ -76,5 +76,5 @@ function lists_with_row(read_lists: () => Region<Element>[], selector: string | 
 function pick_list(derived: DerivedRow, region: Region<Element>, focus: HTMLElement | undefined): void {
   const was = derived.active_()?.items[0] === region.items[0];
   derived.pick_(region);
-  if (!was) focus?.focus({ preventScroll: true });
+  if (!was) (forget_move(), focus?.focus({ preventScroll: true }));
 }
