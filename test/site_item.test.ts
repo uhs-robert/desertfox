@@ -5,7 +5,7 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { create_derived_row } from "../src/content/item/derived.ts";
-import { current_item, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
+import { current_item, forget_move, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
 
@@ -179,6 +179,9 @@ test("current_item is the item that holds the focus, else the last one moved to,
   move_item(moved.page, { selector: "li", link: "a.t", direction: "down" });
   assert.equal(current_item(moved.page)?.item_, moved.items[0], "the last move");
   assert.ok(current_item(moved.page)?.link_, "the row's link");
+  forget_move();
+  assert.equal(current_item(moved.page), undefined, "a picked list drops the move of the old one");
+  move_item(moved.page, { selector: "li", link: "a.t", direction: "down" });
   (moved.items[0] as unknown as { isConnected: boolean }).isConnected = false;
   assert.equal(current_item(moved.page), undefined, "an item the page dropped is no current item");
 });

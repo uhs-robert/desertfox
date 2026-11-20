@@ -15,10 +15,12 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
   const open_list = (id) => open_page("item_list", id, { new_tab: true });
   const scrolled = async () => (await in_active_tab("scrollY")) > 0;
 
+  let active_config = config_dir;
   await setup("bind a bare picker on I for the im_nolanding_ pages, so the leaf has no step after the pick", async () => {
     const dir = config_copy();
     appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=im_nolanding_*"', 'bind = { I = "hint --lists" }', ""].join("\n"));
     await load_config_dir(dir);
+    active_config = dir;
   });
 
   await run_case("I enters item mode, j walks the cards and Escape leaves, after which j scrolls again", async () => {
@@ -45,7 +47,7 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_badge("ITEM");
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
-    expect(!readFileSync(join(config_dir, "settings.toml"), "utf8").includes("item_navigator"), "I wrote item_navigator to settings.toml");
+    expect(!readFileSync(join(active_config, "settings.toml"), "utf8").includes("item_navigator"), "I wrote item_navigator to settings.toml");
   });
 
   await run_case("I after Escape goes on from the same current item, and zz inside the mode lands on it again", async () => {
