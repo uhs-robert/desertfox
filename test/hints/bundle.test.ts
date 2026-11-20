@@ -63,7 +63,7 @@ async function with_session(opened_from: "normal" | "media" | "item", link_tops:
   const exits: string[] = [];
   const modes: string[] = [];
   const commands: string[] = [];
-  let current_item: unknown;
+  const current_item: unknown = undefined;
   const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
   const sinks = new Map<string, { exit: (next: string) => void }>();
   const navigation = new EventTarget();
@@ -106,7 +106,7 @@ async function with_session(opened_from: "normal" | "media" | "item", link_tops:
     void handlers.get("hint.run")!({ action: "click", filter: "links", frames: "all_frames" });
     await new Promise((resolve) => setTimeout(resolve, 20));
   };
-  return { state, exits, commit, open, handlers, modes, commands, set_current_item: (item: unknown) => (current_item = item) };
+  return { state, exits, commit, open, handlers, modes, commands };
 }
 
 test("a pushState that commits ends the hint session once and returns to normal mode", async () => {
@@ -159,7 +159,7 @@ test("copy.links in the viewport scope drops an off-screen link before it reache
   assert.deepEqual(reads, []);
 });
 
-test("a run in item mode reads the current item once, and takes no current item without failing", async () => {
+test("a run in item mode reads item.current once", async () => {
   const { handlers, commands } = await with_session("item", [10, 20]);
   void handlers.get("hint.run")!({ action: "click", filter: "links", frames: "same_origin" });
   await new Promise((resolve) => setTimeout(resolve, 20));
