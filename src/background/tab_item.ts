@@ -4,6 +4,7 @@
 import type { Mode } from "../shared/command.ts";
 import { TAB_ITEM_STORAGE_PREFIX } from "./storage_keys.ts";
 import { best_effort, keep_chain } from "../shared/swallow.ts";
+import { create_step_queue } from "./tab_steps.ts";
 import type { ItemStart } from "./page_keymap.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
@@ -31,12 +32,14 @@ export function create_tab_item(deps: TabItemDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<ItemHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as ItemHold | undefined;
-  // A step goes out without a wait: the queue is shared by every tab, and a frame that never answers (a page stuck in a loop) would hold every later report, join and keymap reply.
-  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number) => void best_effort(deps.send_step(tab_id, on, frame_id, from));
+  // The steps of a tab go out one at a time, in order (`tab_steps.ts`), in a queue kept apart from the media mode's.
+  const { step, drop_steps_to, clear: clear_steps } = create_step_queue(deps.send_step);
+  // The old page of a load gets its steps off straight away, outside the tab's steps: a frame of it that never answers must not hold up the new page.
+  const step_old_page = (tab_id: number, on: boolean, frame_id?: number): void => void best_effort(deps.send_step(tab_id, on, frame_id));
   // Every frame of the hold leaves the mode, the one that ended it excepted: it left already, and may sit in a field.
-  const end = async (tab_id: number, hold: ItemHold, except?: number) => {
+  const end = async (tab_id: number, hold: ItemHold, except?: number, send = step) => {
     await deps.storage.remove(key_of(tab_id));
-    for (const frame_id of hold.frames) if (frame_id !== except) step(tab_id, false, frame_id);
+    for (const frame_id of hold.frames) if (frame_id !== except) send(tab_id, false, frame_id);
   };
 
   return {
@@ -52,6 +55,7 @@ export function create_tab_item(deps: TabItemDeps) {
           }
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
           if (by_step && !hold) return step(tab_id, false, frame_id);
+          drop_steps_to(tab_id, frame_id);
           await deps.storage.set({ [key_of(tab_id)]: { ...hold, frames: [...(hold?.frames ?? []), frame_id] } });
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
           if (!hold) step(tab_id, true, undefined, frame_id);
@@ -80,10 +84,13 @@ export function create_tab_item(deps: TabItemDeps) {
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps it.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
+        if (change.status !== "loading" || change.url !== undefined) return;
+        // The frames of the old page are gone, so the steps still waiting for them are dropped.
+        clear_steps(tab_id);
         const hold = await read(tab_id);
-        if (hold && change.status === "loading" && change.url === undefined) await end(tab_id, hold);
+        if (hold) await end(tab_id, hold, undefined, step_old_page);
       }),
-    forget: (tab_id: number): Promise<void> => in_turn(() => deps.storage.remove(key_of(tab_id))),
+    forget: (tab_id: number): Promise<void> => in_turn(() => (clear_steps(tab_id), deps.storage.remove(key_of(tab_id)))),
   };
 }
 
