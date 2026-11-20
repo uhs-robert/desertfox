@@ -30,11 +30,11 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 <p align="center"><img src="./docs/images/drag.gif" width="800" alt="One card on the Practice page work board is grabbed with ;gg and dropped on the Doing column picked by hint, then grabbed again and dropped on Done."/></p>
 
+You can edit any text box in your own editor, such as Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor (see [host/README.md](host/README.md)). Without it, `<C-o>` shows an error that says where to create the file.
+
 ## 🧭 Item mode
 
 **Walk a page one item at a time.** A search result, a story, a file or a comment is an item. Press `I` and type the hint of a list. A page with one list starts at once. Then `j` and `k` move to the next and previous item with a box around it, `h` and `l` move across a grid, `}` and `{` jump between sections, `Enter` opens the item's link and `Space` ticks its checkbox. `Escape` goes back to normal mode. On some sites item mode starts by itself. [Item mode guide](docs/item_mode.md).
-
-You can edit any text box in your own editor, such as Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor (see [host/README.md](host/README.md)). Without it, `<C-o>` shows an error that says where to create the file.
 
 ## 🏆 Why DesertFox
 
@@ -163,7 +163,7 @@ You gain:
 
 - A which-key popup for the keys you forget, and a Practice page for the ones you never learned.
 - Keyboard drag and drop, which neither Vimium nor Tridactyl has built in.
-- Item mode, which steps through a page's items with `j` and `k`. None of the three documents it.
+- Item mode, which steps through a page's items with `j` and `k`. Neither Vimium nor Tridactyl documents it.
 - Macros and caret mode, which Tridactyl lacks, and settings per site, where Vimium has keys only.
 - A script of 20.3 KB on each page.
 
