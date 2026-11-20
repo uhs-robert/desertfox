@@ -4,7 +4,7 @@
 
 export const areas = ["media", "keys", "hints"];
 
-export async function run_cases({ run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
+export async function run_cases({ run_line, run_case, open_page, press_keys, wait_event, expect_absent, wait_cmdline, type_in_line, close_cmdline, events, expect, in_active_tab, poll_until, in_background, hint_label_count, scroll_delta_by_press, scroll_of, wait_takes_keys }) {
   const indicator = (page_id, label) => (event) => event.type === "indicator" && event.page_id === page_id && event.label === label;
   const media = (page_id, type, video, check = () => true) => (event) => event.page_id === page_id && event.type === `media_${type}` && event.video === video && check(event);
   const read_toast = () =>
@@ -142,6 +142,22 @@ export async function run_cases({ run_case, open_page, press_keys, wait_event, e
     await press_keys("-k", "Escape");
     await normal(mark, id);
     await j_scrolls(id);
+  });
+
+  await run_case("aa in item mode starts the mode, and Escape returns to item mode and a second Escape to normal", async () => {
+    const id = "p29_from_item";
+    await open_page("media_mode", id, { new_tab: true });
+    await run_line("mode item");
+    await poll_until("the ITEM badge", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`)) === "ITEM");
+    let mark = events.length;
+    await press_keys("a", "a");
+    await shown(mark, id);
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await wait_event(mark, indicator(id, "ITEM"), `the badge of ${id} to read ITEM`);
+    mark = events.length;
+    await press_keys("-k", "Escape");
+    await normal(mark, id);
   });
 
   await run_case("a hint opened from the mode returns to it after Escape and after a pick, and : returns to it after Escape and after a command", async () => {

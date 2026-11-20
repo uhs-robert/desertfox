@@ -17,7 +17,7 @@ define("find.open", {
 
 define("find.next", {
   completion: "hidden",
-  modes: ["normal", "caret", "visual", "visual_line"],
+  modes: ["normal", "caret", "visual", "visual_line", "item"],
   label: "Next match",
   intent: "Go to the next match of the last search. It goes the way the search was started. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays.",
   bridge: false,
@@ -28,7 +28,7 @@ define("find.next", {
 
 define("find.prev", {
   completion: "hidden",
-  modes: ["normal", "caret", "visual", "visual_line"],
+  modes: ["normal", "caret", "visual", "visual_line", "item"],
   label: "Previous match",
   intent: "Go to the previous match of the last search. It goes against the way the search was started. In caret mode the caret goes to the match. In visual mode the caret end goes to the match and the anchor stays.",
   bridge: false,

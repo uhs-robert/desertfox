@@ -414,7 +414,7 @@ function start(): void {
   // A fullscreen change in this frame and the media mode of another frame take the same step.
   const media_step = (on: boolean, own?: boolean, item?: true) => {
     const held = item && "item";
-    const next = on ? fullscreen_step(page_mode.get_mode_(), true, held) : page_mode.media_ended_(own, held);
+    const next = on ? fullscreen_step(page_mode.get_mode_(), true, held, !own) : page_mode.media_ended_(own, held);
     if (next) {
       media_by_step = !own;
       void bundles.set_mode_(next);

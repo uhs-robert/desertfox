@@ -34,6 +34,25 @@ test("the item step takes only a frame in normal mode into item mode and only it
   assert.equal(fullscreen_step("item", false), undefined);
 });
 
+test("a media step of another frame takes a frame in item mode, and Escape in media mode that began there goes back to item mode", () => {
+  assert.equal(fullscreen_step("item", true, "media", true), "media");
+  assert.equal(fullscreen_step("item", true, "media", false), undefined);
+  assert.equal(fullscreen_step("item", true, "item", true), undefined);
+  const state = create_mode_state();
+  state.set_mode_("item");
+  state.set_mode_("media");
+  state.set_mode_("cmdline");
+  state.escape();
+  assert.equal(state.get_mode_(), "media");
+  state.escape();
+  assert.equal(state.get_mode_(), "item");
+  state.escape();
+  assert.equal(state.get_mode_(), "normal");
+  state.set_mode_("media");
+  state.escape();
+  assert.equal(state.get_mode_(), "normal", "media from normal goes back to normal");
+});
+
 test("item mode follows the focus into a field and ends there, as media mode does", () => {
   const state = create_mode_state();
   state.set_mode_("item");
@@ -77,11 +96,12 @@ test("a step that ended the mode while a line was open sends the line back to no
 
 test("the item section holds the item keys and, of normal mode, only the tab, page scroll, command line, help, hint, find, follow, jump and gi keys", () => {
   const item = compiled_with().modes.item!;
-  for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>", "H", "L"]) assert.ok(item.children[key], key);
-  assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["?", "T", "g", "i", "t"], "the g group holds gg, gt, gT, g? and gi");
+  for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>", "H", "L", "i", "v", "V", "n", "N", "*", "#", "A", "<S-Escape>", "<C-v>", ","]) assert.ok(item.children[key], key);
+  assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["?", "T", "V", "g", "i", "t"], "the g group holds gg, gt, gT, g?, gi and gV");
   for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children), [group], `${group}${group} alone`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
   assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").filter((key) => key !== ";fF" && key !== ";fe").sort(), "the ; family but the normal-only keys");
+  assert.deepEqual(Object.keys((item.children["a"] as { children: object }).children).sort(), ["P", "S", "V", "a", "f", "h", "l", "p", "r", "s", "v"], "the a media group");
   for (const key of ["o", "t", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
 });
 

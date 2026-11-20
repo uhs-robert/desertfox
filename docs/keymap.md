@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 564 (normal 264, media 58, item 69, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 590 (normal 264, media 58, item 95, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -406,10 +406,31 @@ Which-key group names:
 | `K` | `tab.prev` | Previous tab |
 | `gt` | `tab.goto` | Next tab |
 | `gT` | `tab.prev` | Previous tab |
+| `aa` | `media enter` | Start media mode |
+| `ap` | `media play_pause` | Play or pause |
+| `as` | `media speed up` | Speed up |
+| `aS` | `media speed down` | Slow down |
+| `ar` | `media speed reset` | Reset speed |
+| `av` | `media volume up` | Volume up |
+| `aV` | `media volume down` | Volume down |
+| `al` | `media seek up` | Seek forward |
+| `ah` | `media seek down` | Seek back |
+| `aP` | `media pip` | Toggle picture-in-picture |
+| `af` | `media fullscreen` | Toggle fullscreen |
+| `A` | `cmdline.open --text='media '` | Media command |
 | `gi` | `page.focus_input` | Focus input |
+| `i` | `mode.insert` | Insert mode |
+| `<S-Escape>` | `mode ignore` | Set mode |
+| `<S-Insert>` | `mode ignore` | Set mode |
+| `<AC-Escape>` | `mode ignore` | Set mode |
+| ``<AC-`>`` | `mode ignore` | Set mode |
+| `<C-v>` | `mode.pass_next` | Pass next key |
 | `<F1>` | `help` | Help |
+| `,i` | `mode ignore` | Set mode |
 | `f` | `hint` | Click element |
 | `F` | `hint --background` | Click element in background tab |
+| `v` | `mode caret` | Start caret mode |
+| `V` | `mode visual` | Start visual mode |
 | `;v` | `hint --caret --prose` | Start caret mode at text |
 | `;V` | `hint --visual --prose` | Start visual mode at text |
 | `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
@@ -442,7 +463,12 @@ Which-key group names:
 | `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
 | `:` | `cmdline.open` | Command line |
 | `/` | `find` | Find forward |
+| `*` | `find --word` | Find word forward |
+| `#` | `find --backward --word` | Find word backward |
+| `n` | `find.next` | Next match |
+| `N` | `find.prev` | Previous match |
 | `g?` | `help` | Help |
+| `gV` | `mode caret` | Set mode |
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
 | `?` | `help.whichkey` | Show the keys |
