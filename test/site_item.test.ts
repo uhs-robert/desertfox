@@ -350,13 +350,13 @@ test("first and last go to the ends of the page whatever has focus, skip hidden 
 // The finder's ends: no selector, the items come from the derived row.
 const finder_page = (rects: Box[]) => {
   const fake = fake_page(rects);
-  fake.page.derived = { items_: () => fake.page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  fake.page.derived = { sections_: () => [], items_: () => fake.page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   return fake;
 };
 
 test("with no selector and no derived item, first and last refuse so content.js can scroll, and a selector row still does nothing", async () => {
   const { page, log, scrolls } = fake_page(list);
-  page.derived = { items_: () => [], link_of_: () => undefined, selector_: () => "", grew_: () => false, grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => [], link_of_: () => undefined, selector_: () => "", grew_: () => false, grid_: () => false };
   assert.deepEqual(await move_item(page, { direction: "first" }), { ok: false, message: "No item" });
   assert.deepEqual(await move_item(page, { direction: "last" }), { ok: false, message: "No item" });
   assert.deepEqual([log, scrolls], [[], []]);
@@ -463,7 +463,7 @@ test("a move with no selector walks the derived row and focuses the link the fin
   const named = { tabIndex: 0, setAttribute: () => {}, focus: () => log.push("focus found link") };
   const queries: string[] = [];
   page.doc = { ...page.doc, querySelectorAll: (selector: string) => (queries.push(selector), []) } as unknown as Document;
-  page.derived = { items_: () => items as unknown as Element[], link_of_: (item) => (item === (items[0] as unknown) ? (named as unknown as Element) : undefined), selector_: () => "li.row", grew_: () => false, grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => items as unknown as Element[], link_of_: (item) => (item === (items[0] as unknown) ? (named as unknown as Element) : undefined), selector_: () => "li.row", grew_: () => false, grid_: () => false };
   move_item(page, { direction: "down" });
   assert.deepEqual([log, shown, queries], [["focus found link"], ["0"], []]);
   // The box follows a page script's focus by the selector of the derived row, and by the row's own selector when there is one.
@@ -472,7 +472,7 @@ test("a move with no selector walks the derived row and focuses the link the fin
 
 test("with no selector and no derived items down scrolls like the plain key, and a count adds up", () => {
   const { page, scrolls, shown } = fake_page(list);
-  page.derived = { items_: () => [], link_of_: () => undefined, selector_: () => "", grew_: () => false, grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => [], link_of_: () => undefined, selector_: () => "", grew_: () => false, grid_: () => false };
   move_item(page, { direction: "down", times: 3 });
   move_item(page, { direction: "up" });
   assert.deepEqual([scrolls, shown], [[[0, 150], [0, -50]], []]);
@@ -480,7 +480,7 @@ test("with no selector and no derived items down scrolls like the plain key, and
 
 test("a move through the derived row leaves no cursor for the load step of ]]", () => {
   const { page } = fake_page(list);
-  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   move_item(page, { direction: "down" });
   assert.equal(read_cursor(page, true), undefined);
   move_item(page, { selector: "li", direction: "down" });
@@ -490,7 +490,7 @@ test("a move through the derived row leaves no cursor for the load step of ]]", 
 test("with no selector and no derived item in view, down and up scroll and move no focus", () => {
   const below = list.map((entry) => ({ ...entry, top: entry.top + 5000, bottom: entry.bottom + 5000 }));
   const { page, log, scrolls, shown } = fake_page(below);
-  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   move_item(page, { direction: "down" });
   move_item(page, { direction: "up" });
   assert.deepEqual([log, shown, scrolls], [[], [], [[0, 50], [0, -50]]]);
@@ -498,7 +498,7 @@ test("with no selector and no derived item in view, down and up scroll and move 
 
 test("down at the last item of the derived row scrolls on, so the page below the results stays reachable", () => {
   const { page, scrolls } = fake_page(list, true, 3);
-  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   move_item(page, { direction: "down" });
   assert.deepEqual(scrolls, [[0, 50]]);
 });
@@ -507,12 +507,12 @@ test("down at the end of the derived row asks it to read the page again once, an
   const { page, log, scrolls, add } = fake_page(list, true, 3);
   let grew = 0;
   const derived_items = () => page.doc.querySelectorAll("li") as unknown as Element[];
-  page.derived = { items_: derived_items, link_of_: () => undefined, selector_: () => "li", grew_: () => (grew++ === 0 ? (add(box(0, 240)), true) : false), grid_: () => false };
+  page.derived = { sections_: () => [], items_: derived_items, link_of_: () => undefined, selector_: () => "li", grew_: () => (grew++ === 0 ? (add(box(0, 240)), true) : false), grid_: () => false };
   move_item(page, { direction: "down" });
   assert.deepEqual([log.at(-1), scrolls], ["focus item 4", []]);
   // A list that did not change at its end scrolls on, and the row reads nothing again.
   const { page: still, scrolls: still_scrolls } = fake_page(list, true, 3);
-  still.derived = { items_: () => still.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  still.derived = { sections_: () => [], items_: () => still.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   move_item(still, { direction: "down" });
   assert.deepEqual(still_scrolls, [[0, 50]]);
 });
@@ -521,12 +521,12 @@ test("down with every kept item above the view asks the derived row first, and l
   const above = list.map((entry) => ({ ...entry, top: entry.top - 1000, bottom: entry.bottom - 1000 }));
   const { page, log, scrolls, add } = fake_page(above);
   let asked = 0;
-  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => (asked++ === 0 ? (add(box(0, 240)), true) : false), grid_: () => false };
+  page.derived = { sections_: () => [], items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => (asked++ === 0 ? (add(box(0, 240)), true) : false), grid_: () => false };
   move_item(page, { direction: "down" });
   assert.deepEqual([log.at(-1), scrolls, asked], ["focus item 4", [], 1]);
   // A page that did not grow still scrolls on.
   const { page: still, scrolls: still_scrolls } = fake_page(above);
-  still.derived = { items_: () => still.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
+  still.derived = { sections_: () => [], items_: () => still.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => false };
   move_item(still, { direction: "down" });
   assert.deepEqual(still_scrolls, [[0, 50]]);
 });
@@ -571,7 +571,7 @@ test("down at the end of a list the real derived row kept reads again once the p
 test("with no selector, h and l step along a derived grid and scroll sideways on a derived list", () => {
   const { page, log, scrolls } = fake_page(grid, true, 0);
   let grid_kind = true;
-  page.derived = { items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => grid_kind };
+  page.derived = { sections_: () => [], items_: () => page.doc.querySelectorAll("li") as unknown as Element[], link_of_: () => undefined, selector_: () => "li", grew_: () => false, grid_: () => grid_kind };
   move_item(page, { direction: "right" });
   assert.deepEqual([log.at(-1), scrolls], ["focus item 1", []]);
   grid_kind = false;

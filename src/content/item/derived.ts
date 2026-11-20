@@ -30,7 +30,7 @@ export type DerivedDeps = {
 };
 
 // A pin is a pick of a list that a site row's keys do not walk: `pinned_` says whether one is on, after a read that drops it when its list is gone or the address changed. `grew_` reads the page again when something new follows the last item, and says whether it did. A move at the end of the list asks it. `grid_` says whether the kept answer is a grid.
-export type DerivedRow = { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; focus_none_: () => boolean; lists_: () => Region<Element>[]; active_: () => Region<Element> | undefined; pick_: (region: Region<Element>) => void; pin_: (region: Region<Element>) => void; unpin_: () => void; pinned_: () => boolean };
+export type DerivedRow = { items_: (keep?: boolean) => Element[]; sections_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; focus_none_: () => boolean; lists_: () => Region<Element>[]; active_: () => Region<Element> | undefined; pick_: (region: Region<Element>) => void; pin_: (region: Region<Element>) => void; unpin_: () => void; pinned_: () => boolean };
 
 // The tag and first class that the finder grouped the items by, as a selector. It only has to find the item a focus sits in (`closest`), so a page that reuses the class elsewhere gets a box on that element when a script moves the focus there. Items of more than one tag (batches that draw one template in two tags) give the class alone.
 const item_selector = (items: readonly Element[] = []): string => {
@@ -118,6 +118,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   };
   return {
     items_: (keep) => read(keep)?.items.filter(deps.is_shown_) ?? [],
+    // A peek at the kept list, called after `items_` in the same move: that read has replaced the list when it had to, and a read that timed out kept nothing and must not cost a second one.
+    sections_: () => kept?.active.sections ?? [],
     // A link the page replaced, hid or moved out of its item reads the page again. A link that left the page is in no item.
     link_of_: (item) => {
       const link = kept?.active.links.get(item);
