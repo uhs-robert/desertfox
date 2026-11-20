@@ -134,9 +134,11 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const region = region_of(group);
     if (region) short_regions.push({ ...region, pick_only_: true });
   }
-  // The ARIA lists come before the menus, so a spent budget loses the menus first.
+  // The ARIA lists come before the menus, so a spent budget loses the menus first. A pass that ran out of time adds nothing, and the lists found before it stay.
   const every = [...regions, ...short_regions];
-  every.push(...find_aria_lists(reader, out_of_time, every), ...find_menus(reader, out_of_time));
+  const aria = find_aria_lists(reader, out_of_time, every);
+  if (!aria && !every[0]) return { ...none<N>(), timed_out_: true };
+  every.push(...(aria ?? []), ...find_menus(reader, out_of_time));
   return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
 }
 
