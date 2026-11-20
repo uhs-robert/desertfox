@@ -801,7 +801,7 @@ test("an off step still on its way when the tab enters again cannot reach the fr
   assert.ok(store.get("desertfox_tab_media_4"), "the new hold survives");
 });
 
-test("a frame that never answers drops steps past a bound, and a navigation clears its queue", { timeout: 2000 }, async () => {
+test("a frame that never answers keeps one waiting step per target, and a navigation clears its queue", { timeout: 2000 }, async () => {
   let calls = 0;
   const media = create_tab_media({
     storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
@@ -814,7 +814,7 @@ test("a frame that never answers drops steps past a bound, and a navigation clea
   await media.reported(4, 0, "media", false);
   await media.navigated(4, LOAD_START);
   await media.enter(4, 0);
-  assert.equal(calls, 2, "after the navigation the lane starts fresh");
+  assert.equal(calls, 2, "after the navigation the tab's steps start fresh");
 });
 
 // A send_step that stays open until the test releases it, in order.
@@ -836,11 +836,11 @@ function media_with_held_steps() {
   return { media, release_all, calls: () => calls };
 }
 
-test("a lane keeps 16 steps and drops the oldest waiting ones", async () => {
+test("40 starts behind a step on its way send only the newest after it", async () => {
   const { media, release_all, calls } = media_with_held_steps();
   for (let index = 0; index < 40; index++) await media.enter(4, 0);
   await release_all();
-  assert.equal(calls(), 16);
+  assert.equal(calls(), 2);
 });
 
 test("steps still waiting when the page loads never reach the new page", async () => {
@@ -908,8 +908,8 @@ test("a frame of the old page that never answers its step off at a load holds up
   assert.deepEqual(delivered.at(-1), { on: true, frame: "all", from: undefined });
 });
 
-test("a full lane drops its oldest waiting step, so the latest start still reaches every frame", async () => {
-  const { media, release_all, final_mode, store } = media_with_recorded_steps({ held: true });
+test("waiting steps that a newer one covers are dropped, so the latest start still reaches every frame", async () => {
+  const { media, delivered, release_all, final_mode, store } = media_with_recorded_steps({ held: true });
   for (let cycle = 0; cycle < 20; cycle++) {
     await media.reported(4, 0, "media", false);
     await media.reported(4, 7, "media", false, true);
@@ -919,4 +919,49 @@ test("a full lane drops its oldest waiting step, so the latest start still reach
   await release_all();
   assert.ok(store.get("desertfox_tab_media_4"), "storage holds a live hold");
   assert.equal(final_mode(7), true, "frame 7 ends in the mode");
+  assert.equal(delivered.length, 2, "the first start went out, and the last start covered every step queued behind it");
+});
+
+// Frame 0 enters the mode on its own (a fullscreen) while the off step of the hold it left still waits. The step on of its new hold skips it, so that old off must not go out after it.
+test("a frame that starts a new hold while an off step to it waits stays in the mode", async () => {
+  const { media, release_all, final_mode, store } = media_with_recorded_steps({ held: true });
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.reported(4, 7, "normal", true);
+  await media.reported(4, 0, "media", false);
+  await release_all();
+  assert.deepEqual((store.get("desertfox_tab_media_4") as { frames: number[] }).frames, [0]);
+  assert.notEqual(final_mode(0), false, "no off step reaches frame 0 after its new hold started");
+});
+
+test("the end of a hold over 20 frames sends every frame its off step", async () => {
+  const { media, release_all, final_mode } = media_with_recorded_steps({ held: true });
+  await media.enter(4, 0);
+  for (let frame = 0; frame < 20; frame++) await media.reported(4, frame, "media", false, true);
+  await media.reported(4, 0, "normal", true);
+  await release_all();
+  const still_on = Array.from({ length: 19 }, (_unused, index) => index + 1).filter((frame) => final_mode(frame) !== false);
+  assert.deepEqual(still_on, []);
+});
+
+test("steps still waiting when the tab closes never go out", async () => {
+  const { media, release_all, calls } = media_with_held_steps();
+  for (let index = 0; index < 5; index++) await media.enter(4, 0);
+  await media.forget(4);
+  await release_all();
+  assert.equal(calls(), 1);
+});
+
+test("an aa start covers every waiting step, the off steps of ended holds included", async () => {
+  const { media, delivered, release_all, final_mode } = media_with_recorded_steps({ held: true });
+  for (let cycle = 0; cycle < 20; cycle++) {
+    await media.enter(4, 0);
+    await media.reported(4, 0, "media", false, true);
+    await media.reported(4, 7, "media", false, true);
+    await media.reported(4, 0, "normal", true);
+  }
+  await media.enter(4, 0);
+  await release_all();
+  assert.equal(final_mode(7), true);
+  assert.equal(delivered.length, 2);
 });

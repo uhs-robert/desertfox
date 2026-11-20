@@ -35,13 +35,17 @@ const is_live_hold = (hold: MediaHold | undefined): hold is MediaHold => !!hold 
 // The end of a fullscreen reaches every frame of it at once. Firefox spends the Escape that closes a line in fullscreen on leaving the fullscreen, so the line's frame returns to the mode while the others report normal, in any order. A normal report this soon after a line closed, from a frame without the focus, is that same end. A normal report carries no cause, and content.js has no room for one.
 export const LINE_CLOSE_GRACE_MS = 500;
 
-// More steps than this waiting behind one frame drop the oldest of them.
-const MAX_PENDING_STEPS = 16;
+// A step that waits for its turn. With no `frame_id` it goes to every frame, and skips `from`.
+type QueuedStep = { on: boolean; frame_id?: number | undefined; from?: number | undefined };
+// `sending` says a step of the tab is on its way and not yet answered. `waiting` holds those not yet sent, oldest first.
+type TabSteps = { sending: boolean; waiting: QueuedStep[] };
 
-// A step that waits in its lane. `dropped` says a full lane let it go before it went out.
-type QueuedStep = { dropped: boolean };
-// `pending` counts the lane's steps not yet answered, the one on its way included. `waiting` holds those not yet sent, oldest first.
-type Lane = { tail: Promise<unknown>; pending: number; waiting: QueuedStep[] };
+// Whether `newer` reaches every frame `older` reaches. A step sets the mode, so a frame that gets the newer one needs no older one.
+const covers = (newer: QueuedStep, older: QueuedStep): boolean => {
+  if (newer.frame_id !== undefined) return older.frame_id === newer.frame_id;
+  if (newer.from === undefined) return true;
+  return older.frame_id === undefined ? older.from === newer.from : older.frame_id !== newer.from;
+};
 
 export function create_tab_media(deps: TabMediaDeps) {
   // One read-then-write at a time per background, so two reports together do not drop each other's change.
@@ -52,38 +56,28 @@ export function create_tab_media(deps: TabMediaDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
-  // Steps to one frame go out one after another, in the order the hold sent them, so an off step of an ended hold cannot land after the on step of the next one. A lane is that order for one frame (the key `all` is the lane of steps to every frame). The shared queue never waits on a lane: a frame that never answers (a page stuck in a loop) blocks its own lane, and the steps behind it in this tab, and nothing in another tab.
-  // A step to every frame waits for the lane of each frame the tab has, and a step to one frame waits for the last step to every frame. When the lanes are idle the step is sent at once.
-  const lanes = new Map<number, Map<number | "all", Lane>>();
-  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number): void => {
-    const tab_lanes = lanes.get(tab_id) ?? new Map<number | "all", Lane>();
-    lanes.set(tab_id, tab_lanes);
-    const own = tab_lanes.get(frame_id ?? "all") ?? { tail: Promise.resolve(), pending: 0, waiting: [] };
-    tab_lanes.set(frame_id ?? "all", own);
-    // A frame that never answers would grow its lane for as long as the hold starts and ends. A full lane drops its oldest waiting step, never the newest, so the last step (the state storage holds) always goes out.
-    const oldest = own.pending >= MAX_PENDING_STEPS ? own.waiting.shift() : undefined;
-    if (oldest) {
-      oldest.dropped = true;
-      own.pending--;
-    }
-    const queued: QueuedStep = { dropped: false };
-    own.waiting.push(queued);
-    const every_frame = tab_lanes.get("all");
-    const waits = frame_id === undefined ? [...tab_lanes.values()] : every_frame && every_frame !== own ? [own, every_frame] : [own];
-    // A load of the page deleted these lanes: the frames the step waited for are gone, and it must not reach the new page.
-    const send = () => {
-      if (queued.dropped || lanes.get(tab_id) !== tab_lanes) return Promise.resolve();
-      // The lane sends in order, so the step that goes out is the first that waits.
-      own.waiting.shift();
-      return best_effort(deps.send_step(tab_id, on, frame_id, from));
-    };
-    own.pending++;
-    const idle = waits.every((lane) => lane.pending === (lane === own ? 1 : 0));
-    const run = idle ? send() : Promise.all(waits.map((lane) => lane.tail)).then(send);
-    own.tail = run;
-    void run.then(() => void (queued.dropped || own.pending--));
+  // The steps of a tab go out one at a time, in the order the hold sent them, so an off step of an ended hold cannot land after the on step of the next one. The shared queue never waits on them: a frame that never answers (a page stuck in a loop) holds up the steps behind it in its tab, and nothing in another tab.
+  // A new step drops the waiting steps it covers, so the waiting list holds at most one step per frame and per reporter of a step to every frame, however long a frame stays stuck.
+  const tab_steps = new Map<number, TabSteps>();
+  const send_next = (tab_id: number, steps: TabSteps): void => {
+    // A load or a close of the tab replaced its steps: the frames they were for are gone.
+    const next = tab_steps.get(tab_id) === steps ? steps.waiting.shift() : undefined;
+    steps.sending = next !== undefined;
+    if (next) void best_effort(deps.send_step(tab_id, next.on, next.frame_id, next.from)).then(() => send_next(tab_id, steps));
   };
-  // The old page of a load gets its steps off straight away, outside the lanes: a frame of it that never answers must not hold up the new page's lanes.
+  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number): void => {
+    const steps = tab_steps.get(tab_id) ?? { sending: false, waiting: [] };
+    tab_steps.set(tab_id, steps);
+    const queued: QueuedStep = { on, frame_id, from };
+    steps.waiting = [...steps.waiting.filter((older) => !covers(queued, older)), queued];
+    if (!steps.sending) send_next(tab_id, steps);
+  };
+  // A frame that reports the mode on its own is past every step still waiting for it alone, the off of a hold it left included. The step on of a hold it starts skips it, so that off would land last.
+  const drop_steps_to = (tab_id: number, frame_id: number): void => {
+    const steps = tab_steps.get(tab_id);
+    if (steps) steps.waiting = steps.waiting.filter((waiting) => waiting.frame_id !== frame_id);
+  };
+  // The old page of a load gets its steps off straight away, outside the tab's steps: a frame of it that never answers must not hold up the new page.
   const step_old_page = (tab_id: number, on: boolean, frame_id?: number): void => void best_effort(deps.send_step(tab_id, on, frame_id));
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
   // The reporter gets no step off, because it left the mode already. No step on reaches a frame of the hold late: each frame joins by reporting the mode, so its step came first, and the step of a first report skips the reporter (`from`).
@@ -146,6 +140,7 @@ export function create_tab_media(deps: TabMediaDeps) {
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
           if (by_step && !is_live_hold(hold)) return step(tab_id, false, frame_id);
           const { stepped_on, ...rest } = hold ?? { frames: [] };
+          drop_steps_to(tab_id, frame_id);
           await write(tab_id, { ...rest, frames: [...rest.frames, frame_id] });
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
           if (rest.frames.length === 0 && !stepped_on) step(tab_id, true, undefined, frame_id);
@@ -171,14 +166,14 @@ export function create_tab_media(deps: TabMediaDeps) {
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps the hold and drops the pin, so the keys act on the new main video: a `pushState` (YouTube's next video) sends a bare `url`, and a `replaceState` before the load event sends `status: "loading"` with the `url`.
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
-        // The frames of the old page are gone, so the steps still waiting for them are dropped with their lanes.
-        if (change.status === "loading" && change.url === undefined) lanes.delete(tab_id);
+        // The frames of the old page are gone, so the steps still waiting for them are dropped.
+        if (change.status === "loading" && change.url === undefined) tab_steps.delete(tab_id);
         const hold = await read(tab_id);
         if (!hold) return;
         if (change.status === "loading" && change.url === undefined) await end(tab_id, hold, undefined, step_old_page);
         else if (hold.pin_frame !== undefined) await write(tab_id, without_pin(hold));
       }),
-    forget: (tab_id: number): Promise<void> => in_turn(() => (lanes.delete(tab_id), deps.storage.remove(key_of(tab_id)))),
+    forget: (tab_id: number): Promise<void> => in_turn(() => (tab_steps.delete(tab_id), deps.storage.remove(key_of(tab_id)))),
   };
 }
 
