@@ -267,101 +267,71 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
   await run_case("list view: G follows a list that loads in parts to the last file", async () => {
     await open_drive("list_fetch", "list", 250, 100);
     await press_keys("G");
-    // The stand-in redraws its rows on each scroll and drops the focus a redraw replaces, so only the end of the follow is stable: the select lands on the last file.
-    // Three parts load 300 ms apart, then the follow waits out its 1 s stall before the select goes out, so the default 5 s leaves too little margin on a loaded machine.
-    await poll_until("G to select the last file", async () => (await selected_file()) === 249, { timeout_ms: 15000 });
-    await expect_focus("f249");
+    // The stand-in redraws its rows on each scroll and drops the focus a redraw replaces, so only the end of the follow is stable: the focus lands on the last file.
+    // Three parts load 300 ms apart, then the follow waits out its 1 s stall, so the default 5 s leaves too little margin on a loaded machine.
+    await poll_until("G to focus the last file", async () => (await focused()) === "f249", { timeout_ms: 15000 });
+    expect((await arrows_sent()) === 0, `G sent ${await arrows_sent()} arrow keys`);
   });
 
-  // Escape also blurs the file, so the check reads the stand-in's selection. The arrow pair of G runs before the queued Escape and sets it.
+  // Escape also blurs the file, so the check reads the panel's scroll: a follow that went on would scroll it to the next part.
   await run_case("list view: a key during G stops following the end", async () => {
     await open_drive("list_cancel", "list", 400, 100);
-    const selected = async () => Number(await in_active_tab(`document.getElementById("panel").dataset.selected ?? -1`));
     await press_keys("G");
     await expect_focus("f99");
     await press_keys("-k", "Escape");
+    const stopped_at = await panel_top();
     // The next part lands 300 ms after G reached the bottom.
     await sleep(800);
-    expect((await selected()) === 99, `G went on after Escape, to ${await selected()}`);
+    expect((await panel_top()) === stopped_at, `G went on after Escape, from ${stopped_at} to ${await panel_top()}`);
   });
 
-  await run_case("list view: Enter opens the file that G or gg selected", async () => {
-    await open_drive("list_enter", "list");
-    await press_keys("G");
-    await poll_until("G to select the last file", async () => (await selected_file()) === FILES - 1);
-    await press_keys("-k", "Return");
-    await poll_until("the last file to open", async () => (await hash()) === `#opened-f${FILES - 1}`);
-    await press_keys("gg");
-    await poll_until("gg to select the first file", async () => (await selected_file()) === 0);
-    await press_keys("-k", "Return");
-    await poll_until("the first file to open", async () => (await hash()) === "#opened-f0");
-  });
-
-  // A key that item mode binds waits for the end key and runs after the select lands. The row binds Enter too, so one typed behind G or gg opens the file the select landed on.
-  await run_case("list view: Return typed right behind G or gg opens the file the select landed on", async () => {
-    await open_drive("list_enter_held", "list");
-    await press_keys("G", "-k", "Return");
-    await poll_until("the last file to open", async () => (await hash()) === `#opened-f${FILES - 1}`);
-    await press_keys("gg", "-k", "Return");
-    await poll_until("the first file to open", async () => (await hash()) === "#opened-f0");
-  });
-
-  await run_case("list view: k pressed right after G or gg runs after the select has landed", async () => {
+  await run_case("list view: k pressed right after G or gg runs after the end key has landed", async () => {
     await open_drive("list_held", "list");
     await press_keys("G", "k");
-    await poll_until("k to move the selection up from the last file", async () => (await arrows_sent()) === 3 && (await selected_file()) === FILES - 2);
+    await poll_until("k to move the selection up from the last file", async () => (await arrows_sent()) === 1 && (await selected_file()) === FILES - 2);
     await press_keys("gg", "j");
-    await poll_until("j to move the selection down from the first file", async () => (await arrows_sent()) === 6 && (await selected_file()) === 1);
+    await poll_until("j to move the selection down from the first file", async () => (await arrows_sent()) === 2 && (await selected_file()) === 1);
   });
 
-  // 59 files make the last grid line short, so G must select g58 and not a cell that is not there.
-  await run_case("grid view with a short last line: G selects the last file and gg the first", async () => {
+  // 59 files make the last grid line short, so G must focus g58 and not a cell that is not there.
+  await run_case("grid view with a short last line: G focuses the last file and gg the first", async () => {
     await open_drive("grid_short", "grid", 59);
     await press_keys("G");
-    await poll_until("G to select the last file", async () => (await selected_file()) === 58);
     await expect_focus("g58");
     await press_keys("gg");
-    await poll_until("gg to select the first file", async () => (await selected_file()) === 0);
     await expect_focus("g0");
   });
 
-  // Known gap: with one file no arrow can move, so the file gets the box and Drive selects nothing.
-  await run_case("list view with one file: G boxes it, nothing breaks, and Enter opens nothing", async () => {
+  // Known gap: with one file no arrow can move, so j gives the file the box and Drive selects nothing.
+  await run_case("list view with one file: G boxes it, j selects nothing and item mode stays", async () => {
     await open_drive("list_one", "list", 1);
     await press_keys("G");
     await expect_focus("f0");
-    await sleep(300);
-    await press_keys("-k", "Return");
-    await sleep(300);
-    expect((await hash()) === "#before", `Enter opened ${await hash()}`);
-    expect((await selected_file()) === -1, "the file was selected");
     await press_keys("j");
     await sleep(300);
+    expect((await selected_file()) === -1, "the file was selected");
     expect((await in_active_tab("document.querySelector('[data-desertfox-mode]')?.getAttribute('data-desertfox-mode')")) === "ITEM", "item mode ended");
   });
 
-  // A count on G goes nowhere: one arrow pair goes out, and 100 is past the limit of a sent key, which would fail the leaf.
-  await run_case("list view: a count on G and gg sends one arrow pair and selects the end", async () => {
+  // gg and G send no arrow, so a count on them sends none and Drive's selection stays where it was.
+  await run_case("list view: a count on G and gg sends no arrow and leaves Drive's selection alone", async () => {
     await open_drive("list_count", "list");
-    await press_keys("3G");
-    await poll_until("3G to select the last file", async () => (await selected_file()) === FILES - 1);
-    expect((await arrows_sent()) === 2, `3G sent ${await arrows_sent()} arrows`);
-    await press_keys("100gg");
-    await poll_until("100gg to select the first file", async () => (await selected_file()) === 0);
-    expect((await arrows_sent()) === 4, `100gg sent ${(await arrows_sent()) - 2} arrows`);
-    await press_keys("100G");
-    await poll_until("100G to select the last file", async () => (await selected_file()) === FILES - 1);
-    expect((await arrows_sent()) === 6, `100G sent ${(await arrows_sent()) - 4} arrows`);
+    for (const [keys, wanted] of [["3G", `f${FILES - 1}`], ["100gg", "f0"], ["100G", `f${FILES - 1}`]]) {
+      await press_keys(keys);
+      await expect_focus(wanted);
+      expect((await arrows_sent()) === 0, `${keys} sent ${await arrows_sent()} arrows`);
+      expect((await selected_file()) === -1, `${keys} selected ${await selected_file()}`);
+    }
   });
 
-  await run_case("list view that loads in parts: k pressed during the follow of G stops it, the select lands on the file reached and k moves up from it", async () => {
+  await run_case("list view that loads in parts: k pressed during the follow of G stops it, k moves up from the file reached", async () => {
     await open_drive("list_held_follow", "list", 400, 100);
     await press_keys("G", "k");
-    await poll_until("the arrows to go out", async () => (await arrows_sent()) === 3);
+    await poll_until("the arrow to go out", async () => (await arrows_sent()) === 1);
     await sleep(500);
     const selected = await selected_file();
     expect(selected > 0 && selected < 399, `the select landed on ${selected}`);
-    expect((await arrows_sent()) === 3, `${await arrows_sent()} arrows went out`);
+    expect((await arrows_sent()) === 1, `${await arrows_sent()} arrows went out`);
     expect((await focused()) === `f${selected}`, `the focus is on ${await focused()}`);
   });
 

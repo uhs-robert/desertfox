@@ -41,12 +41,11 @@ test("a move with its own times sends the arrow that many times, and one without
   assert.equal(keys.down.invocation.args?.["times"], 1);
 });
 
-test("the ends keep their scroll and jump, then come back to the end item with an arrow pair that ignores the count", () => {
-  for (const [direction, expected] of [["last", ["item:last", "item:current", "ArrowUp", "ArrowDown"]], ["first", ["item:first", "item:current", "ArrowDown", "ArrowUp"]]] as const) {
+test("the ends keep their scroll and jump and send no arrows", () => {
+  for (const direction of ["first", "last"]) {
     const steps = rewritten(item_step(direction, ".row", true));
-    assert.deepEqual(shape(steps), expected, direction);
-    assert.deepEqual(steps.map((step) => step.jump), [true, undefined, undefined, undefined], direction);
-    assert.deepEqual(steps.slice(1).map((step) => step.count_rule), ["ignore", "ignore", "ignore"], direction);
+    assert.deepEqual(shape(steps), [`item:${direction}`], direction);
+    assert.deepEqual(steps.map((step) => step.jump), [true], direction);
   }
 });
 
@@ -66,7 +65,7 @@ test("a choice list is rewritten at every choice, and the input tree is not chan
   const result = with_item_select(tree, keys);
   assert.deepEqual(tree, before);
   const first = (result.children["g"] as TreeBranch).children["g"] as TreeLeaf;
-  assert.deepEqual(shape(first.steps), ["item:first", "item:current", "ArrowDown", "ArrowUp"]);
+  assert.deepEqual(shape(first.steps), ["item:first"]);
   assert.deepEqual(shape(first.otherwise!.steps), ["item:current", "ArrowDown"]);
   assert.deepEqual(shape(first.otherwise!.otherwise!.steps), ["item:down"]);
 });
