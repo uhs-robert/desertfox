@@ -141,6 +141,8 @@ const DRIVE_BIND: BindingTable = {
   ...end_binds(DRIVE_ANY_ITEM, undefined),
   h: drive_move(DRIVE_GRID_ITEM, "left", "Move to the file on the left (scrolls sideways in the list view)"),
   l: drive_move(DRIVE_GRID_ITEM, "right", "Move to the file on the right (scrolls sideways in the list view)"),
+  // An Enter the row does not bind reaches the page at once, so one typed right behind G finds the old selection. A bound Enter waits for the end key and opens the file the select landed on.
+  "<Enter>": { id: "page.send_key", args: { key: "Enter", key_code: 13 }, when_present: DRIVE_ANY_ITEM, intent: "Open the selected file" },
 };
 
 // Each row that names its items in the `item` column marks its sites with `item_navigator = "shipped"`, so they start in item mode under the default global value `shipped` and under true, and not under false. A user row with its own value comes first in the table and decides the site.

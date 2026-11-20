@@ -776,7 +776,7 @@ test("the drive row binds plain item moves, and the page reply turns them into f
   const leaf_at = async (key: string, compiled_keymap = compiled) => {
     // gg sits under the g branch.
     let node: TreeNode | undefined = (await ask(compiled_keymap, drive))!.keymap.modes.item;
-    for (const token of key) node = node?.kind === "branch" ? node.children[token] : undefined;
+    for (const token of key.startsWith("<") ? [key] : key) node = node?.kind === "branch" ? node.children[token] : undefined;
     assert.equal(node?.kind, "leaf", key);
     return node as TreeLeaf;
   };
@@ -796,6 +796,13 @@ test("the drive row binds plain item moves, and the page reply turns them into f
     assert.deepEqual(leaf.steps.map((step) => step.count_rule), [leaf.steps[0]!.count_rule, "ignore", "ignore", "ignore"], key);
     assert.deepEqual(leaf.steps.map((step) => step.jump), [true, undefined, undefined, undefined], key);
   }
+  // Enter is bound so that one typed behind G or gg waits for the select. The default Enter of the mode (item action open) stays behind it for a page with no file.
+  const enter = await leaf_at("<Enter>");
+  assert.equal(enter.when_present, `${grid}, ${list}`);
+  assert.deepEqual([enter.steps.map((step) => step.invocation.id), enter.steps[0]?.invocation.args?.["key"]], [["page.send_key"], "Enter"]);
+  assert.deepEqual(enter.otherwise?.steps.map((step) => step.invocation.id), ["page.item_action"]);
+  // The row keeps its own keys beside the derived ones.
+  for (const key of ["I", "zz"]) assert.equal((await leaf_at(key)).steps[0]?.invocation.id === undefined, false, key);
   // A guard that fails falls through to the item key of the mode, which scrolls sideways when the page has no grid. It names no selector, so it stays as it is.
   const fallback = (await leaf_at("h")).otherwise;
   assert.deepEqual(fallback?.steps.map((step) => step.invocation.id), ["page.item"]);

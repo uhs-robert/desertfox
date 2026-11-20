@@ -241,7 +241,15 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("the first file to open", async () => (await hash()) === "#opened-f0");
   });
 
-  // A key that item mode binds waits for the end key and runs after the select lands. Enter is unbound there, so it reaches the page at once and finds the old selection.
+  // A key that item mode binds waits for the end key and runs after the select lands. The row binds Enter too, so one typed behind G or gg opens the file the select landed on.
+  await run_case("list view: Return typed right behind G or gg opens the file the select landed on", async () => {
+    await open_drive("list_enter_held", "list");
+    await press_keys("G", "-k", "Return");
+    await poll_until("the last file to open", async () => (await hash()) === `#opened-f${FILES - 1}`);
+    await press_keys("gg", "-k", "Return");
+    await poll_until("the first file to open", async () => (await hash()) === "#opened-f0");
+  });
+
   await run_case("list view: k pressed right after G or gg runs after the select has landed", async () => {
     await open_drive("list_held", "list");
     await press_keys("G", "k");

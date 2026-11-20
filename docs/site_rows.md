@@ -431,6 +431,7 @@ In item mode:
 | `G` | Go to last item (scrolls the page when no item shows) |
 | `h` | Move to the file on the left (scrolls sideways in the list view) |
 | `l` | Move to the file on the right (scrolls sideways in the list view) |
+| `<Enter>` | Open the selected file |
 
 - Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. gg and G go to the end and then send an arrow pair that comes back to it, so Enter opens that file. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
 
