@@ -45,7 +45,6 @@ test("a hand-edited local theme with a missing variant falls back instead of cra
 });
 
 // Oasis themes only: a contributed built-in theme need not follow this rule.
-// The cursor color is also the normal color in oasis_desert dark, so only visual has to stand apart.
 test("every built-in theme gives visual mode its own color in both variants", () => {
   for (const name of Object.keys(OASIS_THEMES)) {
     const theme = load_theme(name, 3)!;
@@ -61,7 +60,7 @@ test("every built-in theme gives visual mode its own color in both variants", ()
 
 test("moonlight keeps its mode colors, caret from the cursor color, and its Search and CurSearch colors", () => {
   const { dark, light } = load_theme("oasis_moonlight", 3)!;
-  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#f0e68c", "#ffba75", "#717a84"]);
+  assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#f7d46c", "#ffba75", "#717a84"]);
   assert.deepEqual([light.mode_caret, light.mode_visual], ["#817613", "#85460e"]);
   assert.equal(dark.mode_item, "#c695ff");
   assert.deepEqual([dark.search_bg, dark.search_fg, dark.search_current_bg, dark.search_current_fg], ["#666666", "#f5f5dc", "#cdc673", "#0c0e13"]);
@@ -81,17 +80,17 @@ function lab_of(hex: string): [number, number, number] {
 }
 
 const BADGE_ROLES = ["mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"] as const;
-// Only pairs with item or media are checked. Older pairs sit below the floor already: normal vs caret in oasis_abyss, desert, dune and midnight, insert vs caret in oasis_sol, normal vs visual in oasis_canyon light.
-const ITEM_OR_MEDIA = new Set<string>(["mode_item", "mode_media"]);
 const MIN_BADGE_DISTANCE = 12;
 
-test("every built-in theme keeps the item and media badge colors a CIE76 distance of 12 from every other badge", () => {
-  const themes = [...Object.keys(OASIS_THEMES).map((name) => [name, load_theme(name, 3)!] as const), ...Object.entries(REPO_THEMES)];
+test("every built-in theme keeps every pair of badge colors a CIE76 distance of 12 apart, at every light level", () => {
+  const themes = [
+    ...Object.keys(OASIS_THEMES).flatMap((name) => [1, 2, 3, 4, 5].map((level) => [`${name} light ${level}`, load_theme(name, level as 1 | 2 | 3 | 4 | 5)!] as const)),
+    ...Object.entries(REPO_THEMES).map(([name, theme]) => [name, theme] as const),
+  ];
   for (const [name, theme] of themes) {
     for (const variant of ["dark", "light"] as const) {
       for (const [at, first] of BADGE_ROLES.entries()) {
         for (const second of BADGE_ROLES.slice(at + 1)) {
-          if (!ITEM_OR_MEDIA.has(first) && !ITEM_OR_MEDIA.has(second)) continue;
           const [l1, a1, b1] = lab_of(theme[variant][first]);
           const [l2, a2, b2] = lab_of(theme[variant][second]);
           const distance = Math.hypot(l1 - l2, a1 - a2, b1 - b2);
