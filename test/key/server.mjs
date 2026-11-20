@@ -270,6 +270,19 @@ export function start_server() {
       </script>`;
       return response.end(page(`${url.pathname.slice(1)} ${id}`, `<table><tbody>${rows}</tbody></table>${wide}${tall_filler}`, script));
     }
+    if (url.pathname === "/reddit_thread") {
+      // A stand-in for a Reddit thread: `shreddit-comment[depth] > details > summary` with the replies nested in `div#comment-children`. The summary ids are k0 to k6: k0 holds k1 (which holds k2) and k3, k4 holds k5, k6 stands alone. The native `details` folds on a click of its summary. Closed replies keep their boxes, as on the site, and only `checkVisibility()` tells. k4 starts folded. Each click is recorded in the `clicks` data attribute of the root element.
+      const comment = (index, children = "", open = true) => `<shreddit-comment depth="${{ 0: 0, 1: 1, 2: 2, 3: 1, 4: 0, 5: 1, 6: 0 }[index]}" style="display:block"><details${open ? " open" : ""}><summary id="k${index}" style="height:36px;display:block">author k${index}</summary><div style="height:30px">body k${index}</div><div id="comment-children">${children}</div></details></shreddit-comment>`;
+      const tree = comment(0, comment(1, comment(2)) + comment(3)) + comment(4, comment(5), false) + comment(6);
+      const script = `<script>
+        document.documentElement.dataset.clicks = "";
+        document.addEventListener("click", (event) => {
+          const head = event.target.closest?.("summary");
+          if (head) document.documentElement.dataset.clicks += head.id + ",";
+        });
+      </script>`;
+      return response.end(page(`reddit_thread ${id}`, `<shreddit-comment-tree><section>${tree}</section></shreddit-comment-tree>${tall_filler}`, script));
+    }
     if (url.pathname === "/links") {
       // Two links up top, an anchor without href that ]l skips, and a link far below. The page reports each focus.
       const links = '<a href="#a" id="first">one</a> <a id="bare">bare</a> <a href="#b" id="second">two</a>' + tall_filler + '<a href="#c" id="last">three</a>';
