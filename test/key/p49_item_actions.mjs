@@ -1,4 +1,4 @@
-// Space and Enter in item mode. Space toggles the checkbox of the current item (a native one, a role=checkbox div, and with a site row's `target` a plain span) and shows a notice on an item with none. Enter opens the item's link, also after Space moved the focus into the item. A row's `target` replaces the generic search.
+// Space, Enter and Tab in item mode. Space toggles the checkbox of the current item (a native one, a role=checkbox div, and with a site row's `target` a plain span) and shows a notice on an item with none. Enter opens the item's link, also after Space moved the focus into the item. A row's `target` replaces the generic search.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -44,28 +44,60 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await toggled()) === "", `Space clicked ${await toggled()}`);
   });
 
-  await run_case("Enter opens the link of the current item, also after Space moved the focus into the item", async () => {
+  await run_case("Enter opens the link of the current item, and clicks the checkbox that Space left focused", async () => {
     await open_boxes("ia_enter");
     await press_keys("-k", "space");
     await poll_until("the native box clicked", async () => (await toggled()) === "box0");
-    // The click moved the focus onto the checkbox, so a native Enter would do nothing.
+    // The click moved the focus onto the checkbox, a child of the item that is not its link, so Enter clicks it.
     await expect_focus("box0");
     await press_keys("-k", "Return");
-    await poll_until("the link opened", async () => (await hash()) === "#c0");
+    await poll_until("the focused box clicked again", async () => (await toggled()) === "box0,box0");
+    expect((await hash()) === "", `Enter opened ${await hash()}`);
     await press_keys("j");
     await expect_focus("c1");
     await press_keys("-k", "Return");
     await poll_until("the second link opened", async () => (await hash()) === "#c1");
   });
 
-  await run_case("a site row's target replaces the generic search, so Space clicks the span", async () => {
-    await open_boxes("ia_star");
-    await press_keys("jj");
+  const shift_tab = () => press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
+
+  await run_case("Tab and Shift-Tab step through the item's controls, wrap both ways and stay in the item", async () => {
+    await open_boxes("ia_tab_ring");
+    await press_keys("-k", "Tab");
+    await expect_focus("box0");
+    await press_keys("-k", "Tab");
+    await expect_focus("c0");
+    await shift_tab();
+    await expect_focus("box0");
+    await shift_tab();
+    await expect_focus("c0");
+    // The box stays on the first item the whole time.
+    expect((await in_active_tab(`document.activeElement.closest(".card") === document.querySelector(".card")`)) === true, "the focus left the item");
+  });
+
+  await run_case("Enter clicks the control that Tab focused, and j puts the focus back on the next item's link", async () => {
+    await open_boxes("ia_tab_enter");
+    await press_keys("-k", "Tab");
+    await expect_focus("box0");
+    await press_keys("-k", "Return");
+    await poll_until("the box clicked", async () => (await toggled()) === "box0");
+    expect((await hash()) === "", `Enter opened ${await hash()}`);
+    await press_keys("j");
+    await expect_focus("c1");
+    await press_keys("-k", "Tab");
+    await expect_focus("box1");
+    await press_keys("j");
     await expect_focus("c2");
-    await press_keys("-k", "space");
-    await poll_until("the span clicked", async () => (await toggled()) === "box2");
-    await sleep(200);
-    expect((await toggled()) === "box2", `Space clicked ${await toggled()}`);
+  });
+
+  await run_case("an item with only its link lets Tab go on to the next link, as the browser does", async () => {
+    await open_boxes("ia_tab_single");
+    await press_keys("3j");
+    await expect_focus("c3");
+    await press_keys("-k", "Tab");
+    await expect_focus("c4");
+    await shift_tab();
+    await expect_focus("c3");
   });
 
   // Auto-start and `mode item` record no move. The focused item is still the current one.

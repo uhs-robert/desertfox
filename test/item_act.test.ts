@@ -39,13 +39,13 @@ test("a target selector replaces the search", () => {
   assert.equal(checkbox_in(item, ".missing"), undefined);
 });
 
-test("the item_act bundle registers page.item_action, and registers once", async () => {
+test("the item_act bundle registers page.item_action and page.item_focus, and registers once", async () => {
   const registered: string[] = [];
   (globalThis as Record<string, unknown>).window = { desertfox_host: { register_handler_: (id: string) => void registered.push(id) } };
   const bundle_url = new URL("../src/content/item_act/main.ts", import.meta.url).href;
   await import(`${bundle_url}?first`);
   await import(`${bundle_url}?second`);
-  assert.deepEqual(registered, ["page.item_action"]);
+  assert.deepEqual(registered, ["page.item_action", "page.item_focus"]);
 });
 
 test("target goes with toggle only, and the action is required", async () => {
@@ -62,4 +62,65 @@ test("target goes with toggle only, and the action is required", async () => {
 test("an item that is itself a checkbox is the checkbox", () => {
   const item = item_of([], shown_box("self", 'role="checkbox"'));
   assert.equal(name_of(checkbox_in(item)), "self");
+});
+
+// Focus ring. An element is a fake with a `tabIndex`, a `disabled` flag and a `shown` flag, and the item holds its children.
+import { focused_child, next_focus } from "../src/content/item_act/focus.ts";
+type Ring = { name: string; tabIndex: number; disabled: boolean; shown: boolean };
+const ring_el = (name: string, over: Partial<Ring> = {}) => ({ name, tabIndex: 0, disabled: false, shown: true, ...over }) as Ring;
+type Fake_el = Element & Ring;
+const as_el = (fake: Ring) => Object.assign(fake, { matches: (selector: string) => selector === ":disabled" && fake.disabled, checkVisibility: () => fake.shown, getClientRects: () => (fake.shown ? [{}] : []) }) as unknown as Fake_el;
+const ring_item = (children: Ring[]) => {
+  const els = children.map(as_el);
+  return { els, item: { querySelectorAll: () => els, contains: (other: unknown) => els.includes(other as never) } as unknown as Element };
+};
+const step = (item: Element, active: Element | null, direction: "next" | "prev", page: Element[] = []) => (next_focus(item, active, direction, () => page) as Fake_el | undefined)?.name;
+
+test("Tab steps through the children of the item in order and wraps", () => {
+  const { els, item } = ring_item([ring_el("link"), ring_el("button"), ring_el("input")]);
+  assert.equal(step(item, els[0]!, "next"), "button");
+  assert.equal(step(item, els[1]!, "next"), "input");
+  assert.equal(step(item, els[2]!, "next"), "link");
+});
+
+test("Shift-Tab steps back and wraps from the first to the last", () => {
+  const { els, item } = ring_item([ring_el("link"), ring_el("button"), ring_el("input")]);
+  assert.equal(step(item, els[2]!, "prev"), "button");
+  assert.equal(step(item, els[0]!, "prev"), "input");
+});
+
+test("focus outside the ring starts at the first on Tab and at the last on Shift-Tab", () => {
+  const { item } = ring_item([ring_el("a"), ring_el("b")]);
+  assert.equal(step(item, null, "next"), "a");
+  assert.equal(step(item, null, "prev"), "b");
+});
+
+test("disabled, tabindex -1 and hidden elements are skipped", () => {
+  const { els, item } = ring_item([ring_el("link"), ring_el("off", { disabled: true }), ring_el("skip", { tabIndex: -1 }), ring_el("gone", { shown: false }), ring_el("button")]);
+  assert.equal(step(item, els[0]!, "next"), "button");
+  assert.equal(step(item, els[4]!, "prev"), "link");
+});
+
+test("an item with no focusable child refuses", () => {
+  const { item } = ring_item([ring_el("off", { disabled: true })]);
+  assert.equal(step(item, null, "next"), undefined);
+});
+
+test("an item with only its link steps on through the page's focusables", () => {
+  const { els, item } = ring_item([ring_el("link")]);
+  const page = [as_el(ring_el("previous result")), els[0]!, as_el(ring_el("next result"))];
+  assert.equal(step(item, els[0]!, "next", page), "next result");
+  assert.equal(step(item, els[0]!, "prev", page), "previous result");
+});
+
+test("Enter takes the focused child, but not the item, its link or a field", () => {
+  const { els, item } = ring_item([ring_el("link"), ring_el("button"), ring_el("field")]);
+  const none = () => false;
+  const field_only = (element: Element | null) => (element as Fake_el | null)?.name === "field";
+  assert.equal((focused_child(item, els[0], els[1]!, none) as Fake_el).name, "button");
+  assert.equal(focused_child(item, els[0], els[0]!, none), undefined);
+  assert.equal(focused_child(item, els[0], item, none), undefined);
+  assert.equal(focused_child(item, els[0], null, none), undefined);
+  assert.equal(focused_child(item, els[0], as_el(ring_el("outside")), none), undefined);
+  assert.equal(focused_child(item, els[0], els[2]!, field_only), undefined);
 });
