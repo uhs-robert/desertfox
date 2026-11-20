@@ -395,7 +395,7 @@ function start(): void {
 
   wire_mode_reports(page_mode, (mode) => {
     if (!extension_context_alive()) return stop_listening();
-    if (mode !== "media" && mode !== "item") media_by_step = false;
+    if ((mode !== "media" && mode !== "item") || page_mode.is_escaping_()) media_by_step = false;
     key_flow.reset_sequence_();
     site_mode.set_();
     bundles.enter_mode_(mode);
@@ -414,7 +414,7 @@ function start(): void {
   // A fullscreen change in this frame and the media mode of another frame take the same step.
   const media_step = (on: boolean, own?: boolean, item?: true) => {
     const held = item && "item";
-    const next = on ? fullscreen_step(page_mode.get_mode_(), true, held, !own) : page_mode.media_ended_(own, held);
+    const next = on ? fullscreen_step(page_mode.get_mode_(), true, held) : page_mode.media_ended_(own, held);
     if (next) {
       media_by_step = !own;
       void bundles.set_mode_(next);

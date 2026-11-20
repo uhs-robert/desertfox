@@ -19,9 +19,9 @@ import { badge_state } from "../src/content/badge_state.ts";
 import { check_args } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 
-test("fullscreen_step: only normal mode enters the media mode, only the media mode leaves with the fullscreen", () => {
+test("fullscreen_step: only normal and item mode enter the media mode, only the media mode leaves with the fullscreen", () => {
   for (const mode of MODES) {
-    assert.equal(fullscreen_step(mode, true), mode === "normal" ? "media" : undefined, `enter from ${mode}`);
+    assert.equal(fullscreen_step(mode, true), mode === "normal" || mode === "item" ? "media" : undefined, `enter from ${mode}`);
     assert.equal(fullscreen_step(mode, false), mode === "media" ? "normal" : undefined, `leave from ${mode}`);
   }
 });
