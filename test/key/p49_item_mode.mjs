@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 export const areas = ["keys", "tabs", "bundles"];
 
-export async function run_cases({ run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ events, wait_event, run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
@@ -184,8 +184,11 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_badge("ITEM");
     await press_keys("j");
     await expect_focus("c0");
-    await in_active_tab(`window.im_nav_old_page = true; location.reload(); 0`);
-    await poll_until("the page to load again", async () => (await in_active_tab("window.im_nav_old_page === undefined && document.readyState === 'complete'")) === true);
+    // The page reads its id from the address, which the pushState changed. The tab refuses scripts while it reloads, so the poll starts once the new document has read its keys.
+    const reload_mark = events.length;
+    await in_active_tab(`location.reload(); 0`);
+    await wait_event(reload_mark, (event) => event.type === "tree_read" && event.page_id === "im_nav_pushed", "content script ready after the reload", 6000);
+    await poll_until("the reload to complete", async () => (await in_active_tab("document.readyState")) === "complete");
     await expect_badge("NORMAL");
     await sleep(500);
     await press_keys("j");
