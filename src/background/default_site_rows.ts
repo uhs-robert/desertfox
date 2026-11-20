@@ -95,20 +95,21 @@ const BING_ITEMS = item_binds("li.b_algo", "h2 a");
 const HACKERNEWS_COMMENTS = "tr.comtr";
 // The link j names for a story. A comment has none, so a landing focuses the row, and the tree keys land the same way.
 const HACKERNEWS_LINK = ".titleline > a";
-const hackernews_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle"): BoundInvocation => ({
+const hackernews_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", intent: string): BoundInvocation => ({
   id: "page.tree",
+  intent,
   args: { action, selector: HACKERNEWS_COMMENTS, link: HACKERNEWS_LINK, depth: "indent", depth_from: "inside", depth_at: "td.ind", fold: "a.togg", folded: "tr.coll" },
   when_present: HACKERNEWS_COMMENTS,
 });
 const HACKERNEWS_ITEMS = {
   ...item_binds("tr.athing", HACKERNEWS_LINK),
-  h: hackernews_tree("parent"),
-  l: hackernews_tree("child"),
-  "}": hackernews_tree("next"),
-  "{": hackernews_tree("prev"),
-  za: hackernews_tree("toggle"),
-  zc: hackernews_tree("fold"),
-  zo: hackernews_tree("unfold"),
+  h: hackernews_tree("parent", "Go to the parent comment"),
+  l: hackernews_tree("child", "Go to the first reply, or unfold a folded comment"),
+  "}": hackernews_tree("next", "Go to the next sibling comment"),
+  "{": hackernews_tree("prev", "Go to the previous sibling comment"),
+  za: hackernews_tree("toggle", "Fold or unfold the comment"),
+  zc: hackernews_tree("fold", "Fold the thread, or the parent of a comment with no replies"),
+  zo: hackernews_tree("unfold", "Unfold the comment"),
 };
 const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 // A grid of tiles has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.

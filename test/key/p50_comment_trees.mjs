@@ -114,6 +114,33 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_toast("Nothing to fold");
   });
 
+  await run_case("opening a folded thread keeps the replies of a still folded comment hidden", async () => {
+    await open_thread("nested");
+    await press_keys("ll");
+    await expect_focus("k2");
+    await press_keys("zc");
+    await poll_until("k1 folded", async () => (await clicks()) === "k1,");
+    await press_keys("h");
+    await expect_focus("k0");
+    await press_keys("za");
+    await poll_until("k0 folded", async () => (await clicks()) === "k1,k0,");
+    await press_keys("zo");
+    await poll_until("k0 opened", async () => (await clicks()) === "k1,k0,k0,");
+    const hidden = (id) => in_active_tab(`document.getElementById("${id}").classList.contains("noshow")`);
+    expect(!(await hidden("k1")) && !(await hidden("k3")) && (await hidden("k2")), "k1 and k3 show and k2 stays hidden");
+    await press_keys("j");
+    await expect_focus("k1");
+    await press_keys("j");
+    await expect_focus("k3");
+  });
+
+  // The first tree key loads the bundle, and the j typed behind it waits for the run to land.
+  await run_case("a j typed right behind the first tree key runs after it", async () => {
+    await open_thread("order");
+    await press_keys("}j");
+    await expect_focus("k5");
+  });
+
   await run_case("on a page with no comment, h and l keep the sideways scroll", async () => {
     await open_page("hn_front", "hn_front", { new_tab: true });
     await run_line("mode item");

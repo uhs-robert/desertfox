@@ -1,7 +1,7 @@
 // The `tree` bundle: `page.tree`, which moves and folds through nested items (the comments of a thread) by their depth. Loaded on the first press.
 
 import { RuntimeRefusal } from "../../shared/command.ts";
-import { keep_chain } from "../../shared/swallow.ts";
+import { refused_as } from "../../shared/swallow.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { click_like_a_hint } from "../hints/actions.ts";
 import { is_shown } from "../shown.ts";
@@ -34,18 +34,21 @@ const host = tree_window.desertfox_host;
 if (!tree_window.desertfox_tree_ready && host) {
   tree_window.desertfox_tree_ready = true;
   // The landing is `page.item`'s own, so focus, scroll, the box and the last move match j. It starts from the item that holds the focus, so the target takes the focus first, and scrolls into view first because a focus off screen is not the start.
+  // A failed outcome (the item bundle did not load) stops the run with its message.
+  const ask = async (id: string, args: Record<string, unknown>) => {
+    const outcome = await host.run_command_(id, "item", args);
+    if (!outcome.ok) throw new RuntimeRefusal(outcome.message);
+  };
   const land = async (item: Element, { selector, link }: TreeArgs) => {
     const { top, bottom } = item.getBoundingClientRect();
     if (top < 0 || bottom > innerHeight) item.scrollIntoView({ block: bottom - top > innerHeight ? "start" : "center", behavior: "instant" });
     if ((item as HTMLElement).tabIndex < 0) item.setAttribute("tabindex", "-1");
     (item as HTMLElement).focus({ preventScroll: true });
-    await host.run_command_("page.item", "item", { selector, link, direction: "current" });
+    await ask("page.item", { selector, link, direction: "current" });
   };
-  // Two keys pressed together (the second replays after the bundle loads) must not both start from the item the first one left, so the runs go one at a time.
-  let turn: Promise<unknown> = Promise.resolve();
   const run = async (args: TreeArgs) => {
     let current: Element | undefined;
-    await host.run_command_("item.current", "item", { take: (item?: Element) => (current = item) });
+    await ask("item.current", { take: (item?: Element) => (current = item) });
     const rows = read_rows(args);
     const at = rows.findIndex((row) => row.item === current);
     if (at === -1) throw new RuntimeRefusal("No current comment");
@@ -83,9 +86,10 @@ if (!tree_window.desertfox_tree_ready && host) {
       }
     }
   };
+  // Every later key waits for the run to land, so a key typed during the first load (a second l, or j) starts from the item this run leaves.
   host.register_handler_("page.tree", (args) => {
-    const done = turn.then(() => run(args as unknown as TreeArgs));
-    turn = keep_chain(done);
+    const done = run(args as unknown as TreeArgs);
+    host.hold_keys_until_(refused_as(done.then(() => []), []), true);
     return done;
   });
 }
