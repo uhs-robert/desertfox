@@ -29,8 +29,8 @@ if (!item_act.desertfox_item_act_ready && host) {
     click_like_a_hint(clicked as HTMLElement);
   });
   host.register_handler_("page.item_focus", async (args) => {
-    const target = next_focus((await current_item()).item, document.activeElement, args.direction as "next" | "prev", () => focusables_in(document.documentElement));
-    if (!target) throw new RuntimeRefusal("Nothing to focus in this item");
+    const target = next_focus((await current_item()).item, document.activeElement, args.direction as "next" | "prev", () => focusables_in(document.documentElement, host.is_editable_), host.is_editable_);
+    if (!target) throw new RuntimeRefusal("Nothing to focus here");
     (tabbed = target as HTMLElement).focus();
   });
 }

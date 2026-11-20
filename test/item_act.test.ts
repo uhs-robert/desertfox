@@ -74,7 +74,8 @@ const ring_item = (children: Ring[], own_focusable = false) => {
   const els = children.map(as_el);
   return { els, item: { matches: () => own_focusable, querySelectorAll: () => els, contains: (other: unknown) => els.includes(other as never) } as unknown as Element };
 };
-const step = (item: Element, active: Element | null, direction: "next" | "prev", page: Element[] = []) => (next_focus(item, active, direction, () => page) as Fake_el | undefined)?.name;
+const is_field = (element: Element) => (element as Fake_el).name.startsWith("field");
+const step = (item: Element, active: Element | null, direction: "next" | "prev", page: Element[] = []) => (next_focus(item, active, direction, () => page, is_field) as Fake_el | undefined)?.name;
 
 test("Tab steps through the children of the item in order and wraps", () => {
   const { els, item } = ring_item([ring_el("link"), ring_el("button"), ring_el("input")]);
@@ -101,6 +102,14 @@ test("disabled, tabindex -1 and hidden elements are skipped", () => {
   assert.equal(step(item, els[4]!, "prev"), "link");
 });
 
+test("a text field is skipped, so the ring wraps past it", () => {
+  const { els, item } = ring_item([ring_el("link"), ring_el("field q"), ring_el("button")]);
+  assert.equal(step(item, els[0]!, "next"), "button");
+  assert.equal(step(item, els[2]!, "next"), "link");
+  assert.equal(step(item, els[0]!, "prev"), "button");
+  assert.equal(step(ring_item([ring_el("field only")]).item, null, "next"), undefined);
+});
+
 test("an item with no focusable child refuses", () => {
   const { item } = ring_item([ring_el("off", { disabled: true })]);
   assert.equal(step(item, null, "next"), undefined);
@@ -122,5 +131,5 @@ test("a step from a page control after the item's link goes on from that control
 
 test("a focusable item root joins the ring", () => {
   const { els, item } = ring_item([ring_el("button")], true);
-  assert.equal(next_focus(item, null, "next", () => [item, els[0]!]), item, "an item whose root and one child are focusable has a ring of two, starting at the root");
+  assert.equal(next_focus(item, null, "next", () => [item, els[0]!], is_field), item, "an item whose root and one child are focusable has a ring of two, starting at the root");
 });

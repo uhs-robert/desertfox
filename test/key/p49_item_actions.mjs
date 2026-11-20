@@ -99,20 +99,16 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("c2");
   });
 
-  await run_case("Tab into a text field of the item starts typing, Enter stays the field's, and Escape leaves it", async () => {
+  await run_case("Tab passes over a text field of the item, so it never starts insert mode", async () => {
     await open_page("item_list", "ia_tfield", { new_tab: true });
     await press_keys("I");
     await expect_badge("ITEM");
     await press_keys("5j");
     await expect_focus("c5");
+    // The card holds its link and a text field, so the ring is the link alone and Tab goes on to the next link.
     await press_keys("-k", "Tab");
-    await expect_focus("in5");
-    await expect_badge("INSERT");
-    await press_keys("-k", "Return");
-    await sleep(300);
-    expect((await hash()) === "", `Enter opened ${await hash()}`);
-    await press_keys("-k", "Escape");
-    await poll_until("the field left", async () => (await badge()) !== "INSERT");
+    await expect_focus("c6");
+    await expect_badge("ITEM");
   });
 
   await run_case("an item with only its link lets Tab go on to the next link, as the browser does", async () => {
