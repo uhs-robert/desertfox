@@ -30,6 +30,10 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 <p align="center"><img src="./docs/images/drag.gif" width="800" alt="One card on the Practice page work board is grabbed with ;gg and dropped on the Doing column picked by hint, then grabbed again and dropped on Done."/></p>
 
+## 🧭 Item mode
+
+**Walk a page one item at a time.** A search result, a story, a file or a comment is an item. Press `I` and type the hint of a list. A page with one list starts at once. Then `j` and `k` move to the next and previous item with a box around it, `h` and `l` move across a grid, `}` and `{` jump between sections, `Enter` opens the item's link and `Space` ticks its checkbox. `Escape` goes back to normal mode. On some sites item mode starts by itself. [Item mode guide](docs/item_mode.md).
+
 You can edit any text box in your own editor, such as Neovim: press `<C-o>` in insert mode. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor (see [host/README.md](host/README.md)). Without it, `<C-o>` shows an error that says where to create the file.
 
 ## 🏆 Why DesertFox
@@ -88,6 +92,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
 | Built-in keyboard drag (`;Gg`, `;gg`) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Step through a page's items with `j` and `k` (item mode) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | [Works in frames from other sites (sign-in popups, embeds)](docs/compatibility.md) | ✅ | 🟡 | 🟡 | ❌ | not checked |
 | Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
@@ -107,6 +112,8 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 ✅ yes · ❌ no · 🟡 partial
 
+Item mode. None of the four documents a command that steps through a page's list items, comments or sections. The closest keys are Vimium's `n` and `N` for find matches, Tridactyl's `hint -c` to hint chosen elements, and qutebrowser's caret moves by block of text. This comes from reading each project's docs and command source, not from running each one. See the [item mode guide](docs/item_mode.md).
+
 Keyboard drag keys. `;` starts the hint keys, and `;g` and `;G` are modifiers that turn the hint into a grab. The letter after the modifier picks which elements get hints.
 - `;Gg` grabs a draggable element and moves it with keys (grab and move). In grab mode, `h` `j` `k` `l` move it, `[` and `]` halve and double the step, `Enter` drops it and `Escape` cancels.
 - `;gg` grabs a draggable element, then hints the page again so you pick the target to drop it on (grab and choose a target).
@@ -118,8 +125,8 @@ Hints typically appear in under a tenth of a second, within the blink of an eye.
 
 Sources, read in November 2026: each project's documentation, source code and shipped add-on.
 
-- Vimium: [README](https://github.com/philc/vimium/blob/master/README.md).
-- Vimium C: [README](https://github.com/gdh1995/vimium-c/blob/master/README.md) and the 2.12.3 add-on.
+- Vimium: [README](https://github.com/philc/vimium/blob/master/README.md) and its [command list](https://github.com/philc/vimium/blob/master/background_scripts/all_commands.js).
+- Vimium C: [README](https://github.com/gdh1995/vimium-c/blob/master/README.md), its [command descriptions](https://github.com/gdh1995/vimium-c/blob/master/i18n/en/help_dialog.json) and the 2.12.3 add-on.
 - Tridactyl: [command source](https://github.com/tridactyl/tridactyl/blob/master/src/excmds.ts) (`bindurl`, `seturl`, `exclaim`).
 - Speed, coverage and drag checks: [performance comparison](tools/measure/rivals/README.md).
 - qutebrowser: [command reference](https://github.com/qutebrowser/qutebrowser/blob/main/doc/help/commands.asciidoc).
@@ -156,6 +163,7 @@ You gain:
 
 - A which-key popup for the keys you forget, and a Practice page for the ones you never learned.
 - Keyboard drag and drop, which neither Vimium nor Tridactyl has built in.
+- Item mode, which steps through a page's items with `j` and `k`. None of the three documents it.
 - Macros and caret mode, which Tridactyl lacks, and settings per site, where Vimium has keys only.
 - A script of 20.3 KB on each page.
 
