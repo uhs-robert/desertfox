@@ -3,7 +3,7 @@
 
 import { ancestors, descendants, once, signature, stacked_items } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
-import { find_aria_lists } from "./aria_lists.ts";
+import { find_aria_lists, holds } from "./aria_lists.ts";
 import { in_chrome, list_groups, plain_block } from "./groups.ts";
 import { find_menus } from "./menus.ts";
 import type { Group, GroupRules } from "./groups.ts";
@@ -138,7 +138,10 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const every = [...regions, ...short_regions];
   const aria = find_aria_lists(reader, out_of_time, every);
   if (!aria && !every[0]) return { ...none<N>(), timed_out_: true };
-  every.push(...(aria ?? []), ...find_menus(reader, out_of_time));
+  // A menu that holds, or sits in, an item of an ARIA list is that list again, and the page's own role names it better.
+  const aria_items = (aria ?? []).flatMap((region) => region.items);
+  const menus = find_menus(reader, out_of_time).filter((menu) => !holds(reader, menu.items, aria_items) && !holds(reader, aria_items, menu.items));
+  every.push(...(aria ?? []), ...menus);
   return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
 }
 

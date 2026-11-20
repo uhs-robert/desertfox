@@ -190,3 +190,24 @@ test("a page whose only list is an ARIA grid starts nothing: the derived row ans
   assert.deepEqual(row.items_(), []);
   assert.equal(row.lists_().length, 1);
 });
+
+test("a tree of open branches in an aside is one region too: the menu of its branches is dropped", () => {
+  const leaf = (top: number, name: string): SavedNode => ({ t: "li", a: { role: "treeitem" }, r: [20, top, 260, 30], c: [{ t: "a", a: { href: `/${name}` }, r: [20, top, 200, 30], s: name }] });
+  const branch = (index: number): SavedNode => {
+    const top = 100 + index * 90;
+    const label: SavedNode = { t: "a", a: { href: `/folder/${index}` }, r: [20, top, 200, 30], s: `folder ${index}` };
+    return { t: "li", a: { role: "treeitem", "aria-expanded": "true" }, r: [20, top, 260, 90], c: [label, { t: "ul", a: { role: "group" }, r: [20, top + 30, 260, 60], c: [leaf(top + 30, `a${index}`), leaf(top + 60, `b${index}`)] }] };
+  };
+  const tree: SavedNode = { t: "ul", a: { role: "tree" }, r: [20, 100, 260, 450], c: Array.from({ length: 5 }, (_, index) => branch(index)) };
+  const found = find_items(saved_reader(page_of({ t: "aside", r: [0, 80, 300, 600], c: [tree] })));
+  assert.equal(found.regions.length, 1);
+  assert.equal(found.regions[0]!.home_, tree);
+});
+
+test("a role=tree sidebar of leaves in an aside is one region, the ARIA one", () => {
+  const items: SavedNode[] = Array.from({ length: 6 }, (_, index) => ({ t: "li", a: { role: "treeitem" }, r: [20, 100 + index * 30, 260, 30], c: [{ t: "a", a: { href: `/channel/${index}` }, r: [20, 100 + index * 30, 200, 30], s: `channel ${index}` }] }));
+  const tree: SavedNode = { t: "ul", a: { role: "tree" }, r: [20, 100, 260, 180], c: items };
+  const found = find_items(saved_reader(page_of({ t: "aside", r: [0, 80, 300, 600], c: [tree] })));
+  assert.equal(found.regions.length, 1);
+  assert.equal(found.regions[0]!.home_, tree);
+});
