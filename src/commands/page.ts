@@ -239,6 +239,30 @@ define("page.item_action", {
   modes: ["item"],
 });
 
+// Bound by site rows whose items nest (a comment thread). The handler asks the item bundle which item is current, and lands each move through `page.item`, so focus, scroll and the box match j.
+define("page.tree", {
+  name: "tree",
+  label: "Move through a tree of items",
+  intent: "Move through nested items by depth, as in a comment thread. Parent goes to the nearest item above with a lower depth, child to the next item when it is one level deeper, and next and prev to the nearest sibling at the same depth in that direction, without leaving the parent. A count prefix repeats a move. Child on a folded item unfolds it and stays on it. Fold folds the item with its replies, or the parent when the item has no replies or is folded already. Unfold opens a folded item and toggle flips the fold. Folding and unfolding click the site's own fold control, with the pointer events of a hint click, and do not check the result. The command refuses when there is no current item, no such relative or no fold control that shows.",
+  params: [
+    { name: "action", type: "enum", values: ["parent", "child", "next", "prev", "fold", "unfold", "toggle"], value_labels: { parent: "to the parent", child: "to the first reply", next: "to the next sibling", prev: "to the previous sibling", fold: "to fold the thread", unfold: "to unfold the item", toggle: "to toggle the fold" }, description: { parent: "Go to the parent item.", child: "Go to the first reply, or unfold a folded item.", next: "Go to the next item at the same level.", prev: "Go to the previous item at the same level.", fold: "Fold the thread, or the parent of a leaf.", unfold: "Unfold a folded item.", toggle: "Fold the item, or unfold it when it is folded." } },
+    { name: "selector", type: "string", main: true, rest: true, verbatim: true, description: "Move through the elements this CSS selector finds." },
+    { name: "link", type: "string", optional: true, description: "Focus the element this CSS selector finds in the item." },
+    { name: "depth", type: "string", pattern: "^[A-Za-z_][A-Za-z0-9_.:-]*$", description: "Read the depth from the attribute of this name." },
+    { name: "depth_from", type: "enum", values: ["item", "inside", "above"], default: "item", value_labels: { inside: "from inside the item", above: "from above the item" }, description: { inside: "Read it from inside the item, where depth-at finds it.", above: "Read it from the closest ancestor that depth-at finds." } },
+    // The arm never holds (the param needs `inside` or `above`), so the param is required once its `when` holds.
+    { name: "depth_at", type: "string", default: [{ value: "", when: { depth_from: ["item"] } }], when: { depth_from: ["inside", "above"] }, description: "Find the element that holds the depth with this selector." },
+    { name: "fold", type: "string", default: "", description: "Click what this CSS selector finds in the item to fold it." },
+    { name: "folded", type: "string", default: "", description: "Treat an item as folded while this CSS selector matches." },
+    { name: "times", type: "int", default: 1, min: 1, when: { action: ["parent", "child", "next", "prev"] }, description: "Move this many steps." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  count: { param: "times" },
+  bundle: "tree",
+  modes: ["item"],
+});
+
 // Meant for site rows, where a synthetic Ctrl+X or Ctrl+V keydown does not cut or paste: the browser runs a clipboard action only from `execCommand`, so a row binds a key to this command instead.
 define("page.clipboard", {
   label: "Cut, copy or paste in the page",

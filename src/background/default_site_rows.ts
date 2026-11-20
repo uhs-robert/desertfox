@@ -91,7 +91,25 @@ const item_binds = (selector: string, link?: string, hover = false): BindingTabl
 const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)");
 const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="result-title-a"]');
 const BING_ITEMS = item_binds("li.b_algo", "h2 a");
-const HACKERNEWS_ITEMS = item_binds("tr.athing", ".titleline > a");
+// A comment is a `tr.athing.comtr` with its depth in the `indent` attribute of its `td.ind`. The fold control is the `a.togg` of its head, and a folded row has the class `coll`. The tree keys shadow the sideways scroll of h and l on a thread page only: the guard leaves them to the plain scroll where no comment shows.
+const HACKERNEWS_COMMENTS = "tr.comtr";
+// The link j names for a story. A comment has none, so a landing focuses the row, and the tree keys land the same way.
+const HACKERNEWS_LINK = ".titleline > a";
+const hackernews_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle"): BoundInvocation => ({
+  id: "page.tree",
+  args: { action, selector: HACKERNEWS_COMMENTS, link: HACKERNEWS_LINK, depth: "indent", depth_from: "inside", depth_at: "td.ind", fold: "a.togg", folded: "tr.coll" },
+  when_present: HACKERNEWS_COMMENTS,
+});
+const HACKERNEWS_ITEMS = {
+  ...item_binds("tr.athing", HACKERNEWS_LINK),
+  h: hackernews_tree("parent"),
+  l: hackernews_tree("child"),
+  "}": hackernews_tree("next"),
+  "{": hackernews_tree("prev"),
+  za: hackernews_tree("toggle"),
+  zc: hackernews_tree("fold"),
+  zo: hackernews_tree("unfold"),
+};
 const GRID_DIRECTIONS = { h: "left", j: "down", k: "up", l: "right" } as const;
 // A grid of tiles has no row of text to read, so h and l step along a row of tiles and j and k step down and up the grid.
 // `hover` is for a grid of video thumbnails: the box starts the tile's preview (the `item_hover` setting turns it off).

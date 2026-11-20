@@ -241,6 +241,27 @@ export function start_server() {
       const slow = id.includes("_slow") ? '<img src="/slow_pixel?ms=2500">' : "";
       return response.end(page(`${url.pathname.slice(1)} ${id}`, field + slow + frame + cards, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/hn_thread" || url.pathname === "/hn_front") {
+      // A stand-in for Hacker News. The thread is a story row and seven comments (k0 to k6) as `tr.athing.comtr` with the depth in `td.ind[indent]`: k0 holds k1 (which holds k2) and k3, k4 holds k5, k6 stands alone. Clicking an `a.togg` folds like the site: the row gets `coll`, the rows below it that are deeper get `noshow`, and each click is recorded in the `clicks` data attribute of the root element. The front page has story rows only, and is wide so that a sideways key shows.
+      const depths = [0, 1, 2, 1, 0, 1, 0];
+      const story = '<tr class="athing" id="story"><td><span class="titleline"><a href="#story_link">The story</a></span></td></tr>';
+      const comment = (depth, index) => `<tr class="athing comtr" id="k${index}"><td><table><tbody><tr><td class="ind" indent="${depth}"><img src="s.gif" height="1" width="${depth * 40}"></td><td><span class="comhead"><a class="togg clicky" href="javascript:void(0)">[-]</a></span><div class="comment" style="height:40px">comment k${index}</div></td></tr></tbody></table></td></tr>`;
+      const rows = url.pathname === "/hn_thread" ? story + depths.map(comment).join("") : story + Array.from({ length: 3 }, (_, index) => `<tr class="athing" id="s${index}"><td><span class="titleline"><a href="#s${index}_link">Story ${index}</a></span></td></tr>`).join("");
+      const wide = url.pathname === "/hn_front" ? '<div style="width:3000px;height:1px"></div>' : "";
+      const script = `<style>.noshow { display: none }</style><script>
+        document.documentElement.dataset.clicks = "";
+        const depth_of = (row) => Number(row.querySelector("td.ind").getAttribute("indent"));
+        document.addEventListener("click", (event) => {
+          const row = event.target.closest?.("a.togg")?.closest("tr.comtr");
+          if (!row) return;
+          const folded = row.classList.toggle("coll");
+          row.querySelector(".comment").classList.toggle("noshow", folded);
+          for (let next = row.nextElementSibling; next && depth_of(next) > depth_of(row); next = next.nextElementSibling) next.classList.toggle("noshow", folded);
+          document.documentElement.dataset.clicks += row.id + ",";
+        });
+      </script>`;
+      return response.end(page(`${url.pathname.slice(1)} ${id}`, `<table><tbody>${rows}</tbody></table>${wide}${tall_filler}`, script));
+    }
     if (url.pathname === "/links") {
       // Two links up top, an anchor without href that ]l skips, and a link far below. The page reports each focus.
       const links = '<a href="#a" id="first">one</a> <a id="bare">bare</a> <a href="#b" id="second">two</a>' + tall_filler + '<a href="#c" id="last">three</a>';
