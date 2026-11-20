@@ -18,6 +18,8 @@ export type TabMediaDeps = {
   send_step: (tab_id: number, on: boolean, frame_id?: number, from?: number) => Promise<unknown>;
   // Whether the frame still runs the content script: a frame removed with its line open never reports again.
   frame_alive: (tab_id: number, frame_id: number) => Promise<boolean>;
+  set_timer: (callback: () => void, delay_ms: number) => unknown;
+  clear_timer: (handle: unknown) => void;
   now: () => number;
 };
 
@@ -34,6 +36,9 @@ const is_live_hold = (hold: MediaHold | undefined): hold is MediaHold => !!hold 
 
 // The end of a fullscreen reaches every frame of it at once. Firefox spends the Escape that closes a line in fullscreen on leaving the fullscreen, so the line's frame returns to the mode while the others report normal, in any order. A normal report this soon after a line closed, from a frame without the focus, is that same end. A normal report carries no cause, and content.js has no room for one.
 export const LINE_CLOSE_GRACE_MS = 500;
+
+// How long the ping to a frame of an open line may take. A frame stuck in a loop never answers, and the ping runs in the chain every tab shares.
+export const FRAME_ALIVE_LIMIT_MS = 1000;
 
 // A step that waits for its turn. With no `frame_id` it goes to every frame, and skips `from`.
 type QueuedStep = { on: boolean; frame_id?: number | undefined; from?: number | undefined };
@@ -89,10 +94,19 @@ export function create_tab_media(deps: TabMediaDeps) {
   const write = (tab_id: number, hold: MediaHold) => deps.storage.set({ [key_of(tab_id)]: hold });
   // A line of another frame closed back to the mode a moment ago, so a normal report now comes from the fullscreen end that closed it. An Escape the user pressed comes from the frame with the focus.
   const line_just_closed = (hold: MediaHold, frame_id: number, focus: boolean): boolean => !focus && !!hold.line_closed && hold.line_closed.frame_id !== frame_id && deps.now() - hold.line_closed.at_ms < LINE_CLOSE_GRACE_MS;
+  // A frame that does not answer within the limit counts as gone, like a removed one.
+  const alive_within_limit = (tab_id: number, frame_id: number): Promise<boolean> =>
+    new Promise((resolve) => {
+      const timer = deps.set_timer(() => resolve(false), FRAME_ALIVE_LIMIT_MS);
+      void refused_as(deps.frame_alive(tab_id, frame_id), false).then((alive) => {
+        deps.clear_timer(timer);
+        resolve(alive);
+      });
+    });
   // A frame removed with its line open never reports again, so only a frame that still runs the content script keeps the mode with its line.
   const open_lines_besides = async (tab_id: number, hold: MediaHold, frame_id: number): Promise<number[]> => {
     const others = (hold.lines ?? []).filter((line_frame) => line_frame !== frame_id);
-    const alive = await Promise.all(others.map((line_frame) => refused_as(deps.frame_alive(tab_id, line_frame), false)));
+    const alive = await Promise.all(others.map((line_frame) => alive_within_limit(tab_id, line_frame)));
     return others.filter((_line_frame, index) => alive[index]);
   };
   // The line's frame is back in the mode. Once no line is open, every frame that reported normal meanwhile goes back too.

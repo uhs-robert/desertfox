@@ -6,7 +6,7 @@ import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
-import { create_media_discovery, create_tab_media, LINE_CLOSE_GRACE_MS } from "../src/background/tab_media.ts";
+import { create_media_discovery, create_tab_media, FRAME_ALIVE_LIMIT_MS, LINE_CLOSE_GRACE_MS } from "../src/background/tab_media.ts";
 import { create_mode_state, fullscreen_step, takes_media_step } from "../src/content/mode_state.ts";
 import type { MediaStep } from "../src/shared/messages.ts";
 import type { Mode } from "../src/shared/command.ts";
@@ -128,7 +128,9 @@ test("a percent key with no count is refused when it runs, since the count fills
 const LOAD_START = { status: "loading" };
 
 // `store`, `sent` and `clock` passed in from an earlier fake stand for a background that restarted.
-function fake_tab_media({ store = new Map<string, unknown>(), sent = [] as [number, number | "all", string][], clock = { now_ms: 0 }, gone = new Set<number>() } = {}) {
+function fake_tab_media({ store = new Map<string, unknown>(), sent = [] as [number, number | "all", string][], clock = { now_ms: 0 }, gone = new Set<number>(), ping = undefined as ((tab_id: number, frame_id: number) => Promise<boolean>) | undefined } = {}) {
+  // The timers the background sets, by hand: `fire_timers` runs those not cleared yet.
+  const timers: { callback: () => void; delay_ms: number; cleared: boolean }[] = [];
   // A `MediaStep` as "on" or "off", with "all" for no frame. `steps` holds each full step the background sent, in order, as the content script receives it.
   const steps: MediaStep[] = [];
   const media = create_tab_media({
@@ -138,10 +140,17 @@ function fake_tab_media({ store = new Map<string, unknown>(), sent = [] as [numb
       remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
     } as never,
     send_step: async (tab_id, on, frame_id, from) => void (sent.push([tab_id, frame_id ?? "all", on ? "on" : "off"]), steps.push({ type: "media", on, from })),
-    frame_alive: async (_tab_id, frame_id) => !gone.has(frame_id),
+    frame_alive: ping ?? (async (_tab_id, frame_id) => !gone.has(frame_id)),
+    set_timer: (callback, delay_ms) => {
+      const timer = { callback, delay_ms, cleared: false };
+      timers.push(timer);
+      return timer;
+    },
+    clear_timer: (handle) => void ((handle as (typeof timers)[number]).cleared = true),
     now: () => clock.now_ms,
   });
-  return { media, sent, store, clock, gone, steps };
+  const fire_timers = () => timers.filter((timer) => !timer.cleared).forEach((timer) => timer.callback());
+  return { media, sent, store, clock, gone, steps, timers, fire_timers };
 }
 
 // `aa` then an immediate Escape: a second step on, sent when the key's frame reports the mode, could reach it after the Escape and put it back in the mode.
@@ -356,6 +365,64 @@ test("a line frame removed while another line is open does not keep the frames t
   await media.reported(7, 0, "normal", false);
   await media.reported(7, 5, "media", false);
   assert.deepEqual(sent, [[7, 0, "on"]]);
+});
+
+// A frame stuck in a loop never answers the ping either. The ping runs inside the chain every tab shares, so without a limit the first report that asks it stalls every report after it.
+const never_answers = (): Promise<boolean> => new Promise(() => {});
+
+async function hold_with_frozen_line_frame_3() {
+  const fake = fake_tab_media({ ping: async (_tab_id, frame_id) => (frame_id === 3 ? never_answers() : true) });
+  for (const frame_id of [0, 3, 5]) await fake.media.reported(7, frame_id, "media", false);
+  await fake.media.reported(7, 3, "hint", false);
+  fake.sent.length = 0;
+  return fake;
+}
+
+test("a frame that never answers the ping counts as gone after the limit, so a normal report ends the hold", { timeout: 2000 }, async () => {
+  const { media, sent, fire_timers, timers } = await hold_with_frozen_line_frame_3();
+  const report = media.reported(7, 0, "normal", false);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(timers.map((timer) => timer.delay_ms), [FRAME_ALIVE_LIMIT_MS]);
+  fire_timers();
+  await report;
+  assert.deepEqual(sent.sort(), [[7, 3, "off"], [7, 5, "off"]]);
+});
+
+test("a frame that never answers the ping does not keep the frames that left out of the mode when the other line closes", { timeout: 2000 }, async () => {
+  const { media, sent, fire_timers } = await hold_with_frozen_line_frame_3();
+  await media.reported(7, 5, "cmdline", false);
+  const left = media.reported(7, 0, "normal", false);
+  await new Promise((resolve) => setImmediate(resolve));
+  fire_timers();
+  await left;
+  assert.deepEqual(sent, []);
+  const closed = media.reported(7, 5, "media", false);
+  await new Promise((resolve) => setImmediate(resolve));
+  fire_timers();
+  await closed;
+  assert.deepEqual(sent, [[7, 0, "on"]]);
+});
+
+test("a frame that never answers the ping holds up no report of another tab past the limit", { timeout: 2000 }, async () => {
+  const { media, sent, fire_timers } = await hold_with_frozen_line_frame_3();
+  const stalled = media.reported(7, 0, "normal", false);
+  const other_tab = media.reported(8, 1, "media", false);
+  await new Promise((resolve) => setImmediate(resolve));
+  fire_timers();
+  await Promise.all([stalled, other_tab]);
+  assert.deepEqual(sent.filter(([tab_id]) => tab_id === 8), [[8, "all", "on"]]);
+});
+
+test("a ping answered before the limit leaves no timer running", async () => {
+  const { media, timers, gone } = fake_tab_media();
+  for (const frame_id of [0, 3, 5]) await media.reported(7, frame_id, "media", false);
+  await media.reported(7, 3, "hint", false);
+  await media.reported(7, 0, "normal", false);
+  assert.equal(timers.length, 1);
+  assert.equal(timers.every((timer) => timer.cleared), true);
+  gone.add(3);
+  await media.reported(7, 5, "media", false);
+  assert.equal(timers.every((timer) => timer.cleared), true);
 });
 
 test("every frame of a nested fullscreen that leaves goes back, before and after the line closes", async () => {
@@ -724,6 +791,8 @@ function media_with_stuck_tab_4() {
     } as never,
     send_step: (tab_id, on, frame_id) => (tab_id === 4 ? new Promise(() => {}) : (sent.push(`${tab_id}:${on ? "on" : "off"}:${frame_id ?? "all"}`), Promise.resolve())),
     frame_alive: async () => true,
+    set_timer: () => undefined,
+    clear_timer: () => {},
     now: () => 0,
   });
   return { media, sent };
@@ -786,6 +855,8 @@ test("an off step still on its way when the tab enters again cannot reach the fr
     // The off step is slow: it is delivered only when released.
     send_step: (_tab_id, on, frame_id) => (on ? (delivered.push(`on:${frame_id ?? "all"}`), Promise.resolve()) : new Promise<void>((resolve) => release.push(() => (delivered.push(`off:${frame_id}`), resolve())))),
     frame_alive: async () => true,
+    set_timer: () => undefined,
+    clear_timer: () => {},
     now: () => 0,
   });
   await media.reported(4, 0, "media", false);
@@ -807,6 +878,8 @@ test("a frame that never answers keeps one waiting step per target, and a naviga
     storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
     send_step: () => (calls++, new Promise(() => {})),
     frame_alive: async () => true,
+    set_timer: () => undefined,
+    clear_timer: () => {},
     now: () => 0,
   });
   for (let index = 0; index < 40; index++) await media.enter(4, 0);
@@ -825,6 +898,8 @@ function media_with_held_steps() {
     storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
     send_step: () => (calls++, new Promise<void>((resolve) => releases.push(resolve))),
     frame_alive: async () => true,
+    set_timer: () => undefined,
+    clear_timer: () => {},
     now: () => 0,
   });
   const release_all = async () => {
@@ -869,6 +944,8 @@ function media_with_recorded_steps({ stuck_frame = -1, held = false } = {}) {
       return held ? new Promise<void>((resolve) => releases.push(resolve)) : Promise.resolve();
     },
     frame_alive: async () => true,
+    set_timer: () => undefined,
+    clear_timer: () => {},
     now: () => 0,
   });
   const release_all = async () => {
