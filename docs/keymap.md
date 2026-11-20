@@ -412,8 +412,8 @@ Which-key group names:
 | `F` | `hint --background --item` | Click element in background tab |
 | `;v` | `hint --caret --prose --item` | Start caret mode at text |
 | `;V` | `hint --visual --prose --item` | Start visual mode at text |
-| `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
-| `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
+| `;u` | `cmdline.open --text='hint --item --custom '` | Hint a CSS selector |
+| `;;` | `cmdline.open --text='hint --item '` | Open the command line with hint |
 | `;b` | `hint --buttons --item` | Click button |
 | `;a` | `hint --every --item` | Click every element |
 | `;t` | `hint --prose --item` | Click text |

@@ -102,13 +102,14 @@ const LINK = "a[href]";
 
 // The item that item mode treats as current, and its link, for an action on that item (the hints of `scope: item`, Space, Enter). The item that holds the focus wins over the last one moved to, as for a move, so a click or Tab into another item counts. Nothing before a first move, or once the last item has left the page.
 export function current_item(page: ItemPage): { item_: Element; link_: Element | undefined } | undefined {
-  const args = last_move?.args_;
+  // Before any move the finder's list stands in, so a link reached with Tab counts.
+  const args = last_move?.args_ ?? { direction: "current" as const };
   const focused = page.focused();
-  if (!args) return undefined;
-  const item = items_of(page, args).find((candidate) => focused && candidate.contains(focused)) ?? last_move?.item_.deref();
+  const item = items_of(page, args, true).find((candidate) => focused && candidate.contains(focused)) ?? last_move?.item_.deref();
   if (!item?.isConnected) return undefined;
-  const link = args.link ? item.querySelector(args.link) : args.selector ? undefined : page.derived?.link_of_(item);
-  return { item_: item, link_: link ?? (item.matches(LINK) ? item : (item.querySelector(LINK) ?? undefined)) };
+  // A row that names a link and finds none has no link: the row's items are not all stories (a comment holds a vote link first).
+  const link = args.link ? item.querySelector(args.link) : args.selector ? (item.matches(LINK) ? item : item.querySelector(LINK)) : page.derived?.link_of_(item);
+  return { item_: item, link_: link ?? undefined };
 }
 
 // A row that names a link and finds none in an item (a comment among stories) focuses the item itself. An item that is not focusable takes tabindex -1, so a script can focus it and the tab order stays as it was.

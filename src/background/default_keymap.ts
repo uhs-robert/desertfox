@@ -522,7 +522,13 @@ const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", 
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
 // Item mode copies the hint keys with `scope: item`, so they label the current item. The all-frames `;fF` stays out, as the schema refuses it with an item scope, and so does `;fe`.
 const in_item_scope = (binding: KeyBinding): KeyBinding => {
-  const scoped = (step: BoundInvocation) => (step.id === "hint.run" ? { ...step, args: { ...step.args, scope: "item" } } : step);
+  // `;;` and `;u` open the command line on a typed hint command, which takes the scope as a flag.
+  const scoped = (step: BoundInvocation) =>
+    step.id === "hint.run"
+      ? { ...step, args: { ...step.args, scope: "item" } }
+      : step.id === "cmdline.open" && typeof step.args?.["text"] === "string" && step.args["text"].startsWith("hint ")
+        ? { ...step, args: { ...step.args, text: step.args["text"].replace("hint ", "hint --item ") } }
+        : step;
   return Array.isArray(binding) ? binding.map(scoped) : scoped(binding);
 };
 const keys_copied_to_item = Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence));

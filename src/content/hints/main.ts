@@ -494,7 +494,12 @@ function register(host: PageHostApi): void {
     performed(run);
     if (current.cancelled) return;
     const started_ms = performance.now();
-    void build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_, current.drop_source_, current.root_), false, started_ms);
+    // The pick may have replaced the item, so an item scope reads the current item again.
+    const rebuild = async () => {
+      if (current.args.scope === "item") current.root_ = await current_item();
+      if (!current.cancelled) await build(current, find_candidates(current.filter, current.custom_selector_, current.action, current.site_selectors_, current.drop_source_, current.root_), false, started_ms);
+    };
+    void rebuild();
   }
 
   // The rest of a typed word still arrives after the key that made the match unique, and it would run as normal keys or as labels of the next round. So that pick waits, with hint mode still open, and the keys are dropped.
@@ -589,7 +594,6 @@ function register(host: PageHostApi): void {
     const started_ms = performance.now();
     const run = ++latest_run;
     const action = args.action as HintAction;
-    const leaf_end_ = action === "enter_item" ? host.leaf_end_() : undefined;
     // The source element stays in this frame: `label_across` sends the args to other frames, and an element does not clone.
     const { drop_source_, ...plain_args } = args as { drop_source_?: Element } & Record<string, unknown>;
     args = plain_args;
@@ -597,6 +601,8 @@ function register(host: PageHostApi): void {
     const custom_selector_ = args.selector as string | undefined;
     if (filter === "lists") await fill_list_targets(args.items);
     const site_selectors_ = await read_site_selectors(host.show_toast_);
+    // Read after an await: content.js names the running leaf only once its run call has returned, and a loaded bundle reaches this point inside that call.
+    const leaf_end_ = action === "enter_item" ? host.leaf_end_() : undefined;
     const item_root_ = args.scope === "item" ? await current_item() : undefined;
     const root = item_root_ ?? document;
     if (run !== latest_run) return cancelled_outcome;

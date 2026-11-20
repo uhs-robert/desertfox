@@ -4,10 +4,10 @@ import { join } from "node:path";
 
 export const areas = ["keys", "config", "bundles", "hints"];
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   await setup("bind Space on the ia_star_ pages to the span a site names", async () => {
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ia_star_*"', 'keymap = { item = { "<Space>" = "page.item_action --action=toggle --target=.star" } }', ""].join("\n"));
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ia_star_*"', 'keymap = { item = { "<Space>" = "page.item_action --action=toggle --target=.star" } }', "", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ia_miss_*"', 'keymap = { item = { j = "page.item --direction=down --link=a.nothing div.card" } }', ""].join("\n"));
     await load_config_dir(dir);
   });
 
@@ -48,6 +48,8 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await open_boxes("ia_enter");
     await press_keys("-k", "space");
     await poll_until("the native box clicked", async () => (await toggled()) === "box0");
+    // The click moved the focus onto the checkbox, so a native Enter would do nothing.
+    await expect_focus("box0");
     await press_keys("-k", "Return");
     await poll_until("the link opened", async () => (await hash()) === "#c0");
     await press_keys("j");
@@ -64,6 +66,28 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await poll_until("the span clicked", async () => (await toggled()) === "box2");
     await sleep(200);
     expect((await toggled()) === "box2", `Space clicked ${await toggled()}`);
+  });
+
+  // Auto-start and `mode item` record no move. The focused item is still the current one.
+  await run_case("Enter opens a link reached with focus before any move", async () => {
+    await open_page("item_list", "ia_tab", { new_tab: true });
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await in_active_tab(`document.getElementById("c3").focus(); 0`);
+    await press_keys("-k", "Return");
+    await poll_until("the link opened", async () => (await hash()) === "#c3");
+  });
+
+  await run_case("a row's link selector that finds nothing means no link, not the first link of the item", async () => {
+    await open_page("item_list", "ia_miss_a", { new_tab: true });
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("j");
+    // The row's link is missing, so the card itself takes the focus.
+    await poll_until("the card focused", async () => (await in_active_tab(`document.activeElement?.className ?? ""`)) === "card");
+    await press_keys("-k", "Return");
+    await poll_until("the notice", async () => (await toast_text()).includes("This item has no link"));
+    expect((await hash()) === "", `Enter opened ${await hash()}`);
   });
 
   await run_case("f labels only the current item, so a hint pick clicks inside it", async () => {
