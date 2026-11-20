@@ -197,7 +197,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": true,
-    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"google_images\", \"google_videos\", \"google_news\", \"google_short_videos\", \"google_shopping\", \"ddg_images\", \"ddg_videos\", \"ddg_news\", \"ddg\", \"kagi_images\", \"kagi\", \"brave_images\", \"brave\", \"google\", \"bing\", \"hackernews\", \"wikipedia\", \"lobsters\", \"archwiki\", \"startpage\", \"arxiv\", \"stackoverflow\", \"tildes\", \"amazon\", \"reddit\" and \"drive\" with no repeat",
+    "expectation": "a list of \"sheets\", \"maps\", \"arrow\", \"google_images\", \"google_videos\", \"google_news\", \"google_short_videos\", \"google_shopping\", \"ddg_images\", \"ddg_videos\", \"ddg_news\", \"ddg\", \"kagi_images\", \"kagi\", \"brave_images\", \"brave\", \"google\", \"bing\", \"hackernews\", \"wikipedia\", \"lobsters\", \"archwiki\", \"startpage\", \"arxiv\", \"stackoverflow\", \"tildes\", \"amazon\", \"reddit_thread\", \"reddit\" and \"drive\" with no repeat",
     "values": [
       "sheets",
       "maps",
@@ -226,6 +226,7 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
       "stackoverflow",
       "tildes",
       "amazon",
+      "reddit_thread",
       "reddit",
       "drive"
     ]

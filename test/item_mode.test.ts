@@ -261,8 +261,7 @@ test("every shipped item row marks its sites as shipped, the rows that give j an
   for (const address of ["https://kagi.com/search?q=a", "https://search.brave.com/search?q=a", "https://www.google.com/maps/place/a"]) assert.equal(await item_start_for(stored(shipped), address), undefined, address);
   assert.equal(await item_start_for(stored(compiled_with({ default_site_rows_off: ["hackernews"] })), "https://news.ycombinator.com/"), undefined);
   // A Reddit thread page keeps item mode off: the user presses I.
-  const is_thread = (site: string) => site.includes("reddit.com/r/*/comments/");
-  for (const { name, row } of DEFAULT_SITE_ROWS) assert.equal((row as { item_navigator?: unknown }).item_navigator, row.keymap?.item === undefined ? undefined : is_thread(row.site) ? false : "shipped", name);
+  for (const { name, row } of DEFAULT_SITE_ROWS) assert.equal((row as { item_navigator?: unknown }).item_navigator, row.keymap?.item === undefined ? undefined : name === "reddit_thread" ? false : "shipped", name);
   for (const address of ["https://www.reddit.com/r/a/comments/1/title/", "https://reddit.com/r/a/comments/1/title/"]) assert.equal(await item_start_for(stored(shipped), address), undefined, address);
 });
 

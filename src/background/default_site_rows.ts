@@ -245,9 +245,9 @@ export const DEFAULT_SITE_ROWS: readonly DefaultSiteRow[] = [
   { name: "tildes", row: { site: "https://tildes.net/*", keymap: { item: TILDES_ITEMS }, item_navigator: "shipped" } },
   { name: "amazon", row: { site: "https://www.amazon.com/s?*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
   { name: "amazon", row: { site: "https://www.amazon.com/s/*", keymap: { item: AMAZON_ITEMS }, item_navigator: "shipped" } },
-  // A thread page comes before the feed rows and shares their name, so `reddit` in `default_site_rows_off` turns both off. `item_navigator = false` keeps item mode off on the page.
-  { name: "reddit", row: { site: "https://www.reddit.com/r/*/comments/*", keymap: { item: REDDIT_THREAD_ITEMS }, item_navigator: false } },
-  { name: "reddit", row: { site: "https://reddit.com/r/*/comments/*", keymap: { item: REDDIT_THREAD_ITEMS }, item_navigator: false } },
+  // A thread page comes before the feed rows and has its own name, so `default_site_rows_off` turns feeds and threads off one at a time. `item_navigator = false` keeps item mode off on the page.
+  { name: "reddit_thread", row: { site: "https://www.reddit.com/r/*/comments/*", keymap: { item: REDDIT_THREAD_ITEMS }, item_navigator: false } },
+  { name: "reddit_thread", row: { site: "https://reddit.com/r/*/comments/*", keymap: { item: REDDIT_THREAD_ITEMS }, item_navigator: false } },
   { name: "reddit", row: { site: "https://www.reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
   { name: "reddit", row: { site: "https://reddit.com/*", keymap: { item: REDDIT_ITEMS }, item_navigator: "shipped" } },
   { name: "drive", row: { site: "https://drive.google.com/drive/*", keymap: { item: DRIVE_BIND }, item_navigator: "shipped", item_select: "arrows" } },
