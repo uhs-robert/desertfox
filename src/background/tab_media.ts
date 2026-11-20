@@ -59,7 +59,8 @@ export function create_tab_media(deps: TabMediaDeps) {
     if (own.pending >= MAX_PENDING_STEPS) return;
     const every_frame = tab_lanes.get("all");
     const waits = frame_id === undefined ? [...tab_lanes.values()] : every_frame && every_frame !== own ? [own, every_frame] : [own];
-    const send = () => best_effort(deps.send_step(tab_id, on, frame_id, from));
+    // A load of the page deleted these lanes: the frames the step waited for are gone, and it must not reach the new page.
+    const send = () => (lanes.get(tab_id) === tab_lanes ? best_effort(deps.send_step(tab_id, on, frame_id, from)) : Promise.resolve());
     own.pending++;
     const idle = waits.every((lane) => lane.pending === (lane === own ? 1 : 0));
     const run = idle ? send() : Promise.all(waits.map((lane) => lane.tail)).then(send);

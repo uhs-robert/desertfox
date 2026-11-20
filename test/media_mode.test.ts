@@ -816,3 +816,38 @@ test("a frame that never answers drops steps past a bound, and a navigation clea
   await media.enter(4, 0);
   assert.equal(calls, 2, "after the navigation the lane starts fresh");
 });
+
+// A send_step that stays open until the test releases it, in order.
+function media_with_held_steps() {
+  const releases: (() => void)[] = [];
+  let calls = 0;
+  const media = create_tab_media({
+    storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
+    send_step: () => (calls++, new Promise<void>((resolve) => releases.push(resolve))),
+    frame_alive: async () => true,
+    now: () => 0,
+  });
+  const release_all = async () => {
+    while (releases.length > 0) {
+      releases.shift()!();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+  return { media, release_all, calls: () => calls };
+}
+
+test("a lane keeps 16 steps and drops the rest", async () => {
+  const { media, release_all, calls } = media_with_held_steps();
+  for (let index = 0; index < 40; index++) await media.enter(4, 0);
+  await release_all();
+  assert.equal(calls(), 16);
+});
+
+test("steps still waiting when the page loads never reach the new page", async () => {
+  const { media, release_all, calls } = media_with_held_steps();
+  for (let index = 0; index < 5; index++) await media.enter(4, 0);
+  assert.equal(calls(), 1);
+  await media.navigated(4, LOAD_START);
+  await release_all();
+  assert.equal(calls(), 1, "the four queued steps were skipped");
+});
