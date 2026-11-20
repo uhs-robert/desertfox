@@ -298,6 +298,13 @@ In item mode:
 | `k` | Go to item above |
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
+| `h` | Move through a tree of items to the parent from inside the item (scrolls the page when no item shows) |
+| `l` | Move through a tree of items to the first reply from inside the item (scrolls the page when no item shows) |
+| `}` | Move through a tree of items to the next sibling from inside the item (scrolls the page when no item shows) |
+| `{` | Move through a tree of items to the previous sibling from inside the item (scrolls the page when no item shows) |
+| `za` | Move through a tree of items to toggle the fold from inside the item (scrolls the page when no item shows) |
+| `zc` | Move through a tree of items to fold the thread from inside the item (scrolls the page when no item shows) |
+| `zo` | Move through a tree of items to unfold the item from inside the item (scrolls the page when no item shows) |
 
 ### `wikipedia`
 
