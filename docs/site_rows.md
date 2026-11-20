@@ -8,7 +8,7 @@ Generated from `src/background/default_site_rows.ts`. Do not edit between the ma
 
 <!-- BEGIN generated -->
 
-Shipped rows: 29 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi_images`, `kagi`, `brave_images`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `amazon`, `reddit`, `drive`).
+Shipped rows: 30 (`sheets`, `maps`, `arrow`, `google_images`, `google_videos`, `google_news`, `google_short_videos`, `google_shopping`, `ddg_images`, `ddg_videos`, `ddg_news`, `ddg`, `kagi_images`, `kagi`, `brave_images`, `brave`, `google`, `bing`, `hackernews`, `wikipedia`, `lobsters`, `archwiki`, `startpage`, `arxiv`, `stackoverflow`, `tildes`, `amazon`, `reddit_thread`, `reddit`, `drive`).
 
 ### `sheets`
 
@@ -412,9 +412,9 @@ In item mode:
 | `gg` | Go to first item (scrolls the page when no item shows) |
 | `G` | Go to last item (scrolls the page when no item shows) |
 
-### `reddit`
+### `reddit_thread`
 
-Addresses: `https://www.reddit.com/r/*/comments/*`, `https://reddit.com/r/*/comments/*`, `https://www.reddit.com/*`, `https://reddit.com/*`
+Addresses: `https://www.reddit.com/r/*/comments/*`, `https://reddit.com/r/*/comments/*`
 
 In item mode:
 
@@ -431,6 +431,18 @@ In item mode:
 | `za` | Fold or unfold the comment |
 | `zc` | Fold the thread, or the parent of a comment with no replies |
 | `zo` | Unfold the comment |
+
+### `reddit`
+
+Addresses: `https://www.reddit.com/*`, `https://reddit.com/*`
+
+In item mode:
+
+| Key | What it does |
+| --- | --- |
+| `j` | Go to item below |
+| `k` | Go to item above |
+| `G` | Go to last item (scrolls the page when no item shows) |
 
 ### `drive`
 

@@ -55,8 +55,8 @@ test("the Hacker News row binds the tree keys to comments only, and keeps the it
 });
 
 test("the Reddit thread rows come before the feed rows, bind the tree keys to comment heads and keep item mode off", () => {
-  const entries = DEFAULT_SITE_ROWS.filter((entry) => entry.name === "reddit");
-  const thread = entries.filter(({ row }) => row.site.includes("/comments/"));
+  const entries = DEFAULT_SITE_ROWS.filter((entry) => entry.name.startsWith("reddit"));
+  const thread = DEFAULT_SITE_ROWS.filter((entry) => entry.name === "reddit_thread");
   assert.deepEqual(thread.map(({ row }) => row.site), ["https://www.reddit.com/r/*/comments/*", "https://reddit.com/r/*/comments/*"]);
   assert.ok(entries.indexOf(thread.at(-1)!) < entries.findIndex(({ row }) => !row.site.includes("/comments/")), "the feed rows would otherwise decide the thread page");
   const expected = { h: "parent", l: "child", "}": "next", "{": "prev", za: "toggle", zc: "fold", zo: "unfold" };

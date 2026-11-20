@@ -12,8 +12,8 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
   await setup("load the shipped Reddit thread row and feed row for the stand-in pages", async () => {
     const dir = config_copy();
     const lines = [""];
-    for (const [pattern, matches] of [["*://127.0.0.1/reddit_thread*", (row) => row.site.includes("/comments/")], ["*://127.0.0.1/controls?id=reddit_feed*", (row) => !row.site.includes("/comments/")]]) {
-      const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "reddit" && matches(entry.row)).row;
+    for (const [pattern, name] of [["*://127.0.0.1/reddit_thread*", "reddit_thread"], ["*://127.0.0.1/controls?id=reddit_feed*", "reddit"]]) {
+      const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === name).row;
       lines.push("[[site_rules]]", `site = "${pattern}"`, ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`), "");
     }
     appendFileSync(join(dir, "settings.toml"), lines.join("\n"));
@@ -93,6 +93,19 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("k0");
     await press_keys("l");
     await expect_focus("k1");
+  });
+
+  await run_case("zc on a leaf folds its parent, and zo opens a folded comment", async () => {
+    await open_thread("close");
+    await press_keys("ll");
+    await expect_focus("k2");
+    await press_keys("zc");
+    await poll_until("the parent folded", async () => (await clicks()) === "k1,");
+    await expect_focus("k1");
+    await press_keys("h}");
+    await expect_focus("k4");
+    await press_keys("zo");
+    await poll_until("the unfold click", async () => (await clicks()) === "k1,k4,");
   });
 
   await run_case("on a feed page, h keeps the sideways scroll", async () => {
