@@ -45,6 +45,8 @@ test("a horizontal bar, a stack of three, a header or footer nav and an off-page
   assert.deepEqual(menus_of(around("nav", [0, 100, 150, 90], [stack(3)])), []);
   assert.deepEqual(menus_of(around("header", [0, 0, 1200, 300], [around("nav", [0, 100, 150, 120], [stack(5)])])), []);
   assert.deepEqual(menus_of(around("div", [0, 2500, 1200, 300], [around("nav", [0, 2600, 150, 120], [stack(5, 0, 2600)])], "contentinfo")), []);
+  assert.deepEqual(menus_of(around("header", [0, 100, 150, 150], [stack(5)], "navigation")), []);
+  assert.deepEqual(menus_of(around("footer", [0, 100, 150, 150], [stack(5)], "navigation")), []);
   assert.deepEqual(menus_of(around("nav", [-300, 100, 150, 150], [stack(5, -300)])), []);
 });
 
@@ -70,4 +72,13 @@ test("a page with a long list and a menu keeps the list first and the menu last"
 
 test("a spent time budget loses the menus", () => {
   assert.deepEqual(find_menus(saved_reader(page(around("nav", [0, 100, 150, 150], [stack(5)]))), () => true), []);
+});
+
+test("a clock that runs out after the lists keeps the lists and drops the menus", () => {
+  const base = saved_reader(page(around("nav", [0, 100, 150, 150], [stack(5)]), results()));
+  let spent = false;
+  const reader = { ...base, query_all_: (selector: string) => { const found = base.query_all_(selector); if (selector.includes("nav")) spent = true; return found; } };
+  const found = find_items(reader, { now_: () => (spent ? 1000 : 0), budget_ms_: 40 });
+  assert.equal(found.kind, "list");
+  assert.deepEqual(found.regions.map((region) => region.items.length), [10]);
 });
