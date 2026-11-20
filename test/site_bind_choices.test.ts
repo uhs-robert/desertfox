@@ -160,6 +160,8 @@ test("the site rules view says a failed otherwise = page bind passes the key to 
   };
   assert.match(action({ otherwise: "page" }), /, else the key goes to the page$/);
   assert.match(action({}), /, else the key without the row$/);
+  const later = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { h: [[{ id: "page.back", when_present: GRID }], [{ id: "tab.next", when_present: LIST, otherwise: "page" }]] } }] }), "https://a.test/").rows[0]!;
+  assert.match(later.changes.find(({ keys }) => keys === "h")!.action, /, else the key goes to the page$/, "the flag on a later choice counts");
 });
 
 test("the build stores otherwise on the first step, and refuses a value other than page", () => {
