@@ -37,6 +37,7 @@ test("typed names are the dotted id except the family words and one-word command
     "open.clipboard=paste",
     "open.search=search",
     "open.url=open",
+    "page.item_action=item_action",
     "quickmark.list=quickmarks",
     "register.list=registers",
     "scroll.lines=scroll",

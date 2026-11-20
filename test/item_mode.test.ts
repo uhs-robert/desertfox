@@ -81,10 +81,18 @@ test("the item section holds the item keys and, of normal mode, only the tab, pa
   for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children), [group], `${group}${group} alone`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
   assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").filter((key) => key !== ";fF" && key !== ";fe").sort(), "the ; family but the normal-only keys");
-  for (const key of ["o", "t", "<Space>", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
+  for (const key of ["o", "t", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
 });
 
 const step_ids = (node: unknown): string[] => (node as { steps: { invocation: { id: string } }[] }).steps.map((step) => step.invocation.id);
+
+test("Space toggles the current item's checkbox and Enter opens its link", () => {
+  const item = compiled_with().modes.item!;
+  const action = (key: string) => (item.children[key] as { steps: { invocation: { id: string; args: Record<string, unknown> }; bundle?: string }[] }).steps[0]!;
+  assert.deepEqual([action("<Space>").invocation.id, action("<Space>").invocation.args["action"], action("<Space>").bundle], ["page.item_action", "toggle", "item_act"]);
+  assert.deepEqual([action("<Enter>").invocation.id, action("<Enter>").invocation.args["action"]], ["page.item_action", "open"]);
+  assert.equal(compiled_with().modes.normal!.children["<Space>"], undefined, "normal mode keeps Space for the page");
+});
 
 // Every copied hint key labels the current item, the modifier variants (;Bl) too. The two normal-only keys are absent because the schema refuses an item scope with all frames.
 test("every hint key of item mode carries the item scope, and ;fF and ;fe stay out of it", () => {

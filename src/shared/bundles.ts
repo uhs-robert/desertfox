@@ -2,7 +2,7 @@
 
 import type { Mode } from "./command.ts";
 
-export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "editor", "site_actions", "grab", "item", "next_page"] as const;
+export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "editor", "site_actions", "grab", "item", "item_act", "next_page"] as const;
 export type BundleName = (typeof BUNDLE_NAMES)[number];
 
 // The modes whose keys go to a sink, and the bundle that registers it.
