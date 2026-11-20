@@ -15,7 +15,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
   };
   await setup("load the shipped reddit row for the reddit_ pages", async () => {
     const dir = config_copy();
-    const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.row.site === "https://www.reddit.com/*").row;
+    const { site: _site, ...columns } = DEFAULT_SITE_ROWS.find((entry) => entry.name === "reddit").row;
     const lines = ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=reddit_*"', ...Object.entries(columns).map(([column, value]) => `${column} = ${toml(value)}`), ""];
     appendFileSync(join(dir, "settings.toml"), lines.join("\n"));
     await load_config_dir(dir);
