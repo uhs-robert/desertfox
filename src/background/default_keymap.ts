@@ -535,6 +535,7 @@ const ITEM_KEYS: ModeBindings = {
   "<Enter>": { id: "page.item_action", args: { action: "open" }, label: "Open the item's link, or click the focused element in it" },
   "<Tab>": { id: "page.item_focus", args: { direction: "next" }, label: "Focus the next element in the item" },
   "<S-Tab>": { id: "page.item_focus", args: { direction: "prev" }, label: "Focus the previous element in the item" },
+  v: { id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" },
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
   h: item_step("left", "Item to the left, or scroll left"),
@@ -543,6 +544,15 @@ const ITEM_KEYS: ModeBindings = {
   "{": item_step("prev_section", "Previous section"),
   gg: item_step("first", "First item, or scroll to top"),
   G: item_step("last", "Last item, or scroll to bottom"),
+};
+
+// The keys of visual item mode, which marks a range of items from the item where `v` was pressed (the anchor) to the item the cursor keys move to. `v` or Escape ends the mode back to item mode.
+const ITEM_VISUAL_KEYS: ModeBindings = {
+  v: { id: "mode.set", args: { mode: "item" }, label: "End the selection" },
+  "<Escape>": { id: "mode.escape" },
+  "<C-[>": { id: "mode.escape" },
+  "?": { id: "help.whichkey", label: "Show the keys" },
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
 // The keys of grab mode. Enter drops where the element is. Escape puts a range input or a draggable element back first and releases a pointer drag where it is. [ and ] halve and double the step.
@@ -560,4 +570,4 @@ const GRAB_KEYS: ModeBindings = {
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS };
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS };

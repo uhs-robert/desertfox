@@ -28,7 +28,7 @@ const compiled_with = (settings: Record<string, unknown> = {}) => {
 test("the item step takes a frame in normal or media mode into item mode and only item mode out, and media mode keeps its own step", () => {
   for (const mode of MODES) {
     assert.equal(fullscreen_step(mode, true, "item"), mode === "normal" || mode === "media" ? "item" : undefined, `enter from ${mode}`);
-    assert.equal(fullscreen_step(mode, false, "item"), mode === "item" ? "normal" : undefined, `leave from ${mode}`);
+    assert.equal(fullscreen_step(mode, false, "item"), mode === "item" || mode === "item_visual" ? "normal" : undefined, `leave from ${mode}`);
   }
   // A step off for item mode leaves a frame in media mode alone, and the other way round.
   assert.equal(fullscreen_step("media", false, "item"), undefined);
@@ -274,6 +274,23 @@ test("the matcher reads counts in item mode and takes a quote as an ordinary key
   const counted = matcher.feed("item", "j");
   assert.equal(counted.kind_ === "match" && counted.count, 3);
   assert.equal(matcher.feed("item", '"').kind_, "no_match", "no register in item mode");
+});
+
+test("visual item mode: Escape goes to item mode, the second to normal, and a field ends it", () => {
+  const state = create_mode_state();
+  state.set_mode_("item");
+  state.set_mode_("item_visual");
+  state.escape();
+  assert.equal(state.get_mode_(), "item");
+  state.escape();
+  assert.equal(state.get_mode_(), "normal");
+  state.set_mode_("item_visual");
+  state.focus_entered_editable_();
+  assert.equal(state.get_mode_(), "insert");
+});
+
+test("the badge says VISUAL in visual item mode", () => {
+  assert.equal(mode_label("item_visual", false, "always"), "VISUAL");
 });
 
 test("the badge says ITEM", () => {

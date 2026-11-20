@@ -76,6 +76,20 @@ test("a hint or the command line opened in the mode keeps it, and a report of no
   assert.deepEqual(steps, []);
 });
 
+test("visual item mode keeps the hold, and a second frame stays in item mode", async () => {
+  const { tab_item, steps, data } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  steps.length = 0;
+  await tab_item.reported(4, 7, "item_visual");
+  await tab_item.reported(4, 7, "item");
+  await tab_item.reported(4, 7, "item_visual");
+  assert.deepEqual(steps, []);
+  assert.ok(data["desertfox_tab_item_4"]);
+  await tab_item.reported(4, 7, "normal");
+  assert.deepEqual(steps, ["4:off:0"], "the end reaches the other frame, which stayed in item mode");
+});
+
 test("a step that arrives after the hold ended sends that frame back to normal and starts no hold", async () => {
   const { tab_item, steps, data } = make();
   await tab_item.reported(4, 0, "item");

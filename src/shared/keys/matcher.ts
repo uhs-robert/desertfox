@@ -13,7 +13,7 @@ export type MatchResult =
 const MAX_COUNT_DIGITS = 6;
 
 // Only the modes that move through the page have counts, and all of them but media and item have registers. In the others a digit or `"` is just a key. Media and item capture only their listed keys, so an unbound `"` reaches the page.
-export const COUNT_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line", "media", "item"];
+export const COUNT_MODES: readonly string[] = ["normal", "caret", "visual", "visual_line", "media", "item", "item_visual"];
 
 // `frees` names the keys a site rule hands to the page. While no sequence is under way, such a key matches nothing and is no count digit.
 export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) => boolean) {

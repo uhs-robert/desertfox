@@ -47,7 +47,7 @@ const host_of = (address: string | undefined): string | undefined => {
 const stays_on_site = (from: string | undefined, to: string | undefined): boolean => host_of(from) !== undefined && host_of(from) === host_of(to);
 
 // A hint or the command line opened from the mode returns to it, so a frame that reports one of these has not left.
-const KEEPS_THE_MODE: readonly Mode[] = ["item", "hint", "cmdline"];
+const KEEPS_THE_MODE: readonly Mode[] = ["item", "item_visual", "hint", "cmdline"];
 
 export function create_tab_item(deps: TabItemDeps) {
   const now = deps.now ?? Date.now;

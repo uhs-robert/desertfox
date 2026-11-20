@@ -4,10 +4,10 @@ import type { Mode } from "../shared/index.ts";
 import type { MediaStep } from "../shared/messages.ts";
 import { is_caret_mode } from "../shared/command.ts";
 
-// The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Normal mode starts the media mode and the item mode. The two also take each other, so `aa` in item mode and the Escape back from media mode reach every frame in either order. Insert, ignore, hint and the reading modes win, and only the held mode ends with the step.
+// The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Normal mode starts the media mode and the item mode. The two also take each other, so `aa` in item mode and the Escape back from media mode reach every frame in either order. Insert, ignore, hint and the reading modes win, and only the held mode ends with the step (visual item mode ends with item mode's).
 // `held` is the mode the step is for: item mode takes the same step, started and ended by the background (`tab_item.ts`).
 export const fullscreen_step = (mode: Mode, has_fullscreen_element: boolean, held: Mode = "media"): Mode | undefined =>
-  has_fullscreen_element ? (mode === "normal" || mode === (held === "media" ? "item" : "media") ? held : undefined) : mode === held ? "normal" : undefined;
+  has_fullscreen_element ? (mode === "normal" || mode === (held === "media" ? "item" : "media") ? held : undefined) : mode === held || (held === "item" && mode === "item_visual") ? "normal" : undefined;
 
 // A frame skips the step that its own report of the mode caused. That step can arrive after the frame left the mode (a site key that ends its fullscreen at once), and would put it back.
 export const takes_media_step = (step: MediaStep, frame_id: number): boolean => step.from !== frame_id;
@@ -66,7 +66,7 @@ export function create_mode_state(initial: Mode = "normal") {
     is_pass_next_armed_: () => pass_next_armed,
     // Normal, media, item, caret and both visual modes follow focus, so a field never loses typing to motion keys. Ignore, hint and command line modes keep the keys.
     focus_entered_editable_: () => {
-      if (mode === "normal" || mode === "media" || mode === "item" || is_caret_mode(mode)) follow_focus_to_("insert");
+      if (mode === "normal" || mode === "media" || mode === "item" || mode === "item_visual" || is_caret_mode(mode)) follow_focus_to_("insert");
     },
     focus_left_editable_: () => {
       if (mode === "insert" && !manual_insert) follow_focus_to_("normal");
@@ -76,7 +76,7 @@ export function create_mode_state(initial: Mode = "normal") {
       if (mode === "ignore") return;
       escaping = true;
       try {
-        set_mode_(is_line(mode) ? back_mode : mode === "media" && media_from_item ? "item" : "normal");
+        set_mode_(is_line(mode) ? back_mode : mode === "item_visual" || (mode === "media" && media_from_item) ? "item" : "normal");
       } finally {
         escaping = false;
       }

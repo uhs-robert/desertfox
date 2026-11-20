@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 593 (normal 264, media 58, item 98, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 598 (normal 264, media 58, item 98, item_visual 5, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -430,7 +430,7 @@ Which-key group names:
 | `,i` | `mode ignore` | Set mode |
 | `f` | `hint` | Click element |
 | `F` | `hint --background` | Click element in background tab |
-| `v` | `mode caret` | Start caret mode |
+| `v` | `mode item_visual` | Select a range of items |
 | `V` | `mode visual` | Start visual mode |
 | `;v` | `hint --caret --prose` | Start caret mode at text |
 | `;V` | `hint --visual --prose` | Start visual mode at text |
@@ -490,6 +490,16 @@ Which-key group names:
 | `{` | `page.item --prev-section --hover` | Previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
+
+### item_visual
+
+| Key | Command | Label |
+| --- | --- | --- |
+| `v` | `mode item` | End the selection |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
 
 ### grab
 
