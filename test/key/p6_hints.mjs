@@ -523,6 +523,18 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("b at the div top", async () => Math.abs((await top_of("b")) - 300) <= 3);
   });
 
+  await run_case("]h reaches a heading in an overflow-visible box below the window top", async () => {
+    await open_page("scroll_box_edges", "p6_scroll_box_edges", { new_tab: true });
+    await press_keys("]h");
+    await poll_until("vh at the top", async () => Math.abs(await top_of("vh")) <= 3);
+  });
+
+  await run_case("]h from the page top skips the first heading of an unscrolled auto box, which already sits at its edge", async () => {
+    await open_page("scroll_box_unscrolled", "p6_scroll_box_unscrolled", { new_tab: true });
+    await press_keys("]h");
+    await poll_until("the box scrolled down to second", async () => (await in_active_tab(`document.getElementById("first").parentElement.scrollTop`)) >= 500);
+  });
+
   await run_case("} lands below a bar that sticks only once the page has scrolled, from the page top", async () => {
     await open_page("article_late_bar", "p6_article_late_bar", { new_tab: true });
     await press_keys("}");

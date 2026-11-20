@@ -711,6 +711,16 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const body = `<div id="box" style="position:fixed;inset:300px 0 0 0;overflow:auto"><h2 id="early" style="margin:0;height:50px">Early</h2>${text("a", 500)}${text("b", 500)}<div style="height:2000px"></div></div>`;
       return response.end(page(`article_scroller_low ${id}`, body, "<style>h1{display:none}body{overflow:hidden}</style>"));
     }
+    if (url.pathname === "/scroll_box_edges") {
+      // The window scrolls. "vh" sits in a 100px box with overflow visible that its content overflows, 300px down: that box is no scroll box, so ]h from the top must still reach "vh".
+      const body = `<div style="height:300px"></div><div style="height:100px"><h2 id="vh" style="margin:0;height:50px">Visible overflow heading</h2><div style="height:400px"></div></div><div style="height:3000px"></div>`;
+      return response.end(page(`scroll_box_edges ${id}`, body, "<style>h1{display:none}</style>"));
+    }
+    if (url.pathname === "/scroll_box_unscrolled") {
+      // The window scrolls. "first" is the first heading of an unscrolled auto box 300px down, at its top. "second" is below the box's visible part.
+      const body = `<div style="height:300px"></div><div style="height:200px;overflow:auto"><h2 id="first" style="margin:0;height:50px">First</h2><div style="height:600px"></div><h2 id="second" style="margin:0;height:50px">Second</h2><div style="height:600px"></div></div><div style="height:3000px"></div>`;
+      return response.end(page(`scroll_box_unscrolled ${id}`, body, "<style>h1{display:none}</style>"));
+    }
     if (url.pathname === "/article_late_bar") {
       // A 40px banner scrolls away, and the 60px bar under it sticks to the top only once the page has scrolled past the banner, so a read at the top edge before the jump finds nothing.
       const text = (name) => `<p id="${name}" style="min-height:700px;margin:0">Paragraph ${name} holds enough running text to be a stop for the brace keys.</p>`;
