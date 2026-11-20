@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
@@ -52,6 +53,54 @@ test("a media step of another frame takes a frame in item mode, and Escape in me
   state.set_mode_("media");
   state.escape();
   assert.equal(state.get_mode_(), "normal", "media from normal goes back to normal");
+});
+
+// A frame applies a step the way main.ts media_step does: on a step on it takes the mode the step brings, on a step off it ends the held mode.
+const apply_step = (state: ReturnType<typeof create_mode_state>, on: boolean, held: Mode) => {
+  const next = on ? fullscreen_step(state.get_mode_(), true, held) : state.media_ended_(undefined, held);
+  if (next) state.set_mode_(next);
+};
+
+test("a sibling frame ends in item mode when the item step and the media step off arrive in either order", () => {
+  for (const item_first of [true, false]) {
+    const sibling = create_mode_state();
+    sibling.set_mode_("item");
+    apply_step(sibling, true, "media");
+    assert.equal(sibling.get_mode_(), "media");
+    if (item_first) {
+      apply_step(sibling, true, "item");
+      apply_step(sibling, false, "media");
+    } else {
+      apply_step(sibling, false, "media");
+      apply_step(sibling, true, "item");
+    }
+    assert.equal(sibling.get_mode_(), "item", item_first ? "item step first" : "media step off first");
+  }
+});
+
+test("Escape reports as the frame's own change and nothing else does", () => {
+  const state = create_mode_state();
+  const seen: boolean[] = [];
+  state.listen(() => seen.push(state.is_escaping_()));
+  state.set_mode_("item");
+  state.set_mode_("media");
+  state.escape();
+  assert.deepEqual(seen, [false, false, true]);
+  assert.equal(state.is_escaping_(), false);
+});
+
+test("main.ts clears the step flag of a report that Escape causes", () => {
+  const text = readFileSync("src/content/main.ts", "utf8");
+  assert.match(text, /if \(\(mode !== "media" && mode !== "item"\) \|\| page_mode\.is_escaping_\(\)\) media_by_step = false;/);
+});
+
+test("an own fullscreen from item mode starts media mode and its end goes to normal mode", () => {
+  const state = create_mode_state();
+  state.set_mode_("item");
+  const next = fullscreen_step(state.get_mode_(), true, "media");
+  assert.equal(next, "media");
+  state.set_mode_(next!);
+  assert.equal(state.media_ended_(true, undefined), "normal");
 });
 
 test("item mode follows the focus into a field and ends there, as media mode does", () => {

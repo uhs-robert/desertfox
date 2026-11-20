@@ -74,8 +74,11 @@ export function create_mode_state(initial: Mode = "normal") {
     escape: () => {
       if (mode === "ignore") return;
       escaping = true;
-      set_mode_(is_line(mode) ? back_mode : mode === "media" && media_from_item ? "item" : "normal");
-      escaping = false;
+      try {
+        set_mode_(is_line(mode) ? back_mode : mode === "media" && media_from_item ? "item" : "normal");
+      } finally {
+        escaping = false;
+      }
     },
     arm_pass_next_: () => {
       pass_next_armed = true;
