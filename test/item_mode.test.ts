@@ -24,9 +24,9 @@ const compiled_with = (settings: Record<string, unknown> = {}) => {
   return compiled;
 };
 
-test("the item step takes only a frame in normal mode into item mode and only item mode out, and media mode keeps its own step", () => {
+test("the item step takes a frame in normal or media mode into item mode and only item mode out, and media mode keeps its own step", () => {
   for (const mode of MODES) {
-    assert.equal(fullscreen_step(mode, true, "item"), mode === "normal" ? "item" : undefined, `enter from ${mode}`);
+    assert.equal(fullscreen_step(mode, true, "item"), mode === "normal" || mode === "media" ? "item" : undefined, `enter from ${mode}`);
     assert.equal(fullscreen_step(mode, false, "item"), mode === "item" ? "normal" : undefined, `leave from ${mode}`);
   }
   // A step off for item mode leaves a frame in media mode alone, and the other way round.
@@ -35,9 +35,10 @@ test("the item step takes only a frame in normal mode into item mode and only it
 });
 
 test("a media step of another frame takes a frame in item mode, and Escape in media mode that began there goes back to item mode", () => {
-  assert.equal(fullscreen_step("item", true, "media", true), "media");
-  assert.equal(fullscreen_step("item", true, "media", false), undefined);
-  assert.equal(fullscreen_step("item", true, "item", true), undefined);
+  assert.equal(fullscreen_step("item", true, "media"), "media");
+  assert.equal(fullscreen_step("item", true, "item"), undefined);
+  assert.equal(fullscreen_step("media", true, "item"), "item", "the step back to item reaches a frame still in media mode");
+  assert.equal(fullscreen_step("insert", true, "media"), undefined);
   const state = create_mode_state();
   state.set_mode_("item");
   state.set_mode_("media");
@@ -94,7 +95,7 @@ test("a step that ended the mode while a line was open sends the line back to no
   assert.equal(state.get_mode_(), "normal");
 });
 
-test("the item section holds the item keys and, of normal mode, only the tab, page scroll, command line, help, hint, find, follow, jump and gi keys", () => {
+test("the item section holds the item keys and, of normal mode, only the tab, page scroll, command line, help, hint, find, follow, jump, gi, media, insert, caret, visual, find repeat, ignore and pass-next keys", () => {
   const item = compiled_with().modes.item!;
   for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>", "H", "L", "i", "v", "V", "n", "N", "*", "#", "A", "<S-Escape>", "<C-v>", ","]) assert.ok(item.children[key], key);
   assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["?", "T", "V", "g", "i", "t"], "the g group holds gg, gt, gT, g?, gi and gV");
