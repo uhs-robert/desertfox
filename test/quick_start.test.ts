@@ -217,6 +217,15 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
   assert.deepEqual(pick_key({ ...without_i, "<A-p>": [pick, { id: "page.item", args: { direction: "current" } }] }), { kind: "keys", text: "<A-p>" });
   assert.notDeepEqual(pick_key({ ...without_i, "<A-p>": pick }), { kind: "keys", text: "<A-p>" });
   assert.notDeepEqual(pick_key({ ...without_i, "<A-p>": [pick, { id: "page.item", args: { direction: "current" } }, { id: "scroll.to", args: { percent: 0 } }] }), { kind: "keys", text: "<A-p>" });
+  // With no key for the picker, the fallback never shows the pick alone: `page.item` has no command line name, so the lesson says no key is bound.
+  const unbound_pick = practice_lessons(compile({ ...DEFAULT_KEYMAP, normal: without_i } as never), all_commands).find((lesson) => lesson.slug === "list")!.steps[0]![1];
+  assert.deepEqual(unbound_pick, { kind: "text", text: "(no key bound)" });
+  // Where both commands have a name, the line carries both steps.
+  const named = all_commands.map((command) => (command.id === "page.item" ? { ...command, name: "item" } : command));
+  assert.match(quick_start_fallbacks(named).find((fallback) => fallback.text.includes("--lists"))!.text, /^:.*--lists ; item --current$/);
+  // The picker step covers a list that is picked at once as well as one that shows letters.
+  const pick_step = practice_lessons(compile(DEFAULT_KEYMAP), all_commands).find((lesson) => lesson.slug === "list")!.steps[0]!.map((inline) => inline.text).join("");
+  assert.ok(pick_step.includes("If no letter shows"), pick_step);
   // The which-key step names the first key of the zoom keys in use, not a fixed z.
   const zoom_step = (keymap: unknown) => practice_lessons(compile(keymap as never), all_commands).find((lesson) => lesson.slug === "which-key")!.steps[1]![1];
   assert.deepEqual(zoom_step(DEFAULT_KEYMAP), { kind: "keys", text: "z" });

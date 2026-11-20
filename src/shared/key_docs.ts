@@ -11,8 +11,12 @@ const KEY_MARK = /\{key:([a-z_]+)(?:\|([^}]*))?\}/g;
 
 // The command line that does the same as the binding, or undefined when the command has no name to type.
 export function command_line_of(commands: CommandMeta[], binding: Binding): string | undefined {
-  const command = commands.find((candidate) => candidate.id === binding.id);
-  return command?.name === undefined ? undefined : `:${print_command(command, binding.args, { flags: "long" })}`;
+  const printed = [binding, ...(binding.then ? [binding.then] : [])].map((step) => {
+    const command = commands.find((candidate) => candidate.id === step.id);
+    return command?.name === undefined ? undefined : print_command(command, step.args, { flags: "long" });
+  });
+  // A two-step key keeps both steps, joined as the keys page joins them, so the line does the whole key.
+  return printed.includes(undefined) ? undefined : `:${printed.join(" ; ")}`;
 }
 
 const SCHEMA_NOTE = " The keys named here are the default keys.";
