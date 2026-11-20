@@ -90,15 +90,17 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await hash()) === "", `Enter opened ${await hash()}`);
   });
 
-  await run_case("f labels only the current item, so a hint pick clicks inside it", async () => {
+  await run_case("f labels the page, and the current item's targets take the first labels", async () => {
     await open_boxes("ia_scope");
     await press_keys("jj");
     await expect_focus("c2");
-    const labels = () => in_active_tab(`[...document.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0)`);
+    const link_top = Number(await in_active_tab(`document.getElementById("c2").getBoundingClientRect().top`));
+    const tops = () => in_active_tab(`JSON.stringify([...document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => node.getBoundingClientRect().top)))`).then((text) => JSON.parse(text));
     await press_keys("f");
-    await poll_until("the labels", async () => (await labels()) > 0);
-    // The card holds its title link and the star span.
-    expect((await labels()) >= 1 && (await labels()) <= 3, `${await labels()} labels`);
+    await poll_until("the labels", async () => (await tops()).length > 3);
+    // The card holds its title link and the star span, and they come first.
+    const found = await tops();
+    expect(Math.abs(found[0] - link_top) < 40, `the first label sits at ${found[0]}, the item's link at ${link_top}`);
     await press_keys("-k", "Escape");
   });
 }
