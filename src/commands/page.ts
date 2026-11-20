@@ -229,11 +229,23 @@ define("page.item", {
 define("page.item_action", {
   name: "item_action",
   label: "Act on the current item",
-  intent: "Toggle or open the current item of item mode. Toggle clicks the first native checkbox or element with role checkbox that shows in the item, or the element a CSS selector finds when a site row names one. Both send the pointer and mouse events of a hint click. They refuse when there is no current item, no checkbox or no link.",
+  intent: "Toggle or open the current item of item mode. Open clicks the element that has the focus inside the item, else the item's link. Toggle clicks the first native checkbox or element with role checkbox that shows in the item, or the element a CSS selector finds when a site row names one. Both send the pointer and mouse events of a hint click. They refuse when there is no current item, no checkbox or no link.",
   params: [
     { name: "action", type: "enum", values: ["toggle", "open"], value_labels: { toggle: "to toggle the checkbox", open: "to open the link" }, description: { toggle: "Toggle the checkbox of the current item.", open: "Open the link of the current item." } },
     { name: "target", type: "string", default: "", when: { action: ["toggle"] }, description: "Click what this selector finds in the item instead." },
   ],
+  bridge: false,
+  runs_in: "content",
+  bundle: "item_act",
+  modes: ["item"],
+});
+
+// Tab and Shift-Tab of item mode. Focus stays in the item and wraps at its edges. An item whose only focusable element is its link steps on through the page's focusables, as the browser's Tab does.
+define("page.item_focus", {
+  name: "item_focus",
+  label: "Move the focus inside the current item",
+  intent: "Focus the next or previous control in the current item. The controls are the links, buttons, fields and checkboxes that show, and the focus wraps at the item's edges. An item with a single focusable element steps on through the page's focusables instead. It refuses when the item has no focusable element. Enter then clicks the focused element.",
+  params: [{ name: "direction", type: "enum", values: ["next", "prev"], value_labels: { next: "to the next element", prev: "to the previous element" }, description: { next: "Focus the next element.", prev: "Focus the previous element." } }],
   bridge: false,
   runs_in: "content",
   bundle: "item_act",

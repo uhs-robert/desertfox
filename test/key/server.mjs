@@ -232,7 +232,8 @@ export function start_server() {
       const prefix = url.pathname === "/item_list" ? "c" : "f";
       // A `_boxes` id gives the first four cards a native checkbox, a role=checkbox div, a plain span that a site row would name (`.star`) and nothing. Each click on one is recorded in the `toggled` data attribute of the root element.
       const boxes = ['<input type="checkbox" id="box0">', '<div role="checkbox" aria-checked="false" id="box1" tabindex="0">box</div>', '<span class="star" id="box2">star</span>', ""];
-      const extra = (index) => (id.includes("_boxes") ? (boxes[index] ?? "") : "");
+      // A `_tfield` id puts a text field in the sixth card.
+      const extra = (index) => (id.includes("_boxes") ? (boxes[index] ?? "") : id.includes("_tfield") && index === 5 ? '<input id="in5">' : "");
       const record = id.includes("_boxes") ? "<script>document.documentElement.dataset.toggled = ''; document.addEventListener('click', (event) => { if (event.target.id?.startsWith('box')) document.documentElement.dataset.toggled += (document.documentElement.dataset.toggled ? ',' : '') + event.target.id; });</script>" : "";
       const cards_html = Array.from({ length: id.includes("_sections") ? 6 : 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span>${extra(index)}</div>`);
       const cards = (id.includes("_sections") ? "" : cards_html.join("")) + record;
