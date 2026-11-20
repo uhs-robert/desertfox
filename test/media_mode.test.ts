@@ -711,3 +711,64 @@ test("a late step's report with only a pin stored leaves the ;M frame's step on 
   assert.deepEqual(sent.at(-1), [7, "all", "on"]);
   assert.equal(await media.pin_of(7), 3);
 });
+
+// A frame stuck in a loop never answers a step. The queue of the hold is shared by every tab, so tab 4's frame must hold up nothing in tab 5.
+function media_with_stuck_tab_4() {
+  const sent: string[] = [];
+  const store = new Map<string, unknown>();
+  const media = create_tab_media({
+    storage: {
+      get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
+      set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
+      remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
+    } as never,
+    send_step: (tab_id, on, frame_id) => (tab_id === 4 ? new Promise(() => {}) : (sent.push(`${tab_id}:${on ? "on" : "off"}:${frame_id ?? "all"}`), Promise.resolve())),
+    frame_alive: async () => true,
+    now: () => 0,
+  });
+  return { media, sent };
+}
+
+test("a frame that never answers its step holds up no later report or join, in this tab or another", { timeout: 2000 }, async () => {
+  const { media, sent } = media_with_stuck_tab_4();
+  await media.enter(4, 0);
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.reported(4, 0, "normal", true);
+  await media.reported(5, 0, "media", false);
+  assert.equal(await media.join(5, 3), true);
+  assert.deepEqual(sent, ["5:on:all"]);
+});
+
+test("a stuck step of a navigation's end holds up no other tab", { timeout: 2000 }, async () => {
+  const { media } = media_with_stuck_tab_4();
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.navigated(4, LOAD_START);
+  await media.reported(5, 0, "media", false);
+  assert.equal(await media.join(5, 3), true);
+});
+
+test("a stuck step of the line's close holds up no other tab", { timeout: 2000 }, async () => {
+  const { media } = media_with_stuck_tab_4();
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.reported(4, 7, "hint", true);
+  await media.reported(4, 0, "normal", false);
+  await media.reported(4, 7, "media", true);
+  await media.reported(5, 0, "media", false);
+  assert.equal(await media.join(5, 3), true);
+});
+
+test("two steps to one frame that arrive out of order leave the stored hold in charge", async () => {
+  const { media, store, steps } = fake_tab_media();
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.reported(4, 7, "normal", true);
+  assert.equal(store.has("desertfox_tab_media_4"), false, "the hold ended");
+  // The step on of the start reaches frame 0 after the step off of the end, so frame 0 is back in the mode and reports it as caused by a step.
+  steps.length = 0;
+  await media.reported(4, 0, "media", false, true);
+  assert.equal(store.has("desertfox_tab_media_4"), false, "no hold starts from the stale step");
+  assert.deepEqual(steps.map((step) => step.on), [false], "the frame is stepped back off");
+});

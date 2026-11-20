@@ -44,11 +44,13 @@ export function create_tab_media(deps: TabMediaDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
+  // A step goes out without a wait: the queue is shared by every tab, and a frame that never answers (a page stuck in a loop) would hold every later report, join and keymap reply. Two steps to one frame may then arrive out of order, and the stored hold stays in charge: a frame that took a stale step reports it, and the report corrects it.
+  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number) => void best_effort(deps.send_step(tab_id, on, frame_id, from));
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
   // The reporter gets no step off, because it left the mode already. No step on reaches a frame of the hold late: each frame joins by reporting the mode, so its step came first, and the step of a first report skips the reporter (`from`).
   const end = async (tab_id: number, hold: MediaHold, except?: number) => {
     await deps.storage.remove(key_of(tab_id));
-    await Promise.all(hold.frames.filter((frame_id) => frame_id !== except).map((frame_id) => best_effort(deps.send_step(tab_id, false, frame_id))));
+    for (const frame_id of hold.frames) if (frame_id !== except) step(tab_id, false, frame_id);
   };
 
   const write = (tab_id: number, hold: MediaHold) => deps.storage.set({ [key_of(tab_id)]: hold });
@@ -69,7 +71,7 @@ export function create_tab_media(deps: TabMediaDeps) {
       delete next.left;
     }
     await write(tab_id, next);
-    if (all_closed) await Promise.all((hold.left ?? []).map((left_frame) => best_effort(deps.send_step(tab_id, true, left_frame))));
+    if (all_closed) for (const left_frame of hold.left ?? []) step(tab_id, true, left_frame);
   };
 
   return {
@@ -79,7 +81,7 @@ export function create_tab_media(deps: TabMediaDeps) {
       in_turn(async () => {
         const hold = await read(tab_id);
         await write(tab_id, { ...(hold && without_pin(hold)), frames: hold?.frames ?? [], stepped_on: true });
-        await best_effort(deps.send_step(tab_id, true));
+        step(tab_id, true);
       }),
     // `;M`: the picked video acts for the keys until the mode ends. The frame enters the mode when its hint ends, and reports it.
     pin: (tab_id: number, frame_id: number): Promise<void> =>
@@ -103,17 +105,17 @@ export function create_tab_media(deps: TabMediaDeps) {
           if (hold?.lines?.includes(frame_id)) return after_line_closed(tab_id, hold, frame_id);
           if (hold?.frames.includes(frame_id)) return;
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
-          if (by_step && !is_live_hold(hold)) return void (await best_effort(deps.send_step(tab_id, false, frame_id)));
+          if (by_step && !is_live_hold(hold)) return step(tab_id, false, frame_id);
           const { stepped_on, ...rest } = hold ?? { frames: [] };
           await write(tab_id, { ...rest, frames: [...rest.frames, frame_id] });
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
-          if (rest.frames.length === 0 && !stepped_on) await best_effort(deps.send_step(tab_id, true, undefined, frame_id));
+          if (rest.frames.length === 0 && !stepped_on) step(tab_id, true, undefined, frame_id);
           return;
         }
         if (!hold?.frames.includes(frame_id)) return;
         if (is_line(mode)) {
           if (!hold.lines?.includes(frame_id)) await write(tab_id, { ...hold, lines: [...(hold.lines ?? []), frame_id] });
-        } else if (mode === "normal" && line_just_closed(hold, frame_id, focus)) await best_effort(deps.send_step(tab_id, true, frame_id));
+        } else if (mode === "normal" && line_just_closed(hold, frame_id, focus)) step(tab_id, true, frame_id);
         else if (mode === "normal" && (await open_lines_besides(tab_id, hold, frame_id)).length > 0) {
           if (!hold.left?.includes(frame_id)) await write(tab_id, { ...hold, left: [...(hold.left ?? []), frame_id] });
         } else if (!KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
