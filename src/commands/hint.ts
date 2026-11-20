@@ -129,7 +129,8 @@ define("hint.run", {
       },
     },
     { name: "selector", type: "string", main: true, rest: true, verbatim: true, when: { filter: ["custom"] }, description: "Label the elements that match this CSS selector." },
-    { name: "items", type: "string", default: "", when: { filter: ["lists"] }, description: "With lists: a site row's items, the only list offered." },
+    { name: "items", type: "string", default: "", when: { filter: ["lists"] }, description: "With lists: a site row's items, the first list offered." },
+    { name: "row_only", type: "bool", default: false, when: { filter: ["lists"] }, description: "With items: offer only the row's list." },
     {
       name: "scope",
       type: "enum",

@@ -15,6 +15,7 @@ import { MODES } from "../src/shared/command.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
+import { check_args } from "../src/shared/registry/check_args.ts";
 import { mode_label } from "../src/content/ui/mode_label.ts";
 
 const compiled_with = (settings: Record<string, unknown> = {}) => {
@@ -133,6 +134,9 @@ test("a row with an item selector gets I and zt, zz and zb for its own items, a 
   assert.deepEqual(landing(google.bind?.["I"]), [["hint.run", undefined], ["page.item", selector]]);
   assert.equal(google.bind?.["I"]?.leaf.when_present, selector);
   assert.equal(google.bind?.["I"]?.leaf.steps[0]?.invocation.args?.["items"], selector);
+  // Normal mode offers the row alone so `I` starts at once. Item mode offers the other lists too.
+  assert.equal(google.bind?.["I"]?.leaf.steps[0]?.invocation.args?.["row_only"], true);
+  assert.equal(google.keymap?.["item"]?.["I"]?.leaf.steps[0]?.invocation.args?.["row_only"], false);
   for (const key of ["zt", "zz", "zb"]) assert.deepEqual(landing(google.keymap?.["item"]?.[key]), [["page.item", selector], ["scroll.align", undefined]], key);
   assert.deepEqual(landing(google.keymap?.["item"]?.["I"]), [["hint.run", undefined], ["page.item", selector]]);
 
@@ -271,4 +275,10 @@ test("a row whose j chooses between selectors gets an I for the union of them, w
     assert.equal((row.bind?.["I"] as { when_present?: string }[] | undefined)?.[0]?.when_present, ".grid_card, .file_row", name);
     assert.equal(((row.bind?.["I"] as unknown as { args: { items: string } }[])[0]!).args.items, ".grid_card, .file_row", name);
   }
+});
+
+test("row_only is an argument of the lists filter alone", () => {
+  const hint = registry.get("hint.run")!;
+  assert.equal(check_args(hint, { filter: "lists", items: "li", row_only: true }).ok, true);
+  assert.equal(check_args(hint, { filter: "links", row_only: true }).ok, false);
 });

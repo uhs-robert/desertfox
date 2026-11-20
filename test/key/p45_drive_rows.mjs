@@ -128,6 +128,25 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("the next file selected", async () => (await selected_file()) >= 1);
   });
 
+  // A list of titled cards beside the files, which the finder reads as a list of its own. Drive's arrows cannot walk it, so the picker never offers it.
+  await run_case("list view: I inside item mode still offers the files alone and selects one at once, though another list is on the page", async () => {
+    await open_drive("list_decoy", "list");
+    await in_active_tab(`(() => {
+      const decoy = document.createElement("div");
+      decoy.style.cssText = "position:absolute;top:0;left:500px;width:400px";
+      decoy.innerHTML = Array.from({ length: 4 }, (_, index) => '<div class="card" style="height:60px;margin:0 0 10px 0;width:400px"><h3 style="margin:0"><a id="d' + index + '" href="#d' + index + '">Decoy list result number ' + index + ' title</a></h3></div>').join("");
+      document.body.prepend(decoy);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+    await press_keys("I");
+    await poll_until("a selected file", async () => (await selected_file()) >= 0);
+    const labels = await in_active_tab(`[...document.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0)`);
+    expect(labels === 0, `${labels} labels showed, the picker offered more than the files`);
+    expect((await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM", "item mode ended");
+  });
+
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`);
   const open_drive_in_normal_mode = async (id, view = "list") => {
     await open_drive(id, view);
