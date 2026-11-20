@@ -262,7 +262,7 @@ const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandO
   // For `enter_item` the bundle also focuses the link of the first item shown, when the pick makes another list active: the landing that follows starts from the focus, so it never takes an item a scroll box clips.
   if (region) {
     const focus = region.links.get(element) ?? element;
-    void page.desertfox_host.run_command_("item.lists", "item", { region, focus });
+    void page.desertfox_host.run_command_("item.lists", "item", { region, focus, selector: current.args.items });
     element = focus;
   }
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
@@ -294,9 +294,9 @@ const shows = (item: Element): boolean => {
 };
 
 // Each frame fills its own map from its own item bundle, before it collects.
-const fill_list_targets = async (selector: unknown): Promise<void> => {
+const fill_list_targets = async (selector: unknown, row_only: unknown): Promise<void> => {
   list_targets.clear();
-  await page.desertfox_host.run_command_("item.lists", "item", { selector, take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
+  await page.desertfox_host.run_command_("item.lists", "item", { selector, row_only, take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
 };
 
 const texts_of = (found: Found[]): string[] => found.map((item) => text_of(item.element));
@@ -599,7 +599,7 @@ function register(host: PageHostApi): void {
     args = plain_args;
     let filter = args.filter as HintFilter;
     const custom_selector_ = args.selector as string | undefined;
-    if (filter === "lists") await fill_list_targets(args.items);
+    if (filter === "lists") await fill_list_targets(args.items, args.row_only);
     const site_selectors_ = await read_site_selectors(host.show_toast_);
     // Read after an await: content.js names the running leaf only once its run call has returned, and a loaded bundle reaches this point inside that call.
     const leaf_end_ = action === "enter_item" ? host.leaf_end_() : undefined;
@@ -672,7 +672,7 @@ function answer_across(end_keyboard_session: (session_id: string) => void): void
     const filter = args.filter as HintFilter;
     const text = (args.text as string | undefined) || undefined;
     let found: Found[] = [];
-    if (filter === "lists") await fill_list_targets(args.items);
+    if (filter === "lists") await fill_list_targets(args.items, args.row_only);
     const [site_selectors, patterns] = await Promise.all([read_site_selectors(() => {}), read_strip_patterns(window.location.href)]);
     strip_patterns = patterns;
     // A parent labels its readable child only when it is asked itself, which only `all_frames` does. A lone parked frame labels its own targets.

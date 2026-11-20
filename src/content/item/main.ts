@@ -1,11 +1,11 @@
 // The `item` bundle: the handler of `page.item`, which item mode and site rows bind to j and k on result pages, and `item.start`, which starts item mode on a list page. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { current_item, follow_item, forget_move, move_item, read_cursor } from "./pick.ts";
+import { current_item, follow_item, move_item, read_cursor } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
-import type { DerivedRow } from "./derived.ts";
+import { args_for_pin, lists_with_row, pick_list } from "./lists.ts";
 import { watch_user_left } from "../user_left.ts";
 import { create_item_start } from "./start.ts";
 import type { Region } from "./finder.ts";
@@ -35,7 +35,7 @@ if (!item_window.desertfox_item_ready && host) {
     now_: Date.now,
     watch_user_,
   };
-  host.register_handler_("page.item", (args) => move_item(page, args as unknown as ItemArgs));
+  host.register_handler_("page.item", (args) => move_item(page, args_for_pin(page.derived, args as unknown as ItemArgs)));
   // The background asks when a load completes. The handler answers at once, so no key waits for the idle time.
   const start = create_item_start({
     mode_: host.get_mode,
@@ -43,7 +43,7 @@ if (!item_window.desertfox_item_ready && host) {
     user_active_: () => host.pressed_keys_() > 0 || navigator.userActivation.hasBeenActive,
     in_field_: () => host.is_editable_(host.focused_()),
     has_list_: (selectors) => (selectors[0] ? selectors.some((selector) => Array.from(document.querySelectorAll(selector)).some(is_shown)) : !!page.derived.items_()[0]),
-    enter_: () => host.set_mode_("item"),
+    enter_: () => (page.derived.unpin_(), host.set_mode_("item")),
     when_idle_: (run) => requestIdleCallback(run, { timeout: 1000 }),
     later_: (run, ms) => setTimeout(run, ms),
     now_: Date.now,
@@ -56,7 +56,7 @@ if (!item_window.desertfox_item_ready && host) {
     // With no row selector the box is the focus mark.
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
-  host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined) : (args.take as (regions: unknown) => void)(lists_with_row(() => page.derived.lists_(), args.selector as string | undefined))));
+  host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined, !!args.selector) : (args.take as (regions: unknown) => void)(lists_with_row(document, () => page.derived.lists_(), args.selector as string | undefined, !!args.row_only))));
   // The hints bundle (`scope: item`) and the item actions call this through `run_command_` and hand a callback that takes the item and its link.
   host.register_handler_("item.current", (args) => {
     const current = current_item(page);
@@ -64,17 +64,4 @@ if (!item_window.desertfox_item_ready && host) {
   });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
-}
-
-// While a site row's items show, they are the only list the picker offers: the row's keys walk its own selector, so another list could not be walked. The finder finds nothing on some rows (Drive's files hold no title link).
-function lists_with_row(read_lists: () => Region<Element>[], selector: string | undefined): Region<Element>[] {
-  const items = selector ? Array.from(document.querySelectorAll(selector)).filter(is_shown) : [];
-  return items[0] ? [{ kind: "list", items, links: new Map() }] : read_lists();
-}
-
-// Making another list active puts the focus on the first item the pick showed. Picking the list that is active already leaves the focus and the last move alone, so the landing goes on from the current item.
-function pick_list(derived: DerivedRow, region: Region<Element>, focus: HTMLElement | undefined): void {
-  const was = derived.active_()?.items[0] === region.items[0];
-  derived.pick_(region);
-  if (!was) (forget_move(), focus?.focus({ preventScroll: true }));
 }

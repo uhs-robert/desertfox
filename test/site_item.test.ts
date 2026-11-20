@@ -5,6 +5,8 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { create_derived_row } from "../src/content/item/derived.ts";
+import type { DerivedRow } from "../src/content/item/derived.ts";
+import { args_for_pin, lists_with_row } from "../src/content/item/lists.ts";
 import { current_item, forget_move, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
@@ -576,4 +578,57 @@ test("with no selector, h and l step along a derived grid and scroll sideways on
   move_item(page, { direction: "right" });
   move_item(page, { direction: "left", times: 2 });
   assert.deepEqual(scrolls, [[50, 0], [-100, 0]]);
+});
+
+// The pin: a picked side list is the one a row's keys walk.
+test("with a pin a move that names the row's selector walks the pinned list and leaves no cursor for ]]", () => {
+  const { page, log } = real_derived_page(-1);
+  const derived = page.derived as unknown as DerivedRow;
+  const walk = (args: { selector?: string; link?: string; direction: "down" }) => move_item(page, args_for_pin(derived, args));
+  walk({ selector: "li", link: "a.t", direction: "down" });
+  assert.equal(read_cursor(page, true)?.selector_, "li", "no pin: the row walks its selector and link");
+  assert.deepEqual(log, ["focus link 0"]);
+  forget_move();
+  derived.pin_(derived.lists_()[0]!);
+  log.length = 0;
+  walk({ selector: "li", link: "a.t", direction: "down" });
+  assert.deepEqual(log, ["tabindex=-1 on 0", "focus item 0"], "the row's link selector is dropped for the pinned list");
+  assert.equal(read_cursor(page, true), undefined);
+  derived.unpin_();
+  forget_move();
+  walk({ selector: "li", link: "a.t", direction: "down" });
+  assert.equal(read_cursor(page, true)?.selector_, "li", "an unpinned list gives the row its keys back");
+});
+
+test("a row that matches no item still walks the pinned list, and scrolls once the pin is off", () => {
+  const { page, log, scrolls } = real_derived_page(-1);
+  const derived = page.derived as unknown as DerivedRow;
+  derived.pin_(derived.lists_()[0]!);
+  move_item(page, args_for_pin(derived, { selector: "none", direction: "down" }));
+  assert.deepEqual([log, scrolls], [["tabindex=-1 on 0", "focus item 0"], []]);
+  derived.unpin_();
+  forget_move();
+  move_item(page, args_for_pin(derived, { selector: "none", direction: "down" }));
+  assert.deepEqual(scrolls, [[0, 50]]);
+});
+
+// `lists_with_row` over fake elements: contains is the DOM one, a node holds itself and what is under it.
+test("the picker offers the row's list first, then the finder's lists that share no item with it", () => {
+  type Node = { name: string; contains: (other: Node) => boolean; checkVisibility: () => boolean; getClientRects: () => number[]; getBoundingClientRect: () => { width: number; height: number } };
+  const node = (name: string, parent?: Node): Node => {
+    const made: Node = { name, contains: (other) => other === made || (other as unknown as { parent?: Node }).parent === made, checkVisibility: () => true, getClientRects: () => [1], getBoundingClientRect: () => ({ width: 100, height: 40 }) };
+    Object.assign(made, { parent });
+    return made;
+  };
+  const rows = [node("r1"), node("r2")];
+  const inner = node("inner", rows[0]);
+  const side = [node("s1"), node("s2")];
+  const region = (items: Node[]) => ({ kind: "list" as const, items: items as never[], links: new Map() });
+  const doc = { querySelectorAll: (selector: string) => (selector === "row" ? rows : []) } as unknown as ParentNode;
+  const finder = () => [region(rows), region([inner]), region(side)];
+  const names = (regions: { items: unknown[] }[]) => regions.map((one) => (one.items as Node[]).map((entry) => entry.name).join());
+  assert.deepEqual(names(lists_with_row(doc, finder, "row", false)), ["r1,r2", "s1,s2"], "a finder list equal to, or held by, a row item is the row again");
+  assert.equal(lists_with_row(doc, finder, "row", false)[0]?.row_, true);
+  assert.deepEqual(names(lists_with_row(doc, finder, "row", true)), ["r1,r2"], "row_only offers the row alone");
+  assert.deepEqual(names(lists_with_row(doc, finder, "other", false)), ["r1,r2", "inner", "s1,s2"], "a row with no item shown offers the finder's lists as they are");
 });
