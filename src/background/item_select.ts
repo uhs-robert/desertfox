@@ -50,8 +50,8 @@ const steps_after_rewrite = (step: LeafStep, keys: ItemSelectKeys): LeafStep[] =
     const pair = (direction as End) === "last" ? [keys.up, keys.down] : [keys.down, keys.up];
     return [step, current_step(step), ...pair.map(ignoring_count)];
   }
-  // `current` is the picker's landing. It selects through a Down and Up, as the first end does.
-  if (direction === "current") return [step, ...[keys.down, keys.up].map(ignoring_count)];
+  // `current` is the picker's landing, and a section jump lands on an item the same way. They select through a Down and Up, as the first end does. A jump that lands nowhere answers failed, which stops the sequence before the arrows.
+  if (direction === "current" || direction === "next_section" || direction === "prev_section") return [step, ...[keys.down, keys.up].map(ignoring_count)];
   return [step];
 };
 
