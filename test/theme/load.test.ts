@@ -58,7 +58,7 @@ test("every built-in theme gives visual mode its own color in both variants", ()
   }
 });
 
-test("moonlight keeps its mode colors, caret from the cursor color, and its Search and CurSearch colors", () => {
+test("moonlight keeps its mode colors, the gold dark caret, and its Search and CurSearch colors", () => {
   const { dark, light } = load_theme("oasis_moonlight", 3)!;
   assert.deepEqual([dark.mode_normal, dark.mode_insert, dark.mode_caret, dark.mode_visual, dark.mode_ignore], ["#7fa3c9", "#ffa0a0", "#f7d46c", "#ffba75", "#717a84"]);
   assert.deepEqual([light.mode_caret, light.mode_visual], ["#817613", "#85460e"]);
