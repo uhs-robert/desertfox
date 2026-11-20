@@ -270,7 +270,7 @@ function hover_page(items: Fake[], thumbs: boolean[]) {
     scroll_by: () => {},
     highlight: (_item: unknown, _selector: string, hover?: () => boolean) => calls.push(hover?.() ?? false),
     box_shown: () => false,
-    derived: { items_: () => elements as unknown as Element[], link_of_: () => undefined, selector_: () => "div", grew_: () => false, grid_: () => true },
+    derived: { sections_: () => [], items_: () => elements as unknown as Element[], link_of_: () => undefined, selector_: () => "div", grew_: () => false, grid_: () => true },
     overflow_y_: () => "visible",
     wait_: async () => {},
     now_: () => 0,

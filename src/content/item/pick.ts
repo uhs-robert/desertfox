@@ -5,9 +5,10 @@ import type { EndPage } from "./ends.ts";
 import type { Outcome } from "../../shared/messages.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
-export type ItemDirection = MoveDirection | "first" | "last" | "current";
+export type SectionDirection = "next_section" | "prev_section";
+export type ItemDirection = MoveDirection | SectionDirection | "first" | "last" | "current";
 // With no selector (undefined, or the empty text the validator fills in) the items come from the derived row (`ItemPage.derived`).
-export type ItemArgs = { selector?: string; link?: string; direction: ItemDirection; times?: number; hover?: boolean };
+export type ItemArgs = { selector?: string; link?: string; section?: string; direction: ItemDirection; times?: number; hover?: boolean };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
 // Where the move starts. `on_item` is false when no item holds the focus or was the last move, and `index` is then the first item not above the view, or the item count when all are above it.
@@ -51,6 +52,19 @@ export function pick_item(boxes: readonly Box[], place: Place, direction: MoveDi
   return { index };
 }
 
+// The index of the first item each section holds, in document order. A section with no shown item is skipped (so a hidden one is), and so is an item in no section.
+export const section_starts = (items: readonly Element[], sections: ArrayLike<Element>): number[] =>
+  Array.from(sections, (section) => items.findIndex((item) => section.contains(item)))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b);
+
+// Next goes to the first start after the item, or from no item to the first one at or after the place. Previous goes to the last start before it, which is the item's own section start when it is not that item. A count runs on and stops at the last start it finds.
+export function pick_section(starts: readonly number[], place: Place, direction: SectionDirection, steps: number): number | undefined {
+  const next = direction === "next_section";
+  const reached = next ? starts.filter((start) => start > place.index - +!place.on_item) : starts.filter((start) => start < place.index).reverse();
+  return reached[steps - 1] ?? reached.at(-1);
+}
+
 // The item that holds the focus, else the last one moved to while it is on screen (or pinned), else the first one not above the view.
 export function place_of(items: readonly Element[], focused: Element | null, last: Element | undefined, boxes: readonly Box[], view_height: number, pinned = false): Place {
   const in_view = (index: number) => boxes[index]!.bottom > 0 && boxes[index]!.top < view_height;
@@ -77,7 +91,7 @@ export type ItemPage = EndPage & {
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
-  derived?: { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; focus_none_?: () => boolean };
+  derived?: { items_: (keep?: boolean) => Element[]; sections_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; focus_none_?: () => boolean };
 };
 
 const SCROLL_PX = 50;
@@ -157,6 +171,12 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
   // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.
   if (direction === "current") return items.length === 0 ? undefined : land_on(page, items[Math.min(place.index, items.length - 1)]!, args);
   const steps = args.times ?? 1;
+  if (direction === "next_section" || direction === "prev_section") {
+    // A failed outcome, not a toast, so the steps a row adds behind the jump (the arrows of `item_select`) do not run when nothing was landed on.
+    const starts = section_starts(items, args.section ? page.doc.querySelectorAll(args.section) : (page.derived?.sections_() ?? []));
+    const start = pick_section(starts, place, direction, steps);
+    return start === undefined ? { ok: false, message: starts.length > 0 ? `No ${direction === "next_section" ? "next" : "previous"} section` : "No sections in this list" } : land_on(page, items[start]!, args);
+  }
   const scroll = () => page.scroll_by(...(SCROLL[direction].map((sign) => sign * SCROLL_PX * steps) as [number, number]));
   // A page the row covers but the selector does not fit (a text page, an image tab) keeps the scroll the key had before.
   if (items.length === 0) return scroll();

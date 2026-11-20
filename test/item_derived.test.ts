@@ -9,7 +9,7 @@ type FakeLink = { name: string; isConnected: boolean; shown: boolean };
 
 // A page whose items the test can hide, drop and bring back, and a finder that counts how often it is asked. `answer` is what the finder gives next unless `fails` says it runs out of time or throws, and `tail` is what follows the last item of the list.
 function setup(initial: Fake[]) {
-  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[]; others: Fake[][] } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [], others: [] };
+  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[]; others: Fake[][]; sections?: Fake[] } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [], others: [] };
   const link = { name: "link", isConnected: true, shown: true };
   const row = create_derived_row({
     find_: (budget_ms) => {
@@ -17,7 +17,7 @@ function setup(initial: Fake[]) {
       state.budgets.push(budget_ms);
       if (state.fails === "throw") throw new Error("finder bug");
       if (state.fails === "timeout") return { kind: "none", items: [], links: new Map(), regions: [], timed_out_: true };
-      const region_of = (entries: Fake[]) => ({ kind: entries.length > 0 ? "list" : "none", items: entries, links: new Map(entries.map((entry) => [entry, state.links.get(entry) ?? link])) });
+      const region_of = (entries: Fake[]) => ({ kind: entries.length > 0 ? "list" : "none", items: entries, links: new Map(entries.map((entry) => [entry, state.links.get(entry) ?? link])), ...(state.sections && { sections: state.sections }) });
       const regions = [state.answer, ...state.others].filter((entries) => entries.length > 0).map(region_of);
       return { ...region_of(state.answer), regions } as unknown as Found<Element>;
     },
@@ -781,4 +781,29 @@ test("the derived row says whether the active list keeps the focus, and gives th
   row.pick_(row.lists_()[0]!);
   assert.equal(row.focus_none_(), true);
   assert.equal(row.selector_(), "[role=option]");
+});
+
+test("sections_ are the sections of the list the items read just kept", () => {
+  const { state, row } = setup([item("a"), item("b")]);
+  state.sections = [item("s1"), item("s2")];
+  row.items_();
+  assert.deepEqual(names(row.sections_()), ["s1", "s2"]);
+  // The kept list goes away: the items read finds the new list, and sections_ after it answers for that list.
+  state.answer[0]!.isConnected = false;
+  state.answer = [item("c"), item("d")];
+  state.sections = [item("t1"), item("t2")];
+  assert.deepEqual(names(row.items_()), ["c", "d"]);
+  assert.deepEqual(names(row.sections_()), ["t1", "t2"]);
+  assert.equal(state.finds, 2);
+  const bare = setup([item("a")]);
+  bare.row.items_();
+  assert.deepEqual(bare.row.sections_(), [], "a list without sections gives none");
+});
+
+test("sections_ after an items read that timed out reads nothing and runs no second finder", () => {
+  const { state, row } = setup([item("a"), item("b")]);
+  state.fails = "timeout";
+  assert.deepEqual(row.items_(), []);
+  assert.deepEqual(row.sections_(), []);
+  assert.equal(state.finds, 1);
 });
