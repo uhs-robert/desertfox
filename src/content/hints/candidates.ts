@@ -303,11 +303,12 @@ export function scroll_clips_in_page(element: Element, options?: { skip_scrollab
   }, options);
 }
 
-// How far below the window top the nearest-to-the-edge scroll box of an element starts, or 0. An edge scrolled out of the top of a box is before the view start even when the box sits below the window top, so callers take the edge less this. The page itself (html and body) has no parent chain of two, so it is skipped.
+// How far below the window top the nearest-to-the-edge scroll box of an element starts, or 0. An edge scrolled out of the top of a box is before the view start even when the box sits below the window top, so callers take the edge less this. A box counts when its content overflows and its overflow-y is not visible. The page itself (html and body) is skipped.
 export function scrollport_top_of(element: Element): number {
+  const win = window_of(element);
   let top = 0;
-  for (let up = element.parentElement; up?.parentElement?.parentElement; up = up.parentElement) {
-    if (up.scrollHeight > up.clientHeight) top = Math.max(top, up.getBoundingClientRect().top + up.clientTop);
+  for (let up = parent_of(element); up !== null; up = parent_of(up)) {
+    if (up.scrollHeight > up.clientHeight && /^(auto|scroll|hidden)$/.test(win.getComputedStyle(up).overflowY) && !/^(body|html)$/.test(up.localName)) top = Math.max(top, up.getBoundingClientRect().top + up.clientTop);
   }
   return top;
 }
