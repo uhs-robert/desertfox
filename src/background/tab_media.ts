@@ -35,8 +35,13 @@ const is_live_hold = (hold: MediaHold | undefined): hold is MediaHold => !!hold 
 // The end of a fullscreen reaches every frame of it at once. Firefox spends the Escape that closes a line in fullscreen on leaving the fullscreen, so the line's frame returns to the mode while the others report normal, in any order. A normal report this soon after a line closed, from a frame without the focus, is that same end. A normal report carries no cause, and content.js has no room for one.
 export const LINE_CLOSE_GRACE_MS = 500;
 
-// More steps than this waiting behind one frame are dropped.
+// More steps than this waiting behind one frame drop the oldest of them.
 const MAX_PENDING_STEPS = 16;
+
+// A step that waits in its lane. `dropped` says a full lane let it go before it went out.
+type QueuedStep = { dropped: boolean };
+// `pending` counts the lane's steps not yet answered, the one on its way included. `waiting` holds those not yet sent, oldest first.
+type Lane = { tail: Promise<unknown>; pending: number; waiting: QueuedStep[] };
 
 export function create_tab_media(deps: TabMediaDeps) {
   // One read-then-write at a time per background, so two reports together do not drop each other's change.
@@ -49,29 +54,42 @@ export function create_tab_media(deps: TabMediaDeps) {
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
   // Steps to one frame go out one after another, in the order the hold sent them, so an off step of an ended hold cannot land after the on step of the next one. A lane is that order for one frame (the key `all` is the lane of steps to every frame). The shared queue never waits on a lane: a frame that never answers (a page stuck in a loop) blocks its own lane, and the steps behind it in this tab, and nothing in another tab.
   // A step to every frame waits for the lane of each frame the tab has, and a step to one frame waits for the last step to every frame. When the lanes are idle the step is sent at once.
-  const lanes = new Map<number, Map<number | "all", { tail: Promise<unknown>; pending: number }>>();
+  const lanes = new Map<number, Map<number | "all", Lane>>();
   const step = (tab_id: number, on: boolean, frame_id?: number, from?: number): void => {
-    const tab_lanes = lanes.get(tab_id) ?? new Map();
+    const tab_lanes = lanes.get(tab_id) ?? new Map<number | "all", Lane>();
     lanes.set(tab_id, tab_lanes);
-    const own = tab_lanes.get(frame_id ?? "all") ?? { tail: Promise.resolve(), pending: 0 };
+    const own = tab_lanes.get(frame_id ?? "all") ?? { tail: Promise.resolve(), pending: 0, waiting: [] };
     tab_lanes.set(frame_id ?? "all", own);
-    // A frame that never answers would grow its lane for as long as the hold starts and ends. Storage stays in charge, so a step dropped here is corrected by the frame's next report.
-    if (own.pending >= MAX_PENDING_STEPS) return;
+    // A frame that never answers would grow its lane for as long as the hold starts and ends. A full lane drops its oldest waiting step, never the newest, so the last step (the state storage holds) always goes out.
+    const oldest = own.pending >= MAX_PENDING_STEPS ? own.waiting.shift() : undefined;
+    if (oldest) {
+      oldest.dropped = true;
+      own.pending--;
+    }
+    const queued: QueuedStep = { dropped: false };
+    own.waiting.push(queued);
     const every_frame = tab_lanes.get("all");
     const waits = frame_id === undefined ? [...tab_lanes.values()] : every_frame && every_frame !== own ? [own, every_frame] : [own];
     // A load of the page deleted these lanes: the frames the step waited for are gone, and it must not reach the new page.
-    const send = () => (lanes.get(tab_id) === tab_lanes ? best_effort(deps.send_step(tab_id, on, frame_id, from)) : Promise.resolve());
+    const send = () => {
+      if (queued.dropped || lanes.get(tab_id) !== tab_lanes) return Promise.resolve();
+      // The lane sends in order, so the step that goes out is the first that waits.
+      own.waiting.shift();
+      return best_effort(deps.send_step(tab_id, on, frame_id, from));
+    };
     own.pending++;
     const idle = waits.every((lane) => lane.pending === (lane === own ? 1 : 0));
     const run = idle ? send() : Promise.all(waits.map((lane) => lane.tail)).then(send);
     own.tail = run;
-    void run.then(() => void own.pending--);
+    void run.then(() => void (queued.dropped || own.pending--));
   };
+  // The old page of a load gets its steps off straight away, outside the lanes: a frame of it that never answers must not hold up the new page's lanes.
+  const step_old_page = (tab_id: number, on: boolean, frame_id?: number): void => void best_effort(deps.send_step(tab_id, on, frame_id));
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
   // The reporter gets no step off, because it left the mode already. No step on reaches a frame of the hold late: each frame joins by reporting the mode, so its step came first, and the step of a first report skips the reporter (`from`).
-  const end = async (tab_id: number, hold: MediaHold, except?: number) => {
+  const end = async (tab_id: number, hold: MediaHold, except?: number, send = step) => {
     await deps.storage.remove(key_of(tab_id));
-    for (const frame_id of hold.frames) if (frame_id !== except) step(tab_id, false, frame_id);
+    for (const frame_id of hold.frames) if (frame_id !== except) send(tab_id, false, frame_id);
   };
 
   const write = (tab_id: number, hold: MediaHold) => deps.storage.set({ [key_of(tab_id)]: hold });
@@ -157,7 +175,7 @@ export function create_tab_media(deps: TabMediaDeps) {
         if (change.status === "loading" && change.url === undefined) lanes.delete(tab_id);
         const hold = await read(tab_id);
         if (!hold) return;
-        if (change.status === "loading" && change.url === undefined) await end(tab_id, hold);
+        if (change.status === "loading" && change.url === undefined) await end(tab_id, hold, undefined, step_old_page);
         else if (hold.pin_frame !== undefined) await write(tab_id, without_pin(hold));
       }),
     forget: (tab_id: number): Promise<void> => in_turn(() => (lanes.delete(tab_id), deps.storage.remove(key_of(tab_id)))),

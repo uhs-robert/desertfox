@@ -836,7 +836,7 @@ function media_with_held_steps() {
   return { media, release_all, calls: () => calls };
 }
 
-test("a lane keeps 16 steps and drops the rest", async () => {
+test("a lane keeps 16 steps and drops the oldest waiting ones", async () => {
   const { media, release_all, calls } = media_with_held_steps();
   for (let index = 0; index < 40; index++) await media.enter(4, 0);
   await release_all();
@@ -850,4 +850,73 @@ test("steps still waiting when the page loads never reach the new page", async (
   await media.navigated(4, LOAD_START);
   await release_all();
   assert.equal(calls(), 1, "the four queued steps were skipped");
+});
+
+// Records each step with its frame and the reporter it skips. A send to `stuck_frame` never answers, and with `held` every other send answers only when released, in order.
+function media_with_recorded_steps({ stuck_frame = -1, held = false } = {}) {
+  const delivered: { on: boolean; frame: number | "all"; from: number | undefined }[] = [];
+  const releases: (() => void)[] = [];
+  const store = new Map<string, unknown>();
+  const media = create_tab_media({
+    storage: {
+      get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
+      set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
+      remove: async (key: string | string[]) => void [key].flat().forEach((name) => store.delete(name)),
+    } as never,
+    send_step: (_tab_id, on, frame_id, from) => {
+      delivered.push({ on, frame: frame_id ?? "all", from });
+      if (frame_id === stuck_frame) return new Promise(() => {});
+      return held ? new Promise<void>((resolve) => releases.push(resolve)) : Promise.resolve();
+    },
+    frame_alive: async () => true,
+    now: () => 0,
+  });
+  const release_all = async () => {
+    while (releases.length > 0) {
+      releases.shift()!();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+  // The mode each frame ends in, after every step that went out.
+  const final_mode = (frame: number): boolean | undefined =>
+    delivered.filter((step) => step.frame === frame || (step.frame === "all" && step.from !== frame)).at(-1)?.on;
+  return { media, delivered, release_all, final_mode, store };
+}
+
+test("an old page's slow step never sends an off to a reused frame after the new page's on", async () => {
+  const { media, delivered, release_all } = media_with_recorded_steps({ held: true });
+  await media.enter(4, 0);
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 0, "normal", true);
+  await media.enter(4, 0);
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.reported(4, 7, "normal", true);
+  await media.navigated(4, LOAD_START);
+  await media.enter(4, 0);
+  await release_all();
+  assert.deepEqual(delivered.at(-1), { on: true, frame: "all", from: undefined }, "the new page's on goes out last");
+});
+
+test("a frame of the old page that never answers its step off at a load holds up nothing on the new page", { timeout: 2000 }, async () => {
+  const { media, delivered } = media_with_recorded_steps({ stuck_frame: 7 });
+  await media.reported(4, 0, "media", false);
+  await media.reported(4, 7, "media", false, true);
+  await media.navigated(4, LOAD_START);
+  await media.enter(4, 0);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(delivered.at(-1), { on: true, frame: "all", from: undefined });
+});
+
+test("a full lane drops its oldest waiting step, so the latest start still reaches every frame", async () => {
+  const { media, release_all, final_mode, store } = media_with_recorded_steps({ held: true });
+  for (let cycle = 0; cycle < 20; cycle++) {
+    await media.reported(4, 0, "media", false);
+    await media.reported(4, 7, "media", false, true);
+    await media.reported(4, 0, "normal", true);
+  }
+  await media.reported(4, 0, "media", false);
+  await release_all();
+  assert.ok(store.get("desertfox_tab_media_4"), "storage holds a live hold");
+  assert.equal(final_mode(7), true, "frame 7 ends in the mode");
 });
