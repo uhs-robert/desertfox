@@ -216,7 +216,7 @@ test-all: install_deps
     echo "test-all: $((SECONDS - start_s)) s"
     exit "$failed"
 
-# Record the README demo: a looping GIF of seven shots with a key overlay and four 1280x800 stills, written to docs/images (or DEMO_OUT_DIR) only when the whole run worked. Plays real key presses in a key-test session and films it with wf-recorder, so it needs wf-recorder, ffmpeg, grim and the key-test tools. Takes the key-test lock, so never wrap it in `flock`. About 2 minutes.
+# Record the README demo: a looping GIF of seven shots with a key overlay, a GIF of the board scene, two GIFs of item mode on live sites and four 1280x800 stills, written to docs/images (or DEMO_OUT_DIR) only when the whole run worked. Plays real key presses in a key-test session and films it with wf-recorder, so it needs wf-recorder, ffmpeg, grim and the key-test tools. Takes the key-test lock, so never wrap it in `flock`. About 2 minutes.
 readme-demo: build build-key-test
     #!/usr/bin/env bash
     set -euo pipefail

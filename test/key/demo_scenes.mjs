@@ -1,6 +1,7 @@
 // The scenes of the README demo, played by demo.mjs as a piece of the key-test session. wf-recorder films the nested display.
 // Seven shots, in the order of the approved storyboard v3, played on the 14-lesson Practice page. The key presses of the film go to key_presses.json, which demo.mjs burns into the GIF as a corner overlay.
 import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluate_in_chrome } from "./rdp.mjs";
 import { OUTPUT } from "./session.mjs";
@@ -33,7 +34,7 @@ function overlay_labels(wtype_args) {
   return labels;
 }
 
-export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, press_keys, poll_until, in_background, wait_cmdline, config_copy, load_config_dir, open_page, wait_view_takes_keys, extension_view, rdp, extension_id, expect }) {
+export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, press_keys, poll_until, in_background, in_active_tab, wait_cmdline, config_copy, load_config_dir, open_page, wait_view_takes_keys, extension_view, rdp, extension_id, expect }) {
   const wait_for_exit = (child) => new Promise((resolve) => child.once("exit", resolve));
   const run_client = async (argv) => { const child = spawn_client(argv, "demo.log"); await wait_for_exit(child); };
 
@@ -61,7 +62,7 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   };
 
   // Every press goes through here, so the overlay lists exactly what the film shows.
-  const key_presses = [];
+  let key_presses = [];
   let film_started_ms;
   const press = async (...wtype_args) => {
     if (film_started_ms !== undefined) for (const label of overlay_labels(wtype_args)) key_presses.push({ at_s: (Date.now() - film_started_ms) / 1000, label });
@@ -125,12 +126,31 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await wait_view_takes_keys("newtab.html");
   await sleep(1200);
 
-  const film_path = join(stage_dir, "film.mkv");
-  const recorder = spawn_client(["wf-recorder", "-o", OUTPUT, "-g", region, "-r", String(FRAME_RATE_OF_FILM), "-c", "libx264", "-p", "preset=ultrafast", "-p", "crf=14", "-y", "-f", film_path], "wf-recorder.log");
   // Listening from the start, so an exit before the stop is not missed.
-  let recorder_exited = false;
-  recorder.once("exit", () => { recorder_exited = true; });
-  film_started_ms = Date.now();
+  const start_film = (film_path) => {
+    const recorder = spawn_client(["wf-recorder", "-o", OUTPUT, "-g", region, "-r", String(FRAME_RATE_OF_FILM), "-c", "libx264", "-p", "preset=ultrafast", "-p", "crf=14", "-y", "-f", film_path], "wf-recorder.log");
+    const film = { recorder, exited: false };
+    recorder.once("exit", () => { film.exited = true; });
+    film_started_ms = Date.now();
+    return film;
+  };
+  // wf-recorder closes the file on the next frame, so a page that stops changing holds it open. Scrolling after the cut gives it that frame, and the GIF stops at the returned length.
+  // An exit before this point leaves a partial film that must not be published.
+  async function stop_film(film, film_path) {
+    const film_seconds = (Date.now() - film_started_ms) / 1000;
+    if (film.exited) throw new Error("wf-recorder exited before the film was done");
+    film.recorder.kill("SIGINT");
+    const stop_deadline_ms = Date.now() + RECORDER_STOP_LIMIT_MS;
+    while (!film.exited) {
+      if (Date.now() > stop_deadline_ms) throw new Error(`wf-recorder did not stop within ${RECORDER_STOP_LIMIT_MS} ms`);
+      await press_keys("j");
+      await sleep(300);
+    }
+    if (statSync(film_path).size < 100000) throw new Error(`the film is only ${statSync(film_path).size} bytes, so the recorder caught no frames`);
+    return film_seconds;
+  }
+  const film_path = join(stage_dir, "film.mkv");
+  const main_film = start_film(film_path);
   await sleep(1000);
 
   console.log("shot 1: new tab page");
@@ -269,19 +289,63 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   await still("theme-switch");
   await sleep(500);
 
-  const film_seconds = (Date.now() - film_started_ms) / 1000;
-  // wf-recorder closes the file on the next frame, so a page that stops changing holds it open. Scrolling after the cut gives it that frame, and the GIF stops at film_seconds.
-  // An exit before this point leaves a partial film that must not be published.
-  if (recorder_exited) throw new Error("wf-recorder exited before the film was done");
-  recorder.kill("SIGINT");
-  const stop_deadline_ms = Date.now() + RECORDER_STOP_LIMIT_MS;
-  while (!recorder_exited) {
-    if (Date.now() > stop_deadline_ms) throw new Error(`wf-recorder did not stop within ${RECORDER_STOP_LIMIT_MS} ms`);
-    await press_keys("j");
-    await sleep(300);
+  const film_seconds = await stop_film(main_film, film_path);
+  const main_presses = key_presses;
+
+  // The item mode films play on live sites, so each has its own recorder. A page that shows a consent wall, a captcha or no tiles fails the piece instead of filming it.
+  const item_films = [];
+  async function item_scene(name, url, { walk, tiles_up }) {
+    console.log(`item scene ${name}: ${url}`);
+    await in_background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.update(tab.id, { url: ${JSON.stringify(url)} }); })()`);
+    await poll_until(`the key handler on ${name}`, async () => await in_active_tab(`document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`).catch(() => false), { timeout_ms: 45000 });
+    try {
+      await poll_until(`the results of ${name}`, async () => await in_active_tab(tiles_up).catch(() => false), { timeout_ms: 30000 });
+    } catch (error) {
+      // The page the recorder met, kept for the maintainer: a wall or a blank page decides the site.
+      await run_client(["grim", "-g", region, join(process.env.DEMO_DEBUG_DIR ?? tmpdir(), `demo_${name}_blocked.png`)]);
+      throw error;
+    }
+    await sleep(1500);
+    // The shipped rows start item mode by themselves, so the film starts from normal mode and shows I doing it.
+    await poll_until("item mode to start by itself", async () => (await item_badge()) === "ITEM");
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await item_badge()) === "NORMAL");
+    await sleep(500);
+    key_presses = [];
+    const item_path = join(stage_dir, `item_${name}.mkv`);
+    const film = start_film(item_path);
+    await sleep(1200);
+    await walk();
+    await sleep(1200);
+    const seconds = await stop_film(film, item_path);
+    item_films.push({ name, film_seconds: seconds, key_presses });
   }
-  if (statSync(film_path).size < 100000) throw new Error(`the film is only ${statSync(film_path).size} bytes, so the recorder caught no frames`);
-  writeFileSync(join(stage_dir, "film.json"), JSON.stringify({ film_seconds, key_presses, board_scene }));
+  const item_badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
+  const wait_item_mode = () => poll_until("item mode", async () => (await item_badge()) === "ITEM");
+  const walk_keys = async (keys) => { for (const key of keys) { await press(key); await sleep(650); } };
+
+  // Google Images shows a captcha to the recorder, so the grid is Brave Images, which has its own shipped row (brave_images). The web results film is DuckDuckGo, so the two films show two sites.
+  await item_scene("brave_images", "https://search.brave.com/images?q=desertfox&source=web", {
+    tiles_up: `document.querySelectorAll("button.image-result").length > 8`,
+    walk: async () => {
+      await press("I");
+      await wait_item_mode();
+      await sleep(900);
+      await walk_keys("llljjhhkk");
+      await press("-k", "Escape");
+    },
+  });
+  await item_scene("ddg", "https://duckduckgo.com/?q=desertfox+firefox&ia=web", {
+    tiles_up: `document.querySelectorAll("article").length > 3`,
+    walk: async () => {
+      await press("I");
+      await wait_item_mode();
+      await sleep(900);
+      await walk_keys("jjjjkk");
+      await press("-k", "Escape");
+    },
+  });
+  writeFileSync(join(stage_dir, "film.json"), JSON.stringify({ film_seconds, key_presses: main_presses, board_scene, item_films }));
   // The Commands tab stays open from the start, and the first tab is the one the harness keeps.
   await in_background(`browser.tabs.query({ currentWindow: true }).then((tabs) => browser.tabs.remove(tabs.filter((tab) => tab.url.endsWith("#/commands")).map((tab) => tab.id)))`);
   // The harness cleans up through a key probe that only its own pages answer, and it keeps only the tab the piece started on.
