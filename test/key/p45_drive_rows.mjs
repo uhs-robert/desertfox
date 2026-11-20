@@ -27,7 +27,8 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
   });
 
   // Grid files are g0.., list files f0... The grid has three files a line. The panel is 300 px tall, so it shows about 10 list rows or 4 grid lines, and it draws two lines more on each side. Enter on a file sets the hash to opened-<id>. With `part`, the panel holds that many files at first and loads `part` more 300 ms after it reaches its bottom, as Drive fetches the next part of a long list. The page is wide, so the document scrolls sideways.
-  const open_drive = async (id, view, files = FILES, part = files) => {
+  // With `drop_fast_arrows`, the page drops an arrow that comes within about 100 ms of the previous one, as real Drive does. It is off by default: only the cases that prove the I fix turn it on.
+  const open_drive = async (id, view, files = FILES, part = files, drop_fast_arrows = false) => {
     await open_page("controls", `drive_${id}`, { new_tab: true });
     await enter_item_mode();
     await in_active_tab(`(() => {
@@ -86,8 +87,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
         const index = target ? Number(target.id.slice(1)) : selected;
         if (event.key === "Enter") { if (selected >= 0) location.hash = "opened-" + prefix() + selected; }
         else if (steps[event.key]) {
-          // Real Drive drops an arrow that comes within about 100 ms of the previous one.
-          if (performance.now() - (window.last_arrow ?? -1000) < 100) { window.last_arrow = performance.now(); event.preventDefault(); return; }
+          if (${drop_fast_arrows} && performance.now() - (window.last_arrow ?? -1000) < 100) { window.last_arrow = performance.now(); event.preventDefault(); return; }
           window.last_arrow = performance.now();
           panel.dataset.arrows = String(Number(panel.dataset.arrows ?? 0) + 1); panel.dataset.order = (panel.dataset.order ?? "") + event.key.slice(5) + " "; select(index + steps[event.key]());
         } else return;
@@ -152,17 +152,19 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM", "item mode ended");
   });
 
+  // The picker lands on the first file, so the selected file must differ from it and from the one a Down from it reaches (grid file 3). The grid takes two j, a line each, to reach file 6.
   for (const view of ["list", "grid"]) {
-    await run_case(`${view} view: I after j, Escape keeps the third file selected`, async () => {
-      await open_drive(`${view}_keep`, view);
-      for (let count = 0; count < (view === "grid" ? 1 : 3); count++) { await press_keys("j"); await sleep(300); }
-      await poll_until("file 3 selected", async () => (await selected_file()) === 3);
+    const wanted = view === "grid" ? 6 : 3;
+    await run_case(`${view} view: I after j, Escape keeps file ${wanted} selected`, async () => {
+      await open_drive(`${view}_keep`, view, FILES, FILES, true);
+      for (let count = 0; count < (view === "grid" ? 2 : 3); count++) { await press_keys("j"); await sleep(300); }
+      await poll_until(`file ${wanted} selected`, async () => (await selected_file()) === wanted);
       await press_keys("-k", "Escape");
       await poll_until("normal mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "NORMAL");
       await press_keys("I");
       await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
       await sleep(600);
-      expect((await selected_file()) === 3, `I left file ${await selected_file()} selected`);
+      expect((await selected_file()) === wanted, `I left file ${await selected_file()} selected`);
     });
   }
 
