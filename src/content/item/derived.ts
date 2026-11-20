@@ -48,8 +48,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   let overran: { url: string; until: number } | undefined;
   // The address a pick pinned the active list at. The pin holds the list against the hand-over to a list in view, and ends with the address, with the list leaving the page, or with `unpin_`.
   let pin: { url: string } | undefined;
-  // A short list never wins a hand-over or the first choice. Only a pick makes it active, and the `old` lookup then keeps it.
-  const long_regions = (regions: Region<Element>[]) => regions.filter((region) => !region.short_);
+  // A pick-only region (a short list) never wins a hand-over or the first choice. Only a pick makes it active, and the `old` lookup then keeps it.
+  const long_regions = (regions: Region<Element>[]) => regions.filter((region) => !region.pick_only_);
   // The first of equal areas wins, and the regions run from the largest down. A region out of the view is none.
   const most_in_view = (regions: Region<Element>[]): Region<Element> | undefined => {
     let top: Region<Element> | undefined;

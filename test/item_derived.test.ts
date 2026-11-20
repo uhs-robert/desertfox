@@ -612,10 +612,10 @@ test("a picked list stays active while the old list still shows, and the old lis
   assert.deepEqual(names(row.items_()), ["r1", "r2"]);
 });
 
-// A page with a long list and a short one beside it, as the finder reports them: the short region comes last and carries `short_`.
+// A page with a long list and a short one beside it, as the finder reports them: the short region comes last and carries `pick_only_`.
 function with_short_list(long_items: Fake[], short_items: Fake[]) {
   const state = { clock: 0, finds: 0 };
-  const region_of = (entries: Fake[], short: boolean) => ({ kind: "list", items: entries, links: new Map(), ...(short ? { short_: true } : {}) });
+  const region_of = (entries: Fake[], short: boolean) => ({ kind: "list", items: entries, links: new Map(), ...(short ? { pick_only_: true } : {}) });
   const row = create_derived_row({
     find_: () => (state.finds++, { ...region_of(long_items, false), regions: [region_of(long_items, false), region_of(short_items, true)] } as unknown as Found<Element>),
     url_: () => "https://a.test/",

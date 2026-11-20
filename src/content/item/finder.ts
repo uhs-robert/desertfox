@@ -9,7 +9,7 @@ import type { Group, GroupRules } from "./groups.ts";
 export type FinderKind = "list" | "grid" | "none";
 
 // `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `row_` marks the list of a site row's items, which the picker offers (`lists_with_row` in `main.ts`) and which is no finder list. `timed_out_` marks a `none` that only says the time budget ran out.
-export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; short_?: true; row_?: true };
+export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; pick_only_?: true; row_?: true };
 // The answer is its first region (the one with the most area) plus every top-level list of the page in `regions`, from the largest down, so the derived row can follow the one in view.
 export type Found<N> = Region<N> & { regions: Region<N>[]; timed_out_?: true };
 
@@ -25,7 +25,7 @@ const TITLE_ZONE_PX = 100;
 const TITLE_ZONE_SHARE = 0.4;
 // The share of a group's items that must hold a title link.
 const MIN_TITLED = 0.6;
-// The group must span this share of the screen height to be the first list or to start item mode on load. A shorter list is kept as a `short_` region, which only a pick can make active.
+// The group must span this share of the screen height to be the first list or to start item mode on load. A shorter list is kept as a `pick_only_` region, which only a pick can make active.
 const MIN_SPAN = 0.6;
 // The cards inside a group of sections must hold this share of the area of the sections.
 const INNER_SHARE = 0.1;
@@ -130,7 +130,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   for (const group of short_tops) {
     if (out_of_time()) break;
     const region = region_of(group);
-    if (region) short_regions.push({ ...region, short_: true });
+    if (region) short_regions.push({ ...region, pick_only_: true });
   }
   const every = [...regions, ...short_regions];
   return every[0] ? { ...(regions[0] ?? none<N>()), regions: every } : none();
