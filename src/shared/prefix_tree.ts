@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 15;
+export const COMPILED_KEYMAP_VERSION = 16;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -38,6 +38,8 @@ export type TreeLeaf = {
   when_focus?: string;
   when_present?: string;
   otherwise?: TreeLeaf;
+  // The bind wrote `otherwise = "page"`: the graft keeps the replaced leaf off the chain, so a failed guard leaves the key to the page.
+  otherwise_page?: true;
   steps: LeafStep[];
 };
 

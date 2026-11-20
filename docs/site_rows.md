@@ -460,7 +460,7 @@ In item mode:
 | `l` | Move to the file on the right (scrolls sideways in the list view) |
 | `<Enter>` | Open the selected file |
 
-- Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. I and the section jumps send no arrow and keep the selected file. With no file selected, I focuses a file and selects none until j or k. gg and G send no arrow and keep the focus on the end file. In Drive, gg and G move Desert Fox's focus but not Drive's selection. Enter after gg or G opens the file Drive had selected, not the one Desert Fox boxed. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
+- Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. I and the section jumps send no arrow and keep the selected file. With no file selected, I focuses a file and selects none until j or k. gg and G send no arrow and keep the focus on the end file. In Drive, gg and G move Desert Fox's focus but not Drive's selection. Enter after gg or G opens the file Drive had selected, not the one Desert Fox boxed. While a dialog holds focus, Enter goes to the page and presses the dialog's focused button. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected.
 
 <!-- END generated -->
 
@@ -491,3 +491,5 @@ The `default_site_rows_off` setting holds the whole list, so `:set` replaces it.
 ## Override a row
 
 A `site_rules` row of your own wins over a shipped row. For each setting, the first row that matches the page and sets it decides, and your rows come before the shipped ones. A `bind` table merges key by key, so your row can change one key and keep the rest. A row that sets `pass` or `only` replaces the shipped `pass` for that page.
+
+A bind that has a guard (`when_focus` or `when_present`) normally runs the key's usual action when the guard fails. Add `otherwise = "page"` to the bind table to send the key to the page instead, as if DesertFox had no key there. For example, `j = { run = "page.item --direction=down li.tile", when_present = "ul.grid", otherwise = "page" }` moves between tiles while the grid shows, and leaves `j` to the page when it does not.

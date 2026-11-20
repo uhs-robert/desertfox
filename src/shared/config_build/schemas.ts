@@ -72,14 +72,15 @@ function keymap_schema(commands: CommandMeta[]): Schema {
 const non_empty_text: Schema = { type: "string", minLength: 1 };
 
 const WHEN_FOCUS: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while nothing has focus or the focused element sits on or inside a match, and the key runs the binding it replaced otherwise" };
+const OTHERWISE: Schema = { enum: ["page"], description: "With \"page\", the key goes to the page when every guard fails, in place of the binding the bind replaced" };
 const WHEN_PRESENT: Schema = { ...non_empty_text, description: "A CSS selector. The bind runs only while the page shows a match, and the key runs the next choice or the binding it replaced otherwise" };
 
 // The formats of a keymap binding, plus the invocation table `{ id, args }` that the build stores and a saved edit exports.
 const BIND_STEP: Schema = {
-  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS, when_present: WHEN_PRESENT }, required: ["id"], additionalProperties: false }],
+  anyOf: [non_empty_text, { type: "object", properties: { id: non_empty_text, args: { type: "object" }, prompt: { type: "object" }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS, when_present: WHEN_PRESENT, otherwise: OTHERWISE }, required: ["id"], additionalProperties: false }],
 };
 const BIND_STEPS: Schema = { type: "array", minItems: 1, maxItems: MAX_BIND_STEPS, items: BIND_STEP };
-const BIND_RUN: Schema = { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS, when_present: WHEN_PRESENT }, required: ["run"], additionalProperties: false };
+const BIND_RUN: Schema = { type: "object", properties: { run: { anyOf: [BIND_STEP, BIND_STEPS] }, label: ONE_LINE_TEXT, intent: ONE_LINE_TEXT, when_focus: WHEN_FOCUS, when_present: WHEN_PRESENT, otherwise: OTHERWISE }, required: ["run"], additionalProperties: false };
 
 const BINDINGS_SCHEMA: Schema = {
   type: "object",

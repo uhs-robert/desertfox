@@ -141,6 +141,36 @@ test("the page tree chains the choices and puts the replaced key after a guarded
   assert.equal(id_of(leaf_for_page(open, null, body, page_root())), "page.back");
 });
 
+test("otherwise = \"page\" keeps the replaced key off the chain, so a failed guard leaves the key to the page", async () => {
+  const guarded = (extra: object) => [{ id: "page.back", when_present: GRID, ...extra }];
+  const tree_for = async (bind: object) => (await page_tree(compiled_with({ site_rules: [{ site: "https://a.test/*", bind }] }), "https://a.test/")).children["h"] as TreeLeaf;
+  const kept = await tree_for({ h: guarded({}) });
+  assert.equal(id_of(leaf_for_page(kept, null, body, page_root())), (DEFAULT_KEYMAP.normal!["h"] as { id: string }).id, "without the field the replaced key runs");
+  const page = await tree_for({ h: guarded({ otherwise: "page" }) });
+  assert.equal(page.otherwise, undefined);
+  assert.equal(leaf_for_page(page, null, body, page_root()), undefined, "no leaf runs, so content.js passes the key");
+  assert.equal(id_of(leaf_for_page(page, null, body, page_root({ shown: [GRID] }))), "page.back", "the guard still runs the bind");
+  assert.deepEqual(page.steps[0]?.invocation, { id: "page.back", args: {} }, "the field is not an argument of the step");
+});
+
+test("the site rules view says a failed otherwise = page bind passes the key to the page", () => {
+  const action = (extra: object) => {
+    const [row] = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { h: [{ id: "page.back", when_present: GRID, ...extra }] } }] }), "https://a.test/").rows;
+    return row!.changes.find(({ keys }) => keys === "h")!.action;
+  };
+  assert.match(action({ otherwise: "page" }), /, else the key goes to the page$/);
+  assert.match(action({}), /, else the key without the row$/);
+  const later = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { h: [[{ id: "page.back", when_present: GRID }], [{ id: "tab.next", when_present: LIST, otherwise: "page" }]] } }] }), "https://a.test/").rows[0]!;
+  assert.match(later.changes.find(({ keys }) => keys === "h")!.action, /, else the key goes to the page$/, "the flag on a later choice counts");
+});
+
+test("the build stores otherwise on the first step, and refuses a value other than page", () => {
+  const bind = (build_with_bind(`h = { run = "page.back", when_present = "${GRID}", otherwise = "page" }`).settings.site_rules?.[0] as { bind: Record<string, unknown> }).bind;
+  assert.deepEqual(bind.h, { id: "page.back", when_present: GRID, otherwise: "page" });
+  assert.equal(SETTING_SPECS.site_rules.check([{ site: "https://a.test/*", bind }]), true);
+  assert.match(problems_of(`h = { run = "page.back", when_present = "${GRID}", otherwise = "next" }`), /otherwise/);
+});
+
 test("the site rules view lists each choice with its guard, and a guarded bind stays live", () => {
   const [user] = site_rules_view(compiled_with({ site_rules: [{ site: "https://a.test/*", bind: { h: stored_choices(true) } }] }), "https://a.test/").rows;
   const h = user!.changes.find(({ keys }) => keys === "h")!;
