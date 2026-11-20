@@ -302,3 +302,12 @@ export function scroll_clips_in_page(element: Element, options?: { skip_scrollab
     },
   }, options);
 }
+
+// How far below the window top the nearest-to-the-edge scroll box of an element starts, or 0. An edge scrolled out of the top of a box is before the view start even when the box sits below the window top, so callers take the edge less this. The page itself (html and body) has no parent chain of two, so it is skipped.
+export function scrollport_top_of(element: Element): number {
+  let top = 0;
+  for (let up = element.parentElement; up?.parentElement?.parentElement; up = up.parentElement) {
+    if (up.scrollHeight > up.clientHeight) top = Math.max(top, up.getBoundingClientRect().top + up.clientTop);
+  }
+  return top;
+}

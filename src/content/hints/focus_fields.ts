@@ -3,7 +3,7 @@
 import { deepest_focused_element } from "../editable.ts";
 import { focus_and_mark } from "./actions.ts";
 import type { MarkFocus } from "./actions.ts";
-import { collect, window_of } from "./candidates.ts";
+import { collect, scrollport_top_of, window_of } from "./candidates.ts";
 import type { Found } from "./candidates.ts";
 import { keep_present_found } from "./headings.ts";
 
@@ -44,7 +44,7 @@ export function place_of(fields: readonly Element[], anchors: readonly (Element 
   return { index: first_in_view === -1 ? fields.length : first_in_view, on_field_: false };
 }
 
-const is_above_view = (field: Element): boolean => field.getBoundingClientRect().bottom <= 0;
+const is_above_view = (field: Element): boolean => field.getBoundingClientRect().bottom <= scrollport_top_of(field);
 
 const is_fully_in_view = (element: Element): boolean => {
   const box = element.getBoundingClientRect();

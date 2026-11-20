@@ -705,6 +705,12 @@ shadow.getElementById("panel").addEventListener("scroll", () => send("panel_scro
       const body = `<div style="position:fixed;inset:0;overflow:auto"><p id="p1" style="min-height:300px;margin:0">Paragraph p1 holds enough running text to be a stop for the brace keys.</p><div style="height:4000px"></div><h2 id="far" style="margin:0">Far section</h2><div style="height:2000px"></div></div>`;
       return response.end(page(`article_scroller_deep ${id}`, body, "<style>h1{display:none}body{overflow:hidden}</style>"));
     }
+    if (url.pathname === "/article_scroller_low") {
+      // The div sits 300px below the window top. The test scrolls it 100px, so "early" and "a" are above its scrollport while their window tops are still positive.
+      const text = (name, height) => `<p id="${name}" style="min-height:${height}px;margin:0">Paragraph ${name} holds enough running text to be a stop for the brace keys.</p>`;
+      const body = `<div id="box" style="position:fixed;inset:300px 0 0 0;overflow:auto"><h2 id="early" style="margin:0;height:50px">Early</h2>${text("a", 500)}${text("b", 500)}<div style="height:2000px"></div></div>`;
+      return response.end(page(`article_scroller_low ${id}`, body, "<style>h1{display:none}body{overflow:hidden}</style>"));
+    }
     if (url.pathname === "/article_late_bar") {
       // A 40px banner scrolls away, and the 60px bar under it sticks to the top only once the page has scrolled past the banner, so a read at the top edge before the jump finds nothing.
       const text = (name) => `<p id="${name}" style="min-height:700px;margin:0">Paragraph ${name} holds enough running text to be a stop for the brace keys.</p>`;
