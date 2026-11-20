@@ -4,6 +4,7 @@
 import type { Mode } from "../shared/command.ts";
 import { TAB_MEDIA_STORAGE_PREFIX, TAB_MEDIA_TOP_STORAGE_PREFIX } from "./storage_keys.ts";
 import { best_effort, keep_chain, refused_as } from "../shared/swallow.ts";
+import { create_step_queue } from "./tab_steps.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
@@ -40,18 +41,6 @@ export const LINE_CLOSE_GRACE_MS = 500;
 // How long the ping to a frame of an open line may take. A frame stuck in a loop never answers, and the ping runs in the chain every tab shares.
 export const FRAME_ALIVE_LIMIT_MS = 1000;
 
-// A step that waits for its turn. With no `frame_id` it goes to every frame, and skips `from`.
-type QueuedStep = { on: boolean; frame_id?: number | undefined; from?: number | undefined };
-// `sending` says a step of the tab is on its way and not yet answered. `waiting` holds those not yet sent, oldest first.
-type TabSteps = { sending: boolean; waiting: QueuedStep[] };
-
-// Whether `newer` reaches every frame `older` reaches. A step sets the mode, so a frame that gets the newer one needs no older one.
-const covers = (newer: QueuedStep, older: QueuedStep): boolean => {
-  if (newer.frame_id !== undefined) return older.frame_id === newer.frame_id;
-  if (newer.from === undefined) return true;
-  return older.frame_id === undefined ? older.from === newer.from : older.frame_id !== newer.from;
-};
-
 export function create_tab_media(deps: TabMediaDeps) {
   // One read-then-write at a time per background, so two reports together do not drop each other's change.
   let chain: Promise<unknown> = Promise.resolve();
@@ -61,27 +50,8 @@ export function create_tab_media(deps: TabMediaDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
-  // The steps of a tab go out one at a time, in the order the hold sent them, so an off step of an ended hold cannot land after the on step of the next one. The shared queue never waits on them: a frame that never answers (a page stuck in a loop) holds up the steps behind it in its tab, and nothing in another tab.
-  // A new step drops the waiting steps it covers, so the waiting list holds at most one step per frame and per reporter of a step to every frame, however long a frame stays stuck.
-  const tab_steps = new Map<number, TabSteps>();
-  const send_next = (tab_id: number, steps: TabSteps): void => {
-    // A load or a close of the tab replaced its steps: the frames they were for are gone.
-    const next = tab_steps.get(tab_id) === steps ? steps.waiting.shift() : undefined;
-    steps.sending = next !== undefined;
-    if (next) void best_effort(deps.send_step(tab_id, next.on, next.frame_id, next.from)).then(() => send_next(tab_id, steps));
-  };
-  const step = (tab_id: number, on: boolean, frame_id?: number, from?: number): void => {
-    const steps = tab_steps.get(tab_id) ?? { sending: false, waiting: [] };
-    tab_steps.set(tab_id, steps);
-    const queued: QueuedStep = { on, frame_id, from };
-    steps.waiting = [...steps.waiting.filter((older) => !covers(queued, older)), queued];
-    if (!steps.sending) send_next(tab_id, steps);
-  };
-  // A frame that reports the mode on its own is past every step still waiting for it alone, the off of a hold it left included. The step on of a hold it starts skips it, so that off would land last.
-  const drop_steps_to = (tab_id: number, frame_id: number): void => {
-    const steps = tab_steps.get(tab_id);
-    if (steps) steps.waiting = steps.waiting.filter((waiting) => waiting.frame_id !== frame_id);
-  };
+  // The steps of a tab go out one at a time, in order (`tab_steps.ts`).
+  const { step, drop_steps_to, clear: clear_steps } = create_step_queue(deps.send_step);
   // The old page of a load gets its steps off straight away, outside the tab's steps: a frame of it that never answers must not hold up the new page.
   const step_old_page = (tab_id: number, on: boolean, frame_id?: number): void => void best_effort(deps.send_step(tab_id, on, frame_id));
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
@@ -181,13 +151,13 @@ export function create_tab_media(deps: TabMediaDeps) {
     navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
       in_turn(async () => {
         // The frames of the old page are gone, so the steps still waiting for them are dropped.
-        if (change.status === "loading" && change.url === undefined) tab_steps.delete(tab_id);
+        if (change.status === "loading" && change.url === undefined) clear_steps(tab_id);
         const hold = await read(tab_id);
         if (!hold) return;
         if (change.status === "loading" && change.url === undefined) await end(tab_id, hold, undefined, step_old_page);
         else if (hold.pin_frame !== undefined) await write(tab_id, without_pin(hold));
       }),
-    forget: (tab_id: number): Promise<void> => in_turn(() => (tab_steps.delete(tab_id), deps.storage.remove(key_of(tab_id)))),
+    forget: (tab_id: number): Promise<void> => in_turn(() => (clear_steps(tab_id), deps.storage.remove(key_of(tab_id)))),
   };
 }
 

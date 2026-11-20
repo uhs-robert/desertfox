@@ -184,17 +184,114 @@ test("reports that arrive together run one after another", async () => {
   assert.deepEqual(steps, ["4:on:all:from 0"], "one start for three frames");
 });
 
-test("a frame that never answers its step holds up no later report or join, in this tab or another", { timeout: 2000 }, async () => {
+// Records each step with its tab, frame and the reporter it skips, in the order the frames receive them. A send to `stuck_tab` or `stuck_frame` never answers. With `held` every other send answers, and so lands, only when released, in order, and with `slow_offs` only the off steps wait for that.
+function item_with_recorded_steps({ stuck_tab = -1, stuck_frame = -1, held = false, slow_offs = false } = {}) {
   const data: Record<string, unknown> = {};
   const storage = {
     get: async (key: string) => (key in data ? { [key]: structuredClone(data[key]) } : {}),
     set: async (items: Record<string, unknown>) => void Object.assign(data, structuredClone(items)),
     remove: async (key: string) => void delete data[key],
   };
-  const tab_item = create_tab_item({ storage: storage as never, send_step: () => new Promise(() => {}) });
+  const delivered: { tab: number; on: boolean; frame: number | "all"; from: number | undefined }[] = [];
+  const releases: (() => void)[] = [];
+  let calls = 0;
+  const tab_item = create_tab_item({
+    storage: storage as never,
+    send_step: (tab, on, frame_id, from) => {
+      calls++;
+      const step = { tab, on, frame: frame_id ?? ("all" as const), from };
+      if (tab === stuck_tab || frame_id === stuck_frame) return new Promise(() => {});
+      if (!held && !(slow_offs && !on)) return (delivered.push(step), Promise.resolve());
+      return new Promise<void>((resolve) => releases.push(() => (delivered.push(step), resolve())));
+    },
+  });
+  const release_all = async () => {
+    while (releases.length > 0) {
+      releases.shift()!();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+  // The mode each frame of tab 4 ends in, after every step that landed.
+  const final_mode = (frame: number): boolean | undefined => delivered.filter((step) => step.tab === 4 && (step.frame === frame || (step.frame === "all" && step.from !== frame))).at(-1)?.on;
+  return { tab_item, delivered, release_all, final_mode, data, calls: () => calls };
+}
+
+test("a frame that never answers its step holds up no later report or join, in this tab or another", { timeout: 2000 }, async () => {
+  const { tab_item, delivered } = item_with_recorded_steps({ stuck_tab: 4 });
   await tab_item.reported(4, 0, "item");
   await tab_item.reported(4, 7, "item", true);
   await tab_item.reported(4, 0, "normal");
   await tab_item.reported(5, 0, "item");
   assert.equal(await tab_item.join(5, 3), true);
+  assert.deepEqual(delivered, [{ tab: 5, on: true, frame: "all", from: 0 }], "tab 5's step goes out past tab 4's stuck one");
+});
+
+test("an off step still on its way when a new hold starts cannot land after the new hold's on step", async () => {
+  const { tab_item, delivered, release_all, data } = item_with_recorded_steps({ slow_offs: true });
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  delivered.length = 0;
+  await tab_item.reported(4, 0, "normal");
+  await tab_item.reported(4, 0, "item");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(delivered.length, 0, "the new on step waits behind the slow off step");
+  await release_all();
+  assert.deepEqual(delivered.map((step) => `${step.on ? "on" : "off"}:${step.frame}`), ["off:7", "on:all"]);
+  assert.ok(data["desertfox_tab_item_4"], "the new hold survives");
+});
+
+// Frame 0 starts a new hold on its own while the off step of the hold it left still waits. The step on of its new hold skips it, so that old off must not go out after it.
+test("a frame that starts a new hold while an off step to it waits stays in the mode", async () => {
+  const { tab_item, release_all, final_mode, data } = item_with_recorded_steps({ held: true });
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  await tab_item.reported(4, 7, "normal");
+  await tab_item.reported(4, 0, "item");
+  await release_all();
+  assert.deepEqual((data["desertfox_tab_item_4"] as { frames: number[] }).frames, [0]);
+  assert.notEqual(final_mode(0), false, "no off step reaches frame 0 after its new hold started");
+});
+
+test("waiting steps that a newer one covers are dropped, so the latest start still reaches every frame", async () => {
+  const { tab_item, delivered, release_all, final_mode, data } = item_with_recorded_steps({ held: true });
+  for (let cycle = 0; cycle < 20; cycle++) {
+    await tab_item.reported(4, 0, "item");
+    await tab_item.reported(4, 7, "item", true);
+    await tab_item.reported(4, 0, "normal");
+  }
+  await tab_item.reported(4, 0, "item");
+  await release_all();
+  assert.ok(data["desertfox_tab_item_4"], "storage holds a live hold");
+  assert.equal(final_mode(7), true, "frame 7 ends in the mode");
+  assert.equal(delivered.length, 2, "the first start went out, and the last start covered every step queued behind it");
+});
+
+test("steps still waiting when the page loads never reach the new page", async () => {
+  const { tab_item, release_all, calls } = item_with_recorded_steps({ held: true });
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  await tab_item.reported(4, 0, "normal");
+  await tab_item.navigated(4, { status: "loading" });
+  await release_all();
+  assert.equal(calls(), 1, "the off step to frame 7 waited behind the start and was skipped");
+});
+
+test("a frame of the old page that never answers its step off at a load holds up nothing on the new page", { timeout: 2000 }, async () => {
+  const { tab_item, delivered } = item_with_recorded_steps({ stuck_frame: 7 });
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.reported(4, 0, "item");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(delivered.at(-1), { tab: 4, on: true, frame: "all", from: 0 });
+});
+
+test("steps still waiting when the tab closes never go out", async () => {
+  const { tab_item, release_all, calls } = item_with_recorded_steps({ held: true });
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  await tab_item.reported(4, 0, "normal");
+  await tab_item.forget(4);
+  await release_all();
+  assert.equal(calls(), 1);
 });
