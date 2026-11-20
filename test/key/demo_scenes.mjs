@@ -319,9 +319,9 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
   const wait_item_mode = () => poll_until("item mode", async () => (await item_badge()) === "ITEM");
   const walk_keys = async (keys) => { for (const key of keys) { await press(key); await sleep(650); } };
 
-  // Google Images shows a captcha to the recorder, so the grid is the DuckDuckGo image vertical, which has its own shipped row (ddg_images).
-  await item_scene("ddg_images", "https://duckduckgo.com/?q=desertfox&iax=images&ia=images", {
-    tiles_up: `document.querySelectorAll("figure").length > 8`,
+  // Google Images shows a captcha to the recorder, so the grid is Brave Images, which has its own shipped row (brave_images). The web results film is DuckDuckGo, so the two films show two sites.
+  await item_scene("brave_images", "https://search.brave.com/images?q=desertfox&source=web", {
+    tiles_up: `document.querySelectorAll("button.image-result").length > 8`,
     walk: async () => {
       await press("I");
       await wait_item_mode();

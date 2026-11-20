@@ -32,7 +32,7 @@ If you know Vim, you already know DesertFox. Modes, `hjkl`, `gg` and `G`, `yy`, 
 
 **Walk a page one item at a time.** Press `I` on a page with a list or a grid, such as search results. `j` and `k` move to the next and previous item, and `h` and `l` move across a grid. `Enter` opens the item's link and `Escape` goes back to normal mode. [Item mode guide](docs/item_mode.md).
 
-<p align="center"><img src="./docs/images/item_ddg_images.gif" width="800" alt="DuckDuckGo image results for desertfox. Pressing I starts item mode, and l, j, h and k move a box from picture to picture across the grid."/></p>
+<p align="center"><img src="./docs/images/item_brave_images.gif" width="800" alt="Brave image results for desertfox. Pressing I starts item mode, and l, j, h and k move a box from picture to picture across the grid."/></p>
 
 <p align="center"><img src="./docs/images/item_ddg.gif" width="800" alt="DuckDuckGo web results for desertfox firefox. Pressing I starts item mode, and j and k move a box from result to result."/></p>
 
