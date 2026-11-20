@@ -224,6 +224,21 @@ define("page.item", {
   modes: ["normal", "item"],
 });
 
+// The actions on the current item of item mode. The handler asks the item bundle which item that is.
+define("page.item_action", {
+  name: "item_action",
+  label: "Act on the current item",
+  intent: "Toggle or open the current item of item mode. Toggle clicks the first native checkbox or element with role checkbox that shows in the item, or the element a CSS selector finds when a site row names one. Both send the pointer and mouse events of a hint click. They refuse when there is no current item, no checkbox or no link.",
+  params: [
+    { name: "action", type: "enum", values: ["toggle", "open"], value_labels: { toggle: "to toggle the checkbox", open: "to open the link" }, description: { toggle: "Toggle the checkbox of the current item.", open: "Open the link of the current item." } },
+    { name: "target", type: "string", default: "", when: { action: ["toggle"] }, description: "Click what this selector finds in the item instead." },
+  ],
+  bridge: false,
+  runs_in: "content",
+  bundle: "item_act",
+  modes: ["item"],
+});
+
 // Meant for site rows, where a synthetic Ctrl+X or Ctrl+V keydown does not cut or paste: the browser runs a clipboard action only from `execCommand`, so a row binds a key to this command instead.
 define("page.clipboard", {
   label: "Cut, copy or paste in the page",

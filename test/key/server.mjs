@@ -230,7 +230,11 @@ export function start_server() {
     if (url.pathname === "/item_list" || url.pathname === "/item_frame") {
       // Ten cards with a title link each, which the item finder takes for a list. The list is in the markup, so a page that starts in item mode finds it when it loads. A `_frame` id adds a same-origin frame with a list of its own, and a `_field` id a text field.
       const prefix = url.pathname === "/item_list" ? "c" : "f";
-      const cards = Array.from({ length: 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span></div>`).join("");
+      // A `_boxes` id gives the first four cards a native checkbox, a role=checkbox div, a plain span that a site row would name (`.star`) and nothing. Each click on one is recorded in the `toggled` data attribute of the root element.
+      const boxes = ['<input type="checkbox" id="box0">', '<div role="checkbox" aria-checked="false" id="box1" tabindex="0">box</div>', '<span class="star" id="box2">star</span>', ""];
+      const extra = (index) => (id.includes("_boxes") ? (boxes[index] ?? "") : "");
+      const record = id.includes("_boxes") ? "<script>document.documentElement.dataset.toggled = ''; document.addEventListener('click', (event) => { if (event.target.id?.startsWith('box')) document.documentElement.dataset.toggled += (document.documentElement.dataset.toggled ? ',' : '') + event.target.id; });</script>" : "";
+      const cards = Array.from({ length: 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span>${extra(index)}</div>`).join("") + record;
       const frame = url.pathname === "/item_list" && id.includes("_frame") ? `<iframe id="inner" src="/item_frame?id=${id}_inner" style="display:block;width:560px;height:300px"></iframe>` : "";
       const field = id.includes("_field") ? '<input id="q">' : "";
       // A `_slow` id holds the load open for 2.5 s with an image, so a key can land before the load completes.

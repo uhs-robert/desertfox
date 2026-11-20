@@ -536,6 +536,8 @@ const ITEM_KEYS: ModeBindings = {
   zt: item_align("top", "Back to the current item, at the top"),
   zz: item_align("center", "Back to the current item, in the middle"),
   zb: item_align("bottom", "Back to the current item, at the bottom"),
+  "<Space>": { id: "page.item_action", args: { action: "toggle" }, label: "Toggle the item's checkbox" },
+  "<Enter>": { id: "page.item_action", args: { action: "open" }, label: "Open the item's link" },
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
   h: item_step("left", "Item to the left, or scroll left"),
