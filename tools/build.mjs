@@ -17,7 +17,8 @@ const MAX_BYTES = {
   // 50.5 KB: the `drop` filter of the grab target pass (`drop_targets.ts`, the Tab widen key and the fallback) passed 49 KB.
   // 50.75 KB: the review fixes of the `drop` filter (shadow-root climb, tag escape, warn_and_go) passed 50.5 KB.
   // 51.75 KB: raised by 1 KB ahead of the next change to the file, with no feature behind it.
-  "hints.js": 51.75 * 1024,
+  // 52.25 KB: the scrollport offset for heading and field jumps in a scrolled div (`scrollport_top_of`, #798) and the scrolling-div clip rule passed 51.75 KB.
+  "hints.js": 52.25 * 1024,
   "caret.js": 32 * 1024,
   // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
   // 9 KB: the top frame keeps its own panel when a subframe's late erase arrives (`relayed_panel.ts`, #619).
