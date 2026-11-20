@@ -234,12 +234,15 @@ export function start_server() {
       const boxes = ['<input type="checkbox" id="box0">', '<div role="checkbox" aria-checked="false" id="box1" tabindex="0">box</div>', '<span class="star" id="box2">star</span>', ""];
       const extra = (index) => (id.includes("_boxes") ? (boxes[index] ?? "") : "");
       const record = id.includes("_boxes") ? "<script>document.documentElement.dataset.toggled = ''; document.addEventListener('click', (event) => { if (event.target.id?.startsWith('box')) document.documentElement.dataset.toggled += (document.documentElement.dataset.toggled ? ',' : '') + event.target.id; });</script>" : "";
-      const cards = Array.from({ length: 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span>${extra(index)}</div>`).join("") + record;
+      const cards_html = Array.from({ length: id.includes("_sections") ? 6 : 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span>${extra(index)}</div>`);
+      const cards = (id.includes("_sections") ? "" : cards_html.join("")) + record;
+      // A `_sections` id puts the first six cards in three sections of two, each with a heading, which the item finder nests into a list with sections.
+      const section_cards = id.includes("_sections") ? Array.from({ length: 3 }, (_, section) => `<section class="sec" style="width:540px"><h2 style="margin:0 0 0 20px">Section ${section}</h2>${cards_html.slice(section * 2, section * 2 + 2).join("")}</section>`).join("") : "";
       const frame = url.pathname === "/item_list" && id.includes("_frame") ? `<iframe id="inner" src="/item_frame?id=${id}_inner" style="display:block;width:560px;height:300px"></iframe>` : "";
       const field = id.includes("_field") ? '<input id="q">' : "";
       // A `_slow` id holds the load open for 2.5 s with an image, so a key can land before the load completes.
       const slow = id.includes("_slow") ? '<img src="/slow_pixel?ms=2500">' : "";
-      return response.end(page(`${url.pathname.slice(1)} ${id}`, field + slow + frame + cards, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+      return response.end(page(`${url.pathname.slice(1)} ${id}`, field + slow + frame + section_cards + cards, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
     if (url.pathname === "/hn_thread" || url.pathname === "/hn_front") {
       // A stand-in for Hacker News. The thread is a story row and seven comments (k0 to k6) as `tr.athing.comtr` with the depth in `td.ind[indent]`: k0 holds k1 (which holds k2) and k3, k4 holds k5, k6 stands alone. Clicking an `a.togg` folds like the site: the row gets `coll`, the rows below it that are deeper get `noshow`, and each click is recorded in the `clicks` data attribute of the root element. The front page has story rows only, and is wide so that a sideways key shows.
