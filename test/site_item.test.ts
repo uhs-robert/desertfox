@@ -6,7 +6,7 @@ import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts";
 import { create_derived_row } from "../src/content/item/derived.ts";
 import type { DerivedRow } from "../src/content/item/derived.ts";
-import { args_for_pin, lists_with_row } from "../src/content/item/lists.ts";
+import { args_for_pin, lists_with_row, pick_list } from "../src/content/item/lists.ts";
 import { current_item, forget_move, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
@@ -631,4 +631,22 @@ test("the picker offers the row's list first, then the finder's lists that share
   assert.equal(lists_with_row(doc, finder, "row", false)[0]?.row_, true);
   assert.deepEqual(names(lists_with_row(doc, finder, "row", true)), ["r1,r2"], "row_only offers the row alone");
   assert.deepEqual(names(lists_with_row(doc, finder, "other", false)), ["r1,r2", "inner", "s1,s2"], "a row with no item shown offers the finder's lists as they are");
+});
+
+// A row pick unpins and leaves the side list active, so picking the side list again is a new pick: it takes the focus and drops the old move.
+test("picking a side list again after a pick of the row's list takes the focus again", () => {
+  const { page } = real_derived_page(-1);
+  const derived = page.derived as unknown as DerivedRow;
+  const side = derived.lists_()[0]!;
+  const row = { kind: "list" as const, items: [{}] as never[], links: new Map(), row_: true as const };
+  const focuses: string[] = [];
+  const focus = { focus: () => focuses.push("focus") } as unknown as HTMLElement;
+  pick_list(derived, side, focus, true);
+  assert.deepEqual(focuses, ["focus"]);
+  pick_list(derived, side, focus, true);
+  assert.deepEqual(focuses, ["focus"], "the pinned list again leaves the focus alone");
+  pick_list(derived, row, focus, true);
+  pick_list(derived, side, focus, true);
+  assert.equal(focuses.length, 3, "the row pick and the repick each take the focus");
+  assert.equal(derived.pinned_(), true);
 });

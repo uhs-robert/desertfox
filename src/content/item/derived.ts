@@ -91,9 +91,10 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
         if (timeouts_in_a_row !== 1) {
           // The list the user was on stays active while it shows (or, for an end command, always), and otherwise the list in view takes over.
           const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)));
-          if (pin && !old) pin = undefined;
+          // A read that ran out of time shows nothing about the list, so only a whole read that lacks it drops the pin.
+          if (pin && !old && !found.timed_out_) pin = undefined;
           const active = (hold ? old : most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
-          active_items = active.items;
+          if (!(pin && found.timed_out_)) active_items = active.items;
           kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
         }
       } catch (error) {
@@ -105,7 +106,9 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   // The list the user picked, and the next read matches it through its items.
   const pick = (region: Region<Element>): void => {
     active_items = region.items;
-    if (kept) (kept.active = region), (kept.tail = deps.tail_(region.items));
+    if (!kept) return;
+    kept.active = region;
+    kept.tail = deps.tail_(region.items);
   };
   return {
     items_: (keep) => read(keep)?.items.filter(deps.is_shown_) ?? [],
@@ -120,7 +123,10 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     lists_: () => (read(), kept?.found.regions ?? []),
     active_: () => kept?.active,
     pick_: pick,
-    pin_: (region) => (pick(region), (pin = { url: deps.url_() }), undefined),
+    pin_: (region) => {
+      pick(region);
+      pin = { url: deps.url_() };
+    },
     unpin_: () => void (pin = undefined),
     pinned_: () => (pin ? (read(true), !!pin) : false),
     grew_: () => !!kept?.active.items[0] && deps.tail_(kept.active.items).some((next, at) => next !== kept!.tail[at]) && !(kept = undefined),

@@ -24,7 +24,8 @@ export function lists_with_row(doc: ParentNode, read_lists: () => Region<Element
 // Picking the row's list makes its own keys walk it again. Picking another list pins it while a row is named (`row_selector`), so the row's keys walk it too. Making another list active puts the focus on the first item the pick showed, and picking the list that is active already leaves the focus and the last move alone, so the landing goes on from the current item.
 export function pick_list(derived: DerivedRow, region: Region<Element>, focus: HTMLElement | undefined, row_selector: boolean): void {
   const was_pinned = derived.pinned_();
-  const was = region.row_ ? !was_pinned : derived.active_()?.items[0] === region.items[0];
+  // With a row named, the active list counts as the user's only while it is pinned: a row pick unpins but leaves the side list active.
+  const was = region.row_ ? !was_pinned : (was_pinned || !row_selector) && derived.active_()?.items[0] === region.items[0];
   if (region.row_) derived.unpin_();
   else (row_selector ? derived.pin_ : derived.pick_)(region);
   if (!was) (forget_move(), focus?.focus({ preventScroll: true }));
