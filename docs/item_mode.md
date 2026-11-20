@@ -39,7 +39,7 @@ Each key shows a notice when the item has no link or no checkbox.
 
 The hint keys work in item mode. `f`, `F` and the `;` group label the whole page and give the shortest hints to the current item, so a page with many links stays quick to use. In normal mode the hints keep their usual order.
 
-Many keys of normal mode keep working in item mode, for example `H` and `L` for history, `]]` and `[[` for next and previous page, `J` and `K` for tabs, `<C-d>` and `<C-u>` to scroll, `/` to find and `:` for the command line. The list is not complete. `gi` focuses a field and so leaves item mode. A key that item mode does not bind goes to the page.
+Many keys of normal mode keep working in item mode, for example `H` and `L` for history, `]]` and `[[` for next and previous page, `J` and `K` for tabs, `<C-d>` and `<C-u>` to scroll, `/` to find and `:` for the command line. The media keys work too: `am`, `aa` and the rest of the `a` group, `n`, `N`, `*` and `#` for find, and `<C-v>`. `A`, `i`, `v`, `V`, `gV` and the ignore keys start another mode and so leave item mode. `Escape` in media mode that began in item mode goes back to item mode in every frame of the tab. A fullscreen started in item mode starts media mode, and its end goes to normal mode. The list is not complete. `gi` focuses a field and so leaves item mode. A key that item mode does not bind goes to the page.
 
 ## Comments on Hacker News and Reddit
 
