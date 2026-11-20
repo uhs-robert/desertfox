@@ -76,6 +76,78 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await in_active_tab("scrollY")) === 0, "j or k scrolled by line instead of moving to the result");
   });
 
+  // A list of titled cards beside the results, which the finder reads as a list of its own. The results are the row's list and keep the left side.
+  const add_side_list = () =>
+    in_active_tab(`(() => {
+      const side = document.createElement("div");
+      side.style.cssText = "position:absolute;top:0;left:500px;width:400px";
+      side.innerHTML = Array.from({ length: 4 }, (_, index) => '<div class="card" style="height:60px;margin:0 0 10px 0;width:400px"><h3 style="margin:0"><a id="s' + index + '" href="#s' + index + '">Side list result number ' + index + ' title</a></h3></div>').join("");
+      document.body.prepend(side);
+      document.activeElement?.blur();
+      window.scrollTo(0, 0);
+      return true;
+    })()`);
+  const labels_by_left = () => in_active_tab(`[...document.documentElement.children].flatMap((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => ({ text: node.textContent, left: node.getBoundingClientRect().left }))).sort((a, b) => a.left - b.left)`);
+  const mode_badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`);
+
+  await run_case("I in item mode offers the results and a side list, a picked side list takes j k gg and zz, and a pick of the results gives the row its keys back", async () => {
+    await open_results("side_pick");
+    await add_side_list();
+    await press_keys("I");
+    await poll_until("a label on the results and one on the side list", async () => (await labels_by_left())?.length === 2);
+    const [, right] = await labels_by_left();
+    await press_keys(right.text);
+    await expect_focus("s0");
+    await press_keys("j");
+    await expect_focus("s1");
+    await press_keys("jj");
+    await expect_focus("s3");
+    await press_keys("k");
+    await expect_focus("s2");
+    await press_keys("gg");
+    await expect_focus("s0");
+    await in_active_tab("document.activeElement.blur(); 0");
+    await press_keys("zz");
+    await expect_focus("s0");
+    await press_keys("I");
+    await poll_until("a label on each list", async () => (await labels_by_left())?.length === 2);
+    const [left] = await labels_by_left();
+    await press_keys(left.text);
+    await expect_focus("r0");
+    await press_keys("j");
+    await expect_focus("r1");
+  });
+
+  await run_case("normal-mode I with a side list on the page starts the results at once and offers no labels", async () => {
+    await open_results("side_normal");
+    await add_side_list();
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await mode_badge()) === "NORMAL");
+    await press_keys("I");
+    await poll_until("item mode", async () => (await mode_badge()) === "ITEM");
+    await expect_focus("r0");
+    expect((await labels_by_left()).length === 0, "the picker showed labels");
+  });
+
+  await run_case("a pin on a side list ends with Escape and a new I: the row's keys walk the results again", async () => {
+    await open_results("side_unpin");
+    await add_side_list();
+    await press_keys("I");
+    await poll_until("two labels", async () => (await labels_by_left())?.length === 2);
+    const [, right] = await labels_by_left();
+    await press_keys(right.text);
+    await expect_focus("s0");
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await mode_badge()) === "NORMAL");
+    await in_active_tab("document.activeElement.blur(); 0");
+    // Normal-mode I is the row's alone, which unpins the side list.
+    await press_keys("I");
+    await poll_until("item mode", async () => (await mode_badge()) === "ITEM");
+    await expect_focus("r0");
+    await press_keys("j");
+    await expect_focus("r1");
+  });
+
   await run_case("gg scrolls to the page top and boxes the first result, G scrolls to the page bottom and boxes the last, neither pulls the result into view", async () => {
     await open_results("ends");
     // A header that leaves the first result half under the fold, and a footer taller than the view that leaves the last result above it at the bottom.

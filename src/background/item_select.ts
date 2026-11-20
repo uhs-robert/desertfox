@@ -41,6 +41,8 @@ const with_times_of = (move: LeafStep, arrow: LeafStep): LeafStep => {
 
 // A move becomes "focus the current item, then send the site's arrow", so the site moves its own selection. The end keys keep their scroll and follow, then come back to the end item with an arrow pair. Up then Down at the last item: a Down on the last row can make the site load more rows and leave its selection on a new one. The `current` step first puts the focus back on the end item when the site redrew it during the follow, or the arrows would go to the body.
 const steps_after_rewrite = (step: LeafStep, keys: ItemSelectKeys): LeafStep[] => {
+  // The arrows cannot walk a list the row does not name, so its picker offers the row's list alone.
+  if (step.invocation.id === "hint.run" && step.invocation.args?.["items"]) return [{ ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, row_only: true } } }];
   if (!names_selector(step)) return [step];
   const direction = direction_of(step) as string;
   if (MOVES.includes(direction)) return [current_step(step), with_times_of(step, keys[direction as keyof ItemSelectKeys])];

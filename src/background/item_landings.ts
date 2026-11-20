@@ -1,4 +1,4 @@
-// The keys a site row with an item selector gets without writing them: `I` (pick a list, the row's items among the candidates) and `zt`, `zz` and `zb` in item mode (back to the current item, then scroll it). They land on the row's own items, which the keys of the item section cannot find where the row names them. A key the row or the user binds themselves stays theirs.
+// The keys a site row with an item selector gets without writing them: `I` (pick a list: the row's items alone in normal mode, among the others in item mode) and `zt`, `zz` and `zb` in item mode (back to the current item, then scroll it). They land on the row's own items, which the keys of the item section cannot find where the row names them. A key the row or the user binds themselves stays theirs.
 
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
@@ -30,12 +30,13 @@ export function with_item_landings(row: SiteRuleRow): SiteRuleRow {
   const { selector, link, hover } = item;
   const landing: BoundInvocation = { id: "page.item", args: { selector, ...(link ? { link } : {}), ...(hover ? { hover } : {}), direction: "current" } };
   const guarded = (step: BoundInvocation): BoundInvocation => ({ ...step, when_present: selector });
-  const pick = [guarded({ id: "hint.run", args: { filter: "lists", items: selector } }), landing];
+  // Normal mode offers the row's list alone, so `I` starts at once. Inside item mode the other lists are offered too.
+  const pick = (row_only: boolean) => [guarded({ id: "hint.run", args: { filter: "lists", items: selector, ...(row_only ? { row_only } : {}) } }), landing];
   const aligns = Object.fromEntries(Object.entries(ALIGNS).map(([key, position]) => [key, [guarded(landing), { id: "scroll.align", args: { position } }]]));
   const own_normal_pick = row.bind?.["I"] !== undefined || row.keymap?.["normal"]?.["I"] !== undefined;
   return {
     ...row,
-    ...(own_normal_pick ? {} : { bind: { I: pick, ...row.bind } }),
-    keymap: { ...row.keymap, item: { I: pick, ...aligns, ...row.keymap?.item } },
+    ...(own_normal_pick ? {} : { bind: { I: pick(true), ...row.bind } }),
+    keymap: { ...row.keymap, item: { I: pick(false), ...aligns, ...row.keymap?.item } },
   } as SiteRuleRow;
 }
