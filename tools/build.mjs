@@ -50,7 +50,8 @@ const MAX_BYTES = {
   // 17.5 KB: item mode: the start of the mode on a list page that is idle (`item.start`), and the box that shows in item mode as well as in normal mode.
   // 18 KB: item mode: the start waits for a row's items by the clock and ends that wait when the page starts to unload.
   // 18.5 KB: item mode: the list picker reads short lists and the items of a site row as the one list.
-  "item.js": 18.5 * 1024,
+  // 19 KB: item mode: the list picker offers a site row's list with the finder's other lists, and a picked side list stays active for the row's keys (the pin).
+  "item.js": 19 * 1024,
   // 3 KB: the item actions (Space toggles the current item's checkbox, Enter opens its link), with the hint click they share with `hints.js`. The bundle loads on the first press.
   "item_act.js": 3 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.

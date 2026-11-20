@@ -29,8 +29,8 @@ export type DerivedDeps = {
   tail_: (items: Element[]) => unknown[];
 };
 
-// `grew_` reads the page again when something new follows the last item, and says whether it did. A move at the end of the list asks it. `grid_` says whether the kept answer is a grid.
-export type DerivedRow = { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; lists_: () => Region<Element>[]; active_: () => Region<Element> | undefined; pick_: (region: Region<Element>) => void };
+// A pin is a pick of a list that a site row's keys do not walk: `pinned_` says whether one is on, after a read that drops it when its list is gone or the address changed. `grew_` reads the page again when something new follows the last item, and says whether it did. A move at the end of the list asks it. `grid_` says whether the kept answer is a grid.
+export type DerivedRow = { items_: (keep?: boolean) => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; lists_: () => Region<Element>[]; active_: () => Region<Element> | undefined; pick_: (region: Region<Element>) => void; pin_: (region: Region<Element>) => void; unpin_: () => void; pinned_: () => boolean };
 
 // The tag and first class that the finder grouped the items by, as a selector. It only has to find the item a focus sits in (`closest`), so a page that reuses the class elsewhere gets a box on that element when a script moves the focus there. Items of more than one tag (batches that draw one template in two tags) give the class alone.
 const item_selector = (items: readonly Element[] = []): string => {
@@ -46,6 +46,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   let timeouts_in_a_row = 0;
   let read_at: string | undefined;
   let overran: { url: string; until: number } | undefined;
+  // The address a pick pinned the active list at. The pin holds the list against the hand-over to a list in view, and ends with the address, with the list leaving the page, or with `unpin_`.
+  let pin: { url: string } | undefined;
   // A short list never wins a hand-over or the first choice. Only a pick makes it active, and the `old` lookup then keeps it.
   const long_regions = (regions: Region<Element>[]) => regions.filter((region) => !region.short_);
   // The first of equal areas wins, and the regions run from the largest down. A region out of the view is none.
@@ -67,9 +69,11 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   // A run that ran out of time, or a finder bug, scrolls this press and keeps nothing, so the next press reads the page again: a cold first run can overrun where a warm one fits. A second timeout in a row stands as a none, so a held j on a page that always overruns does not run the finder on every repeat.
   // Budgets: a read gets the long one (the first read at an address, or one after the kept list dropped), so a long page answers once. A held j on a page with no list re-reads its expired `none` with the short one, and a timeout there keeps the old `none`: a full read of a long text page every 500 ms would stall the scroll. Two overruns in a row put the address on the short budget for `OVERRUN_PAUSE_MS`.
   const read = (keep = false): Region<Element> | undefined => {
-    const status = state(keep);
+    const url = deps.url_();
+    if (pin && pin.url !== url) pin = undefined;
+    const hold = keep || !!pin;
+    const status = state(hold);
     if (status !== GOOD) {
-      const url = deps.url_();
       const expired_none = status === OLD ? kept : undefined;
       kept = undefined;
       if (read_at !== url) timeouts_in_a_row = 0;
@@ -87,7 +91,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
         if (timeouts_in_a_row !== 1) {
           // The list the user was on stays active while it shows (or, for an end command, always), and otherwise the list in view takes over.
           const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)));
-          const active = (keep ? old : most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
+          if (pin && !old) pin = undefined;
+          const active = (hold ? old : most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
           active_items = active.items;
           kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
         }
@@ -96,6 +101,11 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
       }
     }
     return kept?.active;
+  };
+  // The list the user picked, and the next read matches it through its items.
+  const pick = (region: Region<Element>): void => {
+    active_items = region.items;
+    if (kept) (kept.active = region), (kept.tail = deps.tail_(region.items));
   };
   return {
     items_: (keep) => read(keep)?.items.filter(deps.is_shown_) ?? [],
@@ -109,7 +119,10 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     grid_: () => kept?.active.kind === "grid",
     lists_: () => (read(), kept?.found.regions ?? []),
     active_: () => kept?.active,
-    pick_: (region) => kept && ((kept.active = region), (active_items = region.items), (kept.tail = deps.tail_(region.items))),
+    pick_: pick,
+    pin_: (region) => (pick(region), (pin = { url: deps.url_() }), undefined),
+    unpin_: () => void (pin = undefined),
+    pinned_: () => (pin ? (read(true), !!pin) : false),
     grew_: () => !!kept?.active.items[0] && deps.tail_(kept.active.items).some((next, at) => next !== kept!.tail[at]) && !(kept = undefined),
   };
 }

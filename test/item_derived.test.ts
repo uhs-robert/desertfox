@@ -646,3 +646,73 @@ test("a picked short list stays active through a read of the page", () => {
   long_items.forEach((entry) => (entry.shown = false));
   assert.deepEqual(names(row.items_()), ["s1", "s2"]);
 });
+
+// The pin: a picked list that a site row's keys cannot walk stays active until the address changes, the list leaves, or `unpin_`.
+function pinned_setup() {
+  const related = [item("r1"), item("r2")];
+  const comments = [item("c1"), item("c2")];
+  const page = setup(related);
+  page.state.others = [comments];
+  page.row.items_();
+  page.row.pin_(page.row.lists_()[1]!);
+  return { ...page, related, comments };
+}
+const active_names = (row: ReturnType<typeof setup>["row"]) => names(row.active_()!.items);
+
+test("a pinned list stays active when another list is in view and the pinned one is not", () => {
+  const { state, row, comments } = pinned_setup();
+  comments.forEach((entry) => (entry.shown = false));
+  state.clock += NONE_RECHECK_MS;
+  assert.equal(row.pinned_(), true);
+  row.items_();
+  assert.deepEqual(active_names(row), ["c1", "c2"]);
+  row.unpin_();
+  assert.equal(row.pinned_(), false);
+  assert.deepEqual(names(row.items_()), ["r1", "r2"], "without the pin the list in view takes over");
+});
+
+test("a pin outlives the kept answer: a link the page replaced reads the page again and the pin matches the list through its items", () => {
+  const { state, row, link } = pinned_setup();
+  state.links.set(state.others[0]![0]!, link);
+  link.shown = false;
+  row.link_of_(state.others[0]![0]! as unknown as Element);
+  assert.equal(row.pinned_(), true);
+  assert.deepEqual(active_names(row), ["c1", "c2"]);
+});
+
+test("a pin keeps through a read that runs out of time, and holds the list when the next read answers", () => {
+  const { state, row } = pinned_setup();
+  state.fails = "timeout";
+  state.others[0]![0]!.isConnected = false;
+  row.items_();
+  state.fails = "";
+  assert.equal(row.pinned_(), true, "a timed out read tells nothing about the list");
+  assert.deepEqual(active_names(row), ["c1", "c2"]);
+});
+
+test("a pin drops when its list leaves the page, and the list in view takes over", () => {
+  const { state, row, comments } = pinned_setup();
+  comments.forEach((entry) => (entry.isConnected = false));
+  state.others = [];
+  assert.equal(row.pinned_(), false);
+  assert.deepEqual(active_names(row), ["r1", "r2"]);
+});
+
+test("a pin drops at an address change even when the list stays", () => {
+  const { state, row, comments } = pinned_setup();
+  state.url = "https://a.test/?p=2";
+  assert.equal(row.pinned_(), false);
+  comments.forEach((entry) => (entry.shown = false));
+  state.clock += NONE_RECHECK_MS;
+  assert.deepEqual(names(row.items_()), ["r1", "r2"], "the list in view takes over again");
+});
+
+test("a pin set before the first read still holds the list", () => {
+  const related = [item("r1")];
+  const comments = [item("c1")];
+  const { state, row } = setup(related);
+  state.others = [comments];
+  row.pin_({ kind: "list", items: comments as unknown as Element[], links: new Map() });
+  assert.equal(row.pinned_(), true);
+  assert.deepEqual(active_names(row), ["c1"]);
+});

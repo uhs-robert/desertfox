@@ -8,8 +8,8 @@ import type { Group, GroupRules } from "./groups.ts";
 
 export type FinderKind = "list" | "grid" | "none";
 
-// `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `timed_out_` marks a `none` that only says the time budget ran out.
-export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; short_?: true };
+// `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `row_` marks the list of a site row's items, which the picker offers (`lists_with_row` in `main.ts`) and which is no finder list. `timed_out_` marks a `none` that only says the time budget ran out.
+export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; short_?: true; row_?: true };
 // The answer is its first region (the one with the most area) plus every top-level list of the page in `regions`, from the largest down, so the derived row can follow the one in view.
 export type Found<N> = Region<N> & { regions: Region<N>[]; timed_out_?: true };
 
