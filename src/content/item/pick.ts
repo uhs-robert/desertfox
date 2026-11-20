@@ -103,7 +103,7 @@ export function read_cursor(page: ItemPage, shown_: boolean): ItemCursor | undef
 
 const LINK = "a[href]";
 
-// The item that item mode treats as current, and its link, for an action on that item (the hints of `scope: item`, Space, Enter). The item that holds the focus wins over the last one moved to, as for a move, so a click or Tab into another item counts. Nothing before a first move, or once the last item has left the page.
+// The item that item mode treats as current, and its link, for an action on that item (the item-first hint labels, Space, Enter). The item that holds the focus wins over the last one moved to, as for a move, so a click or Tab into another item counts. Nothing before a first move, or once the last item has left the page.
 export function current_item(page: ItemPage): { item_: Element; link_: Element | undefined } | undefined {
   // Before any move the finder's list stands in, so a link reached with Tab counts.
   const args = last_move?.args_ ?? { direction: "current" as const };

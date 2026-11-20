@@ -651,9 +651,3 @@ test("the lists filter keeps the elements the item bundle handed over, and none 
   assert.equal(query_for("lists", undefined).test?.(other), false);
   list_targets.clear();
 });
-
-test("the root of a narrowed walk is a candidate itself, and what lies outside it is not read", () => {
-  const link = (name: string) => ({ name, localName: "a", openOrClosedShadowRoot: null, shadowRoot: null, matches: (selector: string) => selector === "links", getBoundingClientRect: () => ({ width: 300, height: 300 }), getRootNode: () => ({}) });
-  const tile = { ...link("tile"), nodeType: 1, ownerDocument: {}, querySelectorAll: () => [link("inner")] };
-  assert.deepEqual(names(collect(tile as unknown as ParentNode, { selector: "links" })), ["tile", "inner"]);
-});

@@ -159,8 +159,7 @@ export function collect(root: ParentNode, query: Query, is_weak?: WeakTest, only
   if (query.selector === "") return found;
   const doc = (root as Node).ownerDocument ?? (root as Document);
   const { width, height } = only_in_view ? viewport_size(doc, doc.defaultView ?? window) : { width: 0, height: 0 };
-  // The root of a narrowed walk counts itself, so a tile that is a link is a candidate.
-  for (const element of [...(root.nodeType === 1 ? [root as Element] : []), ...Array.from(root.querySelectorAll("*"))]) {
+  for (const element of Array.from(root.querySelectorAll("*"))) {
     const off_screen = only_in_view && is_rect_off_screen(element.getBoundingClientRect(), width, height);
     if (!off_screen) {
       if (element.matches(query.selector) && (query.test?.(element) ?? true)) found.push({ element, frames });

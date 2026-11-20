@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clean_letters, DEFAULT_HINT_LETTERS, make_labels, narrow, overlap_groups, rotate } from "../../src/content/hints/labels.ts";
+import { clean_letters, DEFAULT_HINT_LETTERS, item_first, make_labels, narrow, overlap_groups, rotate } from "../../src/content/hints/labels.ts";
 
 const HOME_ROW = [...DEFAULT_HINT_LETTERS];
 
@@ -68,4 +68,12 @@ test("rotate sends the top to the bottom, and leaves short stacks alone", () => 
   assert.deepEqual(rotate(["a", "b"]), ["b", "a"]);
   assert.deepEqual(rotate(["a"]), ["a"]);
   assert.deepEqual(rotate([]), []);
+});
+
+test("item_first puts the item's targets first and keeps every other order, so they take the shortest labels", () => {
+  const [a, b, c, d] = [{}, {}, {}, {}] as [Element, Element, Element, Element];
+  const item = { contains: (other: unknown) => other === a || other === b } as unknown as Element;
+  const found = [c, a, d, b].map((element) => ({ element }));
+  assert.deepEqual(item_first(found, item).map((target) => target.element), [a, b, c, d]);
+  assert.equal(item_first(found, undefined), found);
 });
