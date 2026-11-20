@@ -10,7 +10,7 @@ export type Args = Record<string, unknown>;
 
 // `args` is the canonical form the command line fallback prints. A key fits when its args, with the registry defaults filled in, equal the defaulted `args`.
 // `test` replaces that equality where a step accepts more than one form. It gets both defaulted sides.
-export type Binding = { mode: KeymapMode; id: string; args: Args; test?: (args: Args, expected: Args) => boolean; prefer?: string; first_step?: boolean };
+export type Binding = { mode: KeymapMode; id: string; args: Args; test?: (args: Args, expected: Args) => boolean; prefer?: string; then?: { id: string; args: Args } };
 
 // A user binding that spells out a default (`direction = "forward"`) and one that leaves it out mean the same, so both sides read the defaults.
 function with_defaults(commands: CommandMeta[], id: string, args: Args | undefined): Args {
@@ -23,10 +23,11 @@ function with_defaults(commands: CommandMeta[], id: string, args: Args | undefin
   return filled;
 }
 
-// A key that runs several steps does more than the sentence says, so only a single step can fit.
+// A key that runs several steps does more than the sentence says, so only a single step can fit. The one exception is a binding with `then`: its key fits only with exactly those two steps.
 function fits(commands: CommandMeta[], binding: Binding, steps: { invocation: { id: string; args?: Args } }[]): boolean {
-  const [step] = steps;
-  if ((steps.length !== 1 && !binding.first_step) || step!.invocation.id !== binding.id) return false;
+  const [step, second] = steps;
+  if (steps.length !== (binding.then ? 2 : 1) || step!.invocation.id !== binding.id) return false;
+  if (binding.then && (second!.invocation.id !== binding.then.id || !same_args(with_defaults(commands, binding.then.id, second!.invocation.args), with_defaults(commands, binding.then.id, binding.then.args)))) return false;
   const args = with_defaults(commands, binding.id, step!.invocation.args);
   const expected = with_defaults(commands, binding.id, binding.args);
   return binding.test ? binding.test(args, expected) : same_args(args, expected);
@@ -82,8 +83,8 @@ export const BINDINGS = {
   // Looked up in caret mode, because the sentence follows entering caret mode and `v` there starts visual mode.
   visual: { mode: "caret", id: "mode.set", args: { mode: "visual" } },
   visual_line: { mode: "caret", id: "mode.set", args: { mode: "visual_line" } },
-  // `I` picks a list and then starts the walk, so the pick is the first of its steps.
-  item_pick: { mode: "normal", id: "hint.run", args: { filter: "lists" }, first_step: true },
+  // `I` picks a list and then lands on the current item, so both steps are the key.
+  item_pick: { mode: "normal", id: "hint.run", args: { filter: "lists" }, then: { id: "page.item", args: { direction: "current" } } },
   item_down: /* @__PURE__ */ item_move("down"),
   item_up: /* @__PURE__ */ item_move("up"),
   item_first: /* @__PURE__ */ item_move("first"),

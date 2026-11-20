@@ -210,6 +210,13 @@ test("practice: every lesson key comes from the keymap, and each lesson names it
   assert.ok(keys("tabs").indexOf("T") < keys("tabs").indexOf(",,"));
   const rebound = practice_lessons(compile({ ...DEFAULT_KEYMAP, normal: { ...Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "gi" && key !== ";fe")), "<A-i>": { id: "page.focus_input" } } } as never), all_commands);
   assert.ok(rebound.find((lesson) => lesson.slug === "form")!.steps.flat().some((inline) => inline.kind === "keys" && inline.text === "<A-i>"));
+  // Only the exact two-step picker is the lesson key: a lone pick and a longer macro do something else.
+  const pick_key = (normal: Record<string, unknown>) => practice_lessons(compile({ ...DEFAULT_KEYMAP, normal } as never), all_commands).find((lesson) => lesson.slug === "list")!.steps[0]!.find((inline) => inline.kind === "keys" || inline.kind === "code");
+  const without_i = Object.fromEntries(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([key]) => key !== "I"));
+  const pick = { id: "hint.run", args: { filter: "lists" } };
+  assert.deepEqual(pick_key({ ...without_i, "<A-p>": [pick, { id: "page.item", args: { direction: "current" } }] }), { kind: "keys", text: "<A-p>" });
+  assert.notDeepEqual(pick_key({ ...without_i, "<A-p>": pick }), { kind: "keys", text: "<A-p>" });
+  assert.notDeepEqual(pick_key({ ...without_i, "<A-p>": [pick, { id: "page.item", args: { direction: "current" } }, { id: "scroll.to", args: { percent: 0 } }] }), { kind: "keys", text: "<A-p>" });
   // The which-key step names the first key of the zoom keys in use, not a fixed z.
   const zoom_step = (keymap: unknown) => practice_lessons(compile(keymap as never), all_commands).find((lesson) => lesson.slug === "which-key")!.steps[1]![1];
   assert.deepEqual(zoom_step(DEFAULT_KEYMAP), { kind: "keys", text: "z" });
