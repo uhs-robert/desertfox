@@ -306,6 +306,11 @@ export async function run_cases({ on_teardown, spawn_client, take_shot, sleep, p
       throw error;
     }
     await sleep(1500);
+    // The shipped rows start item mode by themselves, so the film starts from normal mode and shows I doing it.
+    await poll_until("item mode to start by itself", async () => (await item_badge()) === "ITEM");
+    await press_keys("-k", "Escape");
+    await poll_until("normal mode", async () => (await item_badge()) === "NORMAL");
+    await sleep(500);
     key_presses = [];
     const item_path = join(stage_dir, `item_${name}.mkv`);
     const film = start_film(item_path);
