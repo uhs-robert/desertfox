@@ -192,6 +192,29 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await expect_focus("n1");
   });
 
+  // A main list on the left and a sidebar nav of six stacked links on the right. The nav is pick-only: it gets a label but never starts item mode itself.
+  await run_case("I labels a sidebar nav beside the list, and picking it lets j walk its links", async () => {
+    await open_page("page", "finder_pick_menu", { new_tab: true });
+    await enter_item_mode();
+    await add_cards();
+    await in_active_tab(`(() => {
+      const nav = document.createElement("nav");
+      nav.style.cssText = "position:absolute;top:0;left:700px;width:200px";
+      nav.innerHTML = '<ul style="list-style:none;margin:0;padding:0">' + Array.from({ length: 6 }, (_, index) => '<li style="height:30px"><a id="m' + index + '" href="#m' + index + '">Menu ' + index + '</a></li>').join("") + "</ul>";
+      document.body.prepend(nav);
+      return true;
+    })()`);
+    await press_keys("j");
+    await expect_focus("f0");
+    await press_keys("-k", "I");
+    await poll_until("a label on the list and on the nav", async () => (await labels_by_left())?.length === 2);
+    const [, right] = await labels_by_left();
+    await press_keys(right.text);
+    await expect_focus("m0");
+    await press_keys("j");
+    await expect_focus("m1");
+  });
+
   await run_case("I labels a list in a scroll box whose top items are scrolled out of the box", async () => {
     await open_page("page", "finder_pick_scrolled_list", { new_tab: true });
     await enter_item_mode();
