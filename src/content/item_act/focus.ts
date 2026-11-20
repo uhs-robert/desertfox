@@ -17,5 +17,7 @@ export const next_focus = (item: Element, active: Element | null, direction: "ne
   if (!inside.length) return undefined;
   const ring = inside.length > 1 ? inside : page_focusables();
   const at = ring.indexOf(inside.length > 1 || ring.includes(active!) ? active! : inside[0]!);
-  return ring.at(at < 0 ? (direction === "next" ? 0 : -1) : (at + (direction === "next" ? 1 : -1)) % ring.length);
+  const step = direction === "next" ? 1 : -1;
+  // From no place in the ring, Tab lands on the first element (index 0) and Shift-Tab on the last (index -1).
+  return ring.at((at < 0 ? (step - 1) / 2 : at + step) % ring.length);
 };

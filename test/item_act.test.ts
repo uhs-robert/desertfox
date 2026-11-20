@@ -133,3 +133,34 @@ test("a focusable item root joins the ring", () => {
   const { els, item } = ring_item([ring_el("button")], true);
   assert.equal(next_focus(item, null, "next", () => [item, els[0]!], is_field), item, "an item whose root and one child are focusable has a ring of two, starting at the root");
 });
+
+// Enter clicks the element that Tab focused only while the current item holds it. On a list that does not move the focus (an ARIA list with an active descendant), the current item can differ from the one Tab left the focus in.
+test("Enter clicks the Tab-focused child of the current item, and the link when the current item is another one", async () => {
+  const clicked: string[] = [];
+  const globals = globalThis as Record<string, unknown>;
+  const control = (name: string) => ({ name, tabIndex: 0, matches: (selector: string) => selector !== ":disabled", checkVisibility: () => true, getClientRects: () => [{}], focus() { globals.document = { ...(globals.document as object), activeElement: this }; }, click: () => void clicked.push(name) });
+  const link = control("link");
+  const button = control("button");
+  const other_link = control("other link");
+  const item_of = (...own: object[]) => ({ matches: () => false, querySelectorAll: () => own, contains: (element: unknown) => own.includes(element as object) });
+  let current: { item: unknown; link: unknown } = { item: item_of(link, button), link };
+  globals.document = { activeElement: link, documentElement: { querySelectorAll: () => [] }, addEventListener() {}, removeEventListener() {} };
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<void>>();
+  globals.window = {
+    addEventListener() {},
+    removeEventListener() {},
+    desertfox_host: {
+      register_handler_: (id: string, handler: never) => void handlers.set(id, handler),
+      run_command_: async (_id: string, _bundle: string, args: { take: (item: unknown, link: unknown) => void }) => args.take(current.item, current.link),
+      is_editable_: () => false,
+    },
+  };
+  await import(`${new URL("../src/content/item_act/main.ts", import.meta.url).href}?enter_rule`);
+  await handlers.get("page.item_focus")!({ direction: "next" });
+  await handlers.get("page.item_action")!({ action: "open" });
+  assert.deepEqual(clicked, ["button"], "Enter clicks the control Tab focused");
+  // A move that does not focus makes another item current while the focus stays on the button.
+  current = { item: item_of(other_link), link: other_link };
+  await handlers.get("page.item_action")!({ action: "open" });
+  assert.deepEqual(clicked, ["button", "other link"], "Enter opens the link of the current item");
+});

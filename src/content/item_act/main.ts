@@ -24,13 +24,13 @@ if (!item_act.desertfox_item_act_ready && host) {
   host.register_handler_("page.item_action", async (args) => {
     const current = await current_item();
     const toggle = args.action === "toggle";
-    const clicked = toggle ? checkbox_in(current.item, args.target as string) : (document.activeElement === tabbed ? tabbed : current.link);
+    const clicked = toggle ? checkbox_in(current.item, args.target as string) : (document.activeElement === tabbed && current.item.contains(tabbed) ? tabbed : current.link);
     if (!clicked) throw new RuntimeRefusal(toggle ? "No checkbox in this item" : "This item has no link");
     click_like_a_hint(clicked as HTMLElement);
   });
   host.register_handler_("page.item_focus", async (args) => {
     const target = next_focus((await current_item()).item, document.activeElement, args.direction as "next" | "prev", () => focusables_in(document.documentElement, host.is_editable_), host.is_editable_);
-    if (!target) throw new RuntimeRefusal("Nothing to focus here");
+    if (!target) throw new RuntimeRefusal("Nothing to focus");
     (tabbed = target as HTMLElement).focus();
   });
 }
