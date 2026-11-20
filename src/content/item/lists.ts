@@ -28,5 +28,5 @@ export function pick_list(derived: DerivedRow, region: Region<Element>, focus: H
   const was = region.row_ ? !was_pinned : (was_pinned || !row_selector) && derived.active_()?.items[0] === region.items[0];
   if (region.row_) derived.unpin_();
   else (row_selector ? derived.pin_ : derived.pick_)(region);
-  if (!was) (forget_move(), focus?.focus({ preventScroll: true }));
+  if (!was) (forget_move(), !region.focus_none_ && focus?.focus({ preventScroll: true }));
 }
