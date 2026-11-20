@@ -193,6 +193,16 @@ test("scroll_clips_of keeps a real scroll box and lets a fixed target escape it"
   assert.deepEqual(scroll_clips_of({ tag: "a", parent: scroller, position: "fixed" }, reads), []);
 });
 
+test("scroll_clips_of with skip_scrollable_ lets auto and scroll through and still clips hidden", () => {
+  const box = at(0, 0, 50, 50);
+  const with_overflow = (overflow: string): Dom => ({ tag: "div", parent: body, overflow_x_: overflow, overflow_y_: overflow, box });
+  for (const overflow of ["auto", "scroll"]) {
+    assert.deepEqual(scroll_clips_of(link_in(with_overflow(overflow)), reads, { skip_scrollable_: true }), []);
+    assert.deepEqual(scroll_clips_of(link_in(with_overflow(overflow)), reads), [box]);
+  }
+  for (const overflow of ["hidden", "clip"]) assert.deepEqual(scroll_clips_of(link_in(with_overflow(overflow)), reads, { skip_scrollable_: true }), [box]);
+});
+
 test("box_owners names the element, or for one with no box the children that own boxes (so an observer can watch them)", () => {
   const rects = (n: Node) => n.own;
   const kids = (n: Node) => n.kids ?? [];
