@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { find_aria_lists } from "../src/content/item/aria_lists.ts";
+import { create_derived_row } from "../src/content/item/derived.ts";
 import { find_items } from "../src/content/item/finder.ts";
 import { saved_reader } from "./support/snapshot_page.ts";
 import type { SavedNode, SavedPage } from "./support/snapshot_page.ts";
@@ -16,12 +17,12 @@ const page_of = (...body: SavedNode[]): SavedPage => {
 };
 
 // `count` rows of `height` px stacked from `top`, each `width` wide, with the role and tag given and no link in them.
-const rows = (count: number, role: string, { tag = "div", top = 100, height = 40, width = 1000, attrs = {} as Record<string, string>, kids = (_index: number): SavedNode[] => [] } = {}): SavedNode[] =>
-  Array.from({ length: count }, (_, index) => ({ t: tag, a: { role, ...attrs }, r: [20, top + index * height, width, height], c: kids(index), s: `row ${index}` }));
+const rows = (count: number, role: string | null, { tag = "div", top = 100, height = 40, width = 1000, attrs = {} as Record<string, string>, kids = (_index: number): SavedNode[] => [], text = (index: number) => `row ${index} with a subject line` } = {}): SavedNode[] =>
+  Array.from({ length: count }, (_, index) => ({ t: tag, a: { ...(role && { role }), ...attrs }, r: [20, top + index * height, width, height], c: kids(index), s: text(index) }));
 
 const widget = (role: string, items: SavedNode[], attrs: Record<string, string> = {}, tag = "div"): SavedNode => ({ t: tag, a: { role, ...attrs }, r: [20, 100, 1000, Math.max(40, items.length * 40)], c: items });
 
-const regions_of = (page: SavedPage, taken = []) => find_aria_lists(saved_reader(page), () => false, taken);
+const regions_of = (page: SavedPage, taken = []) => find_aria_lists(saved_reader(page), () => false, taken) ?? [];
 
 test("a grid of link-less rows is one pick-only list whose link is the row itself", () => {
   const items = rows(25, "row", { tag: "tr", attrs: { tabindex: "-1" } });
@@ -32,7 +33,7 @@ test("a grid of link-less rows is one pick-only list whose link is the row itsel
   assert.equal(region!.pick_only_, true);
   assert.equal(region!.items.length, 25);
   assert.ok(region!.items.every((item) => region!.links.get(item) === item));
-  assert.equal(region!.box_selector_, "[role=row]");
+  assert.equal(region!.box_selector_, "[role=row],tr:not([role])");
   assert.equal(region!.focus_none_, undefined);
 });
 
@@ -52,13 +53,20 @@ test("a feed of articles with no link is a list", () => {
   assert.equal(region!.items.length, 8);
 });
 
-test("a tree is flat: the leaves, with a collapsed branch as one item and the hidden ones left out", () => {
+test("a tree is flat: every shown treeitem is an item, a branch by its own label, the hidden ones left out", () => {
   const leaf = (top: number, hidden = false): SavedNode => ({ t: "li", a: { role: "treeitem" }, r: [20, top, 300, 30], ...(hidden && { h: 1 as const }) });
-  const open_branch: SavedNode = { t: "li", a: { role: "treeitem", "aria-expanded": "true" }, r: [20, 100, 300, 90], c: [{ t: "ul", a: { role: "group" }, r: [20, 130, 300, 60], c: [leaf(130), leaf(160)] }] };
-  const [region] = regions_of(page_of(widget("tree", [open_branch, leaf(190), leaf(220), leaf(250, true)])));
-  assert.equal(region!.items.length, 4);
+  const label: SavedNode = { t: "span", r: [20, 100, 300, 30] };
+  const open_branch: SavedNode = { t: "li", a: { role: "treeitem", "aria-expanded": "true" }, r: [20, 100, 300, 90], c: [label, { t: "ul", a: { role: "group" }, r: [20, 130, 300, 60], c: [leaf(130), leaf(160)] }] };
+  const bare_branch: SavedNode = { t: "li", a: { role: "treeitem" }, r: [20, 250, 300, 90], c: [{ t: "ul", r: [20, 250, 300, 90], c: [leaf(250)] }] };
+  const collapsed: SavedNode = { t: "li", a: { role: "treeitem", "aria-expanded": "false" }, r: [20, 190, 300, 30], c: [{ t: "ul", a: { role: "group" }, h: 1, c: [leaf(0, true)] }] };
+  const tree = widget("tree", [open_branch, leaf(190 + 1), collapsed, leaf(220), leaf(280, true), bare_branch]);
+  const [region] = regions_of(page_of(tree));
+  assert.equal(region!.items[0], label, "an open branch stands for its label");
+  assert.equal(region!.items.length, 8);
+  assert.ok(region!.items.includes(collapsed), "a collapsed branch is one item");
   assert.ok(!region!.items.includes(open_branch));
-  assert.ok(region!.items.every((item) => item.h !== 1));
+  assert.ok(region!.items.includes(bare_branch), "a branch with no label child is its own item");
+  assert.equal(region!.box_selector_, "[role=treeitem]:not(:has([role=treeitem]))");
 });
 
 test("replies inside a post are no items of the feed", () => {
@@ -76,8 +84,12 @@ test("the header row of a grid is no item", () => {
 });
 
 test("a calendar grid, a combobox popup and a widget in a dialog or a menu give no list", () => {
-  const calendar = widget("grid", rows(6, "row", { height: 40, width: 280 }));
-  assert.deepEqual(regions_of(page_of(calendar)), []);
+  const days = (index: number) => Array.from({ length: 7 }, (_, day) => (index * 7 + day) % 31 + 1).join("");
+  assert.deepEqual(regions_of(page_of(widget("grid", rows(6, "row", { height: 44, width: 400, text: days })))), [], "a wide calendar too");
+  const spaced = (index: number) => `\n  ${index * 7 + 1}\n  ${index * 7 + 2}\n  ${index * 7 + 3}\n  ${index * 7 + 4}\n  ${index * 7 + 5}\n  ${index * 7 + 6}\n  ${index * 7 + 7}\n`;
+  assert.deepEqual(regions_of(page_of(widget("grid", rows(6, "row", { height: 44, width: 400, text: spaced })))), [], "whitespace between the cells does not count");
+  assert.deepEqual(regions_of(page_of({ t: "div", a: { role: "dialog" }, r: [0, 0, 1000, 600], c: [widget("listbox", rows(8, "option"))] })), []);
+  assert.deepEqual(regions_of(page_of({ t: "div", a: { role: "alertdialog" }, r: [0, 0, 1000, 600], c: [widget("listbox", rows(8, "option"))] })), []);
   const field: SavedNode = { t: "input", a: { role: "combobox", "aria-controls": "popup" }, r: [20, 50, 300, 30] };
   assert.deepEqual(regions_of(page_of(field, widget("listbox", rows(8, "option"), { id: "popup" }))), []);
   assert.deepEqual(regions_of(page_of({ t: "dialog", r: [0, 0, 1000, 600], c: [widget("listbox", rows(8, "option"))] })), []);
@@ -128,6 +140,53 @@ test("a widget inside an item of an earlier ARIA list is dropped", () => {
   assert.equal(regions_of(page_of(outer)).length, 1);
 });
 
-test("the pass stops when the time is out", () => {
-  assert.deepEqual(find_aria_lists(saved_reader(page_of(widget("listbox", rows(8, "option")))), () => true, []), []);
+test("the pass gives no answer when the time is out, also inside one widget", () => {
+  const page = page_of(widget("listbox", rows(500, "option")));
+  assert.equal(find_aria_lists(saved_reader(page), () => true, []), undefined);
+  let reads = 0;
+  assert.equal(find_aria_lists(saved_reader(page), () => ++reads > 50, []), undefined, "the clock runs out after the first widget check");
+  assert.ok(reads < 120, `the walk went on after the clock ran out: ${reads} checks`);
+  const found = find_items(saved_reader(page), { now_: (() => { let at = 0; return () => at++; })(), budget_ms_: 100 });
+  assert.equal(found.timed_out_, true, "the finder marks the answer as timed out");
+});
+
+test("a big listbox that runs out of time leaves the finder's own list in the answer", () => {
+  const counted = (page: SavedPage, budget_ms_: number) => {
+    let calls = 0;
+    const found = find_items(saved_reader(page), { now_: () => calls++, budget_ms_ });
+    return { found, calls };
+  };
+  const list = { t: "div", r: [20, 100, 600, 1200], c: cards(10, 100) } as SavedNode;
+  const page = page_of(list, widget("listbox", rows(500, "option", { top: 1500 })));
+  // The walk of the 500 options reads the clock about a thousand times, at the end of the read, so a budget 300 reads short of the total runs out inside it.
+  const { found } = counted(page, counted(page, 1e9).calls - 300);
+  assert.equal(found.timed_out_, undefined);
+  assert.equal(found.items.length, 10);
+  assert.equal(found.regions.length, 1);
+});
+
+test("a feed that is the finder's own list is skipped without a walk", () => {
+  const feed = widget("feed", cards(10, 100, "article"));
+  let nodes_read = 0;
+  const reader = saved_reader(page_of(feed));
+  const counting = { ...reader, children_: (node: SavedNode) => (nodes_read++, reader.children_(node)) };
+  const found = find_items(counting);
+  const before = nodes_read;
+  find_aria_lists(counting, () => false, found.regions);
+  assert.ok(nodes_read - before < 20, `the pass walked the feed: ${nodes_read - before} reads`);
+});
+
+test("rows of a native table grid are items, and its header row is not", () => {
+  const header: SavedNode = { t: "tr", r: [20, 60, 1000, 40], c: [{ t: "th", r: [20, 60, 500, 40] }] };
+  const table = widget("grid", [header, ...rows(6, null, { tag: "tr" })], {}, "table");
+  const [region] = regions_of(page_of(table));
+  assert.equal(region!.items.length, 6);
+  assert.equal(region!.box_selector_, "[role=row],tr:not([role])");
+});
+
+test("a page whose only list is an ARIA grid starts nothing: the derived row answers no item before a pick", () => {
+  const page = page_of(widget("grid", rows(10, "row")));
+  const row = create_derived_row({ find_: () => find_items(saved_reader(page)) as never, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [] });
+  assert.deepEqual(row.items_(), []);
+  assert.equal(row.lists_().length, 1);
 });

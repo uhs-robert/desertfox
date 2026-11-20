@@ -28,7 +28,7 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
       document.addEventListener("focusin", (event) => window.__log.push("focus " + event.target.id), true);
       document.addEventListener("click", (event) => window.__log.push("click " + event.target.id), true);
       const holder = document.createElement("div");
-      holder.innerHTML = '<div id="w" role="${role_of_widget}" ${widget_attrs} style="width:600px;margin:20px">' + Array.from({ length: ${ROWS} }, (_, index) => '<div id="r' + index + '" role="${role_of_row}" ${row_attrs} style="height:40px;width:600px;box-sizing:border-box">row ' + index + '</div>').join("") + '</div>';
+      holder.innerHTML = '<div id="w" role="${role_of_widget}" ${widget_attrs} style="width:600px;margin:20px">' + Array.from({ length: ${ROWS} }, (_, index) => '<div id="r' + index + '" role="${role_of_row}" ${row_attrs} style="height:40px;width:600px;box-sizing:border-box">row ' + index + ' with a subject line</div>').join("") + '</div>';
       document.body.prepend(holder);
       document.activeElement?.blur();
       window.scrollTo(0, 0);
