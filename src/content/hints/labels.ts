@@ -19,6 +19,21 @@ export function make_labels(count: number, letters: readonly string[]): string[]
   return labels.slice(0, count);
 }
 
+// `Node.contains` stops at a shadow boundary, so the walk goes up through each shadow host.
+function is_within(item: Element, target: Element): boolean {
+  for (let node: Node | undefined = target; node; node = (node.getRootNode() as ShadowRoot).host) if (item.contains(node)) return true;
+  return false;
+}
+
+// `make_labels` hands out the shortest labels first, so putting the item's targets first gives them those. Both groups keep their order. Targets in another frame stay with the rest.
+export function item_first<T extends { element: Element }>(found: T[], item: Element | undefined): T[] {
+  if (!item) return found;
+  const inside: T[] = [];
+  const outside: T[] = [];
+  for (const target of found) (is_within(item, target.element) ? inside : outside).push(target);
+  return [...inside, ...outside];
+}
+
 export type Narrowed = { still_possible_: number[]; complete: number | undefined };
 
 // Which labels still start with what was typed, by index. `complete` is set once exactly one label equals the typed text.

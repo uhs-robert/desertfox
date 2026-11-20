@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clean_letters, DEFAULT_HINT_LETTERS, make_labels, narrow, overlap_groups, rotate } from "../../src/content/hints/labels.ts";
+import { clean_letters, DEFAULT_HINT_LETTERS, item_first, make_labels, narrow, overlap_groups, rotate } from "../../src/content/hints/labels.ts";
 
 const HOME_ROW = [...DEFAULT_HINT_LETTERS];
 
@@ -68,4 +68,14 @@ test("rotate sends the top to the bottom, and leaves short stacks alone", () => 
   assert.deepEqual(rotate(["a", "b"]), ["b", "a"]);
   assert.deepEqual(rotate(["a"]), ["a"]);
   assert.deepEqual(rotate([]), []);
+});
+
+test("item_first puts the item's targets first, also those in a shadow root, and keeps every other order", () => {
+  const [a, c, d] = [0, 1, 2].map(() => ({ getRootNode: () => ({}) }) as unknown as Element) as [Element, Element, Element];
+  const inner_host = {};
+  const in_shadow = { getRootNode: () => ({ host: inner_host }) } as unknown as Element;
+  const item = { contains: (other: unknown) => other === a || other === inner_host } as unknown as Element;
+  const found = [c, a, d, in_shadow].map((element) => ({ element }));
+  assert.deepEqual(item_first(found, item).map((target) => target.element), [a, in_shadow, c, d]);
+  assert.equal(item_first(found, undefined), found);
 });
