@@ -498,7 +498,7 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   await run_case("} and { land below a sticky bar in a div scroller, and { passes the block it just placed", async () => {
     await open_page("article_scroller", "p6_article_scroller", { new_tab: true });
     const below_bar = async (id) => Math.abs((await top_of(id)) - 70) <= 3;
-    await press_keys("2}");
+    await press_keys("}");
     await poll_until("p2 below the bar", async () => await below_bar("p2"));
     await press_keys("}");
     await poll_until("p3 below the bar", async () => await below_bar("p3"));
@@ -508,6 +508,12 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("p1 below the bar", async () => await below_bar("p1"));
     await press_keys("{");
     await poll_until("the notice before the first section", async () => (await toast_text()).includes("No previous section"));
+  });
+
+  await run_case("} reaches a block far below the visible bottom of a scrolling div", async () => {
+    await open_page("article_scroller_deep", "p6_article_scroller_deep", { new_tab: true });
+    await press_keys("2}");
+    await poll_until("far at the top", async () => Math.abs(await top_of("far")) <= 3);
   });
 
   await run_case("} lands below a bar that sticks only once the page has scrolled, from the page top", async () => {

@@ -127,14 +127,16 @@ export type ClipReads<T> = {
 const CANNOT_CLIP_TAGS = new Set(["body", "html"]);
 const CANNOT_CLIP_DISPLAYS = new Set(["inline", "contents"]);
 
-export function scroll_clips_of<T>(element: T, reads: ClipReads<T>): Rect[] {
+// With `skip_scrollable_`, an `auto` or `scroll` ancestor clips nothing: its content is reachable by scrolling it. `hidden` and `clip` still clip, since the user cannot scroll them.
+export function scroll_clips_of<T>(element: T, reads: ClipReads<T>, { skip_scrollable_ = false } = {}): Rect[] {
+  const clips = (overflow: string) => overflow !== "visible" && !(skip_scrollable_ && /^(auto|scroll)$/.test(overflow));
   const ancestors: Ancestor[] = [];
   for (let up = reads.parent_of(element); up !== null; up = reads.parent_of(up)) {
     if (CANNOT_CLIP_TAGS.has(reads.tag_of(up))) continue;
     const style = reads.style_of_(up);
     const can_clip = !CANNOT_CLIP_DISPLAYS.has(style.display);
-    const clips_x_ = can_clip && style.overflow_x_ !== "visible";
-    const clips_y_ = can_clip && style.overflow_y_ !== "visible";
+    const clips_x_ = can_clip && clips(style.overflow_x_);
+    const clips_y_ = can_clip && clips(style.overflow_y_);
     ancestors.push({ position: style.position, clips_x_, clips_y_, box: clips_x_ || clips_y_ ? reads.box_of(up) : { left: 0, top: 0, right: 0, bottom: 0 } });
   }
   return clipping_boxes(reads.style_of_(element).position, ancestors);

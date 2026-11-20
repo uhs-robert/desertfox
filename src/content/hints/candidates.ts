@@ -285,7 +285,7 @@ export const window_of = (element: Element): Window => element.ownerDocument.def
 const parent_of = (element: Element): Element | null => element.parentElement ?? (element.parentNode as ShadowRoot | null)?.host ?? null;
 
 // The visible boxes of the scrolling ancestors of a page element, in the coordinates of its own window.
-export function scroll_clips_in_page(element: Element): Rect[] {
+export function scroll_clips_in_page(element: Element, options?: { skip_scrollable_?: boolean }): Rect[] {
   const win = window_of(element);
   return scroll_clips_of(element, {
     parent_of,
@@ -300,5 +300,5 @@ export function scroll_clips_in_page(element: Element): Rect[] {
       const top = box.top + e.clientTop;
       return { left, top, right: left + e.clientWidth, bottom: top + e.clientHeight };
     },
-  });
+  }, options);
 }
