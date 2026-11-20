@@ -54,6 +54,8 @@ const MAX_BYTES = {
   "item.js": 19 * 1024,
   // 3 KB: the item actions (Space toggles the current item's checkbox, Enter opens its link), with the hint click they share with `hints.js`. The bundle loads on the first press.
   "item_act.js": 3 * 1024,
+  // 4 KB: page.tree (h, l, { and } through the comments of a thread, and the fold keys), with the hint click it shares with `hints.js`. The bundle loads on the first press.
+  "tree.js": 4 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.
@@ -116,6 +118,7 @@ const minified_entries = {
   grab: "src/content/grab/main.ts",
   item: "src/content/item/main.ts",
   item_act: "src/content/item_act/main.ts",
+  tree: "src/content/tree/main.ts",
   next_page: "src/content/next_page/main.ts",
   // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
   media: "src/content/media/main.ts",
