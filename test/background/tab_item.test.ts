@@ -298,13 +298,15 @@ test("steps still waiting when the tab closes never go out", async () => {
   assert.equal(calls(), 1);
 });
 
-const commit_as = (transitionType: string, transitionQualifiers: string[] = []) => ({ transitionType, transitionQualifiers });
+// The page the load leaves, and a commit on the same host unless it names another address.
+const FROM = "https://a.test/list";
+const commit_as = (transitionType: string, transitionQualifiers: string[] = [], url = "https://a.test/next") => ({ transitionType, transitionQualifiers, url });
 
 // The hold is on and the top frame starts a load: the tab item mode resumes on the new page only when the commit says link or form_submit.
-async function load_in_hold(transition: { transitionType: string; transitionQualifiers: string[] }) {
+async function load_in_hold(transition: ReturnType<typeof commit_as>) {
   const made = make();
   await made.tab_item.reported(4, 0, "item");
-  await made.tab_item.navigated(4, { status: "loading" });
+  await made.tab_item.navigated(4, { status: "loading" }, FROM);
   await made.tab_item.committed(4, 0, transition);
   return made;
 }
@@ -327,7 +329,7 @@ test("a reload, back or forward and a typed address end item mode for good", asy
 
 test("a load with no hold writes no mark", async () => {
   const { tab_item } = make();
-  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.navigated(4, { status: "loading" }, FROM);
   await tab_item.committed(4, 0, commit_as("link"));
   assert.equal(await tab_item.take_resume(4), false);
 });
@@ -335,7 +337,7 @@ test("a load with no hold writes no mark", async () => {
 test("the completed load spends the mark, so a page with no list drops it and the next link load does not resume", async () => {
   const { tab_item } = await load_in_hold(commit_as("link"));
   assert.equal(await tab_item.take_resume(4), true);
-  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.navigated(4, { status: "loading" }, FROM);
   await tab_item.committed(4, 0, commit_as("link"));
   assert.equal(await tab_item.take_resume(4), false);
 });
@@ -343,13 +345,13 @@ test("the completed load spends the mark, so a page with no list drops it and th
 test("a load that never commits leaves no mark: the completion drops it, and so does a late commit", async () => {
   const { tab_item, clock } = make();
   await tab_item.reported(4, 0, "item");
-  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.navigated(4, { status: "loading" }, FROM);
   assert.equal(await tab_item.take_resume(4), false, "a load cancelled before its commit completes the old page");
   await tab_item.committed(4, 0, commit_as("link"));
   assert.equal(await tab_item.take_resume(4), false);
 
   await tab_item.reported(4, 0, "item");
-  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.navigated(4, { status: "loading" }, FROM);
   clock.ms += RESUME_COMMIT_LIMIT_MS + 1;
   await tab_item.committed(4, 0, commit_as("link"));
   assert.equal(await tab_item.take_resume(4), false, "a commit long after the load started is another load");
@@ -365,7 +367,7 @@ test("closing the tab clears the mark", async () => {
 test("a child frame's commit leaves the mark alone", async () => {
   const { tab_item } = make();
   await tab_item.reported(4, 0, "item");
-  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.navigated(4, { status: "loading" }, FROM);
   await tab_item.committed(4, 7, commit_as("link"));
   await tab_item.committed(4, 0, commit_as("link"));
   await tab_item.committed(4, 7, commit_as("reload"));
@@ -377,4 +379,77 @@ test("marks are per tab", async () => {
   const { tab_item } = await load_in_hold(commit_as("link"));
   assert.equal(await tab_item.take_resume(5), false);
   assert.equal(await tab_item.take_resume(4), true);
+});
+
+test("a link to another host ends item mode, and a subdomain counts as another host", async () => {
+  for (const url of ["https://b.test/next", "https://www.a.test/next", "http://a.test:8080/next"]) {
+    const { tab_item } = await load_in_hold(commit_as("link", [], url));
+    assert.equal(await tab_item.take_resume(4), false, url);
+  }
+  const { tab_item } = await load_in_hold(commit_as("link", [], "http://a.test/next"));
+  assert.equal(await tab_item.take_resume(4), true, "the scheme does not change the host");
+});
+
+test("a load whose old address is unknown ends item mode", async () => {
+  const { tab_item } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" });
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("a load DesertFox starts itself ends the hold first, so the new page does not resume", async () => {
+  const { tab_item, steps, data } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.reported(4, 7, "item", true);
+  steps.length = 0;
+  await tab_item.end_for_own_load(4);
+  assert.deepEqual(steps.sort(), ["4:off:0", "4:off:7"]);
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+  assert.deepEqual(data, {});
+});
+
+test("a load DesertFox starts drops a mark an earlier load left", async () => {
+  const { tab_item } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  await tab_item.end_for_own_load(4);
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("a page that redirects before it completes keeps the mark through the next load", async () => {
+  const { tab_item } = await load_in_hold(commit_as("link"));
+  await tab_item.navigated(4, { status: "loading" }, "https://a.test/next");
+  await tab_item.committed(4, 0, commit_as("link", ["client_redirect"], "https://a.test/landed"));
+  assert.equal(await tab_item.take_resume(4), true);
+});
+
+test("a load with no hold drops a mark whose load never committed", async () => {
+  const { tab_item } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("an address change with a url writes no mark", async () => {
+  const { tab_item } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading", url: "https://a.test/replaced" }, FROM);
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), false);
+});
+
+test("a commit that arrives before its load start resumes nothing, and leaves nothing behind", async () => {
+  const { tab_item, data } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.committed(4, 0, commit_as("link"));
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  assert.equal(await tab_item.take_resume(4), false);
+  assert.deepEqual(data, {});
 });

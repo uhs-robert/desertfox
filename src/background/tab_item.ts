@@ -22,8 +22,8 @@ export type TabItemDeps = {
 const key_of = (tab_id: number): string => TAB_ITEM_STORAGE_PREFIX + tab_id;
 const resume_key_of = (tab_id: number): string => ITEM_RESUME_STORAGE_PREFIX + tab_id;
 
-// A load of the tab that began in item mode. `kept` says its top frame committed as a link or a form submit, so the new page starts item mode again when it completes.
-type ResumeMark = { at: number; kept?: true };
+// A load of the tab that began in item mode, from the page at `from`. `kept` says its top frame committed as a link or a form submit on the same host, so the new page starts item mode again when it completes.
+type ResumeMark = { at: number; from?: string; kept?: true };
 
 // A load that begins in the mode commits well within this time. A commit later than that belongs to another load, after one that never committed (a download, a 204, a cancelled load).
 export const RESUME_COMMIT_LIMIT_MS = 30_000;
@@ -31,9 +31,20 @@ export const RESUME_COMMIT_LIMIT_MS = 30_000;
 // The transitions that carry item mode to the new page: a link the user followed in the page, by a key or the site's own code, and a form. Back and forward arrive as links (measured), and an address typed in the bar can, so their qualifiers rule them out.
 const RESUMING_TRANSITIONS: readonly string[] = ["link", "form_submit"];
 const ENDING_QUALIFIERS: readonly string[] = ["forward_back", "from_address_bar"];
-export type TopCommit = { transitionType?: string | undefined; transitionQualifiers?: readonly string[] | undefined };
+export type TopCommit = { transitionType?: string | undefined; transitionQualifiers?: readonly string[] | undefined; url?: string | undefined };
 const carries_the_mode = ({ transitionType, transitionQualifiers }: TopCommit): boolean =>
   transitionType !== undefined && RESUMING_TRANSITIONS.includes(transitionType) && !(transitionQualifiers ?? []).some((qualifier) => ENDING_QUALIFIERS.includes(qualifier));
+
+// The host with its port. No helper in the code knows the registrable domain (the public suffix list), so a subdomain counts as another site.
+const host_of = (address: string | undefined): string | undefined => {
+  try {
+    return address === undefined ? undefined : new URL(address).host;
+  } catch {
+    return undefined;
+  }
+};
+// A link to another site ends the mode: that site's lists are not the ones the user was walking.
+const stays_on_site = (from: string | undefined, to: string | undefined): boolean => host_of(from) !== undefined && host_of(from) === host_of(to);
 
 // A hint or the command line opened from the mode returns to it, so a frame that reports one of these has not left.
 const KEEPS_THE_MODE: readonly Mode[] = ["item", "hint", "cmdline"];
@@ -52,7 +63,7 @@ export function create_tab_item(deps: TabItemDeps) {
   const judge_resume = async (tab_id: number, top_commit: TopCommit): Promise<void> => {
     const mark = await read_resume(tab_id);
     if (!mark) return;
-    if (carries_the_mode(top_commit) && now() - mark.at <= RESUME_COMMIT_LIMIT_MS) await deps.storage.set({ [resume_key_of(tab_id)]: { at: mark.at, kept: true } satisfies ResumeMark });
+    if (carries_the_mode(top_commit) && stays_on_site(mark.from, top_commit.url) && now() - mark.at <= RESUME_COMMIT_LIMIT_MS) await deps.storage.set({ [resume_key_of(tab_id)]: { ...mark, kept: true } satisfies ResumeMark });
     else await deps.storage.remove(resume_key_of(tab_id));
   };
   // The steps of a tab go out one at a time, in order (`tab_steps.ts`), in a queue kept apart from the media mode's.
@@ -106,16 +117,28 @@ export function create_tab_item(deps: TabItemDeps) {
         await deps.storage.set({ [key_of(tab_id)]: { ...hold, rejoined: [...(hold.rejoined ?? []), frame_id] } satisfies ItemHold });
       }),
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps it.
-    // The hold leaves a resume mark, which the top frame's commit keeps or drops (`committed`). A load with no hold leaves an older mark alone: its commit judges that mark, and the age limit drops it.
-    navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }): Promise<void> =>
+    // The hold leaves a resume mark from `page_address`, the address the load leaves, which the top frame's commit keeps or drops (`committed`).
+    navigated: (tab_id: number, change: { status?: string | undefined; url?: string | undefined }, page_address?: string): Promise<void> =>
       in_turn(async () => {
         if (change.status !== "loading" || change.url !== undefined) return;
         // The frames of the old page are gone, so the steps still waiting for them are dropped.
         clear_steps(tab_id);
         const hold = await read(tab_id);
-        if (!hold) return;
-        await deps.storage.set({ [resume_key_of(tab_id)]: { at: now() } satisfies ResumeMark });
-        await end(tab_id, hold, undefined, step_old_page);
+        if (hold) {
+          await deps.storage.set({ [resume_key_of(tab_id)]: { at: now(), ...(page_address !== undefined && { from: page_address }) } satisfies ResumeMark });
+          await end(tab_id, hold, undefined, step_old_page);
+          return;
+        }
+        // A kept mark goes on through a page that redirects before it completes, and that load's commit judges it again. A mark whose load never committed belongs to no load now.
+        const mark = await read_resume(tab_id);
+        if (mark && !mark.kept) await deps.storage.remove(resume_key_of(tab_id));
+      }),
+    // A load that DesertFox itself starts in the tab (`:open`, a quickmark, a mark or jump to another page) is an address the user typed, not a link, but Firefox reports it as a link. So the mode ends before the load.
+    end_for_own_load: (tab_id: number): Promise<void> =>
+      in_turn(async () => {
+        await deps.storage.remove(resume_key_of(tab_id));
+        const hold = await read(tab_id);
+        if (hold) await end(tab_id, hold);
       }),
     // Called when the tab's load completes: whether the new page starts item mode again. The mark goes either way, so a page with no list, or a load that never committed, carries nothing to the next one.
     take_resume: (tab_id: number): Promise<boolean> =>
