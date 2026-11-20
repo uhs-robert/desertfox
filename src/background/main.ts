@@ -54,6 +54,7 @@ import { reply_after_hold } from "./hold_on_arrival.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { wire_before_own_load } from "../commands/open_target.ts";
 import { create_media_quality, rule_for_report } from "./media_quality.ts";
 import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_reports, quality_rows } from "./quality_levels.ts";
 import { tab_media } from "../commands/media.ts";
@@ -117,6 +118,7 @@ const tab_item = create_tab_item({
   storage: browser.storage.session,
   send_step: (tab_id, on, frame_id, from) => send_to_tab(tab_id, { type: "media", on, from, item: true }, frame_id),
 });
+wire_before_own_load(tab_item.end_for_own_load);
 
 // Taken before the config loads, so it holds the built-in commands only, which are the ones the help page has cards for.
 const built_in_ids = new Set(registry.list().map((command) => command.id));
@@ -156,12 +158,17 @@ const macro_replay = create_macro_replay({
 });
 wire_macro_replay(macro_replay);
 const global_mark_tabs = async () => (await browser.tabs.query({})).flatMap((tab) => (tab.id === undefined || tab.windowId === undefined || tab.url === undefined ? [] : [{ id: tab.id, window_id: tab.windowId, index: tab.index, url: tab.url, incognito: tab.incognito, last_accessed: tab.lastAccessed ?? 0, discarded: tab.discarded === true }]));
+// A load that DesertFox starts in a tab ends item mode first (`tab_item.end_for_own_load`).
+const own_load = async (tab_id: number, url: string) => {
+  await tab_item.end_for_own_load(tab_id);
+  return browser.tabs.update(tab_id, { url });
+};
 const global_mark_jump = create_global_mark_jump({
   store: browser_mark_store,
   list_tabs: global_mark_tabs,
   activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
-  navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
+  navigate: own_load,
   watch: watch_tab,
   push_jump: (tab_id, key, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key, arrival }, bundle: "page" }] }, 0),
   record_jump: (window_id, is_private, entry) => browser_jump_store.push(window_id, is_private, entry),
@@ -173,7 +180,7 @@ const jump_step = create_jump_step({
   list_tabs: global_mark_tabs,
   activate_tab: (tab_id) => browser.tabs.update(tab_id, { active: true }),
   focus_window: (window_id) => browser.windows.update(window_id, { focused: true }),
-  navigate: (tab_id, url) => browser.tabs.update(tab_id, { url }),
+  navigate: own_load,
   watch: watch_tab,
   push_jump: (tab_id, steps, arrival) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "page.jump", args: { direction: steps < 0 ? "older" : "newer", steps: Math.abs(steps), ...(arrival && { arrival }) }, bundle: "page" }] }, 0),
   show_refusal: (tab_id, message) => router_deps.show_refusal(tab_id, { id: "page.jump", message }, 0),
@@ -219,7 +226,7 @@ const frame_cue = create_frame_cue({
 });
 // A frame that navigates is a new document: the line opened for the old one must not aim at it.
 browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void cmdline.forget_target_frame(tabId, frameId).catch(warn_and_go("cmdline.forget_target_frame")));
-browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => void tab_item.committed(tabId, frameId).catch(warn_and_go("tab_item.committed")));
+browser.webNavigation.onCommitted.addListener(({ tabId, frameId, transitionType, transitionQualifiers, url }) => void tab_item.committed(tabId, frameId, { transitionType, transitionQualifiers, url }).catch(warn_and_go("tab_item.committed")));
 
 const previous_tabs = shared_previous_tabs();
 const last_used_tabs = shared_last_used_tabs();
@@ -611,14 +618,16 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
 
-const start_item_mode = (tab_id: number, address: string | undefined) =>
-  ask_item_start({
+const start_item_mode = async (tab_id: number, address: string | undefined) => {
+  const resume = await tab_item.take_resume(tab_id);
+  await ask_item_start({
     // After the document read, which comes first so that a reload during these reads cannot hand the start to the new document.
-    start_for: async (at) => ((await read_disabled()) ? undefined : item_start_for(browser.storage.local, at)),
+    start_for: async (at) => ((await read_disabled()) ? undefined : item_start_for(browser.storage.local, at, { resume })),
     top_document: (id) => refused_as(browser.webNavigation.getFrame({ tabId: id, frameId: 0 }) as Promise<{ url?: string; documentId?: string } | null>, null).then((frame) => frame ?? undefined),
     // The bundled types do not list `documentId`.
     send_start: (id, document_id, start) => best_effort(browser.tabs.sendMessage(id, { type: "run_in_content", invocations: [{ id: "item.start", args: start, bundle: "item" }] } satisfies BackgroundToContent, { frameId: 0, documentId: document_id } as { frameId: number })),
   }, tab_id, address);
+};
 
 const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.local), redraw_icon_png);
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
@@ -626,7 +635,8 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   if (change.status === "complete" || change.favIconUrl !== undefined) void favicon_saver.on_tab({ url: tab.url, icon: tab.favIconUrl, incognito: tab.incognito }).catch(warn_and_go("favicon_saver.on_tab"));
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
   if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(warn_and_go("tab_media.navigated"));
-  if (change.status === "loading") void tab_item.navigated(tab_id, change).catch(warn_and_go("tab_item.navigated"));
+  // At the bare `loading` the tab still shows the address it leaves.
+  if (change.status === "loading") void tab_item.navigated(tab_id, change, tab.url).catch(warn_and_go("tab_item.navigated"));
   // The top frame decides whether the page holds a list. Item mode then spreads to the other frames from its report.
   if (change.status === "complete") void start_item_mode(tab_id, tab.url).catch(warn_and_go("start_item_mode"));
   // A new tab's first load reports only `status`, with the address already on the tab.

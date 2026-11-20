@@ -114,9 +114,15 @@ async function new_window_context(ctx: CommandContext, container_store_id: strin
   return {};
 }
 
+// `main.ts` wires the background half: item mode ends before a load in the tab (`tab_item.end_for_own_load`).
+let before_own_load: (tab_id: number) => Promise<void> = async () => {};
+export const wire_before_own_load = (run: (tab_id: number) => Promise<void>) => void (before_own_load = run);
+
 async function open_in_unchecked(ctx: CommandContext, url: string, where: Where, container?: string): Promise<number | undefined> {
   if (where === "here") {
-    await browser.tabs.update(require_tab_id(ctx), { url });
+    const tab_id = require_tab_id(ctx);
+    await before_own_load(tab_id);
+    await browser.tabs.update(tab_id, { url });
     return undefined;
   }
   const cookie_store_id = await resolve_container_store_id(container);

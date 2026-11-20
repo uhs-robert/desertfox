@@ -12,6 +12,8 @@ Press `I` in item mode to pick another list. Press `Escape` to go back to normal
 
 On some sites item mode starts by itself when the page loads. See [Pages that start in item mode](#pages-that-start-in-item-mode).
 
+Item mode stays on when you follow a link or send a form in the same tab to the same site (`Enter` on an item, `]]`, `f`) and the new page has a list. A link to another site, a reload, Back, Forward, `:open` or an address you type ends it, and so does a site rule with `item_navigator = false`.
+
 ## Move
 
 | Key | What it does |

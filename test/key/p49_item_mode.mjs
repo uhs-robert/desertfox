@@ -1,10 +1,10 @@
-// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a load of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
+// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a reload of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["keys", "tabs", "bundles"];
 
-export async function run_cases({ run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ events, wait_event, run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
@@ -174,7 +174,8 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_focus("c0");
   });
 
-  await run_case("a load of the page ends item mode, and a pushState keeps it", async () => {
+  // A link the page follows itself keeps item mode on the new page (p49_item_start), so a reload stands for the load here.
+  await run_case("a reload of the page ends item mode, and a pushState keeps it", async () => {
     await open_list("im_nav");
     await run_line("mode item");
     await expect_badge("ITEM");
@@ -183,8 +184,11 @@ export async function run_cases({ run_line, config_dir, config_copy, load_config
     await expect_badge("ITEM");
     await press_keys("j");
     await expect_focus("c0");
-    await in_active_tab(`location.href = "/item_list?id=im_nav_loaded"; 0`);
-    await poll_until("the new page to load", async () => (await in_active_tab("location.search")) === "?id=im_nav_loaded" && (await in_active_tab("document.readyState")) === "complete");
+    // The page reads its id from the address, which the pushState changed. The tab refuses scripts while it reloads, so the poll starts once the new document has read its keys.
+    const reload_mark = events.length;
+    await in_active_tab(`location.reload(); 0`);
+    await wait_event(reload_mark, (event) => event.type === "tree_read" && event.page_id === "im_nav_pushed", "content script ready after the reload", 6000);
+    await poll_until("the reload to complete", async () => (await in_active_tab("document.readyState")) === "complete");
     await expect_badge("NORMAL");
     await sleep(500);
     await press_keys("j");
