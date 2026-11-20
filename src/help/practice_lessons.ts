@@ -112,12 +112,12 @@ const LESSONS = [
     title: "8. Walk a list",
     goal: "Move through a list of results, posts or files one item at a time.",
     steps: [
-      "Press [I]. The page marks each list it finds with a letter. Type the letter on the first item of the list below. The badge says ITEM and a box surrounds that item.",
-      "Press [j] to move to the next item, and [k] to move back. Walk down to \"The fourth sample item\".",
-      "Press Enter. It opens the item's link.",
-      "Press {escape}. The badge returns to NORMAL, and [j] scrolls the page again.",
+      "Press {item_pick}. The page marks each list it finds with a letter. Type the letter on the first item of the list below. The badge says ITEM and a box surrounds that item.",
+      "Press {item_down} to move to the next item, and {item_up} to move back. Walk down to \"The fourth sample item\".",
+      "Press {item_open}. It opens the item's link.",
+      "Press {escape}. The badge returns to NORMAL, and {down} scrolls the page again.",
     ],
-    notes: ["[gg] goes to the first item and [G] to the last. A number before [j] skips that many items."],
+    notes: ["{item_first} goes to the first item and {item_last} to the last. A number before {item_down} skips that many items."],
     checks: { picked: "picked the list", walked: "walked to the fourth item", opened: "opened an item", left: "left item mode" },
   },
   {

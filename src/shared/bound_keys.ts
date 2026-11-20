@@ -10,7 +10,7 @@ export type Args = Record<string, unknown>;
 
 // `args` is the canonical form the command line fallback prints. A key fits when its args, with the registry defaults filled in, equal the defaulted `args`.
 // `test` replaces that equality where a step accepts more than one form. It gets both defaulted sides.
-export type Binding = { mode: KeymapMode; id: string; args: Args; test?: (args: Args, expected: Args) => boolean; prefer?: string };
+export type Binding = { mode: KeymapMode; id: string; args: Args; test?: (args: Args, expected: Args) => boolean; prefer?: string; first_step?: boolean };
 
 // A user binding that spells out a default (`direction = "forward"`) and one that leaves it out mean the same, so both sides read the defaults.
 function with_defaults(commands: CommandMeta[], id: string, args: Args | undefined): Args {
@@ -26,7 +26,7 @@ function with_defaults(commands: CommandMeta[], id: string, args: Args | undefin
 // A key that runs several steps does more than the sentence says, so only a single step can fit.
 function fits(commands: CommandMeta[], binding: Binding, steps: { invocation: { id: string; args?: Args } }[]): boolean {
   const [step] = steps;
-  if (steps.length !== 1 || step!.invocation.id !== binding.id) return false;
+  if ((steps.length !== 1 && !binding.first_step) || step!.invocation.id !== binding.id) return false;
   const args = with_defaults(commands, binding.id, step!.invocation.args);
   const expected = with_defaults(commands, binding.id, binding.args);
   return binding.test ? binding.test(args, expected) : same_args(args, expected);
@@ -56,6 +56,8 @@ export function key_paths(compiled: CompiledKeymap | undefined, commands: Comman
 
 // Any count of the right sign scrolls the way the sentence says.
 const scrolls = (positive: boolean): NonNullable<Binding["test"]> => (args, expected) => typeof args.count === "number" && (positive ? args.count > 0 : args.count < 0) && same_args(args, expected, "count");
+// An item key also sets `hover`, which the sentence does not name.
+const item_move = (direction: string): Binding => ({ mode: "item", id: "page.item", args: { direction }, test: (args, expected) => same_args(args, expected, "hover") });
 const caret_move = (unit: string, back: boolean): Binding => ({ mode: "caret", id: "caret.move", args: { unit, ...(back ? { direction: "back" } : {}) } });
 
 // Its own constant, so the new tab page can look up this one key without carrying the table.
@@ -80,6 +82,13 @@ export const BINDINGS = {
   // Looked up in caret mode, because the sentence follows entering caret mode and `v` there starts visual mode.
   visual: { mode: "caret", id: "mode.set", args: { mode: "visual" } },
   visual_line: { mode: "caret", id: "mode.set", args: { mode: "visual_line" } },
+  // `I` picks a list and then starts the walk, so the pick is the first of its steps.
+  item_pick: { mode: "normal", id: "hint.run", args: { filter: "lists" }, first_step: true },
+  item_down: /* @__PURE__ */ item_move("down"),
+  item_up: /* @__PURE__ */ item_move("up"),
+  item_first: /* @__PURE__ */ item_move("first"),
+  item_last: /* @__PURE__ */ item_move("last"),
+  item_open: { mode: "item", id: "page.item_action", args: { action: "open" } },
   caret_left: /* @__PURE__ */ caret_move("char", true),
   caret_right: /* @__PURE__ */ caret_move("char", false),
   caret_down: /* @__PURE__ */ caret_move("line", false),
