@@ -39,7 +39,7 @@ const with_times_of = (move: LeafStep, arrow: LeafStep): LeafStep => {
   return typeof times === "number" ? { ...arrow, invocation: { ...arrow.invocation, args: { ...arrow.invocation.args, times } } } : arrow;
 };
 
-// A move becomes "focus the current item, then send the site's arrow", so the site moves its own selection. The end keys keep their scroll and follow, then come back to the end item with an arrow pair. Up then Down at the last item: a Down on the last row can make the site load more rows and leave its selection on a new one. The `current` step first puts the focus back on the end item when the site redrew it during the follow, or the arrows would go to the body.
+// A move becomes "focus the current item, then send the site's arrow", so the site moves its own selection. The end keys keep their scroll and follow, then come back to the end item with an arrow pair (only gg and G send it, never I). Up then Down at the last item: a Down on the last row can make the site load more rows and leave its selection on a new one. The `current` step first puts the focus back on the end item when the site redrew it during the follow, or the arrows would go to the body.
 const steps_after_rewrite = (step: LeafStep, keys: ItemSelectKeys): LeafStep[] => {
   // The arrows cannot walk a list the row does not name, so its picker offers the row's list alone.
   if (step.invocation.id === "hint.run" && step.invocation.args?.["items"]) return [{ ...step, invocation: { ...step.invocation, args: { ...step.invocation.args, row_only: true } } }];
@@ -50,8 +50,7 @@ const steps_after_rewrite = (step: LeafStep, keys: ItemSelectKeys): LeafStep[] =
     const pair = (direction as End) === "last" ? [keys.up, keys.down] : [keys.down, keys.up];
     return [step, current_step(step), ...pair.map(ignoring_count)];
   }
-  // `current` is the picker's landing, and a section jump lands on an item the same way. They select through a Down and Up, as the first end does. A jump that lands nowhere answers failed, which stops the sequence before the arrows.
-  if (direction === "current" || direction === "next_section" || direction === "prev_section") return [step, ...[keys.down, keys.up].map(ignoring_count)];
+  // `current` (the picker's landing) and the section jumps send no arrows: Drive drops an arrow that follows another within about 100 ms, and an unpaired landing keeps the file the focus is on selected.
   return [step];
 };
 

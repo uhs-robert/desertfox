@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { content_handlers } from "../src/content/handler_map.ts";
 import { run_in_order } from "../src/content/run_content.ts";
 
-// A section jump that lands nowhere answers a failed outcome, and the arrow pair that `item_select` adds behind it must not run.
+// A section jump that lands nowhere answers a failed outcome, and any step behind it must not run.
 test("a step that answers failed stops the steps behind it", async () => {
   const ran: string[] = [];
   const handlers = content_handlers as Record<string, unknown>;

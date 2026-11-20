@@ -45,7 +45,7 @@ function setting_notes(row: SiteRuleRow): string[] {
   return [
     row.focus_on_load ? `When the page loads, the cursor goes to the first match of ${code(row.focus_on_load)}, in place of a text box.` : "",
     row.escape_to_page ? "Escape goes to the page, so Sheets cancels a cell edit. In a plain text box Escape does nothing and insert mode stays. Insert mode entered with the insert key while no text box has focus still ends on Escape." : "",
-    row.item_select === "arrows" ? "Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. gg and G go to the end and then send an arrow pair that comes back to it, so Enter opens that file. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected." : "",
+    row.item_select === "arrows" ? "Item moves select the file with Drive's own arrow keys: j, k, h and l send the arrow. I and the section jumps send no arrow and keep the selected file. gg and G go to the end and then send an arrow pair that comes back to it, so Enter opens that file. In a folder with one file, or one row of tiles, no arrow can move and the file stays unselected." : "",
     row.editable_remove?.length ? `${row.editable_remove.map((selector) => code(selector)).join(", ")} does not count as a text box${row.editable_remove_unsized ? " while it has no width" : ""}.` : "",
   ].filter(Boolean);
 }
