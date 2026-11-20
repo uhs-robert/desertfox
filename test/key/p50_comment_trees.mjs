@@ -141,6 +141,15 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("k5");
   });
 
+  // A row's own } and { run their guarded step, and with no comment on the page the guard fails and the section jump of item mode runs in its place.
+  await run_case("on a page with no comment, } and { fall through to the section jump", async () => {
+    await open_page("hn_front", "hn_front_fall", { new_tab: true });
+    await run_line("mode item");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+    await press_keys("}");
+    await expect_toast("No sections in this list");
+  });
+
   await run_case("on a page with no comment, h and l keep the sideways scroll", async () => {
     await open_page("hn_front", "hn_front", { new_tab: true });
     await run_line("mode item");
