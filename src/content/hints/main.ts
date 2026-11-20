@@ -57,7 +57,7 @@ type Session = {
   // Settles the promise `hint.run` returned. The first call wins, so each path that leaves hint mode must call it before `set_mode_`, because the mode change ends the session as cancelled.
   finish: (outcome: Outcome | Promise<Outcome>) => void;
   action: HintAction;
-  // The end of the leaf that started an `enter_item` pick. A key typed behind the pick waits for it, so it moves on from the landing the leaf's later steps make (Drive's Down and Up) and not before it. Read at the start, while that leaf is the one running.
+  // The end of the leaf that started an `enter_item` pick. A key typed behind the pick waits for it, so it moves on from the landing the leaf's later steps make and not before it. Read at the start, while that leaf is the one running.
   leaf_end_?: Promise<void> | undefined;
   // Keys typed while the elements are still being found.
   waiting_tokens_: string[];

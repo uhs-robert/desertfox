@@ -835,11 +835,11 @@ test("a thread row's own } and { keep their guard, and a failed guard falls thro
   assert.deepEqual([plain.steps[0]?.invocation.args?.["direction"], plain.otherwise], ["next_section", undefined]);
 });
 
-test("with item_select arrows a section jump of a row selects through a Down and Up, as the current landing does", async () => {
+test("with item_select arrows a section jump of a row sends no arrows, as the current landing does", async () => {
   const row = { site: "https://example.org/*", keymap: { item: { j: { id: "page.item", args: { selector: "li.hit", direction: "down" } }, "}": { id: "page.item", args: { selector: "li.hit", section: "h2", direction: "next_section" } } } } };
   const compiled = with_defaults({ item_select: "arrows", site_rules: [row] });
   const jump = (await ask(compiled, "https://example.org/"))!.keymap.modes.item!.children["}"] as TreeLeaf;
-  assert.deepEqual(jump.steps.map((step) => [step.invocation.args?.["direction"] ?? step.invocation.args?.["key"], step.count_rule === "ignore"]).slice(1), [["ArrowDown", true], ["ArrowUp", true]]);
+  assert.equal(jump.steps.length, 1);
   assert.equal(jump.steps[0]?.invocation.args?.["section"], "h2");
 });
 
@@ -870,25 +870,15 @@ test("which-key and the page reply read the same rewritten item tree", async () 
   assert.equal(await has_j("https://example.test/"), true);
 });
 
-test("normal-mode I on Drive lands on a file and selects it, in the page reply and in which-key", async () => {
+test("normal-mode I on Drive lands on a file with no arrow keys, in the page reply and in which-key", async () => {
   const compiled = with_defaults({});
   const drive = "https://drive.google.com/drive/my-drive";
   const normal = (await ask(compiled, drive))!.keymap.modes.normal!;
   const pick = normal.children["I"] as TreeLeaf;
-  assert.deepEqual(pick.steps.map((step) => step.invocation.id), ["hint.run", "page.item", "page.send_key", "page.send_key"], "the landing sends Down and Up, as the item tree does");
+  assert.deepEqual(pick.steps.map((step) => step.invocation.id), ["hint.run", "page.item"], "the landing sends no arrows");
   assert.deepEqual(page_mode_trees_for(compiled, site_columns_for(compiled, [drive]), drive).normal, normal);
   // Where the site selects with its own keys the rewrite is off, and a page of another site keeps the plain landing.
   const elsewhere = (await ask(compiled, "https://www.google.com/search?q=a"))!.keymap.modes.normal!.children["I"] as TreeLeaf;
   assert.deepEqual(elsewhere.steps.map((step) => step.invocation.id), ["hint.run", "page.item"]);
 });
 
-test("which-key reads the rewritten normal tree on a Drive address and the plain one elsewhere", async () => {
-  const compiled = with_defaults({});
-  const drive = "https://drive.google.com/drive/my-drive";
-  const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
-  // The rewritten I holds `page.send_key` steps, which this page cannot run, so the panel drops the row exactly where the rewrite applies.
-  const availability = { page: { url: drive }, requirement_of: (invocation: { id: string }) => (invocation.id === "page.send_key" ? ["no_such_slot"] : []) } as never;
-  const has_i = async (address: string) => (await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: [] }, { availability, addresses: [address] })).rows.some((row) => row.keys === "I");
-  assert.equal(await has_i(drive), false);
-  assert.equal(await has_i("https://example.test/"), true);
-});

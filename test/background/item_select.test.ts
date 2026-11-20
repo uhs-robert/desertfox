@@ -50,8 +50,8 @@ test("the ends keep their scroll and jump, then come back to the end item with a
   }
 });
 
-test("current keeps itself and gets the Down and Up pair", () => {
-  assert.deepEqual(shape(rewritten(item_step("current"))), ["item:current", "ArrowDown", "ArrowUp"]);
+test("current and the section jumps keep themselves and send no arrows", () => {
+  for (const direction of ["current", "next_section", "prev_section"]) assert.deepEqual(shape(rewritten(item_step(direction))), [`item:${direction}`], direction);
 });
 
 test("a step with no selector and any other command stay as they are", () => {

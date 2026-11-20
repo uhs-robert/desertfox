@@ -85,8 +85,12 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
         if (event.key === "Enter") { if (selected >= 0) location.hash = "opened-" + prefix() + selected; }
-        else if (steps[event.key]) { panel.dataset.arrows = String(Number(panel.dataset.arrows ?? 0) + 1); panel.dataset.order = (panel.dataset.order ?? "") + event.key.slice(5) + " "; select(index + steps[event.key]()); }
-        else return;
+        else if (steps[event.key]) {
+          // Real Drive drops an arrow that comes within about 100 ms of the previous one.
+          if (performance.now() - (window.last_arrow ?? -1000) < 100) { window.last_arrow = performance.now(); event.preventDefault(); return; }
+          window.last_arrow = performance.now();
+          panel.dataset.arrows = String(Number(panel.dataset.arrows ?? 0) + 1); panel.dataset.order = (panel.dataset.order ?? "") + event.key.slice(5) + " "; select(index + steps[event.key]());
+        } else return;
         event.preventDefault();
       });
       draw();
@@ -116,20 +120,21 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await selected_file()) === 1, `j and k selected ${await selected_file()}`);
   });
 
-  await run_case("list view: I from normal mode lands on a file, selects it with Drive's own arrows and starts item mode", async () => {
+  await run_case("list view: I from normal mode lands on a file with no arrow key and starts item mode", async () => {
     await open_drive("list_pick", "list");
     await press_keys("-k", "Escape");
     await poll_until("normal mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "NORMAL");
     await press_keys("I");
     await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
-    await poll_until("a selected file", async () => (await selected_file()) >= 0);
-    expect((await arrows_sent()) > 0, "the landing sent no arrow key");
+    await expect_focus("f0");
+    await sleep(300);
+    expect((await arrows_sent()) === 0, `the landing sent ${await arrows_sent()} arrow keys`);
     await press_keys("j");
     await poll_until("the next file selected", async () => (await selected_file()) >= 1);
   });
 
   // A list of titled cards beside the files, which the finder reads as a list of its own. Drive's arrows cannot walk it, so the picker never offers it.
-  await run_case("list view: I inside item mode still offers the files alone and selects one at once, though another list is on the page", async () => {
+  await run_case("list view: I inside item mode still offers the files alone and lands on one at once, though another list is on the page", async () => {
     await open_drive("list_decoy", "list");
     await in_active_tab(`(() => {
       const decoy = document.createElement("div");
@@ -141,11 +146,25 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
       return true;
     })()`);
     await press_keys("I");
-    await poll_until("a selected file", async () => (await selected_file()) >= 0);
+    await expect_focus("f0");
     const labels = await in_active_tab(`[...document.documentElement.children].reduce((sum, child) => sum + (child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint").length ?? 0), 0)`);
     expect(labels === 0, `${labels} labels showed, the picker offered more than the files`);
     expect((await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM", "item mode ended");
   });
+
+  for (const view of ["list", "grid"]) {
+    await run_case(`${view} view: I after j, Escape keeps the third file selected`, async () => {
+      await open_drive(`${view}_keep`, view);
+      for (let count = 0; count < (view === "grid" ? 1 : 3); count++) { await press_keys("j"); await sleep(300); }
+      await poll_until("file 3 selected", async () => (await selected_file()) === 3);
+      await press_keys("-k", "Escape");
+      await poll_until("normal mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "NORMAL");
+      await press_keys("I");
+      await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+      await sleep(600);
+      expect((await selected_file()) === 3, `I left file ${await selected_file()} selected`);
+    });
+  }
 
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`);
   const open_drive_in_normal_mode = async (id, view = "list") => {
@@ -154,14 +173,14 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("normal mode", async () => (await badge()) === "NORMAL");
   };
 
-  // The leaf of I goes on with Down and Up after the pick. A j typed behind the pick waits for the whole leaf, so it moves from the file the select landed on: three arrows in all (two to select, one for j).
+  // The leaf of I sends no arrow. A j typed behind the pick waits for the pick, so it moves from the file the pick landed on: one arrow in all.
   await run_case("list view: I then j typed together selects the second file, with the arrows in order", async () => {
     await open_drive_in_normal_mode("list_pick_fast");
     await press_keys("I", "j");
-    await poll_until("j to select the second file", async () => (await selected_file()) === 1 && (await arrows_sent()) === 3);
+    await poll_until("j to select the second file", async () => (await selected_file()) === 1 && (await arrows_sent()) === 1);
     await sleep(500);
-    expect((await selected_file()) === 1 && (await arrows_sent()) === 3, `the select ended on ${await selected_file()} after ${await arrows_sent()} arrows`);
-    expect((await arrow_order()) === "Down Up Down ", `the arrows went out as ${await arrow_order()}`);
+    expect((await selected_file()) === 1 && (await arrows_sent()) === 1, `the select ended on ${await selected_file()} after ${await arrows_sent()} arrows`);
+    expect((await arrow_order()) === "Down ", `the arrows went out as ${await arrow_order()}`);
     expect((await badge()) === "ITEM", "item mode ended");
   });
 
@@ -170,13 +189,13 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
   await run_case("list view: a second I with hints.js already loaded still holds j until the select has landed", async () => {
     await open_drive_in_normal_mode("list_pick_warm");
     await press_keys("I");
-    await poll_until("the first landing", async () => (await arrows_sent()) === 2);
+    await expect_focus("f0");
     await press_keys("-k", "Escape");
     await poll_until("normal mode", async () => (await badge()) === "NORMAL");
     await press_keys("I", "j");
-    await poll_until("j to select the next file", async () => (await arrows_sent()) === 5);
+    await poll_until("j to select the next file", async () => (await arrows_sent()) === 1);
     await sleep(500);
-    expect((await arrow_order()) === "Down Up Down Up Down ", `the arrows went out as ${await arrow_order()}`);
+    expect((await arrow_order()) === "Down ", `the arrows went out as ${await arrow_order()}`);
     expect((await badge()) === "ITEM", "item mode ended");
   });
 
