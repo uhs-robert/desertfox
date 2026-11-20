@@ -5,7 +5,7 @@ import { RuntimeRefusal } from "../../shared/command.ts";
 import type { HeadingJump } from "../align_target.ts";
 import type { HeadingItem } from "../../shared/messages.ts";
 import { best_match } from "../../shared/score.ts";
-import { collect, scroll_clips_in_page } from "./candidates.ts";
+import { collect, scrollport_top_of, scroll_clips_in_page } from "./candidates.ts";
 import { HEADINGS, is_heading, rendered_text } from "./heading_match.ts";
 import type { Found } from "./candidates.ts";
 import { boxes_with_fallback, clip_to } from "./visible.ts";
@@ -191,7 +191,7 @@ export const NO_HEADING: Record<HeadingDirection, string> = {
 let last_heading: WeakRef<Element> | undefined;
 
 // A heading in a frame is placed by the frames that hold it, so its top is counted from the top view.
-const top_in_view = ({ element, frames }: Found): number => [element, ...frames].reduce((sum, target) => sum + target.getBoundingClientRect().top, 0);
+const top_in_view = ({ element, frames }: Found): number => [element, ...frames].reduce((sum, target) => sum + target.getBoundingClientRect().top - scrollport_top_of(target), 0);
 
 // Returns the notice when there is no heading that way.
 export function step_heading(direction: HeadingDirection, steps: number): string | undefined {

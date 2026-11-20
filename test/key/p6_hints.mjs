@@ -516,6 +516,13 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await poll_until("far at the top", async () => Math.abs(await top_of("far")) <= 3);
   });
 
+  await run_case("} in a scrolled div below the window top skips blocks scrolled above its edge", async () => {
+    await open_page("article_scroller_low", "p6_article_scroller_low", { new_tab: true });
+    await in_active_tab(`document.getElementById("box").scrollTop = 100`);
+    await press_keys("}");
+    await poll_until("b at the div top", async () => Math.abs((await top_of("b")) - 300) <= 3);
+  });
+
   await run_case("} lands below a bar that sticks only once the page has scrolled, from the page top", async () => {
     await open_page("article_late_bar", "p6_article_late_bar", { new_tab: true });
     await press_keys("}");
