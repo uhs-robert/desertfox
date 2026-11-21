@@ -147,9 +147,10 @@ function entries_for_mode(
       }
       const normalized = parsed.tokens.join("");
       // A keymap binding replaces no other binding, so it has nothing to run when its guard fails. The skip comes before the default keys it extends are dropped.
-      // The default keymap alone may guard a key: `fallback` is the binding that runs when the guard fails.
+      // The default layer alone may guard a key, with `fallback` as the step a failed guard runs. It never writes `otherwise = "page"`: a key that hands itself to the page has no step to fall back to.
       const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
-      const guard = binding === null ? undefined : (["when_focus", "when_present", "otherwise", "fallback"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined && (layer === "user" || name === "otherwise"));
+      const refused = (name: string) => layer === "user" || name === "otherwise";
+      const guard = binding === null ? undefined : (["when_focus", "when_present", "otherwise", "fallback"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined && refused(name));
       if (guard !== undefined) {
         warnings.push(`${mode}: skipped "${sequence}": ${guard} works only in a site row bind`);
         continue;
@@ -274,13 +275,17 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
-  const names = ancestor_group_names(entry.tokens, group_names);
-  const resolved = to_steps(mode, entry, resolve, settings, sources, names, warnings);
+  const ancestor_names = ancestor_group_names(entry.tokens, group_names);
+  const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_names, warnings);
   if (!resolved) return;
   // A guarded default key keeps the step its guard falls through to as the next leaf of its chain.
-  const guarded = resolved.when_present !== undefined || resolved.when_focus !== undefined;
-  const fallback = resolved.fallback && to_steps(mode, { ...entry, binding: resolved.fallback }, resolve, settings, sources, names, warnings);
-  const guards = !guarded ? {} : { ...(resolved.when_focus !== undefined && { when_focus: resolved.when_focus }), ...(resolved.when_present !== undefined && { when_present: resolved.when_present }), ...(fallback && { otherwise: { kind: "leaf" as const, ...(fallback.label !== undefined && { label: fallback.label }), steps: fallback.steps } }) };
+  const fallback = resolved.fallback && to_steps(mode, { ...entry, binding: resolved.fallback }, resolve, settings, sources, ancestor_names, warnings);
+  const fallback_leaf = fallback && { kind: "leaf" as const, ...(fallback.label !== undefined && { label: fallback.label }), steps: fallback.steps };
+  const guards = {
+    ...(resolved.when_focus !== undefined && { when_focus: resolved.when_focus }),
+    ...(resolved.when_present !== undefined && { when_present: resolved.when_present }),
+    ...(fallback_leaf && { otherwise: fallback_leaf }),
+  };
 
   let branch = root;
   for (const [depth, token] of entry.tokens.entries()) {

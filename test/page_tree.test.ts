@@ -3,6 +3,9 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { check_args } from "../src/shared/registry/index.ts";
+import { compile_keymap } from "../src/shared/keys/index.ts";
+import type { KeymapConfig } from "../src/shared/keymap.ts";
+import type { TreeLeaf } from "../src/shared/prefix_tree.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 
@@ -90,15 +93,36 @@ test("the aria preset needs no selector or depth, and fold_by keys goes with the
   assert.equal(check_args(command, { action: "fold", preset: "aria", fold_by: "keys" }).ok, false);
 });
 
-test("the default item keys guard the tree keys on a treeitem and fall back to the item moves", () => {
+test("the default item keys guard the tree keys on the focus in a tree and fall back to the item moves", () => {
   const table = DEFAULT_KEYMAP.item! as Record<string, { id: string; args: Record<string, unknown>; when_present?: string; when_focus?: string; fallback?: { id: string; args: Record<string, unknown> } }>;
   const expected = { h: "parent", l: "child", "}": "next", "{": "prev", za: "toggle", zc: "fold", zo: "unfold" };
   for (const [key, action] of Object.entries(expected)) {
     assert.equal(table[key]?.id, "page.tree", key);
     assert.deepEqual(table[key]?.args, { action, preset: "aria" }, key);
-    assert.equal(table[key]?.when_present, "[role=treeitem]", key);
-    assert.equal(table[key]?.when_focus, "[role=treeitem]", key);
+    assert.equal(table[key]?.when_present, "[role=tree]:focus-within", key);
+    assert.equal(table[key]?.when_focus, undefined, key);
     assert.equal(check_args(command, table[key]!.args).ok, true, key);
   }
   for (const key of ["h", "l", "}", "{"]) assert.equal(table[key]?.fallback?.id, "page.item", `${key} keeps its item move`);
+});
+
+// The compiler takes a guard and a fallback from the default layer alone.
+const resolve_known = (id: string) => (id.startsWith("a.") ? { runs_in: "content" as const, label: id, count: "ignore" as const } : undefined);
+const guarded: KeymapConfig = { item: { h: { id: "a.tree", when_present: "[role=tree]", fallback: { id: "a.left" } } } };
+
+test("a default key keeps its guard, and its fallback is the next leaf of the chain", () => {
+  const { compiled, warnings } = compile_keymap(guarded, {}, resolve_known, undefined, guarded);
+  const leaf = compiled.modes.item!.children["h"] as TreeLeaf;
+  assert.deepEqual(warnings, []);
+  assert.equal(leaf.when_present, "[role=tree]");
+  assert.deepEqual([leaf.steps[0]?.invocation.id, leaf.otherwise?.steps[0]?.invocation.id, leaf.otherwise?.otherwise], ["a.tree", "a.left", undefined]);
+});
+
+test("a guarded key of the user's keymap is skipped, and a default fallback the registry does not know leaves no otherwise", () => {
+  const user = compile_keymap(guarded, {}, resolve_known);
+  assert.equal(user.compiled.modes.item?.children["h"], undefined);
+  assert.ok(user.warnings.some((warning) => warning.includes("when_present works only in a site row bind")));
+  const unknown: KeymapConfig = { item: { h: { id: "a.tree", when_present: "[role=tree]", fallback: { id: "b.missing" } } } };
+  const leaf = compile_keymap(unknown, {}, resolve_known, undefined, unknown).compiled.modes.item?.children["h"] as TreeLeaf | undefined;
+  assert.equal(leaf?.otherwise, undefined);
 });

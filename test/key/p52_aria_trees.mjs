@@ -72,9 +72,41 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await expect_focus("t4");
   });
 
+  await run_case("a tree with no aria-level takes its depth from the nesting", async () => {
+    await open_tree("nolevel");
+    await press_keys("l");
+    await expect_focus("t1");
+    await press_keys("l");
+    await expect_focus("t2");
+    await press_keys("}");
+    await expect_toast("No next sibling");
+    await press_keys("h");
+    await expect_focus("t1");
+  });
+
+  await run_case("za on a leaf folds nothing and sends no key", async () => {
+    await open_tree("leaf");
+    await press_keys("}");
+    await expect_focus("t4");
+    await press_keys("ll");
+    await expect_focus("t5");
+    await press_keys("za");
+    await expect_toast("Nothing to fold");
+    expect((await keys()) === "39:t4,", `za on a leaf sent ${await keys()}`);
+  });
+
+  // With the focus on the page and not in the tree, } and { keep the section jump of item mode.
+  await run_case("with the focus outside the tree, } runs the plain section jump", async () => {
+    await open_tree("body");
+    await in_active_tab("document.activeElement?.blur()");
+    await press_keys("}");
+    await expect_toast("No sections in this list");
+  });
+
+  // The focus is on the tree itself, which tabindex and aria-activedescendant make focusable, so the tree step runs and refuses.
   await run_case("a tree that moves its focus by aria-activedescendant is refused with a notice", async () => {
-    // The finder gives focus to no item of such a tree, so the box is all the landing leaves.
     await open_tree("ad_refused", false);
+    await in_active_tab(`document.querySelector("[role=tree]").focus()`);
     await press_keys("l");
     await expect_toast("aria-activedescendant");
     await sleep(200);

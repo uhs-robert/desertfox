@@ -19,12 +19,20 @@ const arrow = (open: boolean) => ({ key: open ? "ArrowRight" : "ArrowLeft", key_
 // The selectors an ARIA tree stands for. `:scope` finds nothing inside the item, so the landing focuses the treeitem itself and not the first link inside it, which for a branch belongs to a child.
 const ARIA_ARGS = { selector: "[role=treeitem]", link: ":scope", depth: "aria-level", fold_by: "keys", folded: "[aria-expanded=false]" } as const;
 
+function treeitems_around(item: Element): number {
+  let count = 0;
+  for (let at = item.parentElement?.closest("[role=treeitem]"); at; at = at.parentElement?.closest("[role=treeitem]")) count++;
+  return count;
+}
+
 // An item with no readable depth is not part of the tree (the story above the comments).
 function read_rows(args: TreeArgs, current?: Element | null): TreeRow<Element>[] {
   // Rows stay inside the one tree, so a page with two trees never walks from one into the other.
   const scope = args.preset === "aria" ? (current?.closest("[role=tree]") ?? document) : document;
   const holder = (item: Element) => (args.depth_from === "inside" ? item.querySelector(args.depth_at!) : args.depth_from === "above" ? item.closest(args.depth_at!) : item);
   const rows = Array.from(scope.querySelectorAll(args.selector)).filter(is_shown).map((item) => ({ item, depth: Number.parseInt(holder(item)?.getAttribute(args.depth) ?? "", 10) }));
+  // A nested tree may leave out aria-level, since its nesting says the level.
+  if (args.preset === "aria") for (const row of rows) if (Number.isNaN(row.depth)) row.depth = treeitems_around(row.item) + 1;
   return rows.filter((row) => Number.isFinite(row.depth));
 }
 
@@ -59,16 +67,18 @@ if (!tree_window.desertfox_tree_ready && host) {
     const args: TreeArgs = given.preset === "aria" ? { ...given, ...ARIA_ARGS } : given;
     let picked: Element | undefined;
     await ask("item.current", { take: (item?: Element) => (picked = item) });
-    // The finder stands a branch of a tree for by its label, which sits inside the treeitem.
+    // The finder lists a branch of a tree by its label, which sits inside the treeitem.
     const current = args.preset === "aria" ? picked?.closest("[role=treeitem]") : picked;
     if (args.preset === "aria" && current?.closest("[role=tree]")?.hasAttribute("aria-activedescendant")) throw new RuntimeRefusal("This tree uses aria-activedescendant");
     const rows = read_rows(args, current);
     const at = rows.findIndex((row) => row.item === current);
-    if (at === -1) throw new RuntimeRefusal("No current comment");
+    if (at === -1) throw new RuntimeRefusal("No current item");
     // The click can move the focus onto the control, so the landing puts it back on the item. A key goes to the focus, so the landing comes first.
     const fold_item = async (index: number, open: boolean) => {
       const item = rows[index]!.item;
       if (args.fold_by === "keys") {
+        // ArrowLeft on a leaf moves the page focus to the parent, so only an item that can fold gets a key.
+        if (!item.hasAttribute("aria-expanded")) throw new RuntimeRefusal("Nothing to fold");
         await land(item, args);
         return ask("page.send_key", arrow(open), "site_actions");
       }
@@ -78,7 +88,7 @@ if (!tree_window.desertfox_tree_ready && host) {
     const folded_at = (index: number) => is_folded(rows[index]!.item, args);
     // The closest treeitem around the item is its parent. A role=none or role=group wrapper between them is not one. A flat tree, where treeitems do not nest, has no such ancestor and goes by depth.
     const parent_at = (index: number) => {
-      const found = rows.findIndex((row) => row.item === rows[index]!.item.parentElement?.closest("[role=treeitem]"));
+      const found = args.preset === "aria" ? rows.findIndex((row) => row.item === rows[index]!.item.parentElement?.closest("[role=treeitem]")) : -1;
       return found === -1 ? parent_of(rows, index) : found;
     };
     const walk = (step: (index: number) => number | undefined, none: string) => {

@@ -828,7 +828,7 @@ test("a thread row's own } and { keep their guard, and a failed guard falls thro
       const own = keys[key]!;
       assert.deepEqual([own.steps[0]?.invocation.id, own.steps[0]?.invocation.args?.["action"], own.when_present], ["page.tree", action, guard], `${key} on ${url}`);
       // The chain goes on through the default tree step, guarded on a treeitem, to the default jump.
-      assert.deepEqual([own.otherwise!.steps[0]?.invocation.args?.["preset"], own.otherwise!.when_present], ["aria", "[role=treeitem]"], key);
+      assert.deepEqual([own.otherwise!.steps[0]?.invocation.args?.["preset"], own.otherwise!.when_present], ["aria", "[role=tree]:focus-within"], key);
       const default_jump = own.otherwise!.otherwise!;
       assert.deepEqual([default_jump.steps[0]?.invocation.id, default_jump.steps[0]?.invocation.args?.["direction"], default_jump.steps[0]?.invocation.args?.["selector"], default_jump.when_present], ["page.item", direction, "", undefined], key);
     }

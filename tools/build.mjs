@@ -66,7 +66,8 @@ const MAX_BYTES = {
   "item_act.js": 3.5 * 1024,
   // 4 KB: page.tree (h, l, { and } through the comments of a thread, and the fold keys), with the hint click it shares with `hints.js`. The bundle loads on the first press.
   // 4.5 KB: aria-trees: the aria preset (treeitems of one role=tree, closest-treeitem parent) and folding by the arrow keys.
-  "tree.js": 4.5 * 1024,
+  // 5 KB: aria-trees: a missing aria-level counts the treeitems around the item.
+  "tree.js": 5 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
   // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
   // 19.5 KB: the next pass skips the arrows inside an ad post.

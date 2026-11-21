@@ -487,10 +487,10 @@ Which-key group names:
 | `v` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `tree --parent --aria` | Parent item of the tree |
-| `l` | `tree --child --aria` | First child of the tree item, or open it |
-| `}` | `tree --next --aria` | Next sibling in the tree |
-| `{` | `tree --prev --aria` | Previous sibling in the tree |
+| `h` | `tree --parent --aria` | Parent in a tree, else the item to the left |
+| `l` | `tree --child --aria` | First child in a tree or open it, else the item to the right |
+| `}` | `tree --next --aria` | Next sibling in a tree, else the next section |
+| `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 

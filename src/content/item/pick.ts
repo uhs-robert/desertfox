@@ -68,7 +68,7 @@ export function pick_section(starts: readonly number[], place: Place, direction:
 // The index of the deepest item that holds the focus, since items nest in a tree. The finder lists a branch of a tree by its label, which the treeitem around it holds, so a focused treeitem stands for the first item it holds.
 const deepest_holding = (items: readonly Element[], focused: Element): number => {
   const held = items.findLastIndex((item) => item.contains(focused));
-  return held !== -1 || focused.getAttribute?.("role") !== "treeitem" ? held : items.findIndex((item) => focused.contains(item));
+  return held !== -1 || focused.getAttribute("role") !== "treeitem" ? held : items.findIndex((item) => focused.contains(item));
 };
 
 // The item that holds the focus, else the last one moved to while it is on screen (or pinned), else the first one not above the view.

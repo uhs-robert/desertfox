@@ -116,9 +116,10 @@ test("the start is the focused item, else the last item while on screen, else th
 });
 
 test("nested items: the focus holds the deepest item around it, for the start and for current_item", () => {
-  const inner = { contains: (node: unknown) => node === "leaf" } as unknown as Element;
-  const outer = { contains: (node: unknown) => node === "leaf" || node === inner } as unknown as Element;
-  assert.deepEqual(place_of([outer, inner], "leaf" as unknown as Element, undefined, [box(0, 0), box(0, 30)], 800), { index: 1, on_item: true });
+  const leaf = { getAttribute: () => null } as unknown as Element;
+  const inner = { contains: (node: unknown) => node === leaf } as unknown as Element;
+  const outer = { contains: (node: unknown) => node === leaf || node === inner } as unknown as Element;
+  assert.deepEqual(place_of([outer, inner], leaf, undefined, [box(0, 0), box(0, 30)], 800), { index: 1, on_item: true });
   // A focused treeitem holds the label the finder lists for it, and stands for that item.
   const label = { contains: () => false } as unknown as Element;
   const treeitem = { getAttribute: () => "treeitem", contains: (node: unknown) => node === label || node === treeitem } as unknown as Element;
