@@ -705,3 +705,16 @@ test("item_rect keeps the own box with no extent, no match, a hidden match or a 
   assert.deepEqual(item_rect(head_with_text({ top: 136, bottom: 900, shown: false }), "p"), own, "a folded comment's stale text box is ignored");
   assert.deepEqual(item_rect(head_with_text({ top: 0, bottom: 120, shown: true }), "p"), own);
 });
+
+test("an item inside the window that the hit test finds covered is centered, once per landing", () => {
+  const { page, log } = fake_page(list);
+  let covered = true;
+  page.in_view_ = () => (covered ? 0 : 1);
+  move_item(page, { selector: "li", link: "a.t", direction: "down" });
+  assert.deepEqual(log, ["focus link 0", "scroll 0 center"]);
+  // Still covered after the scroll: the next landing scrolls once more and nothing loops.
+  covered = false;
+  log.length = 0;
+  move_item(page, { selector: "li", link: "a.t", direction: "down" });
+  assert.deepEqual(log, ["focus link 1"]);
+});
