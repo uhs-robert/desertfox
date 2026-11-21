@@ -27,8 +27,8 @@ if (!page.desertfox_ui_ready) {
     (document.activeElement as HTMLElement | null)?.blur();
   });
   page.desertfox_host.register_handler_("ui.frame_watch", (args) => watch_focused_frame(args.on === true));
-  // The size of the range of visual item mode, from the child frame that holds it. The top frame keeps it for the badge.
-  page.desertfox_host.register_handler_("ui.badge_count", (args) => (page.desertfox_host as PageHostApi).visual_count_(args.count as number | undefined));
+  // The size of the range of visual item mode, from the child frame that holds it. The top frame keeps it for the badge, apart from the other frames' counts.
+  page.desertfox_host.register_handler_("ui.badge_count", (args) => (page.desertfox_host as PageHostApi).visual_count_(args.count as number | undefined, args.from_frame as number));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
     const { mode, pass_next, setting, recording, site_label, count } = args as unknown as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.

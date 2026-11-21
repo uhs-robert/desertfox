@@ -91,9 +91,9 @@ export function apply_mode_report(record: TabModeRecord, report: ModeReport): Ta
 // A tab that never reported a mode is in normal mode, for example an about: page where no content script runs.
 // Ignore mode in the top frame beats the focused child frame: a field in a frame must not hide that the user turned the page's keys off, from the badge or from the shortcut gate.
 // The top frame draws its own mode then, so it gets no child mode.
-const shown_child_mode = (record: TabModeRecord): Mode | undefined => (record.top_mode === "ignore" ? undefined : record.focused_child?.mode);
+const shown_child = (record: TabModeRecord): TabModeRecord["focused_child"] => (record.top_mode === "ignore" ? undefined : record.focused_child);
 
-export const mode_of_record = (record: TabModeRecord): Mode => shown_child_mode(record) ?? record.top_mode ?? "normal";
+export const mode_of_record = (record: TabModeRecord): Mode => shown_child(record)?.mode ?? record.top_mode ?? "normal";
 
 export function create_tab_modes(storage: ModeStorage) {
   // One read-then-write at a time, so two frames reporting together do not drop each other's change.
@@ -111,15 +111,17 @@ export function create_tab_modes(storage: ModeStorage) {
     // `tell_top` says whether the top frame needs to hear it: the mode changed, or the top frame itself reported. A top frame that just started knows nothing yet, and one shown again from the back-forward cache still draws the child mode it had when it was hidden.
     // A report that changes nothing writes nothing: every frame reports again on each focus and each pageshow.
     // `park` says this report parked its frame: the caller hands the focus to the top page. A park reaches the top frame too, which labels the parked frame's targets.
-    report: (tab_id: number, report: ModeReport): Promise<{ child_mode: Mode | undefined; tell_top: boolean; park: boolean; parked: boolean }> =>
+    // `child_frame` is the frame whose mode `child_mode` is: the top frame shows that frame's count of visual item mode. A move of the focus between two child frames in the same mode tells the top frame too.
+    report: (tab_id: number, report: ModeReport): Promise<{ child_mode: Mode | undefined; child_frame: number | undefined; tell_top: boolean; park: boolean; parked: boolean }> =>
       in_turn(async () => {
         const before = await read(tab_id);
         report = { ...report, now: Date.now() };
         const record = apply_mode_report(before, report);
-        const child_mode = shown_child_mode(record);
+        const [child, child_before] = [shown_child(record), shown_child(before)];
         if (JSON.stringify(record) !== JSON.stringify(before)) await storage.set({ [key_of(tab_id)]: record });
         const parked_changed = record.parked !== before.parked;
-        return { child_mode, tell_top: child_mode !== shown_child_mode(before) || report.frame_id === TOP_FRAME || parked_changed, park: parks(before, report), parked: record.parked !== undefined };
+        const child_changed = child?.mode !== child_before?.mode || child?.frame_id !== child_before?.frame_id;
+        return { child_mode: child?.mode, child_frame: child?.frame_id, tell_top: child_changed || report.frame_id === TOP_FRAME || parked_changed, park: parks(before, report), parked: record.parked !== undefined };
       }),
     // The extension is about to focus a frame, so the frame's first focus is the user's own. `frame_id` is the frame that asked, or undefined for the top page.
     expect_entry: (tab_id: number, frame_id?: number): Promise<void> =>
@@ -129,12 +131,13 @@ export function create_tab_modes(storage: ModeStorage) {
       }),
     parked_frame: (tab_id: number): Promise<number | undefined> => in_turn(async () => (await read(tab_id)).parked),
     // The parked frame is gone or refused a script. Resolves with the mode the top page shows for a child, or undefined when the record no longer named the frame and the top page needs no word.
-    unpark: (tab_id: number, frame_id: number): Promise<{ child_mode: Mode | undefined } | undefined> =>
+    unpark: (tab_id: number, frame_id: number): Promise<{ child_mode: Mode | undefined; child_frame: number | undefined } | undefined> =>
       in_turn(async () => {
         const { parked, parked_blurred, ...rest } = await read(tab_id);
         if (parked !== frame_id) return undefined;
         await storage.set({ [key_of(tab_id)]: rest });
-        return { child_mode: shown_child_mode(rest) };
+        const child = shown_child(rest);
+        return { child_mode: child?.mode, child_frame: child?.frame_id };
       }),
     recall: (tab_id: number): Promise<Mode> => in_turn(async () => mode_of_record(await read(tab_id))),
     forget,

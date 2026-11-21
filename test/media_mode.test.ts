@@ -7,6 +7,7 @@ import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { create_media_discovery, create_tab_media, FRAME_ALIVE_LIMIT_MS, LINE_CLOSE_GRACE_MS } from "../src/background/tab_media.ts";
+import { create_step_queue } from "../src/background/tab_steps.ts";
 import { create_mode_state, fullscreen_step, takes_media_step } from "../src/content/mode_state.ts";
 import type { MediaStep } from "../src/shared/messages.ts";
 import type { Mode } from "../src/shared/command.ts";
@@ -134,6 +135,7 @@ function fake_tab_media({ store = new Map<string, unknown>(), sent = [] as [numb
   // A `MediaStep` as "on" or "off", with "all" for no frame. `steps` holds each full step the background sent, in order, as the content script receives it.
   const steps: MediaStep[] = [];
   const media = create_tab_media({
+    steps: create_step_queue(),
     storage: {
       get: async (key: string) => (typeof key === "string" && store.has(key) ? { [key]: store.get(key) } : {}),
       set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
@@ -784,6 +786,7 @@ function media_with_stuck_tab_4() {
   const sent: string[] = [];
   const store = new Map<string, unknown>();
   const media = create_tab_media({
+    steps: create_step_queue(),
     storage: {
       get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
       set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
@@ -847,6 +850,7 @@ test("an off step still on its way when the tab enters again cannot reach the fr
   const release: (() => void)[] = [];
   const store = new Map<string, unknown>();
   const media = create_tab_media({
+    steps: create_step_queue(),
     storage: {
       get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
       set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),
@@ -875,6 +879,7 @@ test("an off step still on its way when the tab enters again cannot reach the fr
 test("a frame that never answers keeps one waiting step per target, and a navigation clears its queue", { timeout: 2000 }, async () => {
   let calls = 0;
   const media = create_tab_media({
+    steps: create_step_queue(),
     storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
     send_step: () => (calls++, new Promise(() => {})),
     frame_alive: async () => true,
@@ -895,6 +900,7 @@ function media_with_held_steps() {
   const releases: (() => void)[] = [];
   let calls = 0;
   const media = create_tab_media({
+    steps: create_step_queue(),
     storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } as never,
     send_step: () => (calls++, new Promise<void>((resolve) => releases.push(resolve))),
     frame_alive: async () => true,
@@ -933,6 +939,7 @@ function media_with_recorded_steps({ stuck_frame = -1, held = false } = {}) {
   const releases: (() => void)[] = [];
   const store = new Map<string, unknown>();
   const media = create_tab_media({
+    steps: create_step_queue(),
     storage: {
       get: async (key: string) => (store.has(key) ? { [key]: store.get(key) } : {}),
       set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => store.set(key, value)),

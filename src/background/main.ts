@@ -1,6 +1,6 @@
 import "./command_modules.ts";
 import { best_effort, ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
-import type { BackgroundToContent, ContentToBackground, DevtoolsHello, FocusedFrameMode, FocusPage, PageToBackground } from "../shared/messages.ts";
+import type { BackgroundToContent, ContentToBackground, DevtoolsHello, FocusedFrameMode, FocusPage, MediaStep, PageToBackground } from "../shared/messages.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
 import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
@@ -62,6 +62,8 @@ import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
+import { step_target, tab_steps } from "./tab_steps.ts";
+import type { LoadSender } from "./bundle_loader.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -116,7 +118,8 @@ const tab_insert = create_tab_insert({
 wire_tab_insert(tab_insert.enter);
 const tab_item = create_tab_item({
   storage: browser.storage.session,
-  send_step: (tab_id, on, frame_id, from) => send_to_tab(tab_id, { type: "media", on, from, item: true }, frame_id),
+  send_step: (tab_id, on, frame_id, from, document_id) => browser.tabs.sendMessage(tab_id, { type: "media", on, from, item: true } satisfies MediaStep, step_target(frame_id, document_id)),
+  steps: tab_steps,
 });
 wire_before_own_load(tab_item.end_for_own_load);
 
@@ -290,7 +293,7 @@ const hint_frames = create_hint_frames({
   parked_frame: (tab_id) => tab_modes.parked_frame(tab_id),
   unpark: async (tab_id, frame_id) => {
     const unparked = await tab_modes.unpark(tab_id, frame_id);
-    if (unparked) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(unparked.child_mode === undefined ? {} : { mode: unparked.child_mode }) } satisfies FocusedFrameMode, { frameId: 0 }));
+    if (unparked) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(unparked.child_mode === undefined ? {} : { mode: unparked.child_mode, frame_id: unparked.child_frame }) } satisfies FocusedFrameMode, { frameId: 0 }));
   },
 });
 const toolbar = create_toolbar({
@@ -403,10 +406,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(warn_and_go("tab_insert.top_frame_left_insert"));
     void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.reported"));
     const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true, activated: request.activated, in_field: request.in_field, cross_origin: is_cross_origin(sender.url, tab.url) };
-    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true).catch(warn_and_go("tab_media.reported"));
-    void tab_item.reported(tab_id, sender.frameId, request.mode, request.step === true).catch(warn_and_go("tab_item.reported"));
+    const { documentId: document_id } = sender as LoadSender;
+    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true, document_id).catch(warn_and_go("tab_media.reported"));
+    void tab_item.reported(tab_id, sender.frameId, request.mode, request.step === true, document_id).catch(warn_and_go("tab_item.reported"));
     // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
-    return tab_modes.report(tab_id, report).then(({ child_mode, tell_top, park, parked }) => {
+    return tab_modes.report(tab_id, report).then(({ child_mode, child_frame, tell_top, park, parked }) => {
       // The frame that takes the focus on load is handed back through the path of `gF`. Gecko may give the focus back to the frame, and the park then ends in frame mode, as it was before parking.
       if (park) {
         const park_message = { type: "focus_page", park: true } satisfies FocusPage;
@@ -414,7 +418,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       }
       // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
       if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
-      if (tell_top) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode }), ...(parked && { parked: true as const }) } satisfies FocusedFrameMode, { frameId: 0 }));
+      if (tell_top) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode, frame_id: child_frame }), ...(parked && { parked: true as const }) } satisfies FocusedFrameMode, { frameId: 0 }));
     });
   }
   if (request?.type === "quality_report") {
@@ -467,7 +471,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender_at(sender, request.url).url);
   if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
   if (request?.type === "read_keymap") {
-    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender_at(sender, request.url)), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!), () => tab_item.join(sender.tab!.id!, sender.frameId!))));
+    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender_at(sender, request.url)), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!, (sender as LoadSender).documentId), () => tab_item.join(sender.tab!.id!, sender.frameId!, (sender as LoadSender).documentId))));
     return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
   }
   if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);

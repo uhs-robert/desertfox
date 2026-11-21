@@ -679,11 +679,13 @@ export type MediaStep = {
 };
 
 // To the top frame: the mode of the child frame that holds focus, which the badge shows in place of the top frame's own. Absent when no child frame holds focus.
+// `frame_id` is that child frame, whose count of visual item mode the badge shows.
 // `parked` says a frame of another site was handed back to the top page, so the top page's hints label that frame too.
 // The type string is short because content.js holds it.
 export type FocusedFrameMode = {
   type: "frame_mode";
   mode?: Mode;
+  frame_id?: number | undefined;
   parked?: true;
 };
 

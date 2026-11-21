@@ -5,13 +5,15 @@ import { MEDIA_VALUE_PATTERNS } from "../shared/media_values.ts";
 import { run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";
 import { ask_quality_in_tab } from "../background/quality_levels.ts";
 import { create_tab_media } from "../background/tab_media.ts";
+import { step_target, tab_steps } from "../background/tab_steps.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 
 // The background's message listener hands each frame's mode report to this.
 export const tab_media = create_tab_media({
   // Read at call time: Node tools import this module, where there is no `browser`.
   storage: { get: (keys) => browser.storage.session.get(keys), set: (items) => browser.storage.session.set(items), remove: (keys) => browser.storage.session.remove(keys) },
-  send_step: (tab_id, on, frame_id, from) => browser.tabs.sendMessage(tab_id, { type: "media", on, from } satisfies MediaStep, frame_id === undefined ? {} : { frameId: frame_id }),
+  send_step: (tab_id, on, frame_id, from, document_id) => browser.tabs.sendMessage(tab_id, { type: "media", on, from } satisfies MediaStep, step_target(frame_id, document_id)),
+  steps: tab_steps,
   frame_alive: (tab_id, frame_id) => browser.tabs.sendMessage(tab_id, { type: "ping" } satisfies Ping, { frameId: frame_id }).then(Boolean),
   set_timer: (callback, delay_ms) => setTimeout(callback, delay_ms),
   clear_timer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
