@@ -2,7 +2,7 @@ import { is_shown } from "../shown.ts";
 import { follow_end } from "./ends.ts";
 import { thumbnail } from "./hover.ts";
 import type { EndPage } from "./ends.ts";
-import type { Outcome } from "../../shared/messages.ts";
+import type { Outcome } from "../../shared/messages/content.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
 export type SectionDirection = "next_section" | "prev_section";

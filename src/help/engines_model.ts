@@ -2,7 +2,7 @@
 // The form checks its fields while the user types (`field_problems`). The background builds the whole config at Save and refuses what the build refuses.
 
 import { field_problems } from "../shared/engine_fields.ts";
-import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEngines, ListEnginesAnswer } from "../shared/messages.ts";
+import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEngines, ListEnginesAnswer } from "../shared/messages/page.ts";
 
 export type EngineForm = { name: string; url: string; keyword: string; letter: string };
 const EMPTY_FORM: EngineForm = { name: "", url: "", keyword: "", letter: "" };

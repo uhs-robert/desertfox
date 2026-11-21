@@ -1,6 +1,6 @@
 // The settings page without a DOM: which control each setting gets, the checks as you type, and the session that sends changes and absorbs refreshes. Tests read this module.
 
-import type { ChangeSetting, ChangeSettingAnswer, ListFontNames, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages.ts";
+import type { ChangeSetting, ChangeSettingAnswer, ListFontNames, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages/page.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../shared/settings_docs.ts";
 import { FILE_WRITTEN_SETTINGS, is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";

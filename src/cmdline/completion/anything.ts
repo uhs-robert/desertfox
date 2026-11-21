@@ -4,7 +4,7 @@
 
 import { encode_ref } from "../../shared/anything_ref.ts";
 import type { AnythingRef } from "../../shared/anything_ref.ts";
-import type { AnythingItems, EngineItem } from "../../shared/messages.ts";
+import type { AnythingItems, EngineItem } from "../../shared/messages/content.ts";
 import { MAX_SITE_ROWS, RANKED_ROWS, RECENT_CLOSED } from "../../shared/rank_port.ts";
 import type { FinderExtras, RankedReply, WireRow } from "../../shared/rank_port.ts";
 import { score_candidate } from "../../shared/score.ts";

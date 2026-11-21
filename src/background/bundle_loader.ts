@@ -3,7 +3,7 @@
 
 import { is_bundle_name } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
-import type { RunResponse } from "../shared/messages.ts";
+import type { RunResponse } from "../shared/messages/content.ts";
 
 // The document id tells a new page in a frame from the one it replaced, so a request from the new page never joins a load of the old one.
 // `in_extension_page` is set for a help, Settings or new tab page, which Firefox will not take an injection into.

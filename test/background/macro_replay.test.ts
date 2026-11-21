@@ -8,7 +8,7 @@ import { reply_after_hold } from "../../src/background/hold_on_arrival.ts";
 import type { MacroReplayDeps, ReplayStart, StepPlace } from "../../src/background/macro_replay.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
-import type { RunResponse } from "../../src/shared/messages.ts";
+import type { RunResponse } from "../../src/shared/messages/content.ts";
 import { check_play_step } from "../../src/commands/macro.ts";
 import { create_macro_recorder } from "../../src/background/macro_recorder.ts";
 

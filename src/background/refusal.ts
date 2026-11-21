@@ -1,4 +1,4 @@
-import type { BackgroundToContent, Refusal, ToastKind } from "../shared/messages.ts";
+import type { Refusal, BackgroundToContent, ToastKind } from "../shared/messages/index.ts";
 
 export type RefusalChannels = {
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;

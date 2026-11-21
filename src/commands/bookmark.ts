@@ -3,7 +3,7 @@ import type { CommandContext, ParamDef } from "../shared/command.ts";
 import { browser_complete_items_deps } from "../background/complete_items.ts";
 import type { BookmarkView, FolderNode } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import type { BookmarkItem, ToastKind } from "../shared/messages.ts";
+import type { BookmarkItem, ToastKind } from "../shared/messages/index.ts";
 import { in_folder, pick_filter_folder, pick_folder, rows_in_folder } from "../shared/folder_pick.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { is_openable, open_in, open_many, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";

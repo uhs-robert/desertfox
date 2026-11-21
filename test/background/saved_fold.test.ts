@@ -8,7 +8,7 @@ import { fold_kept_notes, fold_moved_note, saved_layer_folded } from "../../src/
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import type { SettingOverrides } from "../../src/shared/config.ts";
 import { answer_host_start_choice } from "../../src/background/host_start.ts";
-import type { HostStartPending } from "../../src/shared/messages.ts";
+import type { HostStartPending } from "../../src/shared/messages/page.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");

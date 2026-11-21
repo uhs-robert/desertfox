@@ -7,7 +7,7 @@ import { type_at_caret } from "../text/field_writer.ts";
 import { is_secret_field } from "../text/secret_field.ts";
 import { CLIPBOARD_NOT_RESTORED, copy_through_clipboard, paste_through_clipboard, VIRTUALIZED_EDITOR } from "./clipboard_fallback.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { BackgroundToContent, EditorAnswer, EditorDone, EditorOpen } from "../../shared/messages.ts";
+import type { EditorAnswer, EditorOpen, BackgroundToContent, EditorDone } from "../../shared/messages/index.ts";
 import { refused_as } from "../../shared/swallow.ts";
 
 // The host refuses more than this many bytes of text, so a longer field is refused here and no doomed request goes out.

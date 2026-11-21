@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import { create_tab_model, type TabModelDeps, type TabModelPort } from "../../src/background/tab_model.ts";
 import { create_cmdline_service } from "../../src/background/cmdline_service.ts";
 import type { ContainerIdentity, WindowLike } from "../../src/background/complete_items.ts";
-import type { TabModelMessage, TabRow } from "../../src/shared/messages.ts";
+import type { TabModelMessage, TabRow } from "../../src/shared/messages/ports.ts";
 
 type Tab = Awaited<ReturnType<TabModelDeps["query"]>>[number];
 type Group = Awaited<ReturnType<TabModelDeps["groups"]>>[number];

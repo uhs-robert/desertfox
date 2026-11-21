@@ -2,7 +2,7 @@
 
 import { enter_for_click, hover, leave_toward } from "./hover.ts";
 import { selector_of } from "./selector_of.ts";
-import type { FrameCue, MediaPin } from "../../shared/messages.ts";
+import type { FrameCue, MediaPin } from "../../shared/messages/content.ts";
 import { parent_across_shadow, player_box } from "../player_box.ts";
 import { best_effort } from "../../shared/swallow.ts";
 import { center_of, dispatch_mouse_event } from "../pointer_events.ts";

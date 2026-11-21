@@ -2,7 +2,7 @@
 
 import type { BundleHostApi, PageHostApi } from "../bundle_host.ts";
 import { show_mode_label } from "../mode_indicator.ts";
-import type { ToastKind } from "../../shared/messages.ts";
+import type { ToastKind } from "../../shared/messages/tab.ts";
 import { mode_label } from "./mode_label.ts";
 import type { BadgeState } from "./mode_label.ts";
 import { relay } from "../relay.ts";

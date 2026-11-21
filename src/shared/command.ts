@@ -2,7 +2,7 @@
 // and `commands.json` is cut from. Types, plus the list of runtime modes.
 
 import type { BundleName } from "./bundles.ts";
-import type { Outcome } from "./messages.ts";
+import type { Outcome } from "./messages/content.ts";
 
 // `key` is one key press. A key binding that leaves a required `key` param out captures the next key into it.
 export type ParamType = "int" | "float" | "string" | "bool" | "enum" | "key";

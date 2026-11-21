@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/commands/hint.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
-import type { Outcome } from "../../src/shared/messages.ts";
+import type { Outcome } from "../../src/shared/messages/content.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { KEY_LINE_LABELS, KEY_LINE_TEXT } from "../../src/content/hints/view.ts";
 import { is_editable_element } from "../../src/content/editable.ts";

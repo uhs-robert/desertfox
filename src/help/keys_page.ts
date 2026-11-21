@@ -4,7 +4,7 @@ import { el } from "./render.ts";
 import { button } from "./transfer_page.ts";
 import { actions_of, create_keys_session, is_read_only, matches_filter, READ_ONLY_ROW_NOTE, RESERVED_CHORDS_NOTE, freed_keys } from "./keys_model.ts";
 import type { CheckView, Editor, KeysDeps, KeysSession } from "./keys_model.ts";
-import type { BindingRow } from "../shared/messages.ts";
+import type { BindingRow } from "../shared/messages/page.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
 import { event_to_token } from "../shared/keys/token.ts";

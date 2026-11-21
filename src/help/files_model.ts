@@ -1,7 +1,7 @@
 // No DOM: the state of the settings page's files editor. It lists the stored config files, holds the text being edited and sends each save to the background.
 // The background decides. A refused save keeps the draft here, shows every problem and leaves the stored files alone.
 
-import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages.ts";
+import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages/page.ts";
 import { edit_problem } from "../shared/config_file_path.ts";
 import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { template_for } from "./file_templates.ts";

@@ -5,7 +5,7 @@
 // because a port sees only the tabs of its own privacy and a global count would show it gaps. A client that sees a gap sends `resync`.
 // A patch applies `removed` first, then `upserts`. Upserts carry every row whose index shifted, so a client never recomputes indexes.
 
-import type { GroupRow, TabModelMessage, TabModelRequest, TabRow } from "../shared/messages.ts";
+import type { GroupRow, TabModelMessage, TabModelRequest, TabRow } from "../shared/messages/ports.ts";
 import { site_key } from "../shared/site_key.ts";
 import { TAB_MODEL_PORT_NAME, TAB_MODEL_PORT_NORMAL, TAB_MODEL_PORT_PRIVATE } from "../shared/tab_model_port.ts";
 import { listed_favicon, numbered_windows, read_container_identities } from "./complete_items.ts";

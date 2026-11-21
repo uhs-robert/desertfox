@@ -10,7 +10,7 @@ import type { CopyFormat } from "../handlers/copy.ts";
 import { selected_text } from "./selection.ts";
 import { arm_leave_watch, scroll_offset, type LeaveWatch } from "./leave_watch.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { BackgroundToContent, JumpStep, MarkAnswer, MarkRequest, MarkStep } from "../../shared/messages.ts";
+import type { JumpStep, MarkAnswer, MarkRequest, MarkStep, BackgroundToContent } from "../../shared/messages/index.ts";
 
 type PageWindow = { desertfox_host?: BundleHostApi; desertfox_page_ready?: true };
 const page = window as unknown as PageWindow;

@@ -1,7 +1,7 @@
 // The Aliases section's messages: the aliases of the browser layer, and one change of it (set, remove). A change goes through `change_layers`, so it shares the queue, the build check and the rollback of an engine edit.
 
 import type { MergedConfig } from "../shared/config.ts";
-import type { AliasRow, ChangeAliases, ChangeAliasesAnswer, ListAliasesAnswer } from "../shared/messages.ts";
+import type { AliasRow, ChangeAliases, ChangeAliasesAnswer, ListAliasesAnswer } from "../shared/messages/page.ts";
 import { ConfigRefusal, failure } from "./config_reload.ts";
 import type { AliasEdits } from "./edit_layers.ts";
 import type { DroppedPiece } from "./engine_layer.ts";

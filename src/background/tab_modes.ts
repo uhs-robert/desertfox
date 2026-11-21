@@ -17,7 +17,7 @@ const TOP_FRAME = 0;
 // `entering` marks a focus the extension is about to move into a frame (`;ff`, a hint pick), so that frame's first focus is the user's own and is not parked. `frame_id` names the frame when the frame itself asked, and is absent when the top page asked, because it cannot read the id of a frame of another site. Only a first focus spends the mark.
 export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; parked_blurred?: true; focused_once?: number[]; entering?: { ms: number; frame_id?: number } };
 
-// `ModeChanged` in src/shared/messages.ts, with the frame that sent it. `cross_origin` is the background's own reading of the frame's address against the tab's.
+// `ModeChanged` in src/shared/messages/content.ts, with the frame that sent it. `cross_origin` is the background's own reading of the frame's address against the tab's.
 export type ModeReport = { frame_id: number; mode: Mode; focus: boolean; activated?: boolean; in_field?: boolean; cross_origin?: boolean; now?: number };
 
 // How long after a hint pick the next frame focus counts as the pick's.

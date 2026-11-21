@@ -1,6 +1,6 @@
 // The `inspect` action: leaves the picked element on the page window for the devtools page, which selects it in the Inspector and deletes the property.
 
-import type { Outcome } from "../../shared/messages.ts";
+import type { Outcome } from "../../shared/messages/content.ts";
 import { PICK_EXPIRY_MS, TOOLBOX_CLOSED_MESSAGE } from "../../shared/inspect.ts";
 import type { InspectAnswer } from "../../shared/inspect.ts";
 

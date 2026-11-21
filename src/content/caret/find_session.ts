@@ -1,7 +1,7 @@
 // Page search: the live search while the line is open, the match that stays after Enter or Escape, and n and N.
 // The line (the cmdline bundle) reaches it through `begin`, `update` and `end`. The keys reach it through `step` and `clear`.
 
-import type { FindScan, FindScanAnswer, Outcome, RegisterRead, RegisterWrite } from "../../shared/messages.ts";
+import type { FindScan, FindScanAnswer, Outcome, RegisterRead, RegisterWrite } from "../../shared/messages/content.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { collect_matches, compile_query, describe_match, describe_timeout, nearest_match, opposite, step_match } from "./find_match.ts";
 import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";

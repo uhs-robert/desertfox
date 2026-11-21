@@ -12,7 +12,7 @@ import { create_session } from "../../src/cmdline/session.ts";
 import { decode_ref, FINDER_PARAM } from "../../src/shared/anything_ref.ts";
 import type { AnythingRef } from "../../src/shared/anything_ref.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { AnythingItems, CompleteItemsAnswer, EngineItem, TabItem } from "../../src/shared/messages.ts";
+import type { AnythingItems, CompleteItemsAnswer, EngineItem, TabItem } from "../../src/shared/messages/content.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 import type { Row } from "../../src/cmdline/completion/sources.ts";

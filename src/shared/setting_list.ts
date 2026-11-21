@@ -1,7 +1,7 @@
 // The settings page's view of every setting: typed value, top layer, kind and allowed values. Shared by the background and the help page.
 
 import type { Settings } from "./config.ts";
-import type { SettingListRow } from "./messages.ts";
+import type { SettingListRow } from "./messages/page.ts";
 import { SETTING_NAMES, SETTING_SPECS } from "./settings_schema.ts";
 import { SETTINGS_TABLE } from "./settings_table.ts";
 

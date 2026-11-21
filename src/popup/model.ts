@@ -4,7 +4,7 @@ import type { SiteState } from "../background/toolbar.ts";
 import { PAGES } from "../help/route.ts";
 import { BUILT_IN_THEME_NAMES } from "../shared/theme_names.ts";
 import { REPO } from "../shared/native_host.ts";
-import type { ToolbarAnswer } from "../shared/messages.ts";
+import type { ToolbarAnswer } from "../shared/messages/page.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 
 const page_hash = (id: (typeof PAGES)[number]["id"]) => PAGES.find((page) => page.id === id)!.hash;

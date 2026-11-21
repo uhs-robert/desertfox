@@ -10,7 +10,7 @@ import { built_in_theme_names } from "../shared/theme/load.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { FILE_WRITTEN_SETTINGS, is_consent_setting, parse_setting_text, SETTING_NAMES, SETTING_SPECS } from "../shared/settings_schema.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import type { TomlValue } from "../background/toml_key_edit.ts";
 
 type Toast = { kind: ToastKind; message: string };

@@ -2,7 +2,7 @@
 
 import { match_regex_source, matches_pattern, resolve_site_columns, site_row_columns, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { parse_sequence } from "../shared/keys/notation.ts";
-import type { SiteKeysRequest, ToolbarAnswer } from "../shared/messages.ts";
+import type { SiteKeysRequest, ToolbarAnswer } from "../shared/messages/page.ts";
 
 const PATTERN_PARTS = /^(\*|https?):\/\/([^/]*)(\/.*)$/;
 

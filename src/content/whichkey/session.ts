@@ -2,7 +2,7 @@
 
 import type { Mode } from "../../shared/command.ts";
 import type { PendingPrefix } from "../key_flow.ts";
-import type { WhichKeyPanel } from "../../shared/messages.ts";
+import type { WhichKeyPanel } from "../../shared/messages/content.ts";
 
 // The modes whose keys are a keymap worth listing. The check sits here and not in content.js, which has no spare bytes.
 // Insert and hint mode show the panel only on request: their half-typed sequences would pop it up after every typed letter.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { content_handlers } from "../../src/content/handler_map.ts";
 import { counted_invocations, run_content_invocation, run_content_steps, run_in_order } from "../../src/content/run_content.ts";
-import type { Outcome } from "../../src/shared/messages.ts";
+import type { Outcome } from "../../src/shared/messages/content.ts";
 
 // Test handlers join the real map under ids no command uses.
 function install(id: string, run: (args: Record<string, unknown>) => unknown): void {

@@ -5,7 +5,7 @@ import { REGISTER_NAME_PATTERN } from "../shared/register_names.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_register_store, describe_value, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 
 export type RegisterCommandDeps = {
   store: RegisterStore;

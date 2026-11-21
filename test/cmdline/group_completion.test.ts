@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_live_source } from "../../src/cmdline/completion/live.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { SessionItem } from "../../src/shared/messages.ts";
+import type { SessionItem } from "../../src/shared/messages/content.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 
 const COMMANDS: CommandMeta[] = [

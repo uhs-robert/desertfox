@@ -3,7 +3,7 @@
 
 import type { CommandDef, CommandMeta } from "../shared/command.ts";
 import type { Invocation } from "../shared/invocation.ts";
-import type { RunResponse } from "../shared/messages.ts";
+import type { RunResponse } from "../shared/messages/content.ts";
 import { check_args, command_meta, parse_command_line } from "../shared/registry/index.ts";
 import { is_context_source } from "../shared/registry/params.ts";
 import type { EnumSources, Registry } from "../shared/registry/index.ts";

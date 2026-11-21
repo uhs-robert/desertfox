@@ -1,7 +1,7 @@
 // The tabs, bookmarks, engines and headings the list offers. The background hands out the bookmarks, engines and windows and the host script the headings, once per kind, and the line keeps them, so
 // ranking a keystroke never waits. The lists that rank the history come ranked from the background (`ranked_client.ts`). The tabs are not fetched: the live tab model keeps them current. Pure: the page passes in the asking and the redraw.
 
-import type { BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, FolderItem, RegisterItem, SessionItem, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, FolderItem, RegisterItem, SessionItem, TabItem, WindowItem } from "../../shared/messages/content.ts";
 
 export type LiveKind = "tabs" | "bookmarks" | "engines" | "windows" | "headings" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "groups";
 export type LiveItems = { tabs: TabItem[]; bookmarks: BookmarkRows; engines: EngineItem[]; windows: WindowItem[]; headings: HeadingItem[]; sessions: SessionItem[]; registers: RegisterItem[]; folders: FolderItem[]; marks: RegisterItem[]; quality_levels: RegisterItem[]; quickmarks: RegisterItem[]; saved_quickmarks: RegisterItem[]; groups: SessionItem[] };

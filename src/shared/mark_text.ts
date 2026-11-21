@@ -1,7 +1,7 @@
 // The text of a mark or quickmark in a list, shared by the which-key rows and the command line list so both read alike.
 
 import { PREVIOUS_MARK } from "./mark_names.ts";
-import type { MarkItem } from "./messages.ts";
+import type { MarkItem } from "./messages/content.ts";
 
 const ADDRESS_CHARS = 36;
 

@@ -34,7 +34,10 @@ const BOUNDARY_TYPE_FILES: Record<string, string> = {
   "src/shared/config.ts": "the built config is stored under FILES_CONFIG_STORAGE_KEY",
   "src/shared/invocation.ts": "invocations are stored in the slot table, the repeat memory and registers",
   "src/shared/jump_names.ts": "JumpEntry sits inside the stored jump lists",
-  "src/shared/messages.ts": "every message between content scripts, pages and the background",
+  "src/shared/messages/content.ts": "every message from a content script to the background",
+  "src/shared/messages/page.ts": "every message from an extension page to the background",
+  "src/shared/messages/ports.ts": "the devtools and tab model ports carry these messages",
+  "src/shared/messages/tab.ts": "every message from the background to a frame",
   "src/shared/prefix_tree.ts": "CompiledKeymap is stored under COMPILED_KEYMAP_STORAGE_KEY",
 };
 

@@ -7,7 +7,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args_shape } from "../shared/registry/check_shape.ts";
 import { parse_command_line } from "../shared/registry/command_line.ts";
-import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages.ts";
+import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages/index.ts";
 import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { RANK_PORT_NAME } from "../shared/rank_port.ts";
 import type { RankPush } from "../shared/rank_port.ts";

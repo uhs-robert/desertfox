@@ -13,7 +13,7 @@ import { rank } from "../../shared/score.ts";
 import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
 import type { Ranked } from "../../shared/score.ts";
 import type { RankSource } from "../../shared/rank_port.ts";
-import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages/content.ts";
 import { RECENT_BOOKMARKS } from "../../shared/rank_port.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { anything_ranked, row_of_wire } from "./anything.ts";

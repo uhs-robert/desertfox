@@ -1,7 +1,7 @@
 // The extension pages' half of a bundle load. Firefox refuses `executeScript` on a `moz-extension://` page, so the background asks the page to add the `<script src>` tag itself.
 
 import { BUNDLE_NAMES } from "./bundles.ts";
-import type { AddBundleScript, AddBundleScriptAnswer } from "./messages.ts";
+import type { AddBundleScript, AddBundleScriptAnswer } from "./messages/tab.ts";
 
 // A bundle file is added once, and a request that arrives while the tag loads joins it. A failed tag is removed and forgotten, so a later request tries again.
 export function create_bundle_tag_adder(doc: Document) {

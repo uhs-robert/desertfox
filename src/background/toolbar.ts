@@ -2,7 +2,7 @@
 
 import { matches_pattern, resolve_site_columns, site_row_columns, type ResolvedSiteColumns, type SiteRowKeys, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION } from "../shared/prefix_tree.ts";
-import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
+import type { ToolbarAnswer, ToolbarRequest } from "../shared/messages/page.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
 import { best_effort, keep_chain } from "../shared/swallow.ts";

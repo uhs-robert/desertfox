@@ -4,7 +4,7 @@ import { fallback_history } from "../background/complete_items.ts";
 import { history_items } from "../background/completion_rank.ts";
 import { rank_pick_history } from "../background/rank_service.ts";
 import type { PickedHistory } from "../background/rank_index.ts";
-import type { HistoryItem } from "../shared/messages.ts";
+import type { HistoryItem } from "../shared/messages/content.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { open_in, pick_entry, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";

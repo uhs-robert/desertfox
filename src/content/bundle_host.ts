@@ -8,7 +8,7 @@ import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
 import type { BundleName } from "../shared/bundles.ts";
 import { is_caret_mode, RuntimeRefusal } from "../shared/command.ts";
 import type { Mode } from "../shared/command.ts";
-import type { Outcome } from "../shared/messages.ts";
+import type { Outcome } from "../shared/messages/content.ts";
 import { refused_as } from "../shared/swallow.ts";
 
 // Where a sink's mode went. A mode, or "page_hidden" when the tab or page went away while the mode was active.

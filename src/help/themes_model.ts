@@ -1,7 +1,7 @@
 // No DOM: the state of the import-a-theme section under the theme picker. It parses the pasted or picked scheme as the user types, so the preview and the problems are live,
 // and sends a save or a remove to the background, which parses the text again before it stores anything.
 
-import type { ChangeImportedThemes, ChangeImportedThemesAnswer, ListImportedThemes, ListImportedThemesAnswer } from "../shared/messages.ts";
+import type { ChangeImportedThemes, ChangeImportedThemesAnswer, ListImportedThemes, ListImportedThemesAnswer } from "../shared/messages/page.ts";
 import { MAX_SCHEME_CHARS, parse_base16, suggested_theme_name, theme_name_problem } from "../shared/theme/base16.ts";
 import type { ImportedScheme } from "../shared/theme/base16.ts";
 import type { PickedFile } from "./transfer_model.ts";

@@ -2,7 +2,7 @@
 // The two sections differ only in their messages, labels and field rules, which a `PairsKind` names. The background judges a save in full, so the form only checks what the fields alone can say.
 
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../shared/quickmark_names.ts";
-import type { ChangeAliases, ChangeAliasesAnswer, ChangeQuickmarks, ChangeQuickmarksAnswer, ListAliases, ListAliasesAnswer, ListQuickmarks, ListQuickmarksAnswer } from "../shared/messages.ts";
+import type { ChangeAliases, ChangeAliasesAnswer, ChangeQuickmarks, ChangeQuickmarksAnswer, ListAliases, ListAliasesAnswer, ListQuickmarks, ListQuickmarksAnswer } from "../shared/messages/page.ts";
 
 export type PairRow = {
   key: string;

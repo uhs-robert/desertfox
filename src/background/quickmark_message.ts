@@ -1,7 +1,7 @@
 // The Quickmarks section's messages over the `M` store's normal-window layer. The store is the one writer, so `M`, the form and `go<key>` never disagree.
 
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
-import type { ChangeQuickmarks, ChangeQuickmarksAnswer, ListQuickmarksAnswer, QuickmarkRow } from "../shared/messages.ts";
+import type { ChangeQuickmarks, ChangeQuickmarksAnswer, ListQuickmarksAnswer, QuickmarkRow } from "../shared/messages/page.ts";
 import { failure } from "./config_reload.ts";
 import type { QuickmarkStore } from "./quickmark_store.ts";
 

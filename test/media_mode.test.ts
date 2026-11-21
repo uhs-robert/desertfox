@@ -9,7 +9,7 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { create_media_discovery, create_tab_media, FRAME_ALIVE_LIMIT_MS, LINE_CLOSE_GRACE_MS } from "../src/background/tab_media.ts";
 import { create_step_queue } from "../src/background/tab_steps.ts";
 import { create_mode_state, fullscreen_step, takes_media_step } from "../src/content/mode_state.ts";
-import type { MediaStep } from "../src/shared/messages.ts";
+import type { MediaStep } from "../src/shared/messages/tab.ts";
 import type { Mode } from "../src/shared/command.ts";
 import { MODES } from "../src/shared/command.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";

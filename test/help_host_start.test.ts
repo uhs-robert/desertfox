@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_host_start_session } from "../src/help/host_start_model.ts";
-import type { HostStartChoice, HostStartPending } from "../src/shared/messages.ts";
+import type { HostStartChoice, HostStartPending } from "../src/shared/messages/page.ts";
 
 const pending: HostStartPending = { config_dir: "/c", host_digest: "h1", browser_digest: "b1", changes: [{ path: "settings.toml", kind: "replaced" }] };
 

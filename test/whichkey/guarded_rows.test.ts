@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { rows_for_page } from "../../src/content/whichkey/guarded_rows.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
-import type { WhichKeyRow } from "../../src/shared/messages.ts";
+import type { WhichKeyRow } from "../../src/shared/messages/content.ts";
 
 const row = (keys: string, command: string, chain?: TreeLeaf): WhichKeyRow => ({ keys, command, description: "", more: false, ...(chain ? { chain } : {}) });
 const guarded: TreeLeaf = { kind: "leaf", steps: [], when_present: "#tree" };

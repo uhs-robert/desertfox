@@ -44,7 +44,7 @@ import type { ApplyAction } from "./config_reload.ts";
 import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
-import type { ConfigImportPreview, SnippetPreview } from "../shared/messages.ts";
+import type { ConfigImportPreview, SnippetPreview } from "../shared/messages/page.ts";
 import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import { key_edits_running } from "./keymap_message.ts";
@@ -58,7 +58,7 @@ import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
 import type { ThemeFileChange } from "./theme_message.ts";
-import type { HostStartChoice } from "../shared/messages.ts";
+import type { HostStartChoice } from "../shared/messages/page.ts";
 
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
 // The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.

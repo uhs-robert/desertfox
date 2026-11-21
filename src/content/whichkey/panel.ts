@@ -1,7 +1,7 @@
 // The panel: one closed shadow root on the page, a floating frame with its title set into the top border (the title takes part in the width, up to the page cap), a row per key and a footer.
 // Hovering a row shows what the command does.
 
-import type { WhichKeyPanel } from "../../shared/messages.ts";
+import type { WhichKeyPanel } from "../../shared/messages/content.ts";
 import { KEY_TEST_BUILD } from "../../shared/key_test_build.ts";
 import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";

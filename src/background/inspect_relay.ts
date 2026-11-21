@@ -1,6 +1,6 @@
 // Hands a hint pick to the devtools page of the picked tab. A devtools page connects when its toolbox opens and names its tab, so the ports are kept by tab id. A pick that finds no port waits in `storage.session` and goes out when the page connects.
 
-import type { DevtoolsPick } from "../shared/messages.ts";
+import type { DevtoolsPick } from "../shared/messages/ports.ts";
 import { PICK_EXPIRY_MS } from "../shared/inspect.ts";
 import type { InspectAnswer } from "../shared/inspect.ts";
 import { INSPECT_PENDING_STORAGE_KEY } from "./storage_keys.ts";

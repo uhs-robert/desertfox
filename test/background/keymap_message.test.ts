@@ -9,7 +9,7 @@ import type { EditLayers, KeymapEdits } from "../../src/background/edit_layers.t
 import { binding_rows, create_keymap_messages, exportable_key_edits } from "../../src/background/keymap_message.ts";
 import type { KeymapState } from "../../src/background/keymap_message.ts";
 import type { MergedConfig } from "../../src/shared/config.ts";
-import { STALE_MOVE_REFUSAL } from "../../src/shared/messages.ts";
+import { STALE_MOVE_REFUSAL } from "../../src/shared/messages/page.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import type { CompiledKeymap, TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";

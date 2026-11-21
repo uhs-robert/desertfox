@@ -1,6 +1,6 @@
 // No DOM: the state of the settings page's banner for a pending host start (`background/host_start.ts`). It reads the stored question and sends the user's answer with the digests it showed.
 
-import type { HostFileChange, HostStartChoice, HostStartChoiceAnswer, HostStartPending } from "../shared/messages.ts";
+import type { HostFileChange, HostStartChoice, HostStartChoiceAnswer, HostStartPending } from "../shared/messages/page.ts";
 import { refused_as } from "../shared/swallow.ts";
 
 export type HostStartState = {

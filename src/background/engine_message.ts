@@ -6,7 +6,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import { field_problems } from "../shared/engine_fields.ts";
 import { parse_toml_text } from "../shared/config_build/source_files.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
-import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEnginesAnswer } from "../shared/messages.ts";
+import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEnginesAnswer } from "../shared/messages/page.ts";
 import { ConfigRefusal, failure, KEPT_CURRENT } from "./config_reload.ts";
 import type { AliasEdits, EngineEdits } from "./edit_layers.ts";
 import { ENGINE_FILE, hand_file_at_page_path, hand_file_defining, owned_engines, page_path_is_hand_file, with_owned_engines } from "./engine_file.ts";

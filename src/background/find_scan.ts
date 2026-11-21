@@ -1,7 +1,7 @@
 // Answers `find_scan`: runs one regex page search in a fresh Worker and stops it after a time limit.
 // A fresh Worker per scan, because `terminate` is the only way to stop a running `exec`, and a stopped Worker cannot be reused.
 
-import type { FindScanAnswer } from "../shared/messages.ts";
+import type { FindScanAnswer } from "../shared/messages/content.ts";
 import type { RegexMatches, ScanRequest } from "./regex_scan.ts";
 
 export const FIND_SCAN_LIMIT_MS = 300;

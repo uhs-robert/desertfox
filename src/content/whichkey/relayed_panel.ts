@@ -2,7 +2,7 @@
 // A frame keeps its id when it loads a new document, so a sender starts its count at the document's start time in ms (`performance.timeOrigin`). The new document's first count is above every count of the old one, which sent at most one per ms.
 // An erase hides only a panel its own frame drew, so a late erase from one frame leaves the panel of another frame, or the top frame's own.
 
-import type { WhichKeyPanel } from "../../shared/messages.ts";
+import type { WhichKeyPanel } from "../../shared/messages/content.ts";
 
 export function create_relayed_panel(show: (panel: WhichKeyPanel) => void, hide: () => void) {
   const newest = new Map<unknown, number>();

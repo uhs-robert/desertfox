@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { is_openable } from "./open_target.ts";

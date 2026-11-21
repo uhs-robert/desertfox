@@ -2,7 +2,7 @@
 // Also the move of the imports an older version kept in browser storage into those files, which a start runs once.
 
 import { stringify, TomlError } from "smol-toml";
-import type { ChangeImportedThemes, ChangeImportedThemesAnswer, ListImportedThemesAnswer } from "../shared/messages.ts";
+import type { ChangeImportedThemes, ChangeImportedThemesAnswer, ListImportedThemesAnswer } from "../shared/messages/page.ts";
 import type { SettingOverrides } from "../shared/config.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { RuntimeRefusal } from "../shared/command.ts";

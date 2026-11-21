@@ -4,7 +4,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { WhichKeyBorder } from "../shared/config.ts";
-import type { ListKeys, MarkItem, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages.ts";
+import type { ListKeys, MarkItem, RegisterItem, WhichKeyPanel, WhichKeyRow } from "../shared/messages/content.ts";
 import { PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { mark_text, shorten_address } from "../shared/mark_text.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";

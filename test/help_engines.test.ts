@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { can_save, create_engines_session, form_problems } from "../src/help/engines_model.ts";
-import type { ChangeEngines, ListEngines } from "../src/shared/messages.ts";
+import type { ChangeEngines, ListEngines } from "../src/shared/messages/page.ts";
 
 function session(answer: (message: ListEngines | ChangeEngines) => unknown) {
   const sent: (ListEngines | ChangeEngines)[] = [];

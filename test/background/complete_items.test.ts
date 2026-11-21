@@ -7,7 +7,7 @@ import type { RankSource } from "../../src/shared/rank_port.ts";
 import { refused_as } from "../../src/shared/swallow.ts";
 import { MAX_BOOST } from "../../src/shared/score.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
-import type { AnythingItems, SessionItem } from "../../src/shared/messages.ts";
+import type { AnythingItems, SessionItem } from "../../src/shared/messages/content.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
 import type { BookmarkNode, ContainerMarks, FolderNode, LineScope, TabLike, WindowLike } from "../../src/background/complete_items.ts";
 

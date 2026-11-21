@@ -2,7 +2,7 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { RegisterRead } from "../../shared/messages.ts";
+import type { RegisterRead } from "../../shared/messages/content.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { write_into_field } from "./field_writer.ts";
 import { take_text_entry } from "./entry.ts";

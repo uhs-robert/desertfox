@@ -2,7 +2,7 @@
 
 import { strip_tracking } from "../strip_tracking.ts";
 import { format_link_list, is_web_address } from "../link_list.ts";
-import type { Outcome } from "../../shared/messages.ts";
+import type { Outcome } from "../../shared/messages/content.ts";
 import type { Yanked } from "../caret/copy_text.ts";
 import { collect, name_candidates, query_for } from "./candidates.ts";
 import type { Found } from "./candidates.ts";

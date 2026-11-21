@@ -1,6 +1,6 @@
 // The port between the command line page and the background for the lists that rank the history: `open`, `history` and the finder.
 // The page sends the typed word and gets back only the top rows, ranked where the history lives.
-import type { AnythingItems } from "./messages.ts";
+import type { AnythingItems } from "./messages/content.ts";
 
 export const RANK_PORT_NAME = "desertfox_rank";
 

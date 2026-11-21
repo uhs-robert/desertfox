@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { read_folder_files, read_zip_file, accepted_code, can_commit, create_transfer_session, reach_block } from "../src/help/transfer_model.ts";
 import type { PickedFile, ReachSegment } from "../src/help/transfer_model.ts";
-import type { ConfigImportPreview, SnippetPreview } from "../src/shared/messages.ts";
+import type { ConfigImportPreview, SnippetPreview } from "../src/shared/messages/page.ts";
 import { no_reach } from "../src/background/import_reach.ts";
 import { DEFAULT_ZIP_LIMITS, read_zip } from "../src/shared/zip.ts";
 

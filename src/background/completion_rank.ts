@@ -3,7 +3,7 @@
 
 import { encode_ref } from "../shared/anything_ref.ts";
 import type { AnythingRef } from "../shared/anything_ref.ts";
-import type { AnythingItems, BookmarkItem, Boosted, ClosedTabRow, HistoryItem, HistoryItems, OpenItems, OpenRow, SiteItem } from "../shared/messages.ts";
+import type { AnythingItems, BookmarkItem, Boosted, ClosedTabRow, HistoryItem, HistoryItems, OpenItems, OpenRow, SiteItem } from "../shared/messages/content.ts";
 import { MAX_SITE_ROWS, RECENT_BOOKMARKS, RECENT_CLOSED } from "../shared/rank_port.ts";
 import type { FinderExtras, WireRow } from "../shared/rank_port.ts";
 import { MAX_BOOST, rank_top, score_candidate } from "../shared/score.ts";

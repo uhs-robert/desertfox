@@ -1,6 +1,6 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import type { FocusPage } from "../shared/messages.ts";
+import type { FocusPage } from "../shared/messages/tab.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
 import { best_effort } from "../shared/swallow.ts";

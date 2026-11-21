@@ -6,7 +6,7 @@ import type { JumpArea } from "../../src/background/jump_store.ts";
 import { create_jump_leave } from "../../src/background/jump_leave.ts";
 import { create_jump_step } from "../../src/background/jump_step.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
-import type { JumpRequest } from "../../src/shared/messages.ts";
+import type { JumpRequest } from "../../src/shared/messages/content.ts";
 
 const tab = (id: number, url: string, extra: Partial<MarkTab> = {}): MarkTab => ({ id, window_id: 1, index: id, url, incognito: false, last_accessed: id, discarded: false, ...extra });
 const HERE = "https://here.test/";

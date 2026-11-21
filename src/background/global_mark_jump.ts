@@ -4,7 +4,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { JumpEntry } from "../shared/jump_names.ts";
 import { mark_page_url } from "../shared/mark_names.ts";
-import type { MarkAnswer, MarkJump } from "../shared/messages.ts";
+import type { MarkAnswer, MarkJump } from "../shared/messages/content.ts";
 import { create_address_arrivals, type AddressDeps } from "./address_arrival.ts";
 import { read_place_in_time, type PageOffset } from "./router.ts";
 import type { GlobalJump, MarkSender, MarkStore } from "./mark_store.ts";

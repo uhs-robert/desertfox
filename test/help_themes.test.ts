@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { can_save, create_themes_session, name_problem } from "../src/help/themes_model.ts";
-import type { ChangeImportedThemes, ListImportedThemes } from "../src/shared/messages.ts";
+import type { ChangeImportedThemes, ListImportedThemes } from "../src/shared/messages/page.ts";
 
 const SCHEME = Array.from({ length: 16 }, (_, at) => `base${at.toString(16).padStart(2, "0")}: "${(at * 17).toString(16).padStart(2, "0").repeat(3)}"`).join("\n");
 const NAMED = `scheme: "My Scheme"\n${SCHEME}\n`;

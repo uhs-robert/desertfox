@@ -4,7 +4,7 @@ import { stringify } from "smol-toml";
 import type { SettingOverrides } from "../shared/config.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { AUTOCONFIG_FILE, type ConfigFiles } from "../shared/config_build/source_files.ts";
-import type { ConfigImportAnswer, ExportConfig, ExportConfigAnswer, InstalledSnippet, ListSnippets, ListSnippetsAnswer, RemoveSnippet } from "../shared/messages.ts";
+import type { ConfigImportAnswer, ExportConfig, ExportConfigAnswer, InstalledSnippet, ListSnippets, ListSnippetsAnswer, RemoveSnippet } from "../shared/messages/page.ts";
 import { ConfigRefusal } from "./config_reload.ts";
 import type { AliasEdits, EngineEdits, KeymapEdits } from "./edit_layers.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";

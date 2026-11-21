@@ -1,7 +1,7 @@
 // Picking an entry by typed text and picking a bookmark folder. The handlers and the command line page share them, so `--folder=` filters a list by the rule that filing uses.
 
 import { RuntimeRefusal } from "./command.ts";
-import type { BookmarkRow, BookmarkRows } from "./messages.ts";
+import type { BookmarkRow, BookmarkRows } from "./messages/content.ts";
 import { best_match, score_candidate } from "./score.ts";
 
 export const FOLDER_PATH_SEPARATOR = " / ";

@@ -5,7 +5,7 @@ import type { CommandMeta, ContextSource, ParamDef } from "../shared/command.ts"
 import type { MergedConfig } from "../shared/config.ts";
 import { BUILT_IN_PAGE } from "../shared/config.ts";
 import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
-import type { ImportReach, KeyGroup, KeyRow, ReachRow, ReachList } from "../shared/messages.ts";
+import type { ImportReach, KeyGroup, KeyRow, ReachRow, ReachList } from "../shared/messages/page.ts";
 import { bind_tables_of } from "../shared/match_pattern.ts";
 import { CLIPBOARD_REGISTER } from "../shared/register_names.ts";
 import { is_context_source } from "../shared/registry/params.ts";

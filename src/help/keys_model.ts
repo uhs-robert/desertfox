@@ -1,8 +1,8 @@
 // No DOM: the state of the Keys section on the settings page. It lists the bindings, holds one open row editor and a draft per row, and sends the check and each edit to the background.
 // The background decides. The page only shows what the check says and keeps the sequence in the spelling the background answers with.
 
-import { STALE_MOVE_REFUSAL } from "../shared/messages.ts";
-import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckBindingAnswer, ListBindings, ListBindingsAnswer } from "../shared/messages.ts";
+import { STALE_MOVE_REFUSAL } from "../shared/messages/page.ts";
+import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckBindingAnswer, ListBindings, ListBindingsAnswer } from "../shared/messages/page.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import { parse_sequence } from "../shared/keys/index.ts";
 import { refused_as } from "../shared/swallow.ts";
