@@ -2,6 +2,8 @@ import type { Outcome, RegisterYank } from "../../shared/messages/content.ts";
 import { BLACK_HOLE_REGISTER } from "../../shared/register_names.ts";
 import { ignore_refusal } from "../../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 // The clipboard is missing on a plain http page and refuses a write the browser does not allow, so a copy can fail.
 export async function copy_text(clipboard: { writeText: (text: string) => Promise<void> } | undefined, text: string): Promise<boolean> {
   if (!clipboard) return false;

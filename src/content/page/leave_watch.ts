@@ -6,6 +6,8 @@ import type { JumpLeave, JumpPush } from "../../shared/messages/content.ts";
 import { mark_page_url } from "../../shared/mark_names.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 
+declare const browser: MessagingBrowser;
+
 // A change this soon after a recorded change, or after a jump or step scrolled the page, records nothing. A burst of pushes is one move. A page that changes its address as it scrolls would otherwise record the scroll the jump list made itself.
 export const LEAVE_QUIET_MS = 1000;
 

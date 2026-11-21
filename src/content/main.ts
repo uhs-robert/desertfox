@@ -32,6 +32,8 @@ import { answer_park, focus_page_content, start_content_once } from "./handlers/
 import { read_field_text } from "./text/field_text.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 
+declare const browser: MessagingBrowser;
+
 // Until the tree is read the setting is unknown, and the default applies.
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 // Set in the top frame only, from the background, while a child frame holds focus.

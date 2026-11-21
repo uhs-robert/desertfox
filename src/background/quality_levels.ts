@@ -4,6 +4,8 @@ import type { QualityAnswer, QualityReport, QualityRequest } from "../shared/qua
 import type { RegisterItem } from "../shared/messages/content.ts";
 import { refused_as } from "../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 // The reports that frames push when the bundle runs in them. A request listens for its tab while it waits, so a report that arrives with no request waiting is dropped.
 export function create_quality_reports() {
   const listeners = new Map<number, Set<(frame_id: number, report: QualityReport) => void>>();

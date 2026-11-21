@@ -41,6 +41,8 @@ import type { HeadingItem, RecordTiming } from "../../shared/messages/content.ts
 import { arm_leave_watch } from "../page/leave_watch.ts";
 import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 // `desertfox_content_loaded` holds the start of a frame whose content script waits for its first focus, see `../handlers/focus.ts`.
 type HintsWindow = { desertfox_host: PageHostApi; desertfox_hints_ready?: true; desertfox_pick_target?: Element; desertfox_content_loaded?: true | (() => void) };
 const page = window as unknown as HintsWindow;

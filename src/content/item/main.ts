@@ -13,6 +13,8 @@ import { best_effort } from "../../shared/swallow.ts";
 import type { Region } from "./finder.ts";
 import { is_shown } from "../shown.ts";
 
+declare const browser: MessagingBrowser;
+
 type ItemWindow = { desertfox_host?: PageHostApi; desertfox_item_ready?: true };
 const item_window = window as unknown as ItemWindow;
 

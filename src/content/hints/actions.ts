@@ -8,6 +8,8 @@ import { best_effort } from "../../shared/swallow.ts";
 import { center_of, dispatch_mouse_event } from "../pointer_events.ts";
 import type { Hoverable } from "../pointer_events.ts";
 
+declare const browser: MessagingBrowser;
+
 export type HintAction = "here" | "tab" | "background" | "window" | "caret" | "visual" | "copy" | "copy_text" | "copy_image" | "copy_selector" | "copy_html" | "inspect" | "download" | "delete" | "focus" | "hover" | "double_click" | "play_pause" | "mute" | "fullscreen" | "enter_media" | "enter_item" | "prompt" | "grab" | "grab_move" | "grab_swipe";
 
 export type Place = "here" | "tab" | "background" | "window";

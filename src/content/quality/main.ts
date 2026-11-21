@@ -9,6 +9,8 @@ import { create_rule } from "./rule.ts";
 import { youtube_driver } from "./youtube.ts";
 import type { YouTubePage } from "./youtube.ts";
 
+declare const browser: MessagingBrowser;
+
 type QualityWindow = QualityVideoState & { desertfox_quality_ready?: true; desertfox_quality_address?: string; desertfox_quality_rule?: ReturnType<typeof create_rule>; wrappedJSObject: YouTubePage & HlsPage };
 const quality_window = window as unknown as QualityWindow;
 

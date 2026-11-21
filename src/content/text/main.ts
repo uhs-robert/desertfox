@@ -10,6 +10,8 @@ import { read_field_text } from "./field_text.ts";
 import { create_text_recorder } from "./recorder.ts";
 import { is_secret_field } from "./secret_field.ts";
 
+declare const browser: MessagingBrowser;
+
 type TextWindow = { desertfox_host: BundleHostApi; desertfox_text_ready?: true };
 const page = window as unknown as TextWindow;
 

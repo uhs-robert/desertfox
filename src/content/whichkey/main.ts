@@ -12,6 +12,8 @@ import { create_which_key_session } from "./session.ts";
 import { create_which_key_timer } from "./timer.ts";
 import { refused_as, warn_and_go } from "../../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 type WhichKeyWindow = { desertfox_host: BundleHostApi; desertfox_whichkey_ready?: true };
 const page = window as unknown as WhichKeyWindow;
 

@@ -8,6 +8,8 @@ import type { ContentHandler } from "./types.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./page.ts";
 import { best_effort } from "../../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line", "item", "item_visual"] as const;
 
 // A caret mode answers once caret.js has set it.

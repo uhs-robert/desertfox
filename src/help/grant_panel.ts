@@ -9,6 +9,8 @@ import type { GrantablePermission } from "../shared/permission_grant.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
 import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages/page.ts";
 
+declare const browser: MessagingBrowser;
+
 export type PermissionDeps = {
   has: () => Promise<boolean>;
   request: () => Promise<boolean>;

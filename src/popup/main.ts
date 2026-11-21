@@ -11,6 +11,8 @@ import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY } from "../background/
 import { build_rows, create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SUPPORT_URL, SITE_RULES_HASH, WARNINGS_HASH, site_keys_hash } from "./model.ts";
 import type { HostDot, PopupRow } from "./model.ts";
 
+declare const browser: MessagingBrowser;
+
 const root = document.getElementById("desertfox-popup")!;
 // One notice node for the life of the popup. The expiry and each new notice change its text and nothing else, so a redraw never runs for them and focus stays put.
 const notice_line = document.createElement("div");
