@@ -117,8 +117,10 @@ export function create_tab_media(deps: TabMediaDeps) {
     // The mode a frame reports. Any frame can start the hold (fullscreen starts it in the frame that sees it), and the first report of media starts the mode in every other frame in normal mode, which then report and join. A frame of the hold that reports a mode that is not media ends it for every frame.
     // A frame of the hold with a hint or the line open keeps the mode for the others too, and when it closes back to the mode, every frame that left meanwhile goes back to it.
     // `focus` says whether the frame's own document holds the keyboard focus. `by_step` says that a step or a join reply put the frame in the mode, so its report never starts a hold. It joins any live hold, even one newer than its step, because the tab and the frame are both in the mode. `document_id` is the reporting document.
-    reported: (tab_id: number, frame_id: number, mode: Mode, focus: boolean, by_step = false, document_id?: string): Promise<void> =>
-      in_turn(async () => {
+    reported: (tab_id: number, frame_id: number, mode: Mode, focus: boolean, by_step = false, document_id?: string): Promise<void> => {
+      // The off may land while the report waits for its turn and its read. The report came first, so an off on its way now is stale too.
+      const off_on_its_way_at_report = off_on_its_way(tab_id, frame_id, document_id);
+      return in_turn(async () => {
         const hold = await read(tab_id);
         if (mode === "media") {
           if (hold?.lines?.includes(frame_id)) return after_line_closed(tab_id, hold, frame_id);
@@ -126,7 +128,7 @@ export function create_tab_media(deps: TabMediaDeps) {
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
           if (by_step && !is_live_hold(hold)) return step(tab_id, false, frame_id, undefined, document_id);
           const { stepped_on, ...rest } = hold ?? { frames: [] };
-          const stale_off = !by_step && off_on_its_way(tab_id, frame_id, document_id);
+          const stale_off = !by_step && (off_on_its_way_at_report || off_on_its_way(tab_id, frame_id, document_id));
           drop_steps_to(tab_id, frame_id);
           await write(tab_id, with_frame(rest, frame_id, document_id, stale_off));
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
@@ -144,7 +146,8 @@ export function create_tab_media(deps: TabMediaDeps) {
         else if (mode === "normal" && (await open_lines_besides(tab_id, hold, frame_id)).length > 0) {
           if (!hold.left?.includes(frame_id)) await write(tab_id, { ...hold, left: [...(hold.left ?? []), frame_id] });
         } else if (!KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
-      }),
+      });
+    },
     // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode.
     // The frame goes into `frames` in the same turn as the read, so an end after the read sends it the step off, and its report finds it in the hold. A step off that reaches the frame before it applies this reply is lost, but the frame reports the mode as caused by a step, so that report finds no hold and sends the frame back to normal.
     // A new document of a frame of the hold joins too. The steps still waiting for the frame were for its old document, and so was a stale off.

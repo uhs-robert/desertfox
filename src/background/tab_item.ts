@@ -81,8 +81,10 @@ export function create_tab_item(deps: TabItemDeps) {
   return {
     // The mode a frame reports. Any frame can start the hold, and the first report starts the mode in every other frame in normal mode, which then report and join. A frame of the hold that reports a mode that is not item ends it for every frame.
     // `by_step` says that a step or a join reply put the frame in the mode, so its report never starts a hold. It joins any live hold, even one newer than its step, because the tab and the frame are both in the mode. `document_id` is the reporting document.
-    reported: (tab_id: number, frame_id: number, mode: Mode, by_step = false, document_id?: string): Promise<void> =>
-      in_turn(async () => {
+    reported: (tab_id: number, frame_id: number, mode: Mode, by_step = false, document_id?: string): Promise<void> => {
+      // The off may land while the report waits for its turn and its read. The report came first, so an off on its way now is stale too.
+      const off_on_its_way_at_report = off_on_its_way(tab_id, frame_id, document_id);
+      return in_turn(async () => {
         const hold = await read(tab_id);
         if (mode === "item") {
           if (hold?.frames.includes(frame_id)) {
@@ -91,7 +93,7 @@ export function create_tab_item(deps: TabItemDeps) {
           }
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
           if (by_step && !hold) return step(tab_id, false, frame_id, undefined, document_id);
-          const stale_off = !by_step && off_on_its_way(tab_id, frame_id, document_id);
+          const stale_off = !by_step && (off_on_its_way_at_report || off_on_its_way(tab_id, frame_id, document_id));
           drop_steps_to(tab_id, frame_id);
           await deps.storage.set({ [key_of(tab_id)]: with_frame<ItemHold>(hold ?? { frames: [] }, frame_id, document_id, stale_off) });
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
@@ -105,7 +107,8 @@ export function create_tab_item(deps: TabItemDeps) {
           return step(tab_id, true, frame_id, undefined, document_id);
         }
         await end(tab_id, hold, frame_id);
-      }),
+      });
+    },
     // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode. The frame goes into the hold in the same turn as the read, so an end after the read sends it the step off.
     // A new document of a frame of the hold joins too. The steps still waiting for the frame were for its old document, and so was a stale off.
     join: (tab_id: number, frame_id: number, document_id?: string): Promise<boolean> =>

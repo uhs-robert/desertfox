@@ -14,8 +14,15 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 // Tab 4, whose frames take the steps the background sends. Each step stays on its way until the test lands it, and a step to a frame in `frozen` never answers. A step that names a document lands only on that document of its frame, as Firefox refuses a send to a document another one replaced. Frame N starts with document `dN`.
 function tab_with_holds({ frozen = [] as number[] } = {}) {
   const data: Record<string, unknown> = {};
+  // While `reads_held` is set, each storage read waits until the test releases the reads.
+  let reads_held: Promise<void> | undefined;
+  let release_reads = () => {};
+  const hold_reads = () => void (reads_held = new Promise<void>((resolve) => (release_reads = () => ((reads_held = undefined), resolve()))));
   const storage = {
-    get: async (key: string) => (key in data ? { [key]: structuredClone(data[key]) } : {}),
+    get: async (key: string) => {
+      await reads_held;
+      return key in data ? { [key]: structuredClone(data[key]) } : {};
+    },
     set: async (items: Record<string, unknown>) => void Object.assign(data, structuredClone(items)),
     remove: async (key: string | string[]) => void [key].flat().forEach((name) => delete data[name]),
   } as never;
@@ -64,7 +71,7 @@ function tab_with_holds({ frozen = [] as number[] } = {}) {
   const reload = (frame: number, document: string) => void documents.set(frame, document);
   // A report from a sender that names no document, as a hold stored before documents were kept has none.
   const report_without_document = (hold: HoldMode, frame: number, mode: Mode, by_step = false) => (hold === "item" ? item.reported(4, frame, mode, by_step) : media.reported(4, frame, mode, true, by_step));
-  return { item, media, steps, report, report_without_document, land, land_all, sent, landed, final_on, hold_of, reload, document_of };
+  return { hold_reads, release_reads: () => release_reads(), item, media, steps, report, report_without_document, land, land_all, sent, landed, final_on, hold_of, reload, document_of };
 }
 
 const MODES: HoldMode[] = ["item", "media"];
@@ -300,5 +307,25 @@ for (const hold of MODES) {
     assert.equal(await (hold === "item" ? tab.item.join(4, 7) : tab.media.join(4, 7)), true);
     await tab.land_all();
     assert.deepEqual(tab.sent.slice(sent_before_join), []);
+  });
+}
+
+// R1 with a slow read: the report of the frame's own start arrives while the off is on its way, and the off lands while the background still reads the hold. The report came first, so the off is still stale.
+for (const hold of MODES) {
+  test(`${hold}: an off that lands while the report of a frame's own start waits on its storage read still counts as stale`, async () => {
+    const tab = tab_with_holds();
+    await tab.report(hold, 0, hold);
+    await tab.land({ on: true });
+    await tab.report(hold, 7, hold, true);
+    await tab.report(hold, 7, "normal", true);
+    tab.hold_reads();
+    const own_start = tab.report(hold, 0, hold);
+    await tab.land({ on: false, frame: 0 });
+    tab.release_reads();
+    await own_start;
+    await tab.report(hold, 0, "normal");
+    await tab.land_all();
+    assert.deepEqual(tab.hold_of(hold)?.frames, [0], "hold B lives");
+    assert.equal(tab.final_on(0, hold), true, "frame 0 is back in the mode");
   });
 }
