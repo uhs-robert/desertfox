@@ -7,7 +7,7 @@ import { bind_tables_of, type SiteRuleRow } from "../src/shared/match_pattern.ts
 import { create_derived_row } from "../src/content/item/derived.ts";
 import type { DerivedRow } from "../src/content/item/derived.ts";
 import { args_for_pin, lists_with_row, pick_list } from "../src/content/item/lists.ts";
-import { current_item, forget_move, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
+import { current_item, forget_move, item_rect, move_item, pick_item, place_of, read_cursor, step_from } from "../src/content/item/pick.ts";
 import type { Box, ItemPage } from "../src/content/item/pick.ts";
 import { click_first_shown } from "../src/content/hints/click_first.ts";
 
@@ -681,4 +681,27 @@ test("an ARIA list with focus_none_ takes no focus on a pick or a landing, draws
   move_item(page, { direction: "down" });
   assert.deepEqual([log, shown, selectors], [[], ["0", "1"], ["[role=option]", "[role=option]"]]);
   assert.equal(derived.link_of_(items[1] as unknown as Element), items[1]);
+});
+
+const rect_of = (top: number, bottom: number) => ({ left: 10, right: 110, top, bottom, width: 100, height: bottom - top });
+const head_with_text = (text: { top: number; bottom: number; shown: boolean } | null, selected: string[] = []) =>
+  ({
+    getBoundingClientRect: () => rect_of(100, 136),
+    parentElement: { querySelector: (selector: string) => (selected.push(selector), text && { checkVisibility: () => text.shown, getBoundingClientRect: () => rect_of(text.top, text.bottom) }) },
+  }) as unknown as Element;
+
+test("item_rect grows the box from the head down to the text the extent selector finds from the parent", () => {
+  const selected: string[] = [];
+  assert.deepEqual(item_rect(head_with_text({ top: 136, bottom: 1500, shown: true }, selected), ":scope > div > [slot=comment]"), { left: 10, right: 110, top: 100, bottom: 1500, width: 100, height: 1400 });
+  assert.deepEqual(selected, [":scope > div > [slot=comment]"]);
+});
+
+test("item_rect keeps the own box with no extent, no match, a hidden match or a match above the head's bottom", () => {
+  const own = { left: 10, right: 110, top: 100, bottom: 136, width: 100, height: 36 };
+  const selected: string[] = [];
+  assert.deepEqual(item_rect(head_with_text({ top: 136, bottom: 900, shown: true }, selected)), own);
+  assert.deepEqual(selected, [], "an empty extent runs no query");
+  assert.deepEqual(item_rect(head_with_text(null), "p"), own);
+  assert.deepEqual(item_rect(head_with_text({ top: 136, bottom: 900, shown: false }), "p"), own, "a folded comment's stale text box is ignored");
+  assert.deepEqual(item_rect(head_with_text({ top: 0, bottom: 120, shown: true }), "p"), own);
 });

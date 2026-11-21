@@ -25,6 +25,15 @@ test("the action is required and must be one of the seven", () => {
   for (const action of ["parent", "child", "next", "prev", "fold", "unfold", "toggle"]) assert.equal(check_args(command, { ...base, action }).ok, true, action);
 });
 
+test("extent is an optional selector on page.tree and page.item", () => {
+  assert.equal(check_args(command, { ...base, action: "next", extent: ":scope > div" }).ok, true);
+  assert.equal(check_args(command, { ...base, action: "next", extent: 3 }).ok, false);
+  const item = registry.get("page.item")!;
+  assert.equal(check_args(item, { selector: "li", direction: "down", extent: ":scope > p" }).ok, true);
+  assert.equal(check_args(item, { selector: "li", direction: "down", extent: 3 }).ok, false);
+  assert.equal(check_args(item, { selector: "li", direction: "down" }).ok, true);
+});
+
 test("times goes with the moves only", () => {
   for (const action of ["parent", "child", "next", "prev"]) assert.equal(check_args(command, { ...base, action, times: 3 }).ok, true, action);
   for (const action of ["fold", "unfold", "toggle"]) assert.equal(check_args(command, { ...base, action, times: 3 }).ok, false, action);
@@ -73,8 +82,13 @@ test("the Reddit thread rows come before the feed rows, bind the tree keys to co
       assert.equal(table[key]?.args["depth_from"], "above", key);
       assert.equal(table[key]?.when_present, "shreddit-comment > details > summary", key);
       assert.equal(check_args(command, table[key]!.args).ok, true, key);
+      assert.equal(table[key]?.args["extent"], ":scope > div > div > [slot=comment]", key);
     }
-    assert.equal(table["j"]?.id, "page.item");
+    for (const key of ["j", "k"]) {
+      assert.equal(table[key]?.id, "page.item", key);
+      assert.equal(table[key]?.args["extent"], ":scope > div > div > [slot=comment]", key);
+      assert.equal(check_args(registry.get("page.item")!, table[key]!.args).ok, true, key);
+    }
   }
   const feed = entries.find(({ row }) => row.site === "https://www.reddit.com/*")!.row.keymap!.item!;
   assert.equal(feed["h"], undefined, "the feed rows keep h and l as they are");

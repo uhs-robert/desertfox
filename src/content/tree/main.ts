@@ -11,7 +11,7 @@ import type { TreeRow } from "./walk.ts";
 type TreeWindow = { desertfox_host?: PageHostApi; desertfox_tree_ready?: true };
 const tree_window = window as unknown as TreeWindow;
 
-type TreeArgs = { action: string; preset?: "none" | "aria"; selector: string; link?: string; depth: string; depth_from: "item" | "inside" | "above"; depth_at?: string; fold_by?: "click" | "keys"; fold: string; folded: string; times?: number };
+type TreeArgs = { action: string; preset?: "none" | "aria"; selector: string; link?: string; depth: string; depth_from: "item" | "inside" | "above"; depth_at?: string; fold_by?: "click" | "keys"; fold: string; folded: string; extent?: string; times?: number };
 
 // A tree widget folds by the arrows. Some read only the key code, so both go.
 const arrow = (open: boolean) => ({ key: open ? "ArrowRight" : "ArrowLeft", key_code: open ? 39 : 37 });
@@ -56,12 +56,12 @@ if (!tree_window.desertfox_tree_ready && host) {
     const outcome = await host.run_command_(id, bundle, args);
     if (!outcome.ok) throw new RuntimeRefusal(outcome.message);
   };
-  const land = async (item: Element, { selector, link }: TreeArgs) => {
+  const land = async (item: Element, { selector, link, extent }: TreeArgs) => {
     const { top, bottom } = item.getBoundingClientRect();
     if (top < 0 || bottom > innerHeight) item.scrollIntoView({ block: bottom - top > innerHeight ? "start" : "center", behavior: "instant" });
     if ((item as HTMLElement).tabIndex < 0) item.setAttribute("tabindex", "-1");
     (item as HTMLElement).focus({ preventScroll: true });
-    await ask("page.item", { selector, link, direction: "current" });
+    await ask("page.item", { selector, link, extent, direction: "current" });
   };
   const run = async (given: TreeArgs) => {
     const args: TreeArgs = given.preset === "aria" ? { ...given, ...ARIA_ARGS } : given;

@@ -108,6 +108,42 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("the unfold click", async () => (await clicks()) === "k1,k4,");
   });
 
+  const READ_BOX = `(() => {
+    for (const child of document.documentElement.children) {
+      const box = child.openOrClosedShadowRoot?.querySelector(".desertfox-item-box");
+      if (!box) continue;
+      const rect = box.getBoundingClientRect();
+      return child.isConnected && box.style.visibility !== "hidden" ? { top: rect.top + scrollY, height: rect.height } : null;
+    }
+    return null;
+  })()`;
+  const page_rect = (id) => in_active_tab(`(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return { top: r.top + scrollY, bottom: r.bottom + scrollY }; })()`);
+
+  await run_case("j reads a comment taller than the window to its end, the box covers the head and the text, and a reply's text stays out", async () => {
+    await open_page("reddit_thread", "reddit_long_read", { new_tab: true });
+    await enter_item_mode();
+    await press_keys("j");
+    await expect_focus("k0");
+    const head = await page_rect("k0");
+    const text = await page_rect("t0");
+    const reply_text = await page_rect("t1");
+    await poll_until("the box on k0", async () => !!(await in_active_tab(READ_BOX)));
+    const box = await in_active_tab(READ_BOX);
+    expect(Math.abs(box.top - head.top) < 2 && Math.abs(box.top + box.height - text.bottom) < 2, `the box ${JSON.stringify(box)} does not run from the head ${head.top} to the text bottom ${text.bottom}`);
+    expect(box.top + box.height < reply_text.bottom - 1, "the box covers the reply's text");
+    // The comment runs past the window, so j scrolls on it until its text ends, and only then goes to the reply.
+    await press_keys("j");
+    await sleep(300);
+    expect((await focused()) === "k0", "the first j left the long comment");
+    expect((await in_active_tab("scrollY")) > 0, "the first j did not scroll");
+    for (let press = 0; press < 80 && (await focused()) === "k0"; press++) {
+      await press_keys("j");
+      await sleep(60);
+    }
+    await expect_focus("k1");
+    expect((await in_active_tab("scrollY")) + (await in_active_tab("innerHeight")) >= text.bottom - 2, "j left k0 before its text came into view");
+  });
+
   await run_case("on a feed page, h keeps the sideways scroll", async () => {
     await open_page("controls", "reddit_feed", { new_tab: true });
     await enter_item_mode();
