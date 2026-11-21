@@ -6,9 +6,9 @@ import type { Outcome } from "../../shared/messages.ts";
 
 export type MoveDirection = "down" | "up" | "left" | "right";
 export type SectionDirection = "next_section" | "prev_section";
-export type ItemDirection = MoveDirection | SectionDirection | "first" | "last" | "current";
+export type ItemDirection = MoveDirection | SectionDirection | "first" | "last" | "current" | "other_end";
 // With no selector (undefined, or the empty text the validator fills in) the items come from the derived row (`ItemPage.derived`).
-export type ItemArgs = { selector?: string; link?: string; section?: string; direction: ItemDirection; times?: number; hover?: boolean };
+export type ItemArgs = { selector?: string; link?: string; section?: string; direction: ItemDirection; times?: number; hover?: boolean; extend?: boolean };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
 // Where the move starts. `on_item` is false when no item holds the focus or was the last move, and `index` is then the first item not above the view, or the item count when all are above it.
@@ -91,6 +91,8 @@ export type ItemPage = EndPage & {
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
+  // Visual item mode: swaps the ends of the selection and hands back the item that is the cursor now.
+  swap_ends_?: () => Element | undefined;
   derived?: { items_: (keep?: boolean) => Element[]; sections_: () => Element[]; link_of_: (item: Element) => Element | undefined; selector_: () => string; grew_: () => boolean; grid_: () => boolean; focus_none_?: () => boolean };
 };
 
@@ -117,7 +119,7 @@ export function read_cursor(page: ItemPage, shown_: boolean): ItemCursor | undef
 
 const LINK = "a[href]";
 
-// The item that item mode treats as current, and its link, for an action on that item (the item-first hint labels, Space, Enter). The item that holds the focus wins over the last one moved to, as for a move, so a click or Tab into another item counts. Nothing before a first move, or once the last item has left the page.
+// The item that item mode treats as current, and its link, for an action on that item (the item-first hint labels, Space, Enter). The item that holds the focus wins over the last one moved to, as for a move, so a click or Tab into another item counts. Nothing once the last item has left the page.
 export function current_item(page: ItemPage): { item_: Element; link_: Element | undefined } | undefined {
   // Before any move the finder's list stands in, so a link reached with Tab counts.
   const args = last_move?.args_ ?? { direction: "current" as const };
@@ -143,6 +145,13 @@ const row_selector = (page: ItemPage, args: ItemArgs): string => args.selector |
 // A row that names its selector asks for the hover outright. The finder's items get it only while one holds a thumbnail, checked again when the wait ends, so a text result gets no hover card opened.
 const hover_check = (args: ItemArgs, item: Element) => (args.hover ? () => !!args.selector || !!thumbnail(item) : undefined);
 
+// The list as the last move read it, which visual item mode keeps its ends in.
+export const all_items = (page: ItemPage): Element[] => items_of(page, last_move?.args_ ?? { direction: "current" }, true);
+
+// Told of every item the cursor lands on, which visual item mode follows.
+let on_land: ((item: Element) => void) | undefined;
+export const watch_lands = (listener: (item: Element) => void) => void (on_land = listener);
+
 const items_of = (page: ItemPage, args: ItemArgs, keep?: boolean): Element[] => (args.selector ? Array.from(page.doc.querySelectorAll(args.selector)).filter(is_shown) : (page.derived?.items_(keep) ?? []));
 
 export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Promise<void> {
@@ -152,6 +161,10 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
   const read_items = (keep?: boolean) => items_of(page, args, keep);
   const items = read_items();
   const { direction } = args;
+  if (direction === "other_end") {
+    const item = page.swap_ends_?.();
+    return item ? land_on(page, item, args) : undefined;
+  }
   // The ends ignore the focus and the count. With no item they do nothing: the shipped rows guard them with `when_present`, so the plain keys run then. With no selector (the finder's gg and G) they refuse instead, and content.js scrolls to the top or bottom.
   // The finder's list can start screens below the top, so with no selector an end item off screen after the scroll takes no focus, no box and no pin: the next j starts from the view and does not jump back.
   // Only the first land reveals. The follow lands again on a row the page redrew, and a reveal then would drag a panel the user has scrolled since.
@@ -208,5 +221,6 @@ function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, p
   const { top, left, bottom, right } = item.getBoundingClientRect();
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };
+  on_land?.(item);
   page.highlight(item, row_selector(page, args), hover_check(args, item));
 }

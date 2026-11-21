@@ -96,7 +96,11 @@ test("the , group holds the DesertFox commands", () => {
 });
 
 test("visual item mode: v enters it from item mode and v or Escape leaves it", () => {
-  assert.deepEqual(DEFAULT_KEYMAP.item?.v, { id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" });
+  assert.deepEqual(DEFAULT_KEYMAP.item?.v, [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }]);
+  for (const key of ["j", "k", "h", "l", "gg", "G", "}", "{"]) assert.equal((DEFAULT_KEYMAP.item_visual?.[key] as { args?: { extend?: boolean } }).args?.extend, true, key);
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.o, { id: "page.item", args: { direction: "other_end" }, label: "Swap the ends of the selection" });
+  assert.equal(DEFAULT_KEYMAP.item_visual?.f, undefined);
+  assert.equal(DEFAULT_KEYMAP.item_visual?.["<Enter>"], undefined);
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Escape>"], { id: "mode.escape" });
   assert.equal(DEFAULT_KEYMAP.item_visual?.V, undefined, "only v enters");

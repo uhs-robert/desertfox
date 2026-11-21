@@ -39,8 +39,8 @@ function covered_rect(item: Element) {
   return new DOMRect(left, top, right - left, bottom - top);
 }
 
-// `mode` is the frame's mode. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to.
-export function create_item_overlay(mode: () => string, watch_user: () => UserLeft, on_follow: (item: Element) => void) {
+// `mode` is the frame's mode. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to. `cursor_now` gives the item of the visual item cursor, found again after the page redrew its list, and nothing outside that mode.
+export function create_item_overlay(mode: () => string, watch_user: () => UserLeft, on_follow: (item: Element) => void, cursor_now: () => Element | undefined) {
   const host = document.createElement("div");
   const box = document.createElement("div");
   box.className = "desertfox-item-box";
@@ -65,7 +65,7 @@ export function create_item_overlay(mode: () => string, watch_user: () => UserLe
   let watch: ReturnType<typeof setInterval> | undefined;
   let drawn_in: string | undefined;
   // The box belongs to item mode and to normal mode, where a row of the user's binds j and k and the focus mark shows. A box drawn in item mode clears once the frame leaves it by any route, a step from another frame included, which no input in this frame shows.
-  const still_wanted = () => mode() === "item" || (mode() === "normal" && drawn_in !== "item");
+  const still_wanted = () => mode().startsWith("item") || (mode() === "normal" && !drawn_in?.startsWith("item"));
 
   const reposition = () => {
     const rect = item && covered_rect(item);
@@ -124,6 +124,8 @@ export function create_item_overlay(mode: () => string, watch_user: () => UserLe
     stop_following = follow_windows([window], reposition);
     watch = setInterval(() => {
       // A focus mark clears as soon as its element loses the focus, also inside a shadow root, which sends no focusout to the window.
+      const cursor = still_wanted() ? cursor_now() : undefined;
+      if (cursor && cursor !== item) show(cursor, item_selector);
       if (!still_wanted() || !item?.isConnected || (!item_selector && !item.matches(":focus"))) return clear();
       follow_focus();
       reposition();

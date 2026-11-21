@@ -123,7 +123,7 @@ test("only a picture at least 96 px wide is a thumbnail", () => {
 
 // The overlay drives the hover: `show` with the hover flag waits, a change of item or a clear undoes it.
 function overlay(mode: () => string = () => "item") {
-  return create_item_overlay(mode, () => ({ left_: () => false, stop_: () => {} }), () => {});
+  return create_item_overlay(mode, () => ({ left_: () => false, stop_: () => {} }), () => {}, () => undefined);
 }
 const entered = () => events.filter((event) => event.startsWith("mouseenter"));
 const left = () => events.filter((event) => event.startsWith("mouseleave"));

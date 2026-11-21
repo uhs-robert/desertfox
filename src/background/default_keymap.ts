@@ -535,7 +535,7 @@ const ITEM_KEYS: ModeBindings = {
   "<Enter>": { id: "page.item_action", args: { action: "open" }, label: "Open the item's link, or click the focused element in it" },
   "<Tab>": { id: "page.item_focus", args: { direction: "next" }, label: "Focus the next element in the item" },
   "<S-Tab>": { id: "page.item_focus", args: { direction: "prev" }, label: "Focus the previous element in the item" },
-  v: { id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" },
+  v: [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }],
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
   h: item_step("left", "Item to the left, or scroll left"),
@@ -547,7 +547,17 @@ const ITEM_KEYS: ModeBindings = {
 };
 
 // The keys of visual item mode, which marks a range of items from the item where `v` was pressed (the anchor) to the item the cursor keys move to. `v` or Escape ends the mode back to item mode.
+const extend_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, extend: true }, label });
 const ITEM_VISUAL_KEYS: ModeBindings = {
+  j: extend_step("down", "Extend to the next item"),
+  k: extend_step("up", "Extend to the previous item"),
+  h: extend_step("left", "Extend to the item on the left"),
+  l: extend_step("right", "Extend to the item on the right"),
+  "}": extend_step("next_section", "Extend to the next section"),
+  "{": extend_step("prev_section", "Extend to the previous section"),
+  gg: extend_step("first", "Extend to the first item"),
+  G: extend_step("last", "Extend to the last item"),
+  o: { id: "page.item", args: { direction: "other_end" }, label: "Swap the ends of the selection" },
   v: { id: "mode.set", args: { mode: "item" }, label: "End the selection" },
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },

@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 598 (normal 264, media 58, item 98, item_visual 5, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 607 (normal 264, media 58, item 98, item_visual 14, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -430,7 +430,7 @@ Which-key group names:
 | `,i` | `mode ignore` | Set mode |
 | `f` | `hint` | Click element |
 | `F` | `hint --background` | Click element in background tab |
-| `v` | `mode item_visual` | Select a range of items |
+| `v` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `V` | `mode visual` | Start visual mode |
 | `;v` | `hint --caret --prose` | Start caret mode at text |
 | `;V` | `hint --visual --prose` | Start visual mode at text |
@@ -495,6 +495,15 @@ Which-key group names:
 
 | Key | Command | Label |
 | --- | --- | --- |
+| `j` | `page.item --down --extend` | Extend to the next item |
+| `k` | `page.item --up --extend` | Extend to the previous item |
+| `h` | `page.item --left --extend` | Extend to the item on the left |
+| `l` | `page.item --right --extend` | Extend to the item on the right |
+| `}` | `page.item --next-section --extend` | Extend to the next section |
+| `{` | `page.item --prev-section --extend` | Extend to the previous section |
+| `gg` | `page.item --first --extend` | Extend to the first item |
+| `G` | `page.item --last --extend` | Extend to the last item |
+| `o` | `page.item --other-end` | Swap the ends of the selection |
 | `v` | `mode item` | End the selection |
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
