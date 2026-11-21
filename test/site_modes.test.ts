@@ -113,7 +113,7 @@ test("mode.site run during a replay keeps key order: the keys behind it run unde
 });
 
 test("the badge shows a site label only in normal mode, and even where the setting hides normal", () => {
-  assert.deepEqual(badge_state("normal", false, "not_normal", undefined, "VISUAL"), { mode: "normal", pass_next: false, setting: "not_normal", recording: undefined, site_label: "VISUAL" });
+  assert.deepEqual(badge_state("normal", false, "not_normal", undefined, "VISUAL"), { mode: "normal", pass_next: false, setting: "not_normal", recording: undefined, site_label: "VISUAL", count: undefined });
   assert.equal(badge_state("normal", false, "not_normal", undefined), undefined);
   assert.equal(badge_state("normal", false, "off", undefined, "VISUAL"), undefined);
   assert.equal(badge_state("hint", false, "always", undefined, "VISUAL"), undefined);

@@ -10,7 +10,8 @@ const STYLE = `
 .desertfox-item-box {
   position: fixed; box-sizing: border-box; pointer-events: none; border-radius: 3px;
   border: 2px solid var(--desertfox-primary, #7fa3c9); box-shadow: 0 0 0 1px var(--desertfox-bg-core, #0c0e13), 0 0 6px #0008;
-}`;
+}
+.desertfox-item-mark { position: fixed; box-sizing: border-box; pointer-events: none; border: 2px solid var(--desertfox-mode-item, #c695ff); }`;
 
 // The mode changes in content.js, which a bundle cannot subscribe to, so a timer reads it while the box shows. The same tick puts the box back on an item that a layout shift moved, and follows a focus that a page script moved.
 const WATCH_MS = 100;
@@ -39,15 +40,25 @@ function covered_rect(item: Element) {
   return new DOMRect(left, top, right - left, bottom - top);
 }
 
-// `mode` is the frame's mode. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to. `cursor_now` gives the item of the visual item cursor, found again after the page redrew its list, and nothing outside that mode.
-export function create_item_overlay(mode: () => string, watch_user: () => UserLeft, on_follow: (item: Element) => void, cursor_now: () => Element | undefined) {
+// `mode` is the frame's mode. `watch_user` starts a watch for a key press, click or wheel, which marks a focus move as the user's. `on_follow` hears of each item the box follows the focus to. `visual_now` finds the cursor and the range of visual item mode again after the page redrew its list, and gives nothing outside that mode. The range gets a mark on each item, and `on_count` hears its size.
+export function create_item_overlay(
+  mode: () => string,
+  watch_user: () => UserLeft,
+  on_follow: (item: Element) => void,
+  visual_now: () => { cursor_: Element; range_: Element[] } | undefined,
+  on_count: (count: number | undefined) => void,
+) {
   const host = document.createElement("div");
   const box = document.createElement("div");
   box.className = "desertfox-item-box";
   const style = document.createElement("style");
   style.textContent = STYLE;
   host.style.cssText = `all: initial; position: fixed; z-index: ${LAYERS.hints};`;
-  host.attachShadow({ mode: "closed" }).append(style, box);
+  const root = host.attachShadow({ mode: "closed" });
+  root.append(style, box);
+  // One mark per item of the range, drawn on the same timer and scroll follow as the box.
+  const marks: HTMLElement[] = [];
+  let marked: Element[] = [];
   let item: Element | undefined;
   // The row's item selector, which the box follows the focus by. None while the box is the focus mark of `item.mark`, which is not a `page.item` box.
   let item_selector: string | undefined;
@@ -71,6 +82,15 @@ export function create_item_overlay(mode: () => string, watch_user: () => UserLe
     const rect = item && covered_rect(item);
     // The class sets every other property, so the inline style holds only the place or the hiding.
     box.style.cssText = !rect?.width || !rect.height ? "visibility:hidden" : `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
+    while (marks.length < marked.length) root.append((marks[marks.length] = Object.assign(document.createElement("div"), { className: "desertfox-item-mark" })));
+    marks.forEach((mark, index) => {
+      const at = marked[index]?.getBoundingClientRect();
+      mark.style.cssText = at?.width ? `left:${at.left}px;top:${at.top}px;width:${at.width}px;height:${at.height}px` : "display:none";
+    });
+  };
+  const mark = (found: ReturnType<typeof visual_now>) => {
+    if (found?.range_.length !== marked.length) on_count(found?.range_.length);
+    marked = found?.range_ ?? [];
   };
 
   // Focus moving inside the item (to a link in it) keeps the box. A move the user made, by key, click or wheel, clears it. A page script's move gets the grace: the item that takes the focus gets the box, and with none the box clears once the grace runs out.
@@ -95,6 +115,7 @@ export function create_item_overlay(mode: () => string, watch_user: () => UserLe
     stop_hover();
     hovers = undefined;
     item = undefined;
+    mark(undefined);
     user?.stop_();
     stop_following?.();
     stop_following = undefined;
@@ -113,6 +134,7 @@ export function create_item_overlay(mode: () => string, watch_user: () => UserLe
     }
     hovers = hover;
     drawn_in = mode();
+    mark(visual_now());
     item = target;
     item_selector = selector;
     focus_at_show = document.activeElement;
@@ -124,8 +146,9 @@ export function create_item_overlay(mode: () => string, watch_user: () => UserLe
     stop_following = follow_windows([window], reposition);
     watch = setInterval(() => {
       // A focus mark clears as soon as its element loses the focus, also inside a shadow root, which sends no focusout to the window.
-      const cursor = still_wanted() ? cursor_now() : undefined;
-      if (cursor && cursor !== item) show(cursor, item_selector);
+      const found = still_wanted() ? visual_now() : undefined;
+      mark(found);
+      if (found && found.cursor_ !== item) show(found.cursor_, item_selector);
       if (!still_wanted() || !item?.isConnected || (!item_selector && !item.matches(":focus"))) return clear();
       follow_focus();
       reposition();

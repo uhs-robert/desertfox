@@ -9,6 +9,7 @@ import { args_for_pin, lists_with_row, pick_list } from "./lists.ts";
 import { watch_user_left } from "../user_left.ts";
 import { create_item_start } from "./start.ts";
 import { create_selection } from "./selection.ts";
+import { relay } from "../relay.ts";
 import type { Region } from "./finder.ts";
 import { is_shown } from "../shown.ts";
 
@@ -20,7 +21,7 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const watch_user_ = () => watch_user_left(document, window, host.pressed_keys_);
-  const overlay = create_item_overlay(host.get_mode, watch_user_, follow_item, () => selection.tick_());
+  const overlay = create_item_overlay(host.get_mode, watch_user_, follow_item, () => selection.tick_(), (count) => (host.visual_count_(count), window === window.top || void relay("top", "ui.badge_count", { count })));
   const page = {
     doc: document,
     view: window,

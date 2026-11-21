@@ -30,7 +30,7 @@ function make(initial: Element[]) {
   return { page, selection };
 }
 const row = (...hrefs: string[]) => hrefs.map((href) => item(href));
-const range_hrefs = (selection: ReturnType<typeof make>["selection"], page: { items: Element[] }) => selection.range_()?.items_.map((found) => page.items.indexOf(found));
+const range_hrefs = (selection: ReturnType<typeof make>["selection"], page: { items: Element[] }) => selection.tick_()?.range_.map((found) => page.items.indexOf(found));
 
 test("a start sets both ends and a later land moves the cursor only, in both directions", () => {
   const { page, selection } = make(row("/a", "/b", "/c", "/d"));
@@ -42,7 +42,7 @@ test("a start sets both ends and a later land moves the cursor only, in both dir
   assert.deepEqual(range_hrefs(selection, page), [1, 2, 3]);
   selection.land_(page.items[0]!);
   assert.deepEqual(range_hrefs(selection, page), [0, 1], "the cursor passed the anchor, which stays");
-  assert.equal(selection.range_()?.anchor_, page.items[1]);
+  assert.equal(selection.tick_()?.anchor_, page.items[1]);
 });
 
 test("the ends follow their items when the page replaces every node", () => {
@@ -53,7 +53,7 @@ test("the ends follow their items when the page replaces every node", () => {
   selection.land_(page.items[3]!);
   page.items = row("/a", "/b", "/c", "/d");
   assert.deepEqual(range_hrefs(selection, page), [1, 2, 3]);
-  assert.equal(selection.tick_(), page.items[3]);
+  assert.equal(selection.tick_()?.cursor_, page.items[3]);
   assert.equal(page.followed.at(-1), page.items[3], "the next move starts from the new node");
 });
 
@@ -90,7 +90,7 @@ test("a list with no items ends the selection once and tells its owner", () => {
   page.items = [];
   assert.equal(selection.tick_(), undefined);
   assert.equal(page.ended, 1);
-  assert.equal(selection.range_(), undefined);
+  assert.equal(selection.tick_(), undefined);
   assert.equal(page.ended, 1, "nothing is left to end");
 });
 
@@ -99,7 +99,7 @@ test("leaving the mode drops the selection, so the next land starts a new one", 
   selection.start_next_land_(true);
   selection.land_(page.items[0]!);
   page.visual = false;
-  assert.equal(selection.range_(), undefined);
+  assert.equal(selection.tick_(), undefined);
   selection.land_(page.items[2]!);
   page.visual = true;
   selection.land_(page.items[1]!);
@@ -114,5 +114,5 @@ test("swap makes the anchor the cursor and the range stays", () => {
   selection.land_(page.items[3]!);
   assert.equal(selection.swap_(), page.items[1]);
   assert.deepEqual(range_hrefs(selection, page), [1, 2, 3]);
-  assert.equal(selection.range_()?.anchor_, page.items[3]);
+  assert.equal(selection.tick_()?.anchor_, page.items[3]);
 });

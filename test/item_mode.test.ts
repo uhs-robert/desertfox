@@ -293,6 +293,12 @@ test("the badge says VISUAL in visual item mode", () => {
   assert.equal(mode_label("item_visual", false, "always"), "VISUAL");
 });
 
+test("the badge of visual item mode carries the size of the range, and no other mode does", () => {
+  assert.equal(mode_label("item_visual", false, "always", undefined, undefined, 3), "VISUAL 3");
+  assert.equal(mode_label("item_visual", false, "always", undefined, undefined, undefined), "VISUAL");
+  assert.equal(mode_label("item", false, "always", undefined, undefined, 3), "ITEM");
+});
+
 test("the badge says ITEM", () => {
   assert.equal(mode_label("item", false, "always"), "ITEM");
 });

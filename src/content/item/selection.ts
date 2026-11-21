@@ -59,12 +59,13 @@ export function create_selection(deps: SelectionDeps) {
       const end = end_at(keys, items.indexOf(item));
       if (end[1] >= 0) ends = [before ? ends![0]! : end, end];
     },
-    // Finds the cursor again after a redraw and hands back its item, for the box. The same read keeps the marks and the count right.
-    tick_: (): Element | undefined => {
+    // Finds both ends again after a redraw and hands back the cursor's item, for the box, the items of the range in document order, for the marks and the count, and the anchor's item.
+    tick_: (): { cursor_: Element; anchor_: Element; range_: Element[] } | undefined => {
       const found = resolve();
-      const cursor = found?.items[found.cursor_];
-      if (cursor) deps.follow_(cursor);
-      return cursor;
+      if (!found) return undefined;
+      const cursor_ = found.items[found.cursor_]!;
+      deps.follow_(cursor_);
+      return { cursor_, anchor_: found.items[found.anchor_]!, range_: found.items.slice(Math.min(found.anchor_, found.cursor_), Math.max(found.anchor_, found.cursor_) + 1) };
     },
     // The other end becomes the cursor.
     swap_: (): Element | undefined => {
@@ -72,11 +73,6 @@ export function create_selection(deps: SelectionDeps) {
       if (!found) return undefined;
       ends = [ends![1]!, ends![0]!];
       return found.items[found.anchor_];
-    },
-    // The items from the anchor to the cursor in document order, with the anchor's own item.
-    range_: (): { items_: Element[]; anchor_: Element } | undefined => {
-      const found = resolve();
-      return found && { items_: found.items.slice(Math.min(found.anchor_, found.cursor_), Math.max(found.anchor_, found.cursor_) + 1), anchor_: found.items[found.anchor_]! };
     },
   };
 }

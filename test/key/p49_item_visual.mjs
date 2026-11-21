@@ -5,6 +5,8 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
+  // The badge says how many items the range holds.
+  const expect_range = (count) => expect_badge(`VISUAL ${count}`);
   const expect_focus = (wanted) => poll_until(`focus on ${wanted}`, async () => (await focused()) === wanted);
   const toast_text = () => in_active_tab(`[...document.documentElement.children].find((child) => child.style.zIndex === "2147483645")?.openOrClosedShadowRoot?.querySelector(".desertfox-toast")?.textContent ?? ""`);
   const focus_frame = () => in_active_tab(`document.getElementById("inner").contentWindow.focus(); 0`);
@@ -22,7 +24,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await expect_badge("ITEM");
     await expect_focus("c0");
     await press_keys("v");
-    await expect_badge("VISUAL");
+    await expect_range(1);
   };
 
   await run_case("v enters visual item mode, v returns to item mode, and Escape goes to item mode and then to normal mode", async () => {
@@ -30,7 +32,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await press_keys("v");
     await expect_badge("ITEM");
     await press_keys("v");
-    await expect_badge("VISUAL");
+    await expect_range(1);
     await press_keys("-k", "Escape");
     await expect_badge("ITEM");
     await press_keys("-k", "Escape");
@@ -41,15 +43,19 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await start("iv_move_dyn");
     await press_keys("jj");
     await expect_focus("c2");
+    await expect_range(3);
     await press_keys("k");
     await expect_focus("c1");
+    await expect_range(2);
     await press_keys("j", "j");
     await expect_focus("c3");
+    await expect_range(4);
     await press_keys("o");
     await expect_focus("c0");
+    await expect_range(4);
     await press_keys("j");
     await expect_focus("c1");
-    await expect_badge("VISUAL");
+    await expect_range(3);
   });
 
   await run_case("the cursor goes on from its item when the page replaces every card", async () => {
@@ -57,9 +63,10 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await press_keys("jj");
     await expect_focus("c2");
     await draw([0, 1, 2, 3, 4, 5, 6, 7]);
+    await expect_range(3);
     await press_keys("j");
     await expect_focus("c3");
-    await expect_badge("VISUAL");
+    await expect_range(4);
   });
 
   await run_case("the cursor takes its neighbour when the page removes its card, and so does the anchor", async () => {
@@ -69,10 +76,12 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await draw([0, 1, 3, 4, 5, 6, 7]);
     await press_keys("j");
     await expect_focus("c4");
+    await expect_range(4);
     await draw([1, 3, 4, 5, 6, 7]);
+    await expect_range(3);
     await press_keys("j");
     await expect_focus("c5");
-    await expect_badge("VISUAL");
+    await expect_range(4);
   });
 
   await run_case("without a link address on each card the selection follows data-id", async () => {
@@ -81,6 +90,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await draw([0, 1, 2, 3, 4, 5, 6, 7]);
     await press_keys("j");
     await expect_focus("c3");
+    await expect_range(4);
   });
 
   await run_case("when the page removes every card the mode returns to item mode with a notice", async () => {
@@ -99,7 +109,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await press_keys("j");
     await expect_focus("c0");
     await press_keys("v");
-    await expect_badge("VISUAL");
+    await expect_range(1);
     await focus_frame();
     await expect_badge("ITEM");
     await press_keys("j");
@@ -119,7 +129,9 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await press_keys("j");
     await poll_until("focus in the frame", async () => (await frame_focused()) === "f0");
     await press_keys("v");
-    await expect_badge("VISUAL");
+    await expect_range(1);
+    await press_keys("j");
+    await expect_range(2);
     await in_active_tab(`(() => { const inner = document.getElementById("inner").contentWindow; inner.old_document = true; inner.location.reload(); return 0; })()`);
     await poll_until("the frame to load again", async () => (await in_active_tab(`(() => { const inner = document.getElementById("inner").contentWindow; return !inner.old_document && inner.document.readyState; })()`)) === "complete");
     await focus_frame();

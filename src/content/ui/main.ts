@@ -1,6 +1,6 @@
 // The `ui` bundle: registers the badge and the toast with the host.
 
-import type { BundleHostApi } from "../bundle_host.ts";
+import type { BundleHostApi, PageHostApi } from "../bundle_host.ts";
 import { show_mode_label } from "../mode_indicator.ts";
 import type { ToastKind } from "../../shared/messages.ts";
 import { mode_label } from "./mode_label.ts";
@@ -27,10 +27,12 @@ if (!page.desertfox_ui_ready) {
     (document.activeElement as HTMLElement | null)?.blur();
   });
   page.desertfox_host.register_handler_("ui.frame_watch", (args) => watch_focused_frame(args.on === true));
+  // The size of the range of visual item mode, from the child frame that holds it. The top frame keeps it for the badge.
+  page.desertfox_host.register_handler_("ui.badge_count", (args) => (page.desertfox_host as PageHostApi).visual_count_(args.count as number | undefined));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
-    const { mode, pass_next, setting, recording, site_label } = args as unknown as BadgeState;
+    const { mode, pass_next, setting, recording, site_label, count } = args as unknown as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.
     if (mode === "media" && document.fullscreenElement) return show_mode_label(undefined);
-    show_mode_label(mode_label(mode, pass_next, setting, recording, site_label), pass_next ? undefined : site_label === undefined ? mode : "site");
+    show_mode_label(mode_label(mode, pass_next, setting, recording, site_label, count), pass_next ? undefined : site_label === undefined ? mode : "site");
   });
 }
