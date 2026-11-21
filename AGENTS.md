@@ -40,7 +40,7 @@ If the behavior of the code and the design disagree, stop and ask the maintainer
 
 `content.js` loads in every frame of every page. Docs: [`docs/design.md`](docs/design.md), "Content script size".
 
-- Admission rule: code goes in `content.js` only if one of these holds. Everything else goes in an on-demand bundle.
+- Admission rule: code goes in `content.js` only if one of these holds. Everything else goes in an on-demand bundle. `test/content_sources.ts` lists every source file in `content.js` with the clause that admits it, and `just test` fails on a file not listed.
   - It runs before the first key or decides what happens to a key.
   - It serves a key pressed on most pages in most frames (scrolling).
   - The bundles need it to load (the bundle host and its proxies).
@@ -71,7 +71,7 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # docs, themes, settings defaults and setting completion checks, the promise lint (`npm run lint`), the TypeScript typecheck (`npm run typecheck`) and every `test/**/*.test.ts` file. It runs the Python host tests first. It does not build: run `just build` to check the size guards
+just test        # docs, themes, settings defaults and setting completion checks, the promise lint (`npm run lint`), the TypeScript typecheck (`npm run typecheck`), the build scans (the `content.js` allow list, the settings schema kept out of `content.js` and the command line page, storage key uniqueness, bundle handler ids) and every `test/**/*.test.ts` file. It runs the Python host tests first. It does not build: run `just build` to check the size guards
 just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/shared/setting_completion.ts
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts
