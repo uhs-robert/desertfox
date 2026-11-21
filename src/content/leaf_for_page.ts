@@ -1,4 +1,4 @@
-// Which leaf a guarded key runs on this page. Shared by run_leaf.ts and the which-key bundle, which cannot import run_leaf.ts (it pulls in run_content).
+// Which leaf a guarded key runs on this page. Imported by content main.ts, which runs the leaf, and by the which-key bundle, which lists it. The bundle cannot import run_leaf.ts, because that pulls in run_content.
 
 import type { TreeLeaf } from "../shared/index.ts";
 import { is_shown } from "./shown.ts";

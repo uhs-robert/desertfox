@@ -291,7 +291,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, rdp, exte
   const LIST = "table.list tr.row";
   await setup("load a row whose Q bind needs a list, for the guarded site-row panel pages", async () => {
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=wkq_*"', `bind = { Q = { run = "page.item --direction=first ${LIST}", when_present = "${LIST}" } }`, ""].join("\n"));
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=wkq_*"', `bind = { X = { run = "page.item --direction=first ${LIST}", when_present = "${LIST}" } }`, ""].join("\n"));
     await load_config_dir(dir);
   });
   const item_panel_rows = async (page, id, keys, with_results = false, in_item_mode = true) => {
@@ -325,6 +325,6 @@ export async function run_cases({ config_copy, load_config_dir, setup, rdp, exte
   await run_case("a site-row bind with no default shows in the first-key panel only while its guard holds", async () => {
     const without = await item_panel_rows("controls", "wkq_none", ",w", false, false);
     const with_list = await item_panel_rows("controls", "wkq_list", ",w", true, false);
-    expect(with_list === without + 1, `the panel had ${without} rows with no list and ${with_list} with one, wanted one more for Q`);
+    expect(with_list === without + 1, `the panel had ${without} rows with no list and ${with_list} with one, wanted one more for X`);
   });
 }
