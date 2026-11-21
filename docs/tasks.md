@@ -43,7 +43,7 @@ Example: the `prompt` action, commit `f51dcc82`.
 Example: the `tree` bundle, commit `f7c3b478`.
 
 1. Add the name to `BUNDLE_NAMES` in `src/shared/bundles.ts`, in the order the build should run them (the shared mangle cache makes the order change the bytes), and one sentence about it in the comment above. A name that is a bundle needs `src/content/<name>/main.ts`: `tools/build.mjs` derives the entry from the name. Only `cmdline` is an exception (`src/cmdline/host.ts`).
-2. Register each handler in `main.ts` with `register_handler_`. A command of the bundle needs the `bundle` field and no `run`. `test/commands/lazy_bundle.test.ts` fails when the bundle does not register the command's id.
+2. Register each handler in `main.ts` with `register_handler_`. A command of the bundle needs the `bundle` field and no `run`. The command side (the `define` entry in `src/commands`, the default key, the tests and the key test) follows "Add a command" above. `test/commands/lazy_bundle.test.ts` fails when the bundle does not register the command's id.
 3. Add one line to `MAX_BYTES` in `tools/build.mjs`, with the measured size from `just build` plus headroom and a comment on when the bundle loads. `test/bundles.test.ts` fails on a name with no line.
 4. Put `src/content/<name>/**` in a glob of `test/key/areas.mjs`.
 5. Add `src/content/<name>/README.md`, a line in `src/content/README.md` and the folder line in `src/README.md`.

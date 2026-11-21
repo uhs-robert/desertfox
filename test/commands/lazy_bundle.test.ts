@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { bundles } from "../../src/content/bundles.ts";
 import { content_handlers } from "../../src/content/handler_map.ts";
@@ -11,6 +12,8 @@ import { COMPILED_KEYMAP_VERSION } from "../../src/shared/index.ts";
 import { is_bundle_name } from "../../src/shared/bundles.ts";
 import type { BundleName, CompiledKeymap, LeafStep } from "../../src/shared/index.ts";
 import "../../src/background/command_modules.ts";
+import { shipped_sources } from "../support/metafile.ts";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
 // `bundles` is one host per frame, so these tests share it. It remembers a loaded bundle, so each test uses a bundle the ones before did not load.
@@ -51,24 +54,18 @@ test("an id with no handler and no bundle field is failed", async () => {
   assert.deepEqual(await run_content_invocation({ id: "hint.run" }, "ignore"), { ok: false, message: "hint.run cannot run in the page" });
 });
 
-// The ids a bundle registers, read from its source: a literal `register_handler_("id", ...)`, or a constant defined in the same folder.
-function registered_ids(bundle: BundleName): Set<string> {
-  const files = bundle === "cmdline" ? ["src/cmdline/host.ts"] : source_files(`src/content/${bundle}`);
-  const text = files.map((file) => readFileSync(new URL(`../../${file}`, import.meta.url), "utf8")).join("\n");
+// The ids a bundle registers, read from the files its entry ships (a file the entry never imports does not count): a literal `register_handler_("id", ...)`, or a string constant of those files.
+async function registered_ids(entry: string): Promise<Set<string>> {
+  const files = await shipped_sources(entry);
+  const text = files.map((file) => readFileSync(file, "utf8")).join("\n");
   const ids = new Set<string>();
   for (const [, id] of text.matchAll(/register_handler_\(\s*"([^"]+)"/g)) ids.add(id!);
   for (const [, name] of text.matchAll(/register_handler_\(\s*([A-Z_]+)\s*,/g)) {
     const defined = text.match(new RegExp(`const ${name} = "([^"]+)"`));
-    assert.ok(defined, `${name} is not defined as a string constant in the ${bundle} bundle`);
+    assert.ok(defined, `${name} is not defined as a string constant in the bundle of ${entry}`);
     ids.add(defined[1]!);
   }
   return ids;
-}
-
-function source_files(folder: string): string[] {
-  return readdirSync(new URL(`../../${folder}`, import.meta.url), { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? source_files(`${folder}/${entry.name}`) : entry.name.endsWith(".ts") ? [`${folder}/${entry.name}`] : [],
-  );
 }
 
 // These lazy commands register no handler by id. The command line sink (BUNDLE_FOR_MODE) takes their keys while the line is open.
@@ -94,12 +91,24 @@ test("every command with a bundle field names a real bundle, has no run, and has
   }
 });
 
-test("each lazy command is registered by its bundle, or is one of the sink-driven ids", () => {
+const bundle_entry = (bundle: BundleName) => (bundle === "cmdline" ? "src/cmdline/host.ts" : `src/content/${bundle}/main.ts`);
+
+test("a registration counts only in a file the bundle entry imports", async (t) => {
+  const dir = make_tmp_dir("lazy_bundle_", t);
+  writeFileSync(join(dir, "main.ts"), 'import "./imported.ts";\n');
+  writeFileSync(join(dir, "imported.ts"), 'declare const host: { register_handler_: (id: string, run: () => void) => void };\nhost.register_handler_("seen.id", () => {});\n');
+  writeFileSync(join(dir, "orphan.ts"), 'declare const host: { register_handler_: (id: string, run: () => void) => void };\nhost.register_handler_("orphan.id", () => {});\n');
+  const ids = await registered_ids(join(dir, "main.ts"));
+  assert.ok(ids.has("seen.id"));
+  assert.ok(!ids.has("orphan.id"), "a file the entry never imports registered an id");
+});
+
+test("each lazy command is registered by its bundle, or is one of the sink-driven ids", async () => {
   const lazy = registry.list().filter((command) => command.bundle !== undefined);
   const ids_of = new Map<BundleName, Set<string>>();
   for (const command of lazy) {
     const bundle = command.bundle as BundleName;
-    if (!ids_of.has(bundle)) ids_of.set(bundle, registered_ids(bundle));
+    if (!ids_of.has(bundle)) ids_of.set(bundle, await registered_ids(bundle_entry(bundle)));
     const registered = ids_of.get(bundle)!.has(command.id);
     if (SINK_DRIVEN_IDS.has(command.id)) assert.equal(registered, false, `${command.id} registers a handler now: take it off SINK_DRIVEN_IDS`);
     else assert.ok(registered, `${command.id} names the ${bundle} bundle, which registers no handler for it`);
