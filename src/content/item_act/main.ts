@@ -36,12 +36,16 @@ if (!item_act.desertfox_item_act_ready && host) {
       if (!anchor_box) throw new RuntimeRefusal("No checkbox in the anchor item");
       const target = !checked(anchor_box);
       let changed = 0;
-      for (const key of keys.slice(from, to + 1)) {
+      // A click moves the focus onto its box. The cursor's item held it, and the next move starts from there.
+      const held = document.activeElement as HTMLElement | null;
+      // From the last row to the first: a click that removes a row then never moves a row not yet visited, whatever the keys are made of.
+      for (const key of keys.slice(from, to + 1).reverse()) {
         const [now = [], now_keys = []] = await read_list();
         const item = now[now_keys.indexOf(key)];
         const box = item && checkbox_in(item);
         if (box && checked(box) !== target) (click_like_a_hint(box as HTMLElement), changed++);
       }
+      held?.focus();
       return host.show_toast_(`${changed} changed`);
     }
     const current = await current_item();

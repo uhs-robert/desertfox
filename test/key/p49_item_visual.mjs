@@ -233,6 +233,15 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await in_active_tab(`[...document.querySelectorAll("#dyn .card a")].map((link) => link.id).join(",")`)) === "c4,c5,c6,c7,c8,c9,c10,c11", "a row was skipped");
   });
 
+  await run_case("a vanishing row on a list told apart by place only still gets every box of the range set", async () => {
+    await start("iv_place_dyn_dynbare_noid_vanish");
+    await press_keys("jjj");
+    await expect_range(4);
+    await press_keys("-k", "space");
+    await poll_until("the count", async () => (await toast_text()).includes("4 changed"));
+    expect((await in_active_tab(`[...document.querySelectorAll("#dyn .card a")].map((link) => link.id).join(",")`)) === "c4,c5,c6,c7,c8,c9,c10,c11", "a row was skipped or one outside the range was clicked");
+  });
+
   await run_case("I in visual item mode ends the selection and picks the list in item mode", async () => {
     await start("iv_pick_dyn");
     await press_keys("jj");
