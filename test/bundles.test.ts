@@ -1,20 +1,31 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { build } from "esbuild";
+import { release_options } from "./support/metafile.ts";
 import { BUNDLE_FOR_MODE, BUNDLE_NAMES, is_bundle_name } from "../src/shared/bundles.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("every bundle name has a build entry, a size limit and a source file", () => {
-  const build = read("tools/build.mjs");
-  const entries = Object.fromEntries([...build.matchAll(/^\s+(\w+): "(src\/[^"]+)",$/gm)].map((match) => [match[1], match[2]]));
+// A bundle is src/content/<name>/main.ts and tools/build.mjs derives its entry from BUNDLE_NAMES. These two folders hold a main.ts and are injected by the background, not loaded through the bundle host.
+const BACKGROUND_INJECTED = ["media", "quality"];
+const entry_of = (name: string) => (name === "cmdline" ? "src/cmdline/host.ts" : `src/content/${name}/main.ts`);
+
+test("every bundle name has a source file and a size limit", () => {
+  const build_script = read("tools/build.mjs");
   for (const name of BUNDLE_NAMES) {
-    assert.ok(entries[name], `${name} has no entry in tools/build.mjs`);
-    assert.ok(existsSync(new URL(`../${entries[name]}`, import.meta.url)), `${entries[name]} is missing`);
-    assert.match(build, new RegExp(`"${name}\\.js": \\d+`), `${name}.js has no size limit`);
+    assert.ok(existsSync(new URL(`../${entry_of(name)}`, import.meta.url)), `${entry_of(name)} is missing`);
+    assert.match(build_script, new RegExp(`"${name}\\.js": \\d+`), `${name}.js has no size limit`);
   }
-  assert.ok(entries.cmdline_page && existsSync(new URL("../src/cmdline/cmdline.html", import.meta.url)));
+  assert.ok(existsSync(new URL("../src/cmdline/cmdline.html", import.meta.url)));
+});
+
+test("a folder under src/content with a main.ts is a bundle name or injected by the background", () => {
+  const folders = readdirSync(new URL("../src/content", import.meta.url), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(new URL(`../src/content/${entry.name}/main.ts`, import.meta.url)))
+    .map((entry) => entry.name);
+  const known = [...BUNDLE_NAMES, ...BACKGROUND_INJECTED] as string[];
+  for (const folder of folders) assert.ok(known.includes(folder), `src/content/${folder}/main.ts is not in BUNDLE_NAMES; add it, or list it as injected by the background`);
 });
 
 test("the command line page can be framed by web pages", () => {
@@ -50,7 +61,7 @@ test("the release bundles hold none of the page-readable test attributes, and th
   const attributes = { content: "data-desertfox-tree-read-ms", whichkey: "data-desertfox-whichkey", ui: "data-desertfox-mode" };
   for (const [name, entry] of Object.entries(entries)) {
     const bundle_with = async (key_test: boolean) => {
-      const result = await build({ bundle: true, format: "iife", target: "firefox140", logLevel: "silent", entryPoints: { [name]: entry }, write: false, minify: true, define: { __KEY_TEST__: String(key_test) } });
+      const result = await build(release_options({ [name]: entry }, key_test));
       return result.outputFiles[0]!.text;
     };
     const attribute = attributes[name as keyof typeof attributes];

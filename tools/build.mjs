@@ -3,6 +3,7 @@ import { write_commands_json } from "./write_commands_json.mjs";
 import { grey_svg } from "./grey_svg.mjs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { refused_as } from "../src/shared/swallow.ts";
+import { BUNDLE_NAMES } from "../src/shared/bundles.ts";
 import { CMDLINE_STYLE } from "../src/cmdline/style.ts";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use. Raise one only as AGENTS.md, "Content script size", says, and name the feature in the commit.
@@ -81,21 +82,10 @@ await build_with_cache({ entryPoints: { background: "src/background/main.ts" }, 
 await build_with_cache({ entryPoints: { help: "src/help/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
 await build_with_cache({ entryPoints: { newtab: "src/newtab/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
 await build_with_cache({ entryPoints: { popup: "src/popup/main.ts" }, outdir: out_dir, minify: true, sourcemap: true });
+// The on-demand bundles come first, in BUNDLE_NAMES order: the shared mangle cache makes build order change bytes. A bundle's entry is src/content/<name>/main.ts. The command line host is the one exception.
+const bundle_entries = Object.fromEntries(BUNDLE_NAMES.map((name) => [name, name === "cmdline" ? "src/cmdline/host.ts" : `src/content/${name}/main.ts`]));
 const minified_entries = {
-  hints: "src/content/hints/main.ts",
-  caret: "src/content/caret/main.ts",
-  whichkey: "src/content/whichkey/main.ts",
-  cmdline: "src/cmdline/host.ts",
-  ui: "src/content/ui/main.ts",
-  page: "src/content/page/main.ts",
-  text: "src/content/text/main.ts",
-  editor: "src/content/editor/main.ts",
-  site_actions: "src/content/site_actions/main.ts",
-  grab: "src/content/grab/main.ts",
-  item: "src/content/item/main.ts",
-  item_act: "src/content/item_act/main.ts",
-  tree: "src/content/tree/main.ts",
-  next_page: "src/content/next_page/main.ts",
+  ...bundle_entries,
   // Not loaded by the content script: the background injects it into every frame for each media command (background/media_actions.ts).
   media: "src/content/media/main.ts",
   // Injected the same way, for each quality request and into each frame whose probe found a video (background/quality_levels.ts).
