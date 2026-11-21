@@ -95,6 +95,18 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     expect((await keys()) === "39:t4,", `za on a leaf sent ${await keys()}`);
   });
 
+  await run_case("zc on a branch that just opened, before its children show, folds that branch", async () => {
+    await open_tree("lazy");
+    await press_keys("}");
+    await expect_focus("t4");
+    await press_keys("l");
+    await expect_keys("39:t4,");
+    await press_keys("zc");
+    await expect_keys("39:t4,37:t4,");
+    await poll_until("t4 folded", async () => (await expanded("t4")) === "false");
+    await expect_focus("t4");
+  });
+
   // With the focus on the page and not in the tree, } and { keep the section jump of item mode.
   await run_case("with the focus outside the tree, } runs the plain section jump", async () => {
     await open_tree("body");

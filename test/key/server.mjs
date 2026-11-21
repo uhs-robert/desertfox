@@ -311,7 +311,7 @@ export function start_server() {
       return response.end(page(`reddit_thread ${id}`, `<shreddit-comment-tree><section>${tree}</section></shreddit-comment-tree>${tall_filler}`, script));
     }
     if (url.pathname === "/aria_tree") {
-      // A stand-in for an ARIA tree widget, as GitHub's file tree and Microsoft Learn's contents build one: nested `role=treeitem` with `aria-level` and `aria-expanded`, the children in a `role=group`, and a `role=none` wrapper between a group and its treeitem. The treeitems are t0 to t6: t0 holds t1 (which holds t2) and t3, t4 holds t5 and starts folded, t6 stands alone. The tree folds on ArrowLeft and ArrowRight and reads `keyCode` alone, as Learn does. Each key is recorded in the `keys` data attribute of the root element as its key code and the treeitem it reached. An id with `_ad` makes the tree itself focusable and moves its focus by `aria-activedescendant`, and an id with `_nolevel` leaves out the `aria-level` attributes.
+      // A stand-in for an ARIA tree widget, as GitHub's file tree and Microsoft Learn's contents build one: nested `role=treeitem` with `aria-level` and `aria-expanded`, the children in a `role=group`, and a `role=none` wrapper between a group and its treeitem. The treeitems are t0 to t6: t0 holds t1 (which holds t2) and t3, t4 holds t5 and starts folded, t6 stands alone. The tree folds on ArrowLeft and ArrowRight and reads `keyCode` alone, as Learn does. Each key is recorded in the `keys` data attribute of the root element as its key code and the treeitem it reached. An id with `_ad` makes the tree itself focusable and moves its focus by `aria-activedescendant`, an id with `_lazy` shows a branch's children only 600 ms after it opens, and an id with `_nolevel` leaves out the `aria-level` attributes.
       const item = (index, level, children = "", open) => `<div role="treeitem" id="t${index}" ${id.includes("_nolevel") ? "" : `aria-level="${level}" `}tabindex="-1"${open === undefined ? "" : ` aria-expanded="${open}"`}><div class="label" style="height:36px">item t${index}</div>${children && `<div role="group" style="${open ? "" : "display:none"}">${children}</div>`}</div>`;
       const wrapped = (inner) => `<div role="none">${inner}</div>`;
       const tree = item(0, 1, wrapped(item(1, 2, wrapped(item(2, 3)), true)) + wrapped(item(3, 2)), true) + item(4, 1, wrapped(item(5, 2)), false) + item(6, 1);
@@ -326,7 +326,10 @@ export function start_server() {
           const open = event.keyCode === 39;
           if (open === (expanded === "true")) return;
           item.setAttribute("aria-expanded", String(open));
-          item.querySelector(":scope > [role=group]").style.display = open ? "" : "none";
+          const group = item.querySelector(":scope > [role=group]");
+          // A \`_lazy\` id sets aria-expanded at once and adds the children 600 ms later, as a tree that loads them on demand does.
+          if (open && ${id.includes("_lazy")}) setTimeout(() => (group.style.display = ""), 600);
+          else group.style.display = open ? "" : "none";
         });
       </script>`;
       const active = id.includes("_ad") ? ' aria-activedescendant="t0" tabindex="0"' : "";

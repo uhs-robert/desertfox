@@ -78,7 +78,7 @@ if (!tree_window.desertfox_tree_ready && host) {
       const item = rows[index]!.item;
       if (args.fold_by === "keys") {
         // ArrowLeft on a leaf moves the page focus to the parent, so only an item that can fold gets a key.
-        if (!item.hasAttribute("aria-expanded")) throw new RuntimeRefusal("Nothing to fold");
+        if (is_leaf(index)) throw new RuntimeRefusal("Nothing to fold");
         await land(item, args);
         return ask("page.send_key", arrow(open), "site_actions");
       }
@@ -86,6 +86,8 @@ if (!tree_window.desertfox_tree_ready && host) {
       return land(item, args);
     };
     const folded_at = (index: number) => is_folded(rows[index]!.item, args);
+    // An ARIA branch says so with aria-expanded, even before a lazy tree has added its children. Other rows have a leaf where nothing is folded and no child row shows.
+    const is_leaf = (index: number) => (args.preset === "aria" ? !rows[index]!.item.hasAttribute("aria-expanded") : !folded_at(index) && child_of(rows, index) === undefined);
     // The closest treeitem around the item is its parent. A role=none or role=group wrapper between them is not one. A flat tree, where treeitems do not nest, has no such ancestor and goes by depth.
     const parent_at = (index: number) => {
       const found = args.preset === "aria" ? rows.findIndex((row) => row.item === rows[index]!.item.parentElement?.closest("[role=treeitem]")) : -1;
@@ -113,7 +115,7 @@ if (!tree_window.desertfox_tree_ready && host) {
         return folded_at(at) ? fold_item(at, true) : undefined;
       default: {
         // Fold: a leaf or a folded item has nothing of its own to fold, so its parent folds.
-        const target = folded_at(at) || child_of(rows, at) === undefined ? parent_at(at) : at;
+        const target = folded_at(at) || is_leaf(at) ? parent_at(at) : at;
         if (target === undefined) throw new RuntimeRefusal("Nothing to fold");
         return fold_item(target, false);
       }
