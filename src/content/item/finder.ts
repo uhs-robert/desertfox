@@ -90,6 +90,10 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     const strong = headed.some(long_enough) ? headed.filter(long_enough) : links.filter((link) => long_enough(link) && names_item(link));
     return strong[0] ?? (links.length === 1 ? links[0] : undefined);
   });
+  const has_text_title = (item: N): boolean => {
+    const title = title_of(item);
+    return !!title && link_text(title) > 0;
+  };
   const titled_share = (group: Group<N>): number => group.items.filter(title_of).length / group.items.length;
 
   // A paragraph is prose, never an item, so the paragraphs of an issue comment are no list.
@@ -117,7 +121,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     let best = top;
     let sections: N[] | undefined;
     for (;;) {
-      const inner = main_by_area(lists.filter((group) => group !== best && nests(reader, group, best) && group.area >= INNER_SHARE * best.area && !parts_of_cards(reader, group, best)));
+      const inner = main_by_area(lists.filter((group) => group !== best && nests(reader, group, best) && group.area >= INNER_SHARE * best.area && !parts_of_cards(reader, group, best, has_text_title)));
       if (!inner) break;
       sections = best.items;
       best = inner;
@@ -219,15 +223,16 @@ function merge_batches<N>(reader: PageReader<N>, groups: Group<N>[]): Group<N>[]
   return pool;
 }
 
-// Whether `inner` is the pieces of the cards in `outer` rather than cards inside sections: it sits in nearly every outer item yet fills only a small part of them (the title, channel and chapter blocks beside a video thumbnail).
+// Whether `inner` is the pieces of the cards in `outer` rather than cards inside sections. Two shapes count. It sits in nearly every outer item yet fills only a small part of them (the title, channel and chapter blocks beside a video thumbnail). Or it has no more items with a text title than the outer items that hold it: one title per record, so its items are halves of a record (the title block and the date-and-avatar block of an inbox row), not a card each.
 const CARD_PARTS_HELD = 0.8;
 const CARD_PARTS_COVER = 0.3;
-function parts_of_cards<N>(reader: PageReader<N>, inner: Group<N>, outer: Group<N>): boolean {
+function parts_of_cards<N>(reader: PageReader<N>, inner: Group<N>, outer: Group<N>, has_text_title: (item: N) => boolean): boolean {
   const holders = new Set(outer.items);
   const held = new Set(inner.items.map((item) => [...ancestors(reader, item)].find((at) => holders.has(at))));
   held.delete(undefined);
   const held_area = outer.items.reduce((sum, item, at) => (held.has(item) ? sum + outer.boxes[at]!.w * outer.boxes[at]!.h : sum), 0);
-  return held.size >= CARD_PARTS_HELD * outer.items.length && inner.area < CARD_PARTS_COVER * held_area;
+  const small_pieces = held.size >= CARD_PARTS_HELD * outer.items.length && inner.area < CARD_PARTS_COVER * held_area;
+  return small_pieces || inner.items.filter(has_text_title).length <= held.size;
 }
 
 // Whether `inner` sits inside an item of `outer`.
