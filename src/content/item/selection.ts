@@ -6,13 +6,13 @@ export type End = [key: string, index: number];
 const href_of = (item: Element) => (item.matches("a[href]") ? item : item.querySelector("a[href]"))?.getAttribute("href");
 const id_of = (item: Element) => item.getAttribute("data-id");
 
-// One scheme for the whole read, never one per item, so two keys never mix schemes: the link address when every item has its own, else `data-id`, else the row index.
+// One scheme for the whole read, never one per item, so two keys never mix schemes: the link address when every item has its own, else `data-id`, else the row index, each key marked with its scheme so a change of scheme never matches the keys of the other.
 export function keys_of(items: readonly Element[]): string[] {
-  for (const read of [href_of, id_of]) {
+  for (const [scheme, read] of [["h", href_of], ["d", id_of]] as const) {
     const values = items.map((item) => read(item) ?? "");
-    if (values.every(Boolean) && new Set(values).size === values.length) return values;
+    if (values.every(Boolean) && new Set(values).size === values.length) return values.map((value) => scheme + value);
   }
-  return items.map((_, index) => `${index}`);
+  return items.map((_, index) => `i${index}`);
 }
 
 const end_at = (keys: readonly string[], index: number): End => [keys[index]!, index];
@@ -46,7 +46,7 @@ export function create_selection(deps: SelectionDeps) {
     const places = settle(keys, held);
     if (!places) return (ends = undefined), deps.ended_(), undefined;
     ends = places.map((place) => end_at(keys, place));
-    return { items, anchor_: places[0]!, cursor_: places[1]! };
+    return { items, keys, anchor_: places[0]!, cursor_: places[1]! };
   };
 
   return {
@@ -59,13 +59,14 @@ export function create_selection(deps: SelectionDeps) {
       const end = end_at(keys, items.indexOf(item));
       if (end[1] >= 0) ends = [before ? ends![0]! : end, end];
     },
-    // Finds both ends again after a redraw and hands back the cursor's item, for the box, the items of the range in document order, for the marks and the count, and the anchor's item.
-    tick_: (): { cursor_: Element; anchor_: Element; range_: Element[] } | undefined => {
+    // Finds both ends again after a redraw and hands back the cursor's item, for the box, the items of the range in document order, for the marks and the count, and the whole list with its keys and the range's places in it, for the actions.
+    tick_: () => {
       const found = resolve();
       if (!found) return undefined;
-      const cursor_ = found.items[found.cursor_]!;
-      deps.follow_(cursor_);
-      return { cursor_, anchor_: found.items[found.anchor_]!, range_: found.items.slice(Math.min(found.anchor_, found.cursor_), Math.max(found.anchor_, found.cursor_) + 1) };
+      const { items, anchor_, cursor_ } = found;
+      const [from_, to_] = [Math.min(anchor_, cursor_), Math.max(anchor_, cursor_)];
+      deps.follow_(items[cursor_]!);
+      return { cursor_: items[cursor_]!, range_: items.slice(from_, to_ + 1), list_: items, keys_: found.keys, from_, to_, anchor_ };
     },
     // The other end becomes the cursor.
     swap_: (): Element | undefined => {

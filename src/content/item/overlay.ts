@@ -7,11 +7,9 @@ import { hover_at } from "./hover.ts";
 
 // Defaults are var() fallbacks, never declarations, as in the hint labels.
 const STYLE = `
-.desertfox-item-box {
-  position: fixed; box-sizing: border-box; pointer-events: none; border-radius: 3px;
-  border: 2px solid var(--desertfox-primary, #7fa3c9); box-shadow: 0 0 0 1px var(--desertfox-bg-core, #0c0e13), 0 0 6px #0008;
-}
-.desertfox-item-mark { position: fixed; box-sizing: border-box; pointer-events: none; border: 2px solid var(--desertfox-mode-item, #c695ff); }`;
+.desertfox-item-box, .desertfox-item-mark { position: fixed; box-sizing: border-box; pointer-events: none; border: 2px solid var(--desertfox-primary, #7fa3c9); }
+.desertfox-item-box { border-radius: 3px; box-shadow: 0 0 0 1px var(--desertfox-bg-core, #0c0e13), 0 0 6px #0008; }
+.desertfox-item-mark { border-color: var(--desertfox-mode-item, #c695ff); }`;
 
 // The mode changes in content.js, which a bundle cannot subscribe to, so a timer reads it while the box shows. The same tick puts the box back on an item that a layout shift moved, and follows a focus that a page script moved.
 const WATCH_MS = 100;
@@ -88,8 +86,10 @@ export function create_item_overlay(
       mark.style.cssText = at?.width ? `left:${at.left}px;top:${at.top}px;width:${at.width}px;height:${at.height}px` : "display:none";
     });
   };
+  // The size of the range last sent, so a tick that finds the same size sends nothing, and a frame outside visual item mode sends nothing at all.
+  let sent: number | undefined;
   const mark = (found: ReturnType<typeof visual_now>) => {
-    if (found?.range_.length !== marked.length) on_count(found?.range_.length);
+    if (found?.range_.length !== sent) on_count((sent = found?.range_.length));
     marked = found?.range_ ?? [];
   };
 
@@ -146,10 +146,11 @@ export function create_item_overlay(
     stop_following = follow_windows([window], reposition);
     watch = setInterval(() => {
       // A focus mark clears as soon as its element loses the focus, also inside a shadow root, which sends no focusout to the window.
-      const found = still_wanted() ? visual_now() : undefined;
+      const wanted = still_wanted();
+      const found = wanted ? visual_now() : undefined;
       mark(found);
       if (found && found.cursor_ !== item) show(found.cursor_, item_selector);
-      if (!still_wanted() || !item?.isConnected || (!item_selector && !item.matches(":focus"))) return clear();
+      if (!wanted || !item?.isConnected || (!item_selector && !item.matches(":focus"))) return clear();
       follow_focus();
       reposition();
     }, WATCH_MS);

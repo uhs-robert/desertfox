@@ -98,8 +98,11 @@ test("the , group holds the DesertFox commands", () => {
 test("visual item mode: v enters it from item mode and v or Escape leaves it", () => {
   assert.deepEqual(DEFAULT_KEYMAP.item?.v, [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }]);
   for (const key of ["j", "k", "h", "l", "gg", "G", "}", "{"]) assert.equal((DEFAULT_KEYMAP.item_visual?.[key] as { args?: { extend?: boolean } }).args?.extend, true, key);
-  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.o, { id: "page.item", args: { direction: "other_end" }, label: "Swap the ends of the selection" });
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.o, { id: "page.item", args: { direction: "other_end", extend: true }, label: "Swap the ends of the selection" });
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Space>"], { id: "page.item_action", args: { action: "toggle_range" }, label: "Toggle the checkboxes of the range" });
+  assert.deepEqual((DEFAULT_KEYMAP.item_visual?.I as { id: string }[]).map((step) => step.id), ["mode.set", "hint.run", "page.item"]);
+  assert.equal((DEFAULT_KEYMAP.item_visual?.o as { args?: { extend?: boolean } }).args?.extend, true);
+  assert.equal(DEFAULT_KEYMAP.item?.v !== undefined && Array.isArray(DEFAULT_KEYMAP.item.v), true);
   assert.equal(DEFAULT_KEYMAP.item_visual?.f, undefined);
   assert.equal(DEFAULT_KEYMAP.item_visual?.["<Enter>"], undefined);
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });

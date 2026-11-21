@@ -93,6 +93,8 @@ export async function run_cases({ events, wait_event, run_line, config_dir, conf
     await expect_badge("ITEM");
     await press_keys("V");
     await expect_badge("VISUAL");
+    // Text visual mode selects a page range. Visual item mode shows the same word and selects none.
+    await poll_until("a page selection", async () => (await in_active_tab("getSelection().rangeCount")) === 1);
   });
 
   await run_case("f labels the page and Escape returns to item mode, and gi focuses the field and leaves the mode", async () => {

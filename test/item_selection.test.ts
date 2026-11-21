@@ -11,10 +11,11 @@ const item = (href?: string, id?: string) =>
   }) as unknown as Element;
 
 test("keys come from the link address when every item has its own, else data-id, else the row index", () => {
-  assert.deepEqual(keys_of([item("/a", "1"), item("/b", "2")]), ["/a", "/b"]);
-  assert.deepEqual(keys_of([item("/a", "1"), item("/a", "2")]), ["1", "2"], "a repeated address falls to data-id");
-  assert.deepEqual(keys_of([item("/a", "1"), item("/a")]), ["0", "1"], "one item with no id falls to the row index");
-  assert.deepEqual(keys_of([item(undefined, "1"), item("/a", "1")]), ["0", "1"]);
+  assert.deepEqual(keys_of([item("/a", "1"), item("/b", "2")]), ["h/a", "h/b"]);
+  assert.deepEqual(keys_of([item("/a", "1"), item("/a", "2")]), ["d1", "d2"], "a repeated address falls to data-id");
+  assert.deepEqual(keys_of([item("/a", "1"), item("/a")]), ["i0", "i1"], "one item with no id falls to the row index");
+  assert.deepEqual(keys_of([item(undefined, "1"), item("/a", "1")]), ["i0", "i1"]);
+  assert.notDeepEqual(keys_of([item(undefined, "1"), item(undefined, "2")]).slice(0, 1), keys_of([item(undefined, "2")]), "a key of one scheme never equals a key of another");
 });
 
 test("settle finds each end by key, else at its last place clamped to the list, and gives nothing for an empty list", () => {
@@ -42,7 +43,7 @@ test("a start sets both ends and a later land moves the cursor only, in both dir
   assert.deepEqual(range_hrefs(selection, page), [1, 2, 3]);
   selection.land_(page.items[0]!);
   assert.deepEqual(range_hrefs(selection, page), [0, 1], "the cursor passed the anchor, which stays");
-  assert.equal(selection.tick_()?.anchor_, page.items[1]);
+  assert.equal(selection.tick_()?.list_[selection.tick_()!.anchor_], page.items[1]);
 });
 
 test("the ends follow their items when the page replaces every node", () => {
@@ -114,5 +115,20 @@ test("swap makes the anchor the cursor and the range stays", () => {
   selection.land_(page.items[3]!);
   assert.equal(selection.swap_(), page.items[1]);
   assert.deepEqual(range_hrefs(selection, page), [1, 2, 3]);
-  assert.equal(selection.tick_()?.anchor_, page.items[3]);
+  assert.equal(selection.tick_()?.list_[selection.tick_()!.anchor_], page.items[3]);
+});
+
+test("the whole list, its keys and the places of the range come out for the actions, and stay put when a click removes a row", () => {
+  const { page, selection } = make(row("/a", "/b", "/c", "/d"));
+  selection.start_next_land_(true);
+  selection.land_(page.items[0]!);
+  selection.start_next_land_(false);
+  selection.land_(page.items[2]!);
+  const first = selection.tick_()!;
+  assert.deepEqual([first.keys_, first.from_, first.to_, first.anchor_], [["h/a", "h/b", "h/c", "h/d"], 0, 2, 0]);
+  const worklist = first.keys_.slice(first.from_, first.to_ + 1);
+  // The first row vanishes: the worklist still finds the other two by key.
+  page.items = row("/b", "/c", "/d");
+  const now = selection.tick_()!;
+  assert.deepEqual(worklist.map((key) => now.keys_.indexOf(key)), [-1, 0, 1]);
 });

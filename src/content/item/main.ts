@@ -1,7 +1,7 @@
 // The `item` bundle: the handler of `page.item`, which item mode and site rows bind to j and k on result pages, and `item.start`, which starts item mode on a list page. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { all_items, current_item, follow_item, move_item, read_cursor, watch_lands } from "./pick.ts";
+import { all_items, carry_row, current_item, follow_item, move_item, read_cursor, watch_lands } from "./pick.ts";
 import type { ItemArgs, ItemCursor } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { live_derived_row } from "./derived.ts";
@@ -9,7 +9,7 @@ import { args_for_pin, lists_with_row, pick_list } from "./lists.ts";
 import { watch_user_left } from "../user_left.ts";
 import { create_item_start } from "./start.ts";
 import { create_selection } from "./selection.ts";
-import { relay } from "../relay.ts";
+import { best_effort } from "../../shared/swallow.ts";
 import type { Region } from "./finder.ts";
 import { is_shown } from "../shown.ts";
 
@@ -21,7 +21,7 @@ const host = item_window.desertfox_host;
 if (!item_window.desertfox_item_ready && host) {
   item_window.desertfox_item_ready = true;
   const watch_user_ = () => watch_user_left(document, window, host.pressed_keys_);
-  const overlay = create_item_overlay(host.get_mode, watch_user_, follow_item, () => selection.tick_(), (count) => (host.visual_count_(count), window === window.top || void relay("top", "ui.badge_count", { count })));
+  const overlay = create_item_overlay(host.get_mode, watch_user_, follow_item, () => selection.tick_(), (count) => (host.visual_count_(count), window === window.top || void best_effort(browser.runtime.sendMessage({ type: "relay", to: "top", id: "ui.badge_count", args: { count } }))));
   const page = {
     doc: document,
     view: window,
@@ -46,7 +46,7 @@ if (!item_window.desertfox_item_ready && host) {
   });
   watch_lands(selection.land_);
   host.register_handler_("page.item", (args) => {
-    const item_args = args as unknown as ItemArgs;
+    const item_args = carry_row(args as unknown as ItemArgs);
     // `current` with extend starts a selection at the item it lands on, which is how `v` begins. Any other extend moves the cursor from where a redraw left it.
     if (item_args.extend) item_args.direction === "current" ? selection.start_next_land_(true) : selection.tick_();
     try {
@@ -84,7 +84,7 @@ if (!item_window.desertfox_item_ready && host) {
   // The item actions read the range of visual item mode (the items from the anchor to the cursor, and the anchor) through a callback, as for `item.current`.
   host.register_handler_("item.range", (args) => {
     const found = selection.tick_();
-    (args.take as (range?: Element[], anchor?: Element) => void)(found?.range_, found?.anchor_);
+    (args.take as (...list: unknown[]) => void)(found?.list_, found?.keys_, found?.from_, found?.to_, found?.anchor_);
   });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));

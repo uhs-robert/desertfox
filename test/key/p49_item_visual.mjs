@@ -1,7 +1,15 @@
 // Visual item mode, entered with v in item mode. v and Escape return to item mode and a second Escape goes to normal mode. The cursor keys move the end of the selection and o swaps the ends. The selection follows its items when the page draws the list again: every node replaced, an end removed, every item removed. The tab holds the mode: a second frame stays in item mode, and a frame that reloads joins as item mode.
-export const areas = ["keys", "tabs", "bundles"];
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 
-export async function run_cases({ run_line, run_case, open_page, press_keys, in_active_tab, poll_until, sleep }) {
+export const areas = ["keys", "tabs", "bundles"];
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+  await setup("bind j on the iv_row_ pages to the even cards, which the finder does not single out", async () => {
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=iv_row_*"', 'keymap = { item = { j = "page.item --direction=down div.card.even" } }', ""].join("\n"));
+    await load_config_dir(dir);
+  });
+
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
@@ -87,6 +95,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
   await run_case("without a link address on each card the selection follows data-id", async () => {
     await start("iv_data_id_dynbare");
     await press_keys("jj");
+    await expect_focus("c2");
     await draw([0, 1, 2, 3, 4, 5, 6, 7]);
     await press_keys("j");
     await expect_focus("c3");
@@ -185,7 +194,7 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await press_keys("j");
     await expect_range(2);
     await press_keys("-k", "space");
-    await poll_until("the notice", async () => (await toast_text()).includes("No checkbox in the first item"));
+    await poll_until("the notice", async () => (await toast_text()).includes("No checkbox in the anchor item"));
     await expect_checked(["x0", "x1", "x3"]);
   });
 
@@ -195,5 +204,44 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await expect_range(4);
     await press_keys("-k", "space");
     await expect_checked(["x0", "x1", "x2", "x3"]);
+  });
+
+  await run_case("visual item mode walks the items of the site row, not the finder's list, and Space acts on them only", async () => {
+    await open_page("item_list", "iv_row_dyn_even", { new_tab: true });
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await expect_focus("c0");
+    await press_keys("v");
+    await expect_range(1);
+    await press_keys("j");
+    await expect_focus("c2");
+    await expect_range(2);
+    await press_keys("o");
+    await expect_focus("c0");
+    await expect_range(2);
+    await press_keys("-k", "space");
+    await expect_checked(["x0", "x2"]);
+  });
+
+  await run_case("a click that removes its row does not make Space skip the next row of the range", async () => {
+    await start("iv_vanish_dyn_vanish");
+    await press_keys("jjj");
+    await expect_range(4);
+    await press_keys("-k", "space");
+    await poll_until("the count", async () => (await toast_text()).includes("4 changed"));
+    expect((await in_active_tab(`[...document.querySelectorAll("#dyn .card a")].map((link) => link.id).join(",")`)) === "c4,c5,c6,c7,c8,c9,c10,c11", "a row was skipped");
+  });
+
+  await run_case("I in visual item mode ends the selection and picks the list in item mode", async () => {
+    await start("iv_pick_dyn");
+    await press_keys("jj");
+    await expect_focus("c2");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    // The pick lands on the item a move would start from, which is where the cursor was.
+    await expect_focus("c2");
+    await press_keys("j");
+    await expect_focus("c3");
   });
 }

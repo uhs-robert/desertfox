@@ -148,6 +148,12 @@ const hover_check = (args: ItemArgs, item: Element) => (args.hover ? () => !!arg
 // The list as the last move read it, which visual item mode keeps its ends in.
 export const all_items = (page: ItemPage): Element[] => items_of(page, last_move?.args_ ?? { direction: "current" }, true);
 
+// A move of visual item mode reads the same list as the item mode move before it: a row's selector, link and section carry over, so a row that names its items is not replaced by the finder's list.
+export const carry_row = (args: ItemArgs): ItemArgs => {
+  const { selector, link, section } = last_move?.args_ ?? {};
+  return args.extend && !args.selector ? ({ ...args, selector, link, section } as ItemArgs) : args;
+};
+
 // Told of every item the cursor lands on, which visual item mode follows.
 let on_land: ((item: Element) => void) | undefined;
 export const watch_lands = (listener: (item: Element) => void) => void (on_land = listener);
