@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { bundles } from "../../src/content/bundles.ts";
 import { content_handlers } from "../../src/content/handler_map.ts";
@@ -7,6 +8,7 @@ import { create_mode_state } from "../../src/content/mode_state.ts";
 import { run_content_invocation, run_content_steps } from "../../src/content/run_content.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/index.ts";
+import { is_bundle_name } from "../../src/shared/bundles.ts";
 import type { BundleName, CompiledKeymap, LeafStep } from "../../src/shared/index.ts";
 import "../../src/background/command_modules.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
@@ -49,14 +51,60 @@ test("an id with no handler and no bundle field is failed", async () => {
   assert.deepEqual(await run_content_invocation({ id: "hint.run" }, "ignore"), { ok: false, message: "hint.run cannot run in the page" });
 });
 
+// The ids a bundle registers, read from its source: a literal `register_handler_("id", ...)`, or a constant defined in the same folder.
+function registered_ids(bundle: BundleName): Set<string> {
+  const files = bundle === "cmdline" ? ["src/cmdline/host.ts"] : source_files(`src/content/${bundle}`);
+  const text = files.map((file) => readFileSync(new URL(`../../${file}`, import.meta.url), "utf8")).join("\n");
+  const ids = new Set<string>();
+  for (const [, id] of text.matchAll(/register_handler_\(\s*"([^"]+)"/g)) ids.add(id!);
+  for (const [, name] of text.matchAll(/register_handler_\(\s*([A-Z_]+)\s*,/g)) {
+    const defined = text.match(new RegExp(`const ${name} = "([^"]+)"`));
+    assert.ok(defined, `${name} is not defined as a string constant in the ${bundle} bundle`);
+    ids.add(defined[1]!);
+  }
+  return ids;
+}
+
+function source_files(folder: string): string[] {
+  return readdirSync(new URL(`../../${folder}`, import.meta.url), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? source_files(`${folder}/${entry.name}`) : entry.name.endsWith(".ts") ? [`${folder}/${entry.name}`] : [],
+  );
+}
+
+// These lazy commands register no handler by id. The command line sink (BUNDLE_FOR_MODE) takes their keys while the line is open.
+const SINK_DRIVEN_IDS = new Set([
+  "cmdline.next_completion",
+  "cmdline.prev_completion",
+  "cmdline.submit",
+  "cmdline.history",
+  "cmdline.clear",
+  "cmdline.help",
+  "list.act",
+  "list.select",
+]);
+
 test("every command with a bundle field names a real bundle, has no run, and has no entry in the handler map", () => {
   const lazy = registry.list().filter((command) => command.bundle !== undefined);
-  assert.equal(lazy.length, 48);
+  assert.ok(lazy.length > 0);
   for (const command of lazy) {
+    assert.ok(is_bundle_name(command.bundle), command.id);
     assert.equal(command.runs_in, "content", command.id);
     assert.equal(command.run, undefined, command.id);
     assert.equal(content_handlers[command.id], undefined, command.id);
   }
+});
+
+test("each lazy command is registered by its bundle, or is one of the sink-driven ids", () => {
+  const lazy = registry.list().filter((command) => command.bundle !== undefined);
+  const ids_of = new Map<BundleName, Set<string>>();
+  for (const command of lazy) {
+    const bundle = command.bundle as BundleName;
+    if (!ids_of.has(bundle)) ids_of.set(bundle, registered_ids(bundle));
+    const registered = ids_of.get(bundle)!.has(command.id);
+    if (SINK_DRIVEN_IDS.has(command.id)) assert.equal(registered, false, `${command.id} registers a handler now: take it off SINK_DRIVEN_IDS`);
+    else assert.ok(registered, `${command.id} names the ${bundle} bundle, which registers no handler for it`);
+  }
+  for (const id of SINK_DRIVEN_IDS) assert.ok(lazy.some((command) => command.id === id && command.bundle === "cmdline"), `${id} is not a cmdline lazy command: drop it from SINK_DRIVEN_IDS`);
 });
 
 test("the first key of a lazy command waits one bundle load, holds the keys typed meanwhile and replays them after the handler runs", async () => {
