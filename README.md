@@ -11,8 +11,8 @@
   <a href="https://github.com/uhs-robert/desertfox/forks"><img src="https://img.shields.io/github/forks/uhs-robert/desertfox?style=for-the-badge&logo=github&colorA=3b2416&colorB=8a6a9e" alt="Forks"/></a>
 </p>
 
-<p align="center"><i>Desert the mouse. The keys teach themselves.</i></p>
-<p align="center">Vim keys for Firefox: link hints, a command line, keyboard drag and drop, and a popup that shows what every key does.</p>
+<p align="center"><i>Desert the mouse. Browse the web with your keyboard. The keys teach themselves.</i></p>
+<p align="center">Vim keys for Firefox: link hints, command line, drag and drop, and a popup that shows what every key does.</p>
 
 <p align="center"><img src="./docs/images/demo.gif" width="800" alt="A demo of DesertFox on its Practice page. It shows link hints, the which-key panel, a form filled with gi and ]i, a radio button and a slider picked by hint, a card dragged to another column of a board, a sentence copied in caret mode, the tab finder and the switch to Catppuccin."/></p>
 
