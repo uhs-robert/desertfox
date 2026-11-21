@@ -6,6 +6,7 @@ import type { ListKeys, ReadRepeatPreview, WhichKeyPanel } from "../../shared/me
 import { MEDIA_PANEL_HANDLER, media_panel_admitted } from "./media_panel.ts";
 import { create_relayed_panel } from "./relayed_panel.ts";
 import { hide_panel, show_panel } from "./panel.ts";
+import { rows_for_page } from "./guarded_rows.ts";
 import { relay } from "../relay.ts";
 import { create_which_key_session } from "./session.ts";
 import { create_which_key_timer } from "./timer.ts";
@@ -39,7 +40,8 @@ const session = create_which_key_session(
   async (mode, typed) => {
     const ask = <Answer>(message: ListKeys | ReadRepeatPreview) => browser.runtime.sendMessage(message) as Promise<Answer>;
     const [panel, repeat] = await Promise.all([ask<WhichKeyPanel>({ type: "list_keys", mode, prefix: typed, url: location.href }), refused_as(ask<string | undefined>({ type: "read_repeat_preview" }), undefined)]);
-    return repeat === undefined ? panel : { ...panel, repeat };
+    const shown = { ...panel, rows: rows_for_page(panel.rows, document.activeElement, document.body, document) };
+    return repeat === undefined ? shown : { ...shown, repeat };
   },
   draw,
   erase,
