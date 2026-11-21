@@ -8,7 +8,7 @@ export const areas = ["caret", "find"];
 export async function run_cases({ sleep, take_shot, run_case, expect, expect_absent, open_page, press_keys, poll_until, barrier, scroll_of, wait_cmdline, settle_focus, last_scroll_y, events, wait_event, in_active_tab, in_background, hint_label_count, badge_is, is_selection_of, press_and_wait_for_move, escape_to_normal, run_line, type_in_line, wait_active_tab }) {
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   // oasis_moonlight, the default theme, dark: the caret cell takes the `mode_caret` role and visual mode the `selection` role (src/content/caret/selection_colors.ts). The sheet text reads back with the colors as rgb().
-  const CARET_BACKGROUND = "rgb(240, 230, 140)";
+  const CARET_BACKGROUND = "rgb(247, 212, 108)";
   const VISUAL_BACKGROUND = "rgb(36, 54, 77)";
 
   const selection_is = (page_id, text) => (event) => event.type === "selection" && event.page_id === page_id && event.text === text;
