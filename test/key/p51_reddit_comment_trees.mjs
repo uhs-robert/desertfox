@@ -126,7 +126,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("k0");
     const head = await page_rect("k0");
     const text = await page_rect("t0");
-    const reply_text = await page_rect("t1");
+    const reply_text = await page_rect("t2");
     await poll_until("the box on k0", async () => !!(await in_active_tab(READ_BOX)));
     const box = await in_active_tab(READ_BOX);
     expect(Math.abs(box.top - head.top) < 2 && Math.abs(box.top + box.height - text.bottom) < 2, `the box ${JSON.stringify(box)} does not run from the head ${head.top} to the text bottom ${text.bottom}`);
@@ -142,6 +142,50 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     }
     await expect_focus("k1");
     expect((await in_active_tab("scrollY")) + (await in_active_tab("innerHeight")) >= text.bottom - 2, "j left k0 before its text came into view");
+  });
+
+  const open_long = async (id) => {
+    await open_page("reddit_thread", `reddit_long_${id}`, { new_tab: true });
+    await enter_item_mode();
+  };
+  const box_bottom = async () => {
+    await poll_until("the box", async () => !!(await in_active_tab(READ_BOX)));
+    const box = await in_active_tab(READ_BOX);
+    return box.top + box.height;
+  };
+
+  await run_case("a comment with no text of its own keeps its author line as the box, though its reply has text", async () => {
+    await open_long("own_text");
+    await press_keys("j");
+    await expect_focus("k0");
+    await press_keys("l");
+    await expect_focus("k1");
+    const head = await page_rect("k1");
+    expect(Math.abs((await box_bottom()) - head.bottom) < 2, "the box of k1 covers more than its author line");
+  });
+
+  await run_case("gg on the thread lands with the extended box", async () => {
+    await open_long("ends");
+    await press_keys("gg");
+    await expect_focus("k0");
+    expect(Math.abs((await box_bottom()) - (await page_rect("t0")).bottom) < 2, "gg boxed the head only");
+  });
+
+  await run_case("I on the thread lands with the extended box", async () => {
+    await open_page("reddit_thread", "reddit_long_pick", { new_tab: true });
+    await press_keys("I");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+    await expect_focus("k0");
+    expect(Math.abs((await box_bottom()) - (await page_rect("t0")).bottom) < 2, "I boxed the head only");
+  });
+
+  await run_case("v on a long comment keeps its extended box", async () => {
+    await open_long("visual");
+    await press_keys("j");
+    await expect_focus("k0");
+    await press_keys("v");
+    await poll_until("visual item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "VISUAL 1");
+    expect(Math.abs((await box_bottom()) - (await page_rect("t0")).bottom) < 2, "v shrank the box to the head");
   });
 
   await run_case("on a feed page, h keeps the sideways scroll", async () => {

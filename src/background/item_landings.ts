@@ -3,7 +3,7 @@
 import type { BoundInvocation } from "../shared/invocation.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 
-type RowItem = { selector: string; link?: unknown; hover?: unknown };
+type RowItem = { selector: string; link?: unknown; hover?: unknown; extent?: unknown };
 
 // The `page.item` steps that name a selector, at any depth of a bind: a plain step, a step list, a choice list of step lists, or a `{ run, when_present }` choice.
 const item_steps = (binding: unknown): BoundInvocation[] => {
@@ -18,7 +18,7 @@ const row_item_of = (table: Record<string, unknown>): RowItem | undefined => {
   const steps = item_steps(table["j"]);
   const [first] = steps.length > 0 ? steps : Object.values(table).flatMap(item_steps);
   const same = steps.length > 0 ? steps : first ? [first] : [];
-  return first && { selector: [...new Set(same.map((step) => step.args!["selector"] as string))].join(", "), link: first.args!["link"], hover: first.args!["hover"] };
+  return first && { selector: [...new Set(same.map((step) => step.args!["selector"] as string))].join(", "), link: first.args!["link"], hover: first.args!["hover"], extent: first.args!["extent"] };
 };
 
 const ALIGNS = { zt: "top", zz: "center", zb: "bottom" } as const;
@@ -27,8 +27,8 @@ export function with_item_landings(row: SiteRuleRow): SiteRuleRow {
   const item_table = row.keymap?.item as Record<string, unknown> | undefined;
   const item = item_table && row_item_of(item_table);
   if (!item) return row;
-  const { selector, link, hover } = item;
-  const landing: BoundInvocation = { id: "page.item", args: { selector, ...(link ? { link } : {}), ...(hover ? { hover } : {}), direction: "current" } };
+  const { selector, link, hover, extent } = item;
+  const landing: BoundInvocation = { id: "page.item", args: { selector, ...(link ? { link } : {}), ...(hover ? { hover } : {}), ...(extent ? { extent } : {}), direction: "current" } };
   const guarded = (step: BoundInvocation): BoundInvocation => ({ ...step, when_present: selector });
   // Normal mode offers the row's list alone, so `I` starts at once. Inside item mode the other lists are offered too.
   const pick = (row_only: boolean) => [guarded({ id: "hint.run", args: { filter: "lists", items: selector, ...(row_only ? { row_only } : {}) } }), landing];

@@ -84,7 +84,7 @@ test("the Reddit thread rows come before the feed rows, bind the tree keys to co
       assert.equal(check_args(command, table[key]!.args).ok, true, key);
       assert.equal(table[key]?.args["extent"], ":scope > div > div > [slot=comment]", key);
     }
-    for (const key of ["j", "k"]) {
+    for (const key of ["j", "k", "gg", "G"]) {
       assert.equal(table[key]?.id, "page.item", key);
       assert.equal(table[key]?.args["extent"], ":scope > div > div > [slot=comment]", key);
       assert.equal(check_args(registry.get("page.item")!, table[key]!.args).ok, true, key);

@@ -165,8 +165,8 @@ export const all_items = (page: ItemPage): Element[] => items_of(page, last_move
 
 // A move of visual item mode reads the same list as the item mode move before it: a row's selector, link and section carry over, so a row that names its items is not replaced by the finder's list.
 export const carry_row = (args: ItemArgs): ItemArgs => {
-  const { selector, link, section } = last_move?.args_ ?? {};
-  return args.extend && !args.selector ? ({ ...args, selector, link, section } as ItemArgs) : args;
+  const { selector, link, section, extent } = last_move?.args_ ?? {};
+  return args.extend && !args.selector ? ({ ...args, selector, link, section, extent } as ItemArgs) : args;
 };
 
 // Told of every item the cursor lands on, which visual item mode follows.
