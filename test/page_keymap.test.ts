@@ -885,3 +885,11 @@ test("normal-mode I on Drive lands on a file with no arrow keys, in the page rep
   assert.deepEqual(elsewhere.steps.map((step) => step.invocation.id), ["hint.run", "page.item"]);
 });
 
+
+test("which-key rows of a site row bind with a guard carry the chain, and an unguarded one carries none", async () => {
+  const compiled = with_defaults({ site_rules: [{ site: "https://example.test/*", bind: { Q: { id: "page.item", args: { direction: "first" }, when_present: "ul li" }, W: { id: "page.item", args: { direction: "last" } } } }] });
+  const storage = { get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: compiled }) } as never;
+  const rows = (await list_keys(storage, (id) => registry.get(id), { mode: "normal", prefix: [] }, { addresses: ["https://example.test/"] })).rows;
+  assert.equal(rows.find((row) => row.keys === "Q")?.chain?.when_present, "ul li");
+  assert.equal(rows.find((row) => row.keys === "W")?.chain, undefined);
+});

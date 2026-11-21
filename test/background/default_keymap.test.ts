@@ -382,3 +382,12 @@ test("which-key lists one <key> row under a find key and skips its live repeat",
   const panel = panel_after_prefix(compiled.modes.caret, ["f"], (id) => registry.get(id) as never);
   assert.deepEqual(panel.rows.map((row) => row.keys), ["<key>"]);
 });
+
+test("which-key rows for the guarded tree keys carry their chain, and the unguarded align keys carry none", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  const rows = panel_after_prefix(compiled.modes.item, ["z"], (id) => registry.get(id) as never).rows;
+  for (const row of rows.filter((entry) => ["za", "zc", "zo"].includes(entry.keys) || ["a", "c", "o"].includes(entry.keys))) assert.equal(row.chain?.when_present, "[role=tree]:focus-within", row.keys);
+  assert.deepEqual(rows.filter((row) => !row.chain).map((row) => row.keys).sort(), ["b", "t", "z"]);
+  const h = panel_after_prefix(compiled.modes.item, [], (id) => registry.get(id) as never).rows.find((row) => row.keys === "h");
+  assert.equal(h?.chain?.otherwise?.label, "Item to the left, or scroll left");
+});

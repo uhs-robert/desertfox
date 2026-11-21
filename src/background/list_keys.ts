@@ -26,7 +26,8 @@ function row_of(token: string, node: TreeNode, find_command: (id: string) => Com
   if (node.kind === "branch") return { keys: token, command: `+${node.label ?? token}`, description: "", more: true };
   const first = node.steps[0];
   const command = first && find_command(first.invocation.id);
-  return { keys: token_label(token), command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
+  const row: WhichKeyRow = { keys: token_label(token), command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
+  return node.when_focus || node.when_present ? { ...row, chain: node } : row;
 }
 
 // Display order: letters (case-blind, so `t` before `T`), other plain keys, keys with a modifier, groups, Escape last.
