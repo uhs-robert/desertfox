@@ -1,5 +1,5 @@
 // Applies a command's count rule to an invocation. The content bundle has no
-// registry, so each handler carries its own rule.
+// registry, so the rule arrives on the `LeafStep` that ran.
 
 import type { CheckedArgs, CountBehavior } from "../shared/index.ts";
 

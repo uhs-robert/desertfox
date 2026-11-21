@@ -110,7 +110,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
 | Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Script loaded on every page and frame | 20.3 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
+| Script loaded on every page and frame | under 22 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
 
@@ -167,7 +167,7 @@ You gain:
 - Keyboard drag and drop, which neither Vimium nor Tridactyl has built in.
 - Item mode, which steps through a page's items with `j` and `k`. Neither Vimium nor Tridactyl documents it.
 - Macros and caret mode, which Tridactyl lacks, and settings per site, where Vimium has keys only.
-- A script of 20.3 KB on each page.
+- A script of under 22 KB on each page.
 
 You lose:
 

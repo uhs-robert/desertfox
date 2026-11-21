@@ -15,11 +15,11 @@ How a handler is found and called:
 - `../run_content.ts` looks the id up. An id with no handler but with a `bundle` on the invocation runs through the bundle host, which loads the bundle first. Any other id fails. It calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
 - The args are already checked, with defaults filled in, by the background compiler.
 
-The definitions in `src/commands` import the same handler objects, so the count rule lives in one place.
+The count rule is not on the handler. The command definition in `src/commands` holds it, and the background compiler puts it on each `LeafStep` as `count_rule`. The definitions import only a few constants from this folder.
 
 To add a handler:
 
 - Write the `ContentHandler` in the file of its group, or in a new file.
 - Add it to `handler_map.ts` under the command id.
-- Define the command in `src/commands` with the same object.
-- To report a success, call `show_toast_` from `../ui_proxy.ts`, as `copy.ts` does. To report a failure, return it as an `Outcome`.
+- Define the command in `src/commands`, with its count rule.
+- To report a success, call `show_toast` from `../ui_proxy.ts`. `copy.ts` takes it as a parameter. To report a failure, return it as an `Outcome`.

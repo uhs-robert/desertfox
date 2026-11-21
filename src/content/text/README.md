@@ -1,6 +1,6 @@
 # text
 
-The `text` bundle (`text.js`, 4 KB limit). It records the text typed in one insert session and types it back for `.`. The background injects it into a frame on the first input event in a text field.
+The `text` bundle (`text.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). It records the text typed in one insert session and types it back for `.`. The background injects it into a frame on the first input event in a text field.
 
 - `content/main.ts` keeps two hooks that must not wait for the bundle: a window `beforeinput` listener (insert mode only) and one flush call before each leaf runs and on each focusout. Each forwards through `run_command_`, which runs a bundle's calls in the order they were made, even a call made after the bundle registered its handlers but before its load answered. So the first characters after `gi` are not lost and a flush runs after the input before it.
 - The flush reads the field's text when it is asked for, at the blur or the key, and sends it along, so a page script that edits the field while the bundle loads does not change what is recorded.
