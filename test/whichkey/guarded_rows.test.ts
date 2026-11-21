@@ -21,3 +21,10 @@ test("rows whose guard holds keep their own label", () => {
 test("when every row is guarded and fails the list is empty", () => {
   assert.deepEqual(rows_for_page([rows[1]!], null, body, root_with(false)), []);
 });
+
+test("a fallback without a label shows its command's label and description", () => {
+  const fallback: TreeLeaf = { kind: "leaf", steps: [], label: "Scroll down", intent: "Scroll the page down." };
+  const chain: TreeLeaf = { ...guarded, otherwise: fallback };
+  assert.deepEqual(rows_for_page([{ ...row("j", "Widget action", chain), description: "Own intent" }], null, body, root_with(false)).map((entry) => [entry.command, entry.description]), [["Scroll down", "Scroll the page down."]]);
+  assert.equal(rows_for_page([row("j", "Widget action", chain)], null, body, root_with(true))[0]!.command, "Widget action");
+});

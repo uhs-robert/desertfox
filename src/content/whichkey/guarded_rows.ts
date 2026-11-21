@@ -7,5 +7,5 @@ export const rows_for_page = (rows: WhichKeyRow[], focused: Element | null, body
   rows.flatMap((row) => {
     if (!row.chain) return [row];
     const leaf = leaf_for_page(row.chain, focused, body, root);
-    return leaf ? [{ ...row, command: leaf.label ?? row.command }] : [];
+    return leaf ? [leaf === row.chain ? row : { ...row, command: leaf.label ?? row.command, description: leaf.intent ?? "" }] : [];
   });

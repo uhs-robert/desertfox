@@ -22,12 +22,21 @@ const REGISTER_PREFIX_MODES: readonly string[] = ["normal", "caret", "visual", "
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
+// The bundle has no command registry, so each leaf of a guard chain carries the label and intent it would show as a row, with the precedence of `row_of`.
+function described(leaf: TreeLeaf, find_command: (id: string) => CommandMeta | undefined): TreeLeaf {
+  const first = leaf.steps[0];
+  const command = first && find_command(first.invocation.id);
+  const label = leaf.label ?? command?.label ?? first?.invocation.id;
+  const intent = leaf.intent ?? command?.intent;
+  return { ...leaf, ...(label && { label }), ...(intent && { intent }), ...(leaf.otherwise && { otherwise: described(leaf.otherwise, find_command) }) };
+}
+
 function row_of(token: string, node: TreeNode, find_command: (id: string) => CommandMeta | undefined): WhichKeyRow {
   if (node.kind === "branch") return { keys: token, command: `+${node.label ?? token}`, description: "", more: true };
   const first = node.steps[0];
   const command = first && find_command(first.invocation.id);
   const row: WhichKeyRow = { keys: token_label(token), command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
-  return node.when_focus || node.when_present ? { ...row, chain: node } : row;
+  return node.when_focus || node.when_present ? { ...row, chain: described(node, find_command) } : row;
 }
 
 // Display order: letters (case-blind, so `t` before `T`), other plain keys, keys with a modifier, groups, Escape last.
