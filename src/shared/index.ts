@@ -2,6 +2,7 @@ export type * from "./command.ts";
 export type * from "./invocation.ts";
 export type * from "./keymap.ts";
 export type * from "./messages/content.ts";
+export type * from "./messages/map.ts";
 export type * from "./messages/page.ts";
 export type * from "./messages/ports.ts";
 export type * from "./messages/tab.ts";

@@ -5,6 +5,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CheckedArgs, CommandContext, CommandDef } from "../shared/command.ts";
 import type { SnippetEntry } from "../shared/config.ts";
+import type { SnippetAnswer, SnippetCall } from "../shared/messages/content.ts";
 import { slot_of } from "../shared/engines/index.ts";
 import { matches_pattern } from "../shared/match_pattern.ts";
 import { parse_command_line, type Registry } from "../shared/registry/index.ts";
@@ -20,12 +21,7 @@ export type SnippetDeps = {
   execute_in_top_frame: (tab_id: number, code: string) => Promise<unknown>;
 };
 
-// Sent by `desertfox.run` inside a snippet. `depth` is the level of the calling snippet.
-export type SnippetCall = { type: "snippet_run"; command_text: string; depth: number };
-
 export type SnippetSender = { tab_id: number | undefined; frame_id: number | undefined };
-
-export type SnippetAnswer = { ok: true } | { ok: false; message: string };
 
 export type Snippets = {
   // Replaces the snippet commands with these. Returns a warning for each one the registry rejects.
