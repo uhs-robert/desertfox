@@ -210,9 +210,14 @@ function warn_unknown_modes(rules: readonly SiteRule[], normal: TreeBranch | und
 // Checks and prunes in place.
 function check_branch(branch: TreeBranch, path: string[], mode: string, input: CompileInput, warnings: string[]): void {
   for (const [token, node] of Object.entries(branch.children)) {
-    if (!keep_node(node, [...path, token], mode, input, warnings)) delete branch.children[token];
+    if (!keep_node(node, [...path, token], mode, input, warnings)) {
+      delete branch.children[token];
+      continue;
+    }
+    // The step a guarded default key falls back to is checked like the key itself.
+    if (node.kind === "leaf" && node.otherwise && !keep_node(node.otherwise, [...path, token], mode, input, warnings)) delete node.otherwise;
     // A leaf that waits for a key press moves under a branch of its own, so the matcher reaches it through one more key.
-    else if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = capture_branch(node, live_repeat_child(node, input));
+    if (node.kind === "leaf" && node.steps.some((step) => step.capture)) branch.children[token] = capture_branch(node, live_repeat_child(node, input));
   }
 }
 

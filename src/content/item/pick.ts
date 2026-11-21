@@ -65,11 +65,17 @@ export function pick_section(starts: readonly number[], place: Place, direction:
   return reached[steps - 1] ?? reached.at(-1);
 }
 
+// The index of the deepest item that holds the focus, since items nest in a tree. The finder lists a branch of a tree by its label, which the treeitem around it holds, so a focused treeitem stands for the first item it holds.
+const deepest_holding = (items: readonly Element[], focused: Element): number => {
+  const held = items.findLastIndex((item) => item.contains(focused));
+  return held !== -1 || focused.getAttribute("role") !== "treeitem" ? held : items.findIndex((item) => focused.contains(item));
+};
+
 // The item that holds the focus, else the last one moved to while it is on screen (or pinned), else the first one not above the view.
 export function place_of(items: readonly Element[], focused: Element | null, last: Element | undefined, boxes: readonly Box[], view_height: number, pinned = false): Place {
   const in_view = (index: number) => boxes[index]!.bottom > 0 && boxes[index]!.top < view_height;
   // A focus left behind off screen, after a scroll far away, gives way to the start rules.
-  const found = focused ? items.findIndex((item) => item.contains(focused)) : -1;
+  const found = focused ? deepest_holding(items, focused) : -1;
   const holding = found !== -1 && in_view(found) ? found : -1;
   const remembered = items.indexOf(last as Element);
   const held = holding !== -1 || remembered === -1 || (!pinned && !in_view(remembered)) ? holding : remembered;
@@ -124,7 +130,8 @@ export function current_item(page: ItemPage): { item_: Element; link_: Element |
   // Before any move the finder's list stands in, so a link reached with Tab counts.
   const args = last_move?.args_ ?? { direction: "current" as const };
   const focused = page.focused();
-  const item = items_of(page, args, true).find((candidate) => focused && candidate.contains(focused)) ?? last_move?.item_.deref();
+  const candidates = items_of(page, args, true);
+  const item = (focused && candidates[deepest_holding(candidates, focused)]) || last_move?.item_.deref();
   if (!item?.isConnected) return undefined;
   // A row that names a link and finds none has no link: the row's items are not all stories (a comment holds a vote link first).
   const link = args.link ? item.querySelector(args.link) : args.selector ? (item.matches(LINK) ? item : item.querySelector(LINK)) : page.derived?.link_of_(item);

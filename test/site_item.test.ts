@@ -115,6 +115,22 @@ test("the start is the focused item, else the last item while on screen, else th
   assert.deepEqual(place_of(items, null, undefined, list.map((entry) => ({ ...entry, bottom: -1 })), 800), { index: 4, on_item: false });
 });
 
+test("nested items: the focus holds the deepest item around it, for the start and for current_item", () => {
+  const leaf = { getAttribute: () => null } as unknown as Element;
+  const inner = { contains: (node: unknown) => node === leaf } as unknown as Element;
+  const outer = { contains: (node: unknown) => node === leaf || node === inner } as unknown as Element;
+  assert.deepEqual(place_of([outer, inner], leaf, undefined, [box(0, 0), box(0, 30)], 800), { index: 1, on_item: true });
+  // A focused treeitem holds the label the finder lists for it, and stands for that item.
+  const label = { contains: () => false } as unknown as Element;
+  const treeitem = { getAttribute: () => "treeitem", contains: (node: unknown) => node === label || node === treeitem } as unknown as Element;
+  assert.deepEqual(place_of([label], treeitem, undefined, [box(0, 0)], 800), { index: 0, on_item: true });
+  const held = fake_page(list, true, 1);
+  const first = held.items[0] as unknown as { contains: (node: unknown) => boolean };
+  first.contains = (node: unknown) => node === held.items[1] || node === held.items[0];
+  move_item(held.page, { selector: "li", link: "a.t", direction: "down" });
+  assert.equal(current_item(held.page)?.item_, held.items[1], "the inner item, not the outer one that comes first");
+});
+
 // A page of fake items. `focus` records which element took the focus and with which options.
 function fake_page(rects: Box[], on_screen = true, focused_index = -1, hidden: number[] = []) {
   const log: string[] = [];
