@@ -108,12 +108,12 @@ test("a focused child frame that reports without the focus gives the tab back to
 test("ignore mode in the top frame beats a focused child frame, until the top frame leaves it", async () => {
   const modes = create_tab_modes(fake_storage());
   await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
-  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), { child_mode: undefined, tell_top: false, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true }), { child_mode: undefined, child_frame: undefined, tell_top: false, park: false, parked: false });
   assert.equal(await modes.recall(4), "ignore", "a field in a child frame hid ignore mode");
   // Leaving ignore mode hands the tab to the frame that still holds the focus.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", child_frame: CHILD, tell_top: true, park: false, parked: false });
   assert.equal(await modes.recall(4), "insert");
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), { child_mode: undefined, tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "ignore", focus: false }), { child_mode: undefined, child_frame: undefined, tell_top: true, park: false, parked: false });
   assert.equal(await modes.recall(4), "ignore");
 });
 
@@ -172,7 +172,7 @@ test("a report that changes nothing writes nothing, and the top frame hears the 
   storage.set = (items) => (writes++, set(items));
   const modes = create_tab_modes(storage);
   // A top frame shown again from the back-forward cache still draws the child mode it had, so it hears that no child frame holds the focus.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: true }), { child_mode: undefined, tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: true }), { child_mode: undefined, child_frame: undefined, tell_top: true, park: false, parked: false });
   assert.equal((await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true })).tell_top, true);
   assert.equal(writes, 2);
   // The same reports again, as each focus and pageshow sends them.
@@ -180,9 +180,16 @@ test("a report that changes nothing writes nothing, and the top frame hears the 
   assert.equal((await modes.report(4, { frame_id: OTHER_CHILD, mode: "normal", focus: false })).tell_top, false);
   assert.equal(writes, 2);
   // A top frame that just started has not heard of the focused child frame.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: "insert", child_frame: CHILD, tell_top: true, park: false, parked: false });
   assert.equal(writes, 2);
-  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), { child_mode: undefined, tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "insert", focus: false }), { child_mode: undefined, child_frame: undefined, tell_top: true, park: false, parked: false });
+});
+
+// The badge shows the count of visual item mode of the focused frame, so the top frame hears a move of the focus to another child frame in the same mode.
+test("a move of the focus between two child frames in the same mode tells the top frame which frame it is", async () => {
+  const modes = create_tab_modes(fake_storage());
+  assert.deepEqual(await modes.report(4, { frame_id: CHILD, mode: "item_visual", focus: true }), { child_mode: "item_visual", child_frame: CHILD, tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: OTHER_CHILD, mode: "item_visual", focus: true }), { child_mode: "item_visual", child_frame: OTHER_CHILD, tell_top: true, park: false, parked: false });
 });
 
 // Navigation clearing the stored mode
@@ -300,7 +307,7 @@ test("a load start after the pageshow reports forgets the child claim, and only 
   await modes.forget_on_navigation(4, { status: "loading" });
   assert.equal(await modes.recall(4), "normal", "the record kept the child claim past the load start");
   // The top frame still draws the child mode it had, so a top report must reach it even though the record changes nothing.
-  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: undefined, tell_top: true, park: false, parked: false });
+  assert.deepEqual(await modes.report(4, { frame_id: TOP, mode: "normal", focus: false }), { child_mode: undefined, child_frame: undefined, tell_top: true, park: false, parked: false });
 });
 
 // The report of a cross-origin child frame that took the focus on load: no click or key, and not on a field.
@@ -398,7 +405,7 @@ test("unpark ends the record of a gone frame once, hands the top page its child 
   await modes.report(4, { frame_id: CHILD, ...LOAD_FOCUS });
   assert.equal(await modes.unpark(4, OTHER_CHILD), undefined);
   assert.equal(await modes.parked_frame(4), CHILD);
-  assert.deepEqual(await modes.unpark(4, CHILD), { child_mode: undefined });
+  assert.deepEqual(await modes.unpark(4, CHILD), { child_mode: undefined, child_frame: undefined });
   assert.equal(await modes.unpark(4, CHILD), undefined);
   assert.equal(await modes.parked_frame(4), undefined);
   // The frame was seen: a frame that comes back with the same id is not parked again.

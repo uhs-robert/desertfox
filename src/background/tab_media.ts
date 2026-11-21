@@ -4,19 +4,21 @@
 import type { Mode } from "../shared/command.ts";
 import { TAB_MEDIA_STORAGE_PREFIX, TAB_MEDIA_TOP_STORAGE_PREFIX } from "./storage_keys.ts";
 import { best_effort, keep_chain, refused_as } from "../shared/swallow.ts";
-import { create_step_queue } from "./tab_steps.ts";
+import { with_frame, without_stale_off, type HoldFrames, type SendStep, type StepQueue } from "./tab_steps.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
 // `pin_frame` is the frame whose video `;M` pinned. The video itself is a weak reference in that frame's page.
 // `stepped_on` says that `aa` sent the step on to every frame already, so the first frame to report the mode sends none.
 // `lines` are the frames of the hold with a hint or the line open, opened from the mode. `left` are the frames that reported normal while one was open, and go back to the mode when it closes. `line_closed` is the last frame whose line closed back to the mode, and when.
-export type MediaHold = { frames: number[]; pin_frame?: number; stepped_on?: true; lines?: number[]; left?: number[]; line_closed?: { frame_id: number; at_ms: number } };
+export type MediaHold = HoldFrames & { pin_frame?: number; stepped_on?: true; lines?: number[]; left?: number[]; line_closed?: { frame_id: number; at_ms: number } };
 
 export type TabMediaDeps = {
   storage: SessionStorage;
   // The `MediaStep` message, to one frame or, with no frame, to every frame of the tab that runs the content script. `from` names the reporter that the step skips.
-  send_step: (tab_id: number, on: boolean, frame_id?: number, from?: number) => Promise<unknown>;
+  send_step: SendStep;
+  // The queue the item mode's steps go through too (`tab_steps.ts`).
+  steps: StepQueue;
   // Whether the frame still runs the content script: a frame removed with its line open never reports again.
   frame_alive: (tab_id: number, frame_id: number) => Promise<boolean>;
   set_timer: (callback: () => void, delay_ms: number) => unknown;
@@ -50,15 +52,15 @@ export function create_tab_media(deps: TabMediaDeps) {
     return run;
   };
   const read = async (tab_id: number): Promise<MediaHold | undefined> => (await deps.storage.get(key_of(tab_id)))[key_of(tab_id)] as MediaHold | undefined;
-  // The steps of a tab go out one at a time, in order (`tab_steps.ts`).
-  const { step, drop_steps_to, clear: clear_steps } = create_step_queue(deps.send_step);
+  // The steps of a tab go out in order (`tab_steps.ts`).
+  const { step, drop_steps_to, off_on_its_way, clear: clear_steps } = deps.steps.for_mode(deps.send_step);
   // The old page of a load gets its steps off straight away, outside the tab's steps: a frame of it that never answers must not hold up the new page.
-  const step_old_page = (tab_id: number, on: boolean, frame_id?: number): void => void best_effort(deps.send_step(tab_id, on, frame_id));
+  const step_old_page = (tab_id: number, on: boolean, frame_id?: number, from?: number, document_id?: string): void => void best_effort(deps.send_step(tab_id, on, frame_id, from, document_id));
   // Every frame of the hold leaves the mode, the one that ended it excepted. A frame with a hint or the line open keeps it, and closing it lands in normal mode.
   // The reporter gets no step off, because it left the mode already. No step on reaches a frame of the hold late: each frame joins by reporting the mode, so its step came first, and the step of a first report skips the reporter (`from`).
   const end = async (tab_id: number, hold: MediaHold, except?: number, send = step) => {
     await deps.storage.remove(key_of(tab_id));
-    for (const frame_id of hold.frames) if (frame_id !== except) send(tab_id, false, frame_id);
+    for (const frame_id of hold.frames) if (frame_id !== except) send(tab_id, false, frame_id, undefined, hold.documents?.[frame_id]);
   };
 
   const write = (tab_id: number, hold: MediaHold) => deps.storage.set({ [key_of(tab_id)]: hold });
@@ -88,7 +90,7 @@ export function create_tab_media(deps: TabMediaDeps) {
       delete next.left;
     }
     await write(tab_id, next);
-    if (all_closed) for (const left_frame of hold.left ?? []) step(tab_id, true, left_frame);
+    if (all_closed) for (const left_frame of hold.left ?? []) step(tab_id, true, left_frame, undefined, hold.documents?.[left_frame]);
   };
 
   return {
@@ -114,37 +116,47 @@ export function create_tab_media(deps: TabMediaDeps) {
       }),
     // The mode a frame reports. Any frame can start the hold (fullscreen starts it in the frame that sees it), and the first report of media starts the mode in every other frame in normal mode, which then report and join. A frame of the hold that reports a mode that is not media ends it for every frame.
     // A frame of the hold with a hint or the line open keeps the mode for the others too, and when it closes back to the mode, every frame that left meanwhile goes back to it.
-    // `focus` says whether the frame's own document holds the keyboard focus. `by_step` says that a step or a join reply put the frame in the mode, so its report never starts a hold. It joins any live hold, even one newer than its step, because the tab and the frame are both in the mode.
-    reported: (tab_id: number, frame_id: number, mode: Mode, focus: boolean, by_step = false): Promise<void> =>
-      in_turn(async () => {
+    // `focus` says whether the frame's own document holds the keyboard focus. `by_step` says that a step or a join reply put the frame in the mode, so its report never starts a hold. It joins any live hold, even one newer than its step, because the tab and the frame are both in the mode. `document_id` is the reporting document.
+    reported: (tab_id: number, frame_id: number, mode: Mode, focus: boolean, by_step = false, document_id?: string): Promise<void> => {
+      // The off may land while the report waits for its turn and its read. The report came first, so an off on its way now is stale too.
+      const off_on_its_way_at_report = off_on_its_way(tab_id, frame_id, document_id);
+      return in_turn(async () => {
         const hold = await read(tab_id);
         if (mode === "media") {
           if (hold?.lines?.includes(frame_id)) return after_line_closed(tab_id, hold, frame_id);
           if (hold?.frames.includes(frame_id)) return;
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
-          if (by_step && !is_live_hold(hold)) return step(tab_id, false, frame_id);
+          if (by_step && !is_live_hold(hold)) return step(tab_id, false, frame_id, undefined, document_id);
           const { stepped_on, ...rest } = hold ?? { frames: [] };
+          const stale_off = !by_step && (off_on_its_way_at_report || off_on_its_way(tab_id, frame_id, document_id));
           drop_steps_to(tab_id, frame_id);
-          await write(tab_id, { ...rest, frames: [...rest.frames, frame_id] });
+          await write(tab_id, with_frame(rest, frame_id, document_id, stale_off));
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.
           if (rest.frames.length === 0 && !stepped_on) step(tab_id, true, undefined, frame_id);
           return;
         }
         if (!hold?.frames.includes(frame_id)) return;
+        if (mode === "normal" && hold.stale_offs?.includes(frame_id)) {
+          await write(tab_id, without_stale_off(hold, frame_id));
+          return step(tab_id, true, frame_id, undefined, document_id);
+        }
         if (is_line(mode)) {
           if (!hold.lines?.includes(frame_id)) await write(tab_id, { ...hold, lines: [...(hold.lines ?? []), frame_id] });
-        } else if (mode === "normal" && line_just_closed(hold, frame_id, focus)) step(tab_id, true, frame_id);
+        } else if (mode === "normal" && line_just_closed(hold, frame_id, focus)) step(tab_id, true, frame_id, undefined, document_id);
         else if (mode === "normal" && (await open_lines_besides(tab_id, hold, frame_id)).length > 0) {
           if (!hold.left?.includes(frame_id)) await write(tab_id, { ...hold, left: [...(hold.left ?? []), frame_id] });
         } else if (!KEEPS_THE_MODE.includes(mode)) await end(tab_id, hold, frame_id);
-      }),
+      });
+    },
     // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode.
     // The frame goes into `frames` in the same turn as the read, so an end after the read sends it the step off, and its report finds it in the hold. A step off that reaches the frame before it applies this reply is lost, but the frame reports the mode as caused by a step, so that report finds no hold and sends the frame back to normal.
-    join: (tab_id: number, frame_id: number): Promise<boolean> =>
+    // A new document of a frame of the hold joins too. The steps still waiting for the frame were for its old document, and so was a stale off.
+    join: (tab_id: number, frame_id: number, document_id?: string): Promise<boolean> =>
       in_turn(async () => {
         const hold = await read(tab_id);
         if (!is_live_hold(hold)) return false;
-        if (!hold.frames.includes(frame_id)) await write(tab_id, { ...hold, frames: [...hold.frames, frame_id] });
+        drop_steps_to(tab_id, frame_id);
+        await write(tab_id, without_stale_off(with_frame(hold, frame_id, document_id), frame_id));
         return true;
       }),
     // A load ends the hold in every frame. Firefox sends `status: "loading"` with no `url` when a load starts (docs/firefox-behavior.md). An address change the page makes itself keeps the hold and drops the pin, so the keys act on the new main video: a `pushState` (YouTube's next video) sends a bare `url`, and a `replaceState` before the load event sends `status: "loading"` with the `url`.

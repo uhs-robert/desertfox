@@ -35,11 +35,12 @@ import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 let mode_indicator: ModeIndicator = DEFAULT_MODE_INDICATOR;
 // Set in the top frame only, from the background, while a child frame holds focus.
 let focused_frame_mode: Mode | undefined;
+let focused_frame = 0;
 // A frame of another site was handed back to this page, so the hints label its targets too.
 let frame_parked = false;
 let recording: string | undefined;
-// The size of the range of visual item mode, set by the item bundle.
-let visual_count: number | undefined;
+// The size of the range of visual item mode by frame (0 for this frame's own), set by the item bundle. The top frame shows the focused frame's, so a frame without the focus that changes its range does not take the badge.
+const visual_counts: (number | undefined)[] = [];
 // A macro replay holds this page's keys. Escape then stops the replay.
 let replaying = false;
 // The last reply, which the site mode swaps the tree of.
@@ -50,7 +51,7 @@ function refresh_mode_indicator(): void {
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
   // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
   const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
-  show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_count));
+  show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
 }
 
 const script_started_ms = KEY_TEST_BUILD ? performance.now() : 0;
@@ -364,7 +365,7 @@ function read_page_keymap(): Promise<PageKeymap | undefined> {
 let media_by_step = false;
 
 function start(): void {
-  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, pressed_keys_: () => pressed_keys, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element, leaf_end_: () => keep_chain(leaf_ran), visual_count_: (count: number | undefined) => ((visual_count = count), refresh_mode_indicator()) });
+  (window as unknown as { desertfox_host: PageHostApi }).desertfox_host = Object.assign(bundles.api, { is_editable_: is_editable_element, grab_step_px_: () => grab_step_px, pressed_keys_: () => pressed_keys, frame_parked_: () => frame_parked, scroll_by_: scroll_by, focused_: deepest_focused_element, leaf_end_: () => keep_chain(leaf_ran), visual_count_: (count: number | undefined, frame_id = 0) => ((visual_counts[frame_id] = count), refresh_mode_indicator()) });
   listen("keydown", on_keydown);
   listen("keypress", on_keypress);
   listen("keyup", on_keyup);
@@ -469,6 +470,7 @@ function start(): void {
       sync_mode_to_focus();
     } else if (message.type === "frame_mode") {
       focused_frame_mode = message.mode;
+      focused_frame = message.frame_id ?? 0;
       frame_parked = message.parked === true;
       // Only the top frame hears `frame_mode`. Its watch on the focused child frame lives in the ui bundle, loaded when a child first takes the focus.
       if (message.mode || bundles.has_handler_("ui.frame_watch")) void bundles.run_command_("ui.frame_watch", "ui", { on: !!message.mode }, "", false);

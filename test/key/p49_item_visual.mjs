@@ -129,6 +129,28 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_badge("NORMAL");
   });
 
+  // Each frame sends the size of its own range. The top frame keeps one per frame, so the badge shows the range of the frame with the focus.
+  await run_case("the badge shows the range of the frame that holds the focus, not the one changed last", async () => {
+    await open_page("item_list", "iv_count_frame_frame", { new_tab: true });
+    await poll_until("the frame to load", async () => (await in_active_tab(`document.getElementById("inner").contentDocument.readyState`)) === "complete");
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await expect_focus("c0");
+    await press_keys("v");
+    await expect_range(1);
+    await focus_frame();
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await poll_until("focus in the frame", async () => (await frame_focused()) === "f0");
+    await press_keys("v");
+    await expect_range(1);
+    await press_keys("j");
+    await expect_range(2);
+    await in_active_tab(`window.focus(); document.activeElement?.blur(); 0`);
+    await expect_range(1);
+  });
+
   await run_case("a frame that reloads joins the hold as item mode", async () => {
     await open_page("item_list", "iv_reload_frame_frame", { new_tab: true });
     await poll_until("the frame to load", async () => (await in_active_tab(`document.getElementById("inner").contentDocument?.readyState`)) === "complete");

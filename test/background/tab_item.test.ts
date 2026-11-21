@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ask_item_start, create_tab_item, RESUME_COMMIT_LIMIT_MS } from "../../src/background/tab_item.ts";
+import { create_step_queue } from "../../src/background/tab_steps.ts";
 
 // Each storage call takes a few ticks, like the real one, so operations that are not ordered interleave.
 const ticks = async () => {
@@ -26,6 +27,7 @@ function make() {
     },
   };
   const tab_item = create_tab_item({
+    steps: create_step_queue(),
     storage: storage as never,
     send_step: async (tab_id, on, frame_id, from) => void steps.push(`${tab_id}:${on ? "on" : "off"}:${frame_id ?? "all"}${from === undefined ? "" : `:from ${from}`}`),
     now: () => clock.ms,
@@ -212,6 +214,7 @@ function item_with_recorded_steps({ stuck_tab = -1, stuck_frame = -1, held = fal
   const releases: (() => void)[] = [];
   let calls = 0;
   const tab_item = create_tab_item({
+    steps: create_step_queue(),
     storage: storage as never,
     send_step: (tab, on, frame_id, from) => {
       calls++;
