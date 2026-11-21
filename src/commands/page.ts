@@ -230,15 +230,15 @@ define("page.item", {
 define("page.item_action", {
   name: "item_action",
   label: "Act on the current item",
-  intent: "Toggle or open the current item of item mode. Open clicks the element that has the focus inside the item, else the item's link. Toggle clicks the first native checkbox or element with role checkbox that shows in the item, or the element a CSS selector finds when a site row names one. Both send the pointer and mouse events of a hint click. They refuse when there is no current item, no checkbox or no link.",
+  intent: "Toggle or open the current item of item mode. Open clicks the element that has the focus inside the item, else the item's link. Toggle clicks the first native checkbox or element with role checkbox that shows in the item, or the element a CSS selector finds when a site row names one. Both send the pointer and mouse events of a hint click. Toggle range, in visual item mode, sets every checkbox of the range to the opposite of the anchor item's, skips the items with none, and says how many it changed. They refuse when there is no current item, no checkbox or no link.",
   params: [
-    { name: "action", type: "enum", values: ["toggle", "open"], value_labels: { toggle: "to toggle the checkbox", open: "to open the link" }, description: { toggle: "Toggle the checkbox of the current item.", open: "Open the link of the current item." } },
+    { name: "action", type: "enum", values: ["toggle", "toggle_range", "open"], value_labels: { toggle: "to toggle the checkbox", toggle_range: "to set the checkboxes of the range", open: "to open the link" }, description: { toggle: "Toggle the checkbox of the current item.", toggle_range: "Set the range to the opposite of the anchor box.", open: "Open the link of the current item." } },
     { name: "target", type: "string", default: "", when: { action: ["toggle"] }, description: "Click what this selector finds in the item instead." },
   ],
   bridge: false,
   runs_in: "content",
   bundle: "item_act",
-  modes: ["item"],
+  modes: ["item", "item_visual"],
 });
 
 // Tab and Shift-Tab of item mode. Focus stays in the item and wraps at its edges. An item whose only focusable element is its link steps on through the page's focusables, as the browser's Tab does.

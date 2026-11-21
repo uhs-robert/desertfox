@@ -21,7 +21,26 @@ if (!item_act.desertfox_item_act_ready && host) {
     if (!current.item) throw new RuntimeRefusal("No current item");
     return current as { item: Element; link?: Element | undefined };
   };
+  const checked = (box: Element) => !!(box as HTMLInputElement).checked || box.getAttribute("aria-checked") === "true";
+  // The range is read again before each click, so a list the page redraws on a click still gives the item at that place.
+  const range_at = async (index: number) => {
+    let found: { items?: Element[] | undefined; anchor?: Element | undefined } = {};
+    await host.run_command_("item.range", "item", { take: (items?: Element[], anchor?: Element) => (found = { items, anchor }) });
+    return { item: found.items?.[index], anchor: found.anchor, size: found.items?.length ?? 0 };
+  };
   host.register_handler_("page.item_action", async (args) => {
+    if (args.action === "toggle_range") {
+      const start = await range_at(0);
+      const anchor_box = start.anchor && checkbox_in(start.anchor);
+      if (!anchor_box) throw new RuntimeRefusal(start.size ? "No checkbox in the first item" : "No selection");
+      const target = !checked(anchor_box);
+      let changed = 0;
+      for (let index = 0, range = start; range.item; range = await range_at(++index)) {
+        const box = checkbox_in(range.item);
+        if (box && checked(box) !== target) (click_like_a_hint(box as HTMLElement), changed++);
+      }
+      return host.show_toast_(`${changed} changed`);
+    }
     const current = await current_item();
     const toggle = args.action === "toggle";
     const clicked = toggle ? checkbox_in(current.item, args.target as string) : (document.activeElement === tabbed && current.item.contains(tabbed) ? tabbed : current.link);

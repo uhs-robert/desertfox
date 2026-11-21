@@ -81,6 +81,11 @@ if (!item_window.desertfox_item_ready && host) {
     const current = current_item(page);
     (args.take as (item: Element | undefined, link: Element | undefined) => void)(current?.item_, current?.link_);
   });
+  // The item actions read the range of visual item mode (the items from the anchor to the cursor, and the anchor) through a callback, as for `item.current`.
+  host.register_handler_("item.range", (args) => {
+    const found = selection.tick_();
+    (args.take as (range?: Element[], anchor?: Element) => void)(found?.range_, found?.anchor_);
+  });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
 }

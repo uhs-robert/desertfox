@@ -138,4 +138,62 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await sleep(500);
     await expect_badge("ITEM");
   });
+
+  const checked_boxes = async () => JSON.parse(await in_active_tab(`JSON.stringify([...document.querySelectorAll("#dyn input:checked")].map((box) => box.id))`));
+  const expect_checked = (ids) => poll_until(`boxes ${ids.join(",") || "none"} checked`, async () => (await checked_boxes()).join(",") === ids.join(","));
+
+  await run_case("Space sets every checkbox of the range to the opposite of the anchor's, and says how many it changed", async () => {
+    await start("iv_space_dyn");
+    await press_keys("jj");
+    await expect_range(3);
+    await press_keys("-k", "space");
+    await expect_checked(["x0", "x1", "x2"]);
+    await poll_until("the count", async () => (await toast_text()).includes("3 changed"));
+    // The anchor is checked now, so the next Space clears the range, and the mode stays.
+    await press_keys("-k", "space");
+    await expect_checked([]);
+    await expect_range(3);
+  });
+
+  await run_case("a mixed range goes to the opposite of the anchor's state, whichever end the cursor is", async () => {
+    await start("iv_mixed_dyn");
+    await in_active_tab(`document.getElementById("x1").checked = true; document.getElementById("x3").checked = true; 0`);
+    await press_keys("jjj");
+    await expect_range(4);
+    await press_keys("-k", "space");
+    await expect_checked(["x0", "x1", "x2", "x3"]);
+    // Swap the ends: the anchor is x3 now, still checked, so the range clears.
+    await press_keys("o");
+    await expect_focus("c0");
+    await press_keys("-k", "space");
+    await expect_checked([]);
+  });
+
+  await run_case("an item with no checkbox is skipped, and an anchor with none refuses", async () => {
+    await start("iv_nobox_dyn_nobox");
+    await press_keys("jjj");
+    await expect_range(4);
+    await press_keys("-k", "space");
+    await expect_checked(["x0", "x1", "x3"]);
+    await poll_until("the count", async () => (await toast_text()).includes("3 changed"));
+    await press_keys("v");
+    await expect_badge("ITEM");
+    await press_keys("k");
+    await expect_focus("c2");
+    await press_keys("v");
+    await expect_range(1);
+    await press_keys("j");
+    await expect_range(2);
+    await press_keys("-k", "space");
+    await poll_until("the notice", async () => (await toast_text()).includes("No checkbox in the first item"));
+    await expect_checked(["x0", "x1", "x3"]);
+  });
+
+  await run_case("a page that draws its list again on each click still gets every box of the range set", async () => {
+    await start("iv_redraw_dyn_redraw");
+    await press_keys("jjj");
+    await expect_range(4);
+    await press_keys("-k", "space");
+    await expect_checked(["x0", "x1", "x2", "x3"]);
+  });
 }

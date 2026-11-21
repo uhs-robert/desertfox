@@ -236,18 +236,23 @@ export function start_server() {
       const extra = (index) => (id.includes("_boxes") ? (boxes[index] ?? "") : id.includes("_tfield") && index === 5 ? '<input id="in5">' : "");
       const record = id.includes("_boxes") ? "<script>document.documentElement.dataset.toggled = ''; document.addEventListener('click', (event) => { if (event.target.id?.startsWith('box')) document.documentElement.dataset.toggled += (document.documentElement.dataset.toggled ? ',' : '') + event.target.id; });</script>" : "";
       const cards_html = Array.from({ length: id.includes("_sections") ? 6 : 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span>${extra(index)}</div>`);
-      // A `_dyn` id draws the cards from a script, each with a native checkbox `x<n>`, counts its draws in the `drawn` data attribute, and draws them again when a test sets the `draw` data attribute of the root element to the card numbers: every node is new, the checked boxes stay checked, and a number left out is a removed card. A `_dynhref` id leaves the links out of the cards, so a redraw cannot be told by address, and `data-id` names each card.
+      // A `_dyn` id draws the cards from a script, each with a native checkbox `x<n>`, counts its draws in the `drawn` data attribute, and, with `_nobox`, leaves the box out of card 2, with `_redraw` draws the list again on each click on a box, and draws them again when a test sets the `draw` data attribute of the root element to the card numbers: every node is new, the checked boxes stay checked, and a number left out is a removed card. A `_dynhref` id leaves the links out of the cards, so a redraw cannot be told by address, and `data-id` names each card.
       const dyn_script = `<div id="dyn"></div><script>
         const dyn = document.getElementById("dyn");
         const bare = ${id.includes("_dynbare")};
-        const card = (number) => '<div class="card" data-id="d' + number + '" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="c' + number + '" href="' + (bare ? "#same" : "#c" + number) + '">Result number ' + number + ' title</a></h3><span>snippet ' + number + '</span><input type="checkbox" id="x' + number + '"></div>';
+        const nobox = ${id.includes("_nobox")};
+        let shown = [];
+        const card = (number) => '<div class="card" data-id="d' + number + '" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="c' + number + '" href="' + (bare ? "#same" : "#c" + number) + '">Result number ' + number + ' title</a></h3><span>snippet ' + number + '</span>' + (nobox && number === 2 ? "" : '<input type="checkbox" id="x' + number + '">') + '</div>';
         const draw = (numbers) => {
+          shown = numbers;
           const checked = new Set([...dyn.querySelectorAll("input:checked")].map((box) => box.id));
           dyn.innerHTML = numbers.map(card).join("");
           for (const box of dyn.querySelectorAll("input")) box.checked = checked.has(box.id);
           document.documentElement.dataset.drawn = String(Number(document.documentElement.dataset.drawn ?? 0) + 1);
         };
         draw([0, 1, 2, 3, 4, 5, 6, 7]);
+        // A \`_redraw\` id draws the list again on every click on a checkbox, as a page that re-renders its list on a change.
+        if (${id.includes("_redraw")}) dyn.addEventListener("click", (event) => { if (event.target.matches?.("input")) draw(shown); });
         new MutationObserver(() => draw(document.documentElement.dataset.draw.split(",").filter(Boolean).map(Number))).observe(document.documentElement, { attributes: true, attributeFilter: ["data-draw"] });
       </script>`;
       const cards = id.includes("_dyn") ? dyn_script : (id.includes("_sections") ? "" : cards_html.join("")) + record;

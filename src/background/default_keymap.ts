@@ -557,6 +557,7 @@ const ITEM_VISUAL_KEYS: ModeBindings = {
   "{": extend_step("prev_section", "Extend to the previous section"),
   gg: extend_step("first", "Extend to the first item"),
   G: extend_step("last", "Extend to the last item"),
+  "<Space>": { id: "page.item_action", args: { action: "toggle_range" }, label: "Toggle the checkboxes of the range" },
   o: { id: "page.item", args: { direction: "other_end" }, label: "Swap the ends of the selection" },
   v: { id: "mode.set", args: { mode: "item" }, label: "End the selection" },
   "<Escape>": { id: "mode.escape" },

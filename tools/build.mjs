@@ -61,7 +61,8 @@ const MAX_BYTES = {
   // 24.5 KB: visual item mode: the selection of two ends that survives a redraw of the list, the cursor moves, the marks and the swap of the ends.
   "item.js": 24.5 * 1024,
   // 3 KB: the item actions (Space toggles the current item's checkbox, Enter opens its link), with the hint click they share with `hints.js`. The bundle loads on the first press.
-  "item_act.js": 3 * 1024,
+  // 3.5 KB: visual item mode: Space sets the checkboxes of the range to the opposite of the anchor item's.
+  "item_act.js": 3.5 * 1024,
   // 4 KB: page.tree (h, l, { and } through the comments of a thread, and the fold keys), with the hint click it shares with `hints.js`. The bundle loads on the first press.
   "tree.js": 4 * 1024,
   // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
