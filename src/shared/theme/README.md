@@ -9,5 +9,5 @@ Themes as role colors. A theme file maps its colors onto a fixed list of roles, 
 - `contrast.ts`: the fg_dim contrast clamp, shared by the Oasis build and the base16 importer.
 - `tokens.ts`: the CSS custom property name of each role.
 - `font_family.ts`: checks a font family list typed into a setting and returns canonical CSS text. It is the only guard before the value reaches a style sheet.
-- `load.ts`: finds the theme a `theme` name stands for. Only the background imports it, because it holds every theme table.
+- `load.ts`: finds the theme a `theme` name stands for. The background, the command definitions, `config_build` and `tools/build-config` import it. No page or content bundle does, because it holds every theme table.
 - `apply.ts`: turns the stored theme into CSS for one surface and keeps it current. It runs in pages and lazy content bundles, never in `content.js`.
