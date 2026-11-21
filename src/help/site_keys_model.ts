@@ -3,12 +3,13 @@
 
 import { match_regex_source } from "../shared/match_pattern.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
-import type { BindingRow, ListBindingsAnswer, SiteKeysRequest, ToolbarAnswer } from "../shared/messages/page.ts";
+import type { BindingRow } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import { key_column_refusal, pass_row_for, pass_words, site_is_off_for } from "../background/site_keys.ts";
 import { site_rule_effects } from "./site_rule_effect.ts";
 
 export type SiteKeysDeps = {
-  send: (message: SiteKeysRequest | { type: "list_bindings" }) => Promise<unknown>;
+  send: Ask<Pick<PageRequests, "site_keys" | "list_bindings">>;
   // The site rules in force, as the Settings page shows them.
   read_rules: () => Promise<SiteRuleRow[]>;
   on_change: () => void;
@@ -57,7 +58,7 @@ export function create_site_keys_session(deps: SiteKeysDeps) {
   }
 
   async function read_bindings(): Promise<void> {
-    const answer = (await deps.send({ type: "list_bindings" })) as ListBindingsAnswer;
+    const answer = await deps.send({ type: "list_bindings" });
     const seen = new Set<string>();
     bindings = answer.ok ? answer.bindings.filter((row: BindingRow) => row.mode === "normal" && row.text !== "" && !seen.has(row.keys) && seen.add(row.keys)).map((row) => ({ keys: row.keys, command: row.text })) : [];
   }
@@ -121,7 +122,7 @@ export function create_site_keys_session(deps: SiteKeysDeps) {
     busy = true;
     changed();
     try {
-      const answer = (await deps.send({ type: "site_keys", pattern: site, keys })) as ToolbarAnswer;
+      const answer = await deps.send({ type: "site_keys", pattern: site, keys });
       await read_rules();
       if (answer.ok && keys === null) set_chips([]);
       message = { ok: answer.ok, text: answer.message };

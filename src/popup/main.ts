@@ -29,7 +29,7 @@ let draw_generation = 0;
 let host_permission = false;
 const host_flag = create_host_flag();
 
-const ask = (request: ToolbarRequest): Promise<ToolbarAnswer> => browser.runtime.sendMessage(request) as Promise<ToolbarAnswer>;
+const ask = (request: ToolbarRequest): Promise<ToolbarAnswer> => browser.runtime.sendMessage(request);
 
 async function active_tab(): Promise<browser.tabs.Tab | undefined> {
   return (await browser.tabs.query({ active: true, currentWindow: true }))[0];
@@ -76,7 +76,7 @@ async function act(row: PopupRow): Promise<void> {
 
 // The settings page's own request, so the one validator checks the name and `desktop` passes like any theme. Layer `file` writes settings.toml, so the pick lasts and the file stays the one source.
 async function pick_theme(name: string): Promise<void> {
-  show_notice((await browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "set", layer: "file", value: name } satisfies ChangeSetting)) as ToolbarAnswer);
+  show_notice(await browser.runtime.sendMessage({ type: "change_setting", name: "theme", action: "set", layer: "file", value: name } satisfies ChangeSetting));
   await draw();
 }
 

@@ -1,7 +1,8 @@
 // No DOM: the state of the settings page's transfer section. It picks the files to import, holds the preview and the user's consent per snippet, and builds the export zips.
 // Nothing is sent to be stored until `commit`, and `commit` sends only the snippets the user ticked, with the code the preview showed.
 
-import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions, ImportReach, ImportSource, InstalledSnippet, KeyGroup, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, ReachList, RemoveSnippet } from "../shared/messages/page.ts";
+import type { ConfigImportAnswer, ConfigImportPreview, ExportConfigAnswer, ExportSessionsAnswer, ImportReach, ImportSource, InstalledSnippet, KeyGroup, ListSnippetsAnswer, ReachList } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import { DEFAULT_ZIP_LIMITS, write_zip, ZipError, type ZipLimits } from "../shared/zip.ts";
 
 export const CONFIG_ZIP_NAME = "desertfox-config.zip";
@@ -100,7 +101,7 @@ export type TransferState = {
 };
 
 export type TransferDeps = {
-  send: (message: PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions) => Promise<unknown>;
+  send: Ask<Pick<PageRequests, "preview_config_import" | "commit_config_import" | "export_config" | "list_snippets" | "remove_snippet" | "export_sessions" | "import_sessions">>;
   on_change: () => void;
 };
 
@@ -127,7 +128,7 @@ export function create_transfer_session(deps: TransferDeps) {
   const say = (ok: boolean, text: string) => set({ message: { ok, text } });
 
   async function load_snippets(): Promise<void> {
-    const answer = (await deps.send({ type: "list_snippets" }).catch((error: unknown) => ({ ok: false, message: message_of(error) }))) as ListSnippetsAnswer;
+    const answer = await deps.send({ type: "list_snippets" }).catch((error: unknown): ListSnippetsAnswer => ({ ok: false, message: message_of(error) }));
     if (answer.ok) set({ snippets: answer.snippets });
     else say(false, `The snippet list could not be loaded: ${answer.message}`);
   }
@@ -139,7 +140,7 @@ export function create_transfer_session(deps: TransferDeps) {
     try {
       const source = await read();
       if (mine !== selection) return;
-      const preview = (await deps.send({ type: "preview_config_import", source })) as ConfigImportPreview;
+      const preview = await deps.send({ type: "preview_config_import", source });
       if (mine !== selection) return;
       if (preview.ok) set({ busy: false, message: undefined, review: { source, preview, accepted: new Set() } });
       else set({ busy: false, message: { ok: false, text: preview.message } });
@@ -163,7 +164,7 @@ export function create_transfer_session(deps: TransferDeps) {
     set({ busy: true });
     let answer: ConfigImportAnswer;
     try {
-      answer = (await deps.send({ type: "commit_config_import", source: review.source, accepted: accepted_code(review) })) as ConfigImportAnswer;
+      answer = await deps.send({ type: "commit_config_import", source: review.source, accepted: accepted_code(review) });
     } catch (error) {
       answer = { ok: false, message: `Settings not imported, the current ones stay. ${message_of(error)}` };
     }
@@ -178,14 +179,14 @@ export function create_transfer_session(deps: TransferDeps) {
 
   async function remove(path: string): Promise<void> {
     set({ busy: true });
-    const answer = (await deps.send({ type: "remove_snippet", path }).catch((error: unknown) => ({ ok: false, message: message_of(error) }))) as ConfigImportAnswer;
+    const answer = await deps.send({ type: "remove_snippet", path }).catch((error: unknown): ConfigImportAnswer => ({ ok: false, message: message_of(error) }));
     set({ busy: false, message: { ok: answer.ok, text: answer.message } });
     await load_snippets();
   }
 
   // The zip to download, or nothing with the reason in the message.
   async function export_zip(which: "config" | "snippets"): Promise<ExportFile | undefined> {
-    const answer = (await deps.send({ type: "export_config" }).catch((error: unknown) => ({ ok: false, message: message_of(error) }))) as ExportConfigAnswer;
+    const answer = await deps.send({ type: "export_config" }).catch((error: unknown): ExportConfigAnswer => ({ ok: false, message: message_of(error) }));
     const name = which === "config" ? CONFIG_ZIP_NAME : SNIPPETS_ZIP_NAME;
     const files = !answer.ok ? undefined : which === "config" ? answer.config_files : answer.snippet_files;
     if (!answer.ok || !files) {
@@ -208,7 +209,7 @@ export function create_transfer_session(deps: TransferDeps) {
 
   // The sessions file to download, or nothing with the reason in the message.
   async function export_sessions(): Promise<ExportFile | undefined> {
-    const answer = (await deps.send({ type: "export_sessions" }).catch((error: unknown) => ({ ok: false, message: message_of(error) }))) as ExportSessionsAnswer;
+    const answer = await deps.send({ type: "export_sessions" }).catch((error: unknown): ExportSessionsAnswer => ({ ok: false, message: message_of(error) }));
     if (!answer.ok) {
       say(false, `Nothing exported: ${answer.message}`);
       return undefined;
@@ -229,7 +230,7 @@ export function create_transfer_session(deps: TransferDeps) {
     }
     set({ busy: true });
     try {
-      const answer = (await deps.send({ type: "import_sessions", text: await file.text() })) as ConfigImportAnswer;
+      const answer = await deps.send({ type: "import_sessions", text: await file.text() });
       set({ busy: false, message: { ok: answer.ok, text: answer.message } });
     } catch (error) {
       set({ busy: false, message: { ok: false, text: `Sessions not imported: ${message_of(error)}` } });

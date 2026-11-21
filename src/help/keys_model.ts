@@ -2,7 +2,8 @@
 // The background decides. The page only shows what the check says and keeps the sequence in the spelling the background answers with.
 
 import { STALE_MOVE_REFUSAL } from "../shared/messages/page.ts";
-import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckBindingAnswer, ListBindings, ListBindingsAnswer } from "../shared/messages/page.ts";
+import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, ListBindings } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import type { KeymapMode } from "../shared/keymap.ts";
 import { parse_sequence } from "../shared/keys/index.ts";
 import { refused_as } from "../shared/swallow.ts";
@@ -56,7 +57,7 @@ export type KeysState = {
 };
 
 export type KeysDeps = {
-  send: (message: ListBindings | CheckBinding | ChangeKeymap) => Promise<unknown>;
+  send: Ask<Pick<PageRequests, "list_bindings" | "check_binding" | "change_keymap">>;
   names?: () => Promise<string[]>;
   // Runs `run` after `ms` and returns the call that cancels it. Tests pass their own.
   schedule?: (run: () => void, ms: number) => () => void;
@@ -116,16 +117,16 @@ export function create_keys_session(deps: KeysDeps) {
   let refresh_running = false;
   let refresh_again = false;
 
-  const ask = async <T>(message: Parameters<KeysDeps["send"]>[0]): Promise<T | { ok: false; message: string }> => {
+  const ask = async <R extends ListBindings | CheckBinding | ChangeKeymap>(message: R) => {
     try {
-      return (await deps.send(message)) as T;
+      return await deps.send(message);
     } catch (error) {
-      return { ok: false, message: message_of(error) };
+      return { ok: false as const, message: message_of(error) };
     }
   };
 
   async function read_rows(): Promise<boolean> {
-    const answer = await ask<ListBindingsAnswer>({ type: "list_bindings" });
+    const answer = await ask({ type: "list_bindings" });
     if (!answer.ok) {
       state.error = `The keys could not be loaded: ${answer.message}`;
       return false;
@@ -229,7 +230,7 @@ export function create_keys_session(deps: KeysDeps) {
 
   async function run_check(editor: Editor, serial: number): Promise<void> {
     cancel_check = undefined;
-    const answer = await ask<CheckBindingAnswer>({ type: "check_binding", mode: editor.mode, keys: keys_of(editor.tokens), text: editor.text, ...(freed_keys(editor) !== undefined && { move_from: freed_keys(editor)! }) });
+    const answer = await ask({ type: "check_binding", mode: editor.mode, keys: keys_of(editor.tokens), text: editor.text, ...(freed_keys(editor) !== undefined && { move_from: freed_keys(editor)! }) });
     if (serial !== check_serial || state.open !== editor) return;
     if (!answer.ok) editor.check = { state: "failed", message: answer.message };
     else {
@@ -281,7 +282,7 @@ export function create_keys_session(deps: KeysDeps) {
     stop_check();
     editor.busy = true;
     deps.on_change("editor");
-    const answer = await ask<ChangeKeymapAnswer>({ type: "change_keymap", ...request });
+    const answer = await ask({ type: "change_keymap", ...request });
     editor.busy = false;
     if (answer.ok) {
       applied(answer);

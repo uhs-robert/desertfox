@@ -1,6 +1,7 @@
 // No DOM: the state of the settings page's banner for a pending host start (`background/host_start.ts`). It reads the stored question and sends the user's answer with the digests it showed.
 
 import type { HostFileChange, HostStartChoice, HostStartChoiceAnswer, HostStartPending } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import { refused_as } from "../shared/swallow.ts";
 
 export type HostStartState = {
@@ -10,7 +11,7 @@ export type HostStartState = {
   problems: string[];
 };
 
-export type HostStartDeps = { read_pending: () => Promise<unknown>; send: (message: HostStartChoice) => Promise<unknown>; on_change: () => void };
+export type HostStartDeps = { read_pending: () => Promise<unknown>; send: Ask<Pick<PageRequests, "host_start_choice">>; on_change: () => void };
 
 const CHANGE_KINDS: HostFileChange["kind"][] = ["replaced", "added", "removed"];
 
@@ -41,9 +42,9 @@ export function create_host_start_session(deps: HostStartDeps) {
     const { pending } = state;
     if (!pending || state.busy) return;
     set({ busy: true, message: undefined, problems: [] });
-    const answer = (await deps
+    const answer = await deps
       .send({ type: "host_start_choice", choice, host_digest: pending.host_digest, browser_digest: pending.browser_digest })
-      .catch((error: unknown) => ({ ok: false, message: message_of(error) }))) as HostStartChoiceAnswer;
+      .catch((error: unknown): HostStartChoiceAnswer => ({ ok: false, message: message_of(error) }));
     set({ busy: false, message: { ok: answer.ok, text: answer.message }, problems: !answer.ok && answer.problems ? answer.problems : [] });
     await load();
   }

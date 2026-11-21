@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_site_keys_session, OFF_NOTE, SITE_PROBLEM } from "../src/help/site_keys_model.ts";
 import type { SiteRuleRow } from "../src/shared/match_pattern.ts";
+import { stub_send } from "./support/stub_send.ts";
 
 const MAIL = "*://*.mail.test/*";
 const BINDINGS = [
@@ -18,12 +19,12 @@ function make(rules: SiteRuleRow[] = []) {
   let bindings: unknown[] = BINDINGS;
   let failing = false;
   const session = create_site_keys_session({
-    send: async (message) => {
+    send: stub_send<"site_keys" | "list_bindings">(async (message) => {
       sent.push(message);
       if (message.type === "list_bindings") return { ok: true, bindings };
       if (failing) throw new Error("port closed");
       return reply;
-    },
+    }),
     read_rules: async () => current,
     on_change: () => undefined,
   });

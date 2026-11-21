@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_host_start_session } from "../src/help/host_start_model.ts";
 import type { HostStartChoice, HostStartPending } from "../src/shared/messages/page.ts";
+import { stub_send } from "./support/stub_send.ts";
 
 const pending: HostStartPending = { config_dir: "/c", host_digest: "h1", browser_digest: "b1", changes: [{ path: "settings.toml", kind: "replaced" }] };
 
@@ -9,10 +10,10 @@ function session_with(stored: { value: unknown }, answer_of: (message: HostStart
   const sent: HostStartChoice[] = [];
   const session = create_host_start_session({
     read_pending: async () => stored.value,
-    send: async (message) => {
+    send: stub_send<"host_start_choice">(async (message) => {
       sent.push(message);
       return answer_of(message);
-    },
+    }),
     on_change: () => undefined,
   });
   return { session, sent };

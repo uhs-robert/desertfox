@@ -1,7 +1,7 @@
 // Page search: the live search while the line is open, the match that stays after Enter or Escape, and n and N.
 // The line (the cmdline bundle) reaches it through `begin`, `update` and `end`. The keys reach it through `step` and `clear`.
 
-import type { FindScan, FindScanAnswer, Outcome, RegisterRead, RegisterWrite } from "../../shared/messages/content.ts";
+import type { FindScan, Outcome, RegisterRead, RegisterWrite } from "../../shared/messages/content.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 import { collect_matches, compile_query, describe_match, describe_timeout, nearest_match, opposite, step_match } from "./find_match.ts";
 import type { Direction, Fallback, Matches, ScanRegex, Search, Slicing } from "./find_match.ts";
@@ -83,12 +83,12 @@ export const browser_find_deps = (page_text: PageText, selections: FindDeps["sel
   scroll_to_: (model, first_index, last_index_, bottom_inset_) => scroll_to_index(model, first_index, { bottom_inset_, last_index_ }),
   read_colors_: read_find_colors,
   get_register_: async (name) => {
-    const value = await (browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead) as Promise<unknown>);
+    const value = await browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead);
     return typeof value === "string" ? value : undefined;
   },
   set_register_: async (name, text) => void (await browser.runtime.sendMessage({ type: "register_write", name, text } satisfies RegisterWrite)),
   slicing: (is_stale_) => ({ is_stale_, yield_to_page_: () => new Promise<void>((resume) => setTimeout(resume, 0)), now: () => performance.now(), slice_ms_: SLICE_MS }),
-  scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan) as Promise<FindScanAnswer>,
+  scan_regex: (text, { source, flags }) => browser.runtime.sendMessage({ type: "find_scan", text, source, flags } satisfies FindScan),
   selections,
 });
 

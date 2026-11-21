@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { read_folder_files, read_zip_file, accepted_code, can_commit, create_transfer_session, reach_block } from "../src/help/transfer_model.ts";
 import type { PickedFile, ReachSegment } from "../src/help/transfer_model.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../src/shared/messages/page.ts";
+import { stub_send } from "./support/stub_send.ts";
 import { no_reach } from "../src/background/import_reach.ts";
 import { DEFAULT_ZIP_LIMITS, read_zip } from "../src/shared/zip.ts";
 
@@ -111,13 +112,13 @@ test("a superseded pick cannot replace the newer review, and a cancel drops a pi
   const release: (() => void)[] = [];
   const sent: unknown[] = [];
   const session = create_transfer_session({
-    send: async (message) => {
+    send: stub_send<"preview_config_import" | "commit_config_import" | "export_config" | "list_snippets" | "remove_snippet" | "export_sessions" | "import_sessions">(async (message) => {
       sent.push(message);
       const { source } = message as { source: { entries: { text: string }[] } };
       const code = source.entries[0]!.text;
       if (code === "old") await new Promise<void>((resolve) => release.push(resolve));
       return preview_of([snippet("snippets/a.js", code)]);
-    },
+    }),
     on_change: () => undefined,
   });
   const pick = (text: string) => async () => ({ kind: "folder" as const, entries: [{ path: "cfg/snippets/a.js", text }] });

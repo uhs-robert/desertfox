@@ -1,6 +1,7 @@
 // The settings page without a DOM: which control each setting gets, the checks as you type, and the session that sends changes and absorbs refreshes. Tests read this module.
 
-import type { ChangeSetting, ChangeSettingAnswer, ListFontNames, ListSettings, ListSettingsAnswer, SettingListRow } from "../shared/messages/page.ts";
+import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer, SettingListRow } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../shared/settings_docs.ts";
 import { FILE_WRITTEN_SETTINGS, is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
@@ -117,7 +118,7 @@ export type Field = {
 };
 
 export type SessionDeps = {
-  send: (message: ChangeSetting | ListSettings | ListFontNames) => Promise<unknown>;
+  send: Ask<Pick<PageRequests, "change_setting" | "list_settings" | "list_font_names">>;
   engines: string[];
   // Fills the `{key:name}` marks of the setting prose with the keys of the live keymap.
   resolve_keys: (text: string) => string;
@@ -153,7 +154,7 @@ export function create_settings_session(deps: SessionDeps) {
   // A rejected send, for example while the background restarts, reads as a refusal.
   async function ask_for_list(): Promise<ListSettingsAnswer> {
     try {
-      return (await deps.send({ type: "list_settings" })) as ListSettingsAnswer;
+      return await deps.send({ type: "list_settings" });
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -236,7 +237,7 @@ export function create_settings_session(deps: SessionDeps) {
     const sequence = touched.get(name)!;
     let answer: ChangeSettingAnswer;
     try {
-      answer = (await deps.send({ type: "change_setting", name, ...request })) as ChangeSettingAnswer;
+      answer = await deps.send({ type: "change_setting", name, ...request });
     } catch (error) {
       answer = { ok: false, message: error instanceof Error ? error.message : String(error) };
     }

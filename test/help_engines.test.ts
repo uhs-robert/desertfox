@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { can_save, create_engines_session, form_problems } from "../src/help/engines_model.ts";
 import type { ChangeEngines, ListEngines } from "../src/shared/messages/page.ts";
+import { stub_send } from "./support/stub_send.ts";
 
 function session(answer: (message: ListEngines | ChangeEngines) => unknown) {
   const sent: (ListEngines | ChangeEngines)[] = [];
-  return { sent, session: create_engines_session({ send: async (message) => (sent.push(message), answer(message)), on_change: () => undefined }) };
+  return { sent, session: create_engines_session({ send: stub_send<"list_engines" | "change_engines">(async (message) => (sent.push(message), answer(message))), on_change: () => undefined }) };
 }
 
 test("the form names a bad address, keyword and key letter while typing and keeps Save off", () => {

@@ -212,7 +212,7 @@ const handle_move = (args: Record<string, unknown>): Outcome | undefined => {
 
 // The router shows a refusal of its own, so the answer only decides whether a sequence goes on. Visual mode ends as the command goes out.
 async function run_in_background(id: string, args: Record<string, unknown>): Promise<Outcome> {
-  const sent = browser.runtime.sendMessage({ type: "run", invocations: [{ id, args }], mode: "visual" }) as Promise<RunResponse>;
+  const sent = browser.runtime.sendMessage({ type: "run", invocations: [{ id, args }], mode: "visual" });
   page.desertfox_host.set_mode_("caret");
   let answer: RunResponse;
   try {

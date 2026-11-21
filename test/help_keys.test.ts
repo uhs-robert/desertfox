@@ -4,6 +4,7 @@ import { actions_of, CHECK_DELAY_MS, create_keys_session, matches_filter, row_id
 import { create_key_capture } from "../src/help/keys_page.ts";
 import { STALE_MOVE_REFUSAL } from "../src/shared/messages/page.ts";
 import type { BindingRow } from "../src/shared/messages/page.ts";
+import { stub_send } from "./support/stub_send.ts";
 
 const row = (over: Partial<BindingRow> & { keys: string; text: string }): BindingRow => ({ mode: "normal", origin: "default", ...over });
 
@@ -13,10 +14,10 @@ function make(rows: BindingRow[], answer_of: (message: { type: string; [key: str
   const changes: string[] = [];
   let current = rows;
   const session = create_keys_session({
-    send: async (message) => {
+    send: stub_send<"list_bindings" | "check_binding" | "change_keymap">(async (message) => {
       sent.push(message as never);
       return message.type === "list_bindings" ? { ok: true, bindings: current } : answer_of(message as never);
-    },
+    }),
     schedule: (run, ms) => {
       const timer = { run, ms, live: true };
       timers.push(timer);
@@ -43,7 +44,7 @@ test("rows load, filter by keys, text or mode, and a failed load shows the reaso
   assert.equal(matches_filter(J, "next"), true);
   assert.equal(matches_filter(J, "prev"), false);
   assert.equal(matches_filter(J, " NORMAL "), true);
-  const failing = create_keys_session({ send: async () => ({ ok: false, message: "background down" }), on_change: () => undefined });
+  const failing = create_keys_session({ send: stub_send<"list_bindings">(async () => ({ ok: false, message: "background down" })), on_change: () => undefined });
   await failing.load();
   assert.match(failing.state.error ?? "", /background down/);
 });
@@ -304,7 +305,7 @@ test("a read-only row keeps its keys when keys are captured", async () => {
 
 test("a refresh reads the command names again, and a new open counts once", async () => {
   let names = ["tab.next"];
-  const session = create_keys_session({ send: async () => ({ ok: true, bindings: [J] }), names: async () => names, on_change: () => undefined });
+  const session = create_keys_session({ send: stub_send<"list_bindings">(async () => ({ ok: true, bindings: [J] })), names: async () => names, on_change: () => undefined });
   await session.load();
   names = ["tab.next", "user.new"];
   await session.refresh();

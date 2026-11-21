@@ -2,7 +2,8 @@
 // The form checks its fields while the user types (`field_problems`). The background builds the whole config at Save and refuses what the build refuses.
 
 import { field_problems } from "../shared/engine_fields.ts";
-import type { ChangeEngines, ChangeEnginesAnswer, EngineRow, ListEngines, ListEnginesAnswer } from "../shared/messages/page.ts";
+import type { ChangeEngines, EngineRow, ListEngines } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 
 export type EngineForm = { name: string; url: string; keyword: string; letter: string };
 const EMPTY_FORM: EngineForm = { name: "", url: "", keyword: "", letter: "" };
@@ -19,7 +20,7 @@ export type EnginesState = {
 };
 
 export type EnginesDeps = {
-  send: (message: ListEngines | ChangeEngines) => Promise<unknown>;
+  send: Ask<Pick<PageRequests, "list_engines" | "change_engines">>;
   on_change: () => void;
 };
 
@@ -36,16 +37,16 @@ export const can_save = (state: EnginesState): boolean => !state.busy && form_pr
 export function create_engines_session(deps: EnginesDeps) {
   const state: EnginesState = { rows: [], loaded: false, form: { ...EMPTY_FORM }, busy: false };
 
-  const ask = async <T>(message: ListEngines | ChangeEngines): Promise<T | { ok: false; message: string }> => {
+  const ask = async <R extends ListEngines | ChangeEngines>(message: R) => {
     try {
-      return (await deps.send(message)) as T;
+      return await deps.send(message);
     } catch (error) {
-      return { ok: false, message: message_of(error) };
+      return { ok: false as const, message: message_of(error) };
     }
   };
 
   async function refresh(): Promise<void> {
-    const answer = await ask<ListEnginesAnswer>({ type: "list_engines" });
+    const answer = await ask({ type: "list_engines" });
     if (answer.ok) {
       state.rows = answer.engines;
       state.loaded = true;
@@ -60,7 +61,7 @@ export function create_engines_session(deps: EnginesDeps) {
     state.busy = true;
     delete state.message;
     deps.on_change();
-    const answer = await ask<ChangeEnginesAnswer>(request);
+    const answer = await ask(request);
     state.busy = false;
     if (answer.ok) {
       state.message = { ok: true, text: answer.message };

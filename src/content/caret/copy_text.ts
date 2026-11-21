@@ -23,7 +23,7 @@ export type Yanked = Outcome | { ok: true; dropped: true };
 export async function copy_yank(clipboard: Parameters<typeof copy_text>[0], text: string, register: string | undefined): Promise<Yanked> {
   if (register === BLACK_HOLE_REGISTER) return { ok: true, dropped: true };
   const copied = await copy_text(clipboard, text);
-  const stored = (await ignore_refusal(browser.runtime.sendMessage({ type: "register_yank", name: register ?? "", text } satisfies RegisterYank))) as Outcome | undefined;
+  const stored = await ignore_refusal(browser.runtime.sendMessage({ type: "register_yank", name: register ?? "", text } satisfies RegisterYank));
   if (!copied) return { ok: false, message: "Could not copy to the clipboard" };
   return stored ?? { ok: false, message: "DesertFox background did not answer" };
 }

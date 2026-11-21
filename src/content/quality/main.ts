@@ -43,7 +43,7 @@ function probe(): Driver | undefined {
 const rule = (quality_window.desertfox_quality_rule ??= create_rule({
   // Inline: the shared helper adds a function to this bundle and pushes it over its size guard (quality.js, 5120 B).
   // eslint-disable-next-line no-restricted-syntax -- an expected refusal (the extension page is gone); the swallow.ts helper costs too many bytes here
-  report: () => (browser.runtime.sendMessage(report()) as Promise<string | undefined>).catch(() => undefined),
+  report: () => browser.runtime.sendMessage(report()).catch(() => undefined),
   has_media,
   probe,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
