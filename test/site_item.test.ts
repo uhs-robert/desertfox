@@ -712,7 +712,7 @@ test("an item inside the window that the hit test finds covered is centered, onc
   page.in_view_ = () => (covered ? 0 : 1);
   move_item(page, { selector: "li", link: "a.t", direction: "down" });
   assert.deepEqual(log, ["focus link 0", "scroll 0 center"]);
-  // Still covered after the scroll: the next landing scrolls once more and nothing loops.
+  // An item the probe finds uncovered does not scroll. There is no loop: land_on probes once per landing.
   covered = false;
   log.length = 0;
   move_item(page, { selector: "li", link: "a.t", direction: "down" });

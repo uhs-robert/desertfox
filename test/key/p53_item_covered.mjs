@@ -16,15 +16,19 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
   await run_case("j onto a row that the bottom edge of its scroll box clips scrolls it clear", async () => {
     await start("cov_scroll");
     // Rows 0 to 2 fill the box. Row 3 starts at its edge, inside the window but out of sight.
-    await press_keys("jjjj");
-    await expect_focus("r3");
+    for (const row of ["r0", "r1", "r2", "r3"]) {
+      await press_keys("j");
+      await expect_focus(row);
+    }
     await expect_clear("row 3");
   });
 
   await run_case("k onto a row under the fixed bar scrolls it clear", async () => {
     await start("cov_bar");
-    await press_keys("jjjjjj");
-    await expect_focus("r5");
+    for (const row of ["r0", "r1", "r2", "r3", "r4", "r5"]) {
+      await press_keys("j");
+      await expect_focus(row);
+    }
     await expect_clear("row 5");
     await press_keys("k");
     await expect_focus("r4");
