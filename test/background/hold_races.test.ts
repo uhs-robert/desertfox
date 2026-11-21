@@ -62,7 +62,9 @@ function tab_with_holds({ frozen = [] as number[] } = {}) {
   const final_on = (frame: number, hold: HoldMode) => landed.filter((step) => step.mode === hold && (step.frame === frame || (step.frame === "all" && step.from !== frame))).at(-1)?.on;
   const hold_of = (hold: HoldMode) => data[`desertfox_tab_${hold}_4`] as { frames: number[] } | undefined;
   const reload = (frame: number, document: string) => void documents.set(frame, document);
-  return { item, media, report, land, land_all, sent, landed, final_on, hold_of, reload, document_of };
+  // A report from a sender that names no document, as a hold stored before documents were kept has none.
+  const report_without_document = (hold: HoldMode, frame: number, mode: Mode, by_step = false) => (hold === "item" ? item.reported(4, frame, mode, by_step) : media.reported(4, frame, mode, true, by_step));
+  return { item, media, steps, report, report_without_document, land, land_all, sent, landed, final_on, hold_of, reload, document_of };
 }
 
 const MODES: HoldMode[] = ["item", "media"];
@@ -235,3 +237,68 @@ test("the queue holds no entry for a tab whose steps all landed or whose tab clo
   }
   assert.equal(steps_by_tab.size, 0, "a report after the close leaves nothing either");
 });
+
+// A load or a close of the tab, as the background's listeners run it: one reset of the tab's steps, then each mode ends its hold.
+const load_page = async (tab: ReturnType<typeof tab_with_holds>) => {
+  tab.steps.reset(4);
+  await Promise.all([tab.media.navigated(4, { status: "loading" }), tab.item.navigated(4, { status: "loading" })]);
+};
+const close_tab = async (tab: ReturnType<typeof tab_with_holds>) => {
+  tab.steps.reset(4);
+  await Promise.all([tab.media.forget(4), tab.item.forget(4)]);
+};
+
+// A media step on its way and an item step to every frame waiting behind it. The first mode to clear its steps must not set the other mode's step free to reach the new page.
+for (const [name, end_of_page] of [
+  ["load", load_page],
+  ["close", close_tab],
+] as const) {
+  test(`a ${name} sends no waiting step of either mode, whichever mode clears first`, async () => {
+    const tab = tab_with_holds();
+    await tab.media.enter(4, 0);
+    await tab.report("item", 0, "item");
+    assert.equal(tab.sent.length, 1, "the item step waits behind the media step");
+    await end_of_page(tab);
+    await tab.land_all();
+    // The load's offs to the old page name its documents, so none reaches the new page.
+    assert.deepEqual(
+      tab.sent.slice(1).filter((step) => step.on || step.document === undefined),
+      [],
+    );
+  });
+}
+
+// An off for the old document of a frame cannot land on its new one, so the new document's own start is no stale start, and its first Escape ends the hold.
+for (const hold of MODES) {
+  test(`${hold}: a frame's new document that starts the mode while an off to its old one is on its way ends the hold with its first Escape`, async () => {
+    const tab = tab_with_holds();
+    await tab.report(hold, 0, hold);
+    await tab.land({ on: true });
+    await tab.report(hold, 7, hold, true);
+    await tab.report(hold, 0, "normal");
+    assert.deepEqual(tab.sent.at(-1), { mode: hold, on: false, frame: 7, document: "d7" });
+    tab.reload(7, "d7-new");
+    await tab.report(hold, 7, hold);
+    await tab.report(hold, 7, "normal");
+    assert.equal(tab.hold_of(hold), undefined);
+  });
+}
+
+// A step still waiting for a frame when its new document joins was for the old document. With no document on record, only the drop at the join keeps it from the new one.
+for (const hold of MODES) {
+  test(`${hold}: a step still waiting for a child frame when its new document joins never goes out`, async () => {
+    const tab = tab_with_holds();
+    await tab.report_without_document(hold, 7, hold);
+    await tab.land({ on: true });
+    await tab.report_without_document(hold, 0, hold, true);
+    await tab.report_without_document(hold, 0, "normal");
+    await tab.report_without_document(hold, 7, hold);
+    await tab.land({ on: false, frame: 7 });
+    await tab.report_without_document(hold, 7, "normal");
+    assert.deepEqual(tab.sent.at(-1), { mode: hold, on: true, frame: "all", from: 7 }, "the step back on to frame 7 waits behind this one");
+    const sent_before_join = tab.sent.length;
+    assert.equal(await (hold === "item" ? tab.item.join(4, 7) : tab.media.join(4, 7)), true);
+    await tab.land_all();
+    assert.deepEqual(tab.sent.slice(sent_before_join), []);
+  });
+}

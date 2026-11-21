@@ -637,6 +637,8 @@ const favicon_saver = make_favicon_saver(make_favicon_cache(browser.storage.loca
 browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // The icon often arrives after the load completes, so a later icon change saves too. A private tab saves nothing.
   if (change.status === "complete" || change.favIconUrl !== undefined) void favicon_saver.on_tab({ url: tab.url, icon: tab.favIconUrl, incognito: tab.incognito }).catch(warn_and_go("favicon_saver.on_tab"));
+  // A load drops the mode steps of both modes at once, before either ends its hold (`tab_steps.ts`).
+  if (change.status === "loading" && change.url === undefined) tab_steps.reset(tab_id);
   // A load ends the media mode. An address change the page makes itself keeps it and drops the pin.
   if (change.url !== undefined || change.status === "loading") void tab_media.navigated(tab_id, change).catch(warn_and_go("tab_media.navigated"));
   // At the bare `loading` the tab still shows the address it leaves.
@@ -685,6 +687,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void cmdline.forget_opener(tab_id);
   void inspect_relay.forget(tab_id);
   void hint_frames.forget(tab_id).catch(warn_and_go("hint_frames.forget"));
+  tab_steps.reset(tab_id);
   void tab_media.forget(tab_id).catch(warn_and_go("tab_media.forget"));
   void tab_item.forget(tab_id).catch(warn_and_go("tab_item.forget"));
   void media_discovery.forget(tab_id).catch(warn_and_go("media_discovery.forget"));

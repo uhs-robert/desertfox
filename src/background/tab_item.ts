@@ -91,7 +91,7 @@ export function create_tab_item(deps: TabItemDeps) {
           }
           // The step came from a hold that ended before the frame took it. Starting a hold here would step every other frame back into the mode.
           if (by_step && !hold) return step(tab_id, false, frame_id, undefined, document_id);
-          const stale_off = !by_step && off_on_its_way(tab_id, frame_id);
+          const stale_off = !by_step && off_on_its_way(tab_id, frame_id, document_id);
           drop_steps_to(tab_id, frame_id);
           await deps.storage.set({ [key_of(tab_id)]: with_frame<ItemHold>(hold ?? { frames: [] }, frame_id, document_id, stale_off) });
           // No list of frames reaches the background, so the step goes to every frame and names the reporter, which skips it.

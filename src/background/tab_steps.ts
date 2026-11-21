@@ -38,6 +38,8 @@ export function create_step_queue(steps_by_tab = new Map<number, QueuedStep[]>()
   };
 
   return {
+    // At a load or a close of the tab, before either mode clears its hold: drops the steps of both modes at once. A clear of one mode alone would set a waiting step of the other mode free, to reach the new page.
+    reset: (tab_id: number): void => void steps_by_tab.delete(tab_id),
     // The steps of the mode that `send` sends.
     for_mode: (send: SendStep) => ({
       // A new step drops the waiting steps of its mode that it covers, so a tab holds at most one waiting step per mode and frame, and per mode and reporter of a step to every frame, however long a frame stays stuck.
@@ -47,8 +49,9 @@ export function create_step_queue(steps_by_tab = new Map<number, QueuedStep[]>()
       },
       // A frame that reports the mode on its own, or whose new document joins a hold, is past every step of the mode still waiting for it alone, the off of a hold it left included. The step on of a hold it starts skips it, so that off would land last.
       drop_steps_to: (tab_id: number, frame_id: number): void => store_and_send(tab_id, steps_of(tab_id).filter((queued) => queued.sending || queued.send !== send || queued.frame_id !== frame_id)),
-      // Whether an off step of the mode to the frame is on its way, so the frame can still take it after a report it sent first.
-      off_on_its_way: (tab_id: number, frame_id: number): boolean => steps_of(tab_id).some((queued) => queued.sending && queued.send === send && !queued.on && queued.frame_id === frame_id),
+      // Whether an off step of the mode to the document is on its way, so the document can still take it after a report it sent first. An off for another document of the frame never lands on this one.
+      off_on_its_way: (tab_id: number, frame_id: number, document_id?: string): boolean =>
+        steps_of(tab_id).some((queued) => queued.sending && queued.send === send && !queued.on && queued.frame_id === frame_id && (queued.document_id === undefined || document_id === undefined || queued.document_id === document_id)),
       // At a load or a close of the tab: the frames of the old page are gone, so the steps of the mode still waiting for them never go out, and the ones on their way hold up nothing.
       clear: (tab_id: number): void => store_and_send(tab_id, steps_of(tab_id).filter((queued) => queued.send !== send)),
     }),
@@ -57,7 +60,7 @@ export function create_step_queue(steps_by_tab = new Map<number, QueuedStep[]>()
 
 export type StepQueue = ReturnType<typeof create_step_queue>;
 
-// The frames of a hold. `documents` names the document each frame joined from, so its off step reaches that document only. `stale_offs` are frames that started or joined the hold on their own while an off step of an older hold was on its way to them: the next report of normal from such a frame is that off landing, not the user leaving. An Escape the user presses in that frame before the off lands reads as the off too, which no report can tell apart.
+// The frames of a hold. `documents` names the document each frame joined from, so its off step reaches that document only. `stale_offs` are frames that started or joined the hold on their own while an off step of an older hold was on its way to them: the next report of normal from such a frame is that off landing, not the user leaving. An Escape the user presses in that frame before the off lands reads as the off too, which no report can tell apart. So does a report of the mode the frame sends again on a window focus or a pageshow while the off is on its way: it reads as a new start, and the off then steps the frame back on after the user left.
 export type HoldFrames = { frames: number[]; documents?: Record<number, string>; stale_offs?: number[] };
 
 // `stale_off` says an off step of an older hold is on its way to the frame, which reported first.
