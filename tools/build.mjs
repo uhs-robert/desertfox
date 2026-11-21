@@ -5,88 +5,51 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { refused_as } from "../src/shared/swallow.ts";
 import { CMDLINE_STYLE } from "../src/cmdline/style.ts";
 
-// Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use.
+// Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use. Raise one only as AGENTS.md, "Content script size", says, and name the feature in the commit.
 const MAX_BYTES = {
-  // 20 KB (admission clause A, it runs before the first key): the layout fallback reads a letter of another script by its physical key. The proxy that holds a plain NORMAL badge until the load event (clause C) took it past 19.5 KB.
-  // 20.5 KB (clause A, it decides what happens to a key): a site row bind's focus guard picks the bind or the leaf it replaced (`leaf_for_focus`), for the Maps row's hjkl.
-  // 21 KB (clause A, it decides what happens to a key): a site mode with the `sticky` flag keeps running through a mouse press and a key the page keeps, and a toggle of `mode.site` leaves a text field and the mode it came from before it starts the mode.
-  // 21.5 KB (clause A, it decides what happens to a key): a site row bind's `when_present` guard and its choices pick the leaf a key runs (`leaf_for_page`), reading which matches the page shows (`is_shown`), for gg and G on every page.item row.
-  // 22 KB (clause A, it decides what happens to a key): a bound key whose guards all fail passes to the page, and the leaf-end signal makes a key typed behind a leaf wait until the leaf has finished.
+  // Key listener, prefix tree, modes and scrolling. Runs on every page and frame (admission rule in AGENTS.md, "Content script size").
   "content.js": 22 * 1024,
-  // 49 KB: hints.js loads on the first hint command, not on every page. Cross-frame text mode (#536) and the per-site tracking strip (#538) pushed it past 44.5 KB, and the jump list's leave watch (`src/content/page/leave_watch.ts`, #523) past 45.5 KB, and the key hand-off across frames (#521) past 46 KB. Together with the leave watch's same-document exit (#547) it passed 46.5 KB. Rect-first collect (`collect` with `only_in_view`) passed 47 KB. The `draggable` filter (grab group selector and cursor test) passed 47.5 KB. The draggable filter's touch-action sign and the eight resize cursors (#630) passed 48 KB. The three newtab_weather settings add their default values, which every bundle that imports the defaults carries.
-  // 50.5 KB: the `drop` filter of the grab target pass (`drop_targets.ts`, the Tab widen key and the fallback) passed 49 KB.
-  // 50.75 KB: the review fixes of the `drop` filter (shadow-root climb, tag escape, warn_and_go) passed 50.5 KB.
-  // 51.75 KB: raised by 1 KB ahead of the next change to the file, with no feature behind it.
-  // 52.25 KB: the scrollport offset for heading and field jumps in a scrolled div (`scrollport_top_of`, #798) and the scrolling-div clip rule passed 51.75 KB.
+  // Link hints and the grab target pass. Loads on the first hint command, not on every page.
   "hints.js": 52.25 * 1024,
+  // Caret and visual mode.
   "caret.js": 32 * 1024,
-  // 8.5 KB: a panel for a subframe's keys relays to the top frame (`relay.ts`, the draw and erase handlers and the `relayed_panel` guard). The bundle loads on a pause in a prefix, not on every page.
-  // 9 KB: the top frame keeps its own panel when a subframe's late erase arrives (`relayed_panel.ts`, #619).
-  // 9.5 KB: guarded rows run `leaf_for_page` when the panel opens (whichkey-guards).
+  // The which-key panel. Loads on a pause in a prefix.
   "whichkey.js": 9.5 * 1024,
-  // 7 KB: the line opens in the top frame for a subframe's keys, which takes the subframe's end (keys sent up, the focus and the late keys taken back) and the top frame's handlers. The subframe also hides its focus loss from the page while the line is open (#634), so a popup that closes on blur stays open. The bundle loads on the first `:`, not on every page.
+  // The command line host in the page, and the remote end for a subframe. Loads on the first `:`.
   "cmdline.js": 7 * 1024,
+  // The mode badge and the toast.
   "ui.js": 8 * 1024,
-  // 6 KB: the page copy reads the strip list and drops tracking parameters, and the jump list's leave watch (#523) records a single-page app's address change. `scroll.align` reads the heading jump and aligns its frame chain. The bundle loads on first use, not on every page.
+  // Rare page commands: scroll alignment, page copy, marks and the jump list.
   "page.js": 6 * 1024,
+  // The typed-text recorder for `.`.
   "text.js": 4 * 1024,
-  "editor.js": 6.5 * 1024, // 6.5 KB: the clipboard fallback for CodeMirror, Ace and Monaco, with its copy checks and paste read-back. The bundle loads on first use.
-  // 6.5 KB: the fullscreen key looks for the site player's own button, clicks its control and waits for the answer, the captions and frame keys read the text tracks and step the time, and the volume and play keys go through the YouTube player (#632, #656). The bundle loads on first use, not on every page.
+  // The external editor hand-off and the clipboard fallback for code editors.
+  "editor.js": 6.5 * 1024,
+  // Media keys. The background injects it into each frame.
   "media.js": 6.5 * 1024,
-  // 5 KB: the YouTube driver gained the captions toggle and its state read, and the rule answers a frame without a video by waiting for a media event and looking again for 10 s, inside open shadow roots too. The bundle loads on first use.
+  // The media quality driver, injected on demand.
   "quality.js": 5 * 1024,
-  // 2.5 KB: the probe queues a report asked for while another is out. It is the only script the media_quality rule injects into every frame, so it stays small. The names of the plain HTML elements, which the custom-element search for a video in shadow roots leaves out, are most of it.
+  // The only script the media_quality rule injects into every frame, so it stays small.
   "quality_probe.js": 2.5 * 1024,
+  // Handlers of commands that site rows bind to keys.
   "site_actions.js": 4 * 1024,
-  // 5.5 KB: page.item, the box it draws around a result (search-site-rows), the last move that ]] reads to put the box on the first item a load added, and the first and last ends that scroll the list's own scroller and follow its end while the page loads more (with the user watch of `user_left.ts`). The bundle loads on the first j or k on a result page.
-  // 6 KB: the box follows a focus that a page script moves (a loader that takes the focus, then hands it to a result), draws again when j or k only scrolls, and covers the parts of an item that poke out of it.
-  // 6.5 KB: the box follows only a row item that took the focus since the box was drawn, so a focus the user left on another item does not pull it away.
-  // 13 KB: the item finder behind `page.item` with no selector (`finder.ts`, the repeated blocks it shares with `]]` in `groups.ts`, the derived row and its cache in `derived.ts`, and the live page reader). It reads a page once and walks the list or grid it finds. The owner accepted about 11 KB for it on the 3.8 KB bundle the plan measured. The bundle was 6.3 KB when it landed, so it is larger.
-  // 13.25 KB: the gg and G page pin and panel reveal land beside the item finder.
-  // 15 KB: the hover of the boxed tile (`hover.ts`): the pointer events a resting mouse sends, the 300 ms wait, and the undo.
-  // 15.5 KB: the page reader reads each tag and attribute once, and the derived row picks a read budget by address.
-  // 15.75 KB: gg and G on the finder row (the in-view landing and the scroll fallback) and the check for a grown list.
-  // 16 KB: a load that nests its batch inside the first one's container, and the tail check that sees a form replaced in place.
-  // 16.5 KB: a short h3 to h6 link to another page names its item (a comment thread), beside the batch merge by parent kind.
-  // 17 KB: the finder keeps every top-level list, and the derived row follows the one in view.
-  // 17.5 KB: item mode: the start of the mode on a list page that is idle (`item.start`), and the box that shows in item mode as well as in normal mode.
-  // 18 KB: item mode: the start waits for a row's items by the clock and ends that wait when the page starts to unload.
-  // 18.5 KB: item mode: the list picker reads short lists and the items of a site row as the one list.
-  // 19 KB: item mode: the list picker offers a site row's list with the finder's other lists, and a picked side list stays active for the row's keys (the pin).
-  // 20 KB: item mode: the list picker offers navigation and sidebar menus as pick-only lists (the menu pass).
-  // 20.5 KB: item mode: the list picker offers role=listbox, grid, feed and tree widgets as pick-only lists (ARIA lists), through the ARIA pass.
-  // 21 KB: item mode: the ARIA lists take their own time limit and the tree branches.
-  // 21.5 KB: item mode: the ARIA lists skip the dialog, calendar and table-grid widgets.
-  // 22 KB: item mode: } and { jump between sections (`section_starts`, `pick_section` and the sections of the derived row).
-  // 22.5 KB: item mode: the section jump handler with its notices and the `section` selector of a row.
-  // 24.5 KB: visual item mode: the selection of two ends that survives a redraw of the list, the cursor moves, the marks and the swap of the ends.
-  // 25 KB: aria-trees: the deepest holding item takes the focus of a nested treeitem, and a focused treeitem stands for the label the finder lists for it.
+  // Item mode and the item finder behind `page.item`. Loads on the first j or k on a list page.
   "item.js": 25 * 1024,
-  // 3 KB: the item actions (Space toggles the current item's checkbox, Enter opens its link), with the hint click they share with `hints.js`. The bundle loads on the first press.
-  // 3.5 KB: visual item mode: Space sets the checkboxes of the range to the opposite of the anchor item's.
+  // Item actions (Space, Enter) in item mode.
   "item_act.js": 3.5 * 1024,
-  // 4 KB: page.tree (h, l, { and } through the comments of a thread, and the fold keys), with the hint click it shares with `hints.js`. The bundle loads on the first press.
-  // 4.5 KB: aria-trees: the aria preset (treeitems of one role=tree, closest-treeitem parent) and folding by the arrow keys.
-  // 5 KB: aria-trees: a missing aria-level counts the treeitems around the item.
+  // page.tree and the fold keys. Loads on the first press.
   "tree.js": 5 * 1024,
-  // 18.5 KB: page.follow (]] and [[): the detector with its next pass and load step, the load words in nine languages, the collect walk and the click it borrows from the hints code, the wait for loaded content (one load at a time, none counted after the page hides), and the move of the item box to the first item a load added.
-  // 19 KB: the load step also takes a role-less div with its own pointer cursor and a load word, and the item box move stops when the user pressed a key, used the wheel or pointer or hid the tab. The bundle loads on the first ]] or [[.
-  // 19.5 KB: the next pass skips the arrows inside an ad post.
-  // 20 KB: the load step reads the repeated blocks through `../item/groups.ts`, which the item finder shares.
+  // page.follow (]] and [[). Loads on the first press.
   "next_page.js": 20 * 1024,
-  // 6.5 KB: the thumb press point, the per-drag step keys (`[` and `]`), the swipe fling (`snap_scroll`, `start_fling`) and the start step read from `grab_step_px`.
+  // Keyboard drag.
   "grab.js": 6.5 * 1024,
-  // 59 KB: the lazy bundle carries every setting's completion entry, and the bridge settings add to it. The verbatim subject needs a lazy tokenizer and its completion path. The key-capture matcher and the registry validator ship in this lazy bundle, and the registers and macros pieces add to them. The three editable_ settings add their completion entries and help text, and so does strip_tracking. The grab_step_px setting adds its completion entry, and so do the five newtab_closed_tabs, newtab_closed_tabs_max, newtab_top_sites, newtab_top_sites_max and newtab_command_hint settings, and the three newtab_weather settings. `set theme` also offers the theme files and imports of the config, which the page gets when the line opens.
-  // 59.5 KB: the lists that rank the history come ranked from the background over a port (`ranked_client.ts`), the finder merges its tab rows into them, and keys that act on the list wait for rows on their way.
-  // 60 KB: behind a key that waits for rows, the page looks up each later key in the keymap, so only typed keys and row keys wait in order and every other key acts at once. A failed answer reads as empty for its word without being kept.
-  // 60.5 KB: the font_family, font_family_mono and font_scale settings add their completion entries.
-  // 61 KB: the site_rules setting accepts the keymap column, and its check reads the key clash between bind and keymap.normal.
-  // 61.5 KB: the item_navigator setting adds its completion entry.
+  // The command line page: completion for every setting, the registry validator and the key-capture matcher. Opened by the first `:`.
   "cmdline_page.js": 61.5 * 1024,
+  // The regex page search Worker.
   "find_worker.js": 2 * 1024,
-  // 10.5 KB: the Worker holds the history cache and builds and ranks the rows of `open`, `history` and the finder. It loads once per background start, never in a page.
-  // 11 KB: the Worker also answers `usage_for` (the bookmark list's use boosts) and `pick_history` (Enter on `history <text>`), so the background no longer copies the 20000 rows.
+  // The history rank Worker. Loads once per background start, never in a page.
   "rank_worker.js": 11 * 1024,
+  // The devtools page.
   "devtools.js": 2 * 1024,
 };
 

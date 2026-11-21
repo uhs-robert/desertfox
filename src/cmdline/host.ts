@@ -146,7 +146,7 @@ if (!page.desertfox_cmdline_ready) {
   function mount(text: string, from_mode_: string, finish: (outcome: Outcome | Promise<Outcome>) => void, search?: "forward" | "backward", target_?: Open["target_"], typed: string[] = [], scroll = read_scroll()) {
     const holder = document.createElement("div");
     // A top-layer popover like the other surfaces. It is shown last, so it draws above them. It is not made by `create_surface`: its
-    // shadow root and text would cost the 4 KB budget of this bundle.
+    // shadow root and text would cost size in this bundle, which has a tight limit.
     holder.setAttribute("popover", "manual");
     holder.setAttribute(LAYER_ATTRIBUTE, String(LAYERS.command_line));
     holder.style.cssText = `all:initial;position:fixed;left:0;right:0;bottom:0;height:${BAR_HEIGHT};z-index:${LAYERS.command_line};`;

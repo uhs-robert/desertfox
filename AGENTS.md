@@ -20,7 +20,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Privacy policy, what the add-on sends      | [`docs/privacy.md`](docs/privacy.md)                   |
 | The addons.mozilla.org listing             | [`amo/README.md`](amo/README.md)                       |
 
-If code and the design disagree, stop and ask the maintainer. Do not change the design to match the code without the maintainer's approval.
+If the behavior of the code and the design disagree, stop and ask the maintainer. Do not change the design to match the code without the maintainer's approval. Where only a number or a path is stale, fix it in the same PR.
 
 ## Architecture rules
 
@@ -71,7 +71,7 @@ This repository is public.
 
 ```bash
 just build       # bundle the extension
-just test        # docs, themes, settings defaults and setting completion checks, the promise lint (`npm run lint`), the TypeScript typecheck (`npm run typecheck`), then unit tests: registry, parser, prefix tree, config merge, and the Python host tests
+just test        # docs, themes, settings defaults and setting completion checks, the promise lint (`npm run lint`), the TypeScript typecheck (`npm run typecheck`), then the Python host tests and every `test/**/*.test.ts` file. It does not build: run `just build` to check the size guards
 just docs-gen    # regenerate the tables in docs/keymap.md
 just themes      # regenerate src/shared/themes.ts from themes/*.toml, then src/shared/setting_completion.ts
 just settings-defaults  # regenerate src/shared/default_settings.ts from src/shared/settings_table.ts and src/shared/setting_completion.ts from src/shared/settings_schema.ts
