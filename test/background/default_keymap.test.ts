@@ -87,12 +87,27 @@ test("the , group holds the DesertFox commands", () => {
   assert.equal(DEFAULT_KEYMAP.normal?.[",j"], undefined);
   assert.deepEqual(DEFAULT_KEYMAP.normal?.I, [{ id: "hint.run", args: { filter: "lists" }, label: "Pick a list for item mode" }, { id: "page.item", args: { direction: "current" } }]);
   assert.deepEqual(DEFAULT_KEYMAP.normal?.[",?"], { id: "help.whichkey" });
-  for (const mode of ["normal", "caret", "visual", "visual_line", "media", "item", "insert", "hint"] as const) {
+  for (const mode of ["normal", "caret", "visual", "visual_line", "media", "item", "item_visual", "insert", "hint"] as const) {
     assert.deepEqual(DEFAULT_KEYMAP[mode]?.["<A-?>"], { id: "help.whichkey", label: "Show the keys" }, mode);
   }
   assert.equal(DEFAULT_KEYMAP.ignore?.["<A-?>"], undefined);
   assert.equal(DEFAULT_KEYMAP.normal?.[","], undefined);
   assert.ok(compiled.modes.normal);
+});
+
+test("visual item mode: v enters it from item mode and v or Escape leaves it", () => {
+  assert.deepEqual(DEFAULT_KEYMAP.item?.v, [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }]);
+  for (const key of ["j", "k", "h", "l", "gg", "G", "}", "{"]) assert.equal((DEFAULT_KEYMAP.item_visual?.[key] as { args?: { extend?: boolean } }).args?.extend, true, key);
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.o, { id: "page.item", args: { direction: "other_end", extend: true }, label: "Swap the ends of the selection" });
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Space>"], { id: "page.item_action", args: { action: "toggle_range" }, label: "Toggle the checkboxes of the range" });
+  assert.deepEqual((DEFAULT_KEYMAP.item_visual?.I as { id: string }[]).map((step) => step.id), ["mode.set", "hint.run", "page.item"]);
+  assert.equal((DEFAULT_KEYMAP.item_visual?.o as { args?: { extend?: boolean } }).args?.extend, true);
+  assert.equal(DEFAULT_KEYMAP.item?.v !== undefined && Array.isArray(DEFAULT_KEYMAP.item.v), true);
+  assert.equal(DEFAULT_KEYMAP.item_visual?.f, undefined);
+  assert.equal(DEFAULT_KEYMAP.item_visual?.["<Enter>"], undefined);
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Escape>"], { id: "mode.escape" });
+  assert.equal(DEFAULT_KEYMAP.item_visual?.V, undefined, "only v enters");
 });
 
 test("plain r, t, x, tu and tU are prefixes only", () => {

@@ -354,3 +354,11 @@ test("an unbound quote in the media mode is no register prefix, so it reaches th
   assert.equal(matcher.feed("media", "3").kind_, "pending");
   assert.equal(matcher.feed("media", "j").kind_, "match");
 });
+
+test("an unbound quote in visual item mode is no register prefix either, while a count still counts", () => {
+  const keymap = tree();
+  const matcher = create_matcher({ ...keymap, modes: { ...keymap.modes, item_visual: keymap.modes.normal } } as CompiledKeymap);
+  assert.equal(matcher.feed("item_visual", '"').kind_, "no_match");
+  assert.equal(matcher.feed("item_visual", "3").kind_, "pending");
+  assert.equal(matcher.feed("item_visual", "j").kind_, "match");
+});

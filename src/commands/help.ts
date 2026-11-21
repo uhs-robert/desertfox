@@ -12,7 +12,7 @@ define("help.whichkey", {
   bridge: false,
   runs_in: "content",
   repeatable: false,
-  modes: ["normal", "caret", "visual", "visual_line", "media", "item", "insert", "hint", "grab"],
+  modes: ["normal", "caret", "visual", "visual_line", "media", "item", "item_visual", "insert", "hint", "grab"],
   bundle: "whichkey",
 });
 

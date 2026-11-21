@@ -236,7 +236,30 @@ export function start_server() {
       const extra = (index) => (id.includes("_boxes") ? (boxes[index] ?? "") : id.includes("_tfield") && index === 5 ? '<input id="in5">' : "");
       const record = id.includes("_boxes") ? "<script>document.documentElement.dataset.toggled = ''; document.addEventListener('click', (event) => { if (event.target.id?.startsWith('box')) document.documentElement.dataset.toggled += (document.documentElement.dataset.toggled ? ',' : '') + event.target.id; });</script>" : "";
       const cards_html = Array.from({ length: id.includes("_sections") ? 6 : 10 }, (_, index) => `<div class="card" style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="${prefix}${index}" href="#${prefix}${index}">Result number ${index} title</a></h3><span>snippet ${index}</span>${extra(index)}</div>`);
-      const cards = (id.includes("_sections") ? "" : cards_html.join("")) + record;
+      // A `_dyn` id draws the cards from a script, each with a native checkbox `x<n>`, counts its draws in the `drawn` data attribute, and, with `_nobox`, leaves the box out of card 2, with `_vanish` removes a card when its box is clicked, with `_even` the even cards carry the class `even` for a site row, with `_redraw` draws the list again on each click on a box, and draws them again when a test sets the `draw` data attribute of the root element to the card numbers: every node is new, the checked boxes stay checked, and a number left out is a removed card. A `_dynbare` id gives every card the same link address and a `_noid` id leaves `data-id` out, so the rows are told apart by their place only.
+      const dyn_script = `<div id="dyn"></div><script>
+        const dyn = document.getElementById("dyn");
+        const bare = ${id.includes("_dynbare")};
+        const nobox = ${id.includes("_nobox")};
+        const noid = ${id.includes("_noid")};
+        const vanish = ${id.includes("_vanish")};
+        let shown = [];
+        const card = (number) => '<div class="card' + (number % 2 === 0 ? " even" : "") + '"' + (noid ? "" : ' data-id="d' + number + '"') + ' style="height:100px;margin:0 0 20px 20px;width:500px"><h3 style="margin:0"><a id="c' + number + '" href="' + (bare ? "#same" : "#c" + number) + '">Result number ' + number + ' title</a></h3><span>snippet ' + number + '</span>' + (nobox && number === 2 ? "" : '<input type="checkbox" id="x' + number + '">') + '</div>';
+        const draw = (numbers) => {
+          shown = numbers;
+          const checked = new Set([...dyn.querySelectorAll("input:checked")].map((box) => box.id));
+          dyn.innerHTML = numbers.map(card).join("");
+          for (const box of dyn.querySelectorAll("input")) box.checked = checked.has(box.id);
+          document.documentElement.dataset.drawn = String(Number(document.documentElement.dataset.drawn ?? 0) + 1);
+        };
+        draw([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        // A \`_redraw\` id draws the list again on every click on a checkbox, as a page that re-renders its list on a change.
+        if (${id.includes("_redraw")}) dyn.addEventListener("click", (event) => { if (event.target.matches?.("input")) draw(shown); });
+        // A \`_vanish\` id removes a card when its box is clicked, as a filtered task list does.
+        if (vanish) dyn.addEventListener("click", (event) => { if (event.target.matches?.("input")) draw(shown.filter((number) => "x" + number !== event.target.id)); });
+        new MutationObserver(() => draw(document.documentElement.dataset.draw.split(",").filter(Boolean).map(Number))).observe(document.documentElement, { attributes: true, attributeFilter: ["data-draw"] });
+      </script>`;
+      const cards = id.includes("_dyn") ? dyn_script : (id.includes("_sections") ? "" : cards_html.join("")) + record;
       // A `_sections` id puts the first six cards in three sections of two, each with a heading, which the item finder nests into a list with sections.
       const section_cards = id.includes("_sections") ? Array.from({ length: 3 }, (_, section) => `<section class="sec" style="width:540px"><h2 style="margin:0 0 0 20px">Section ${section}</h2>${cards_html.slice(section * 2, section * 2 + 2).join("")}</section>`).join("") : "";
       const frame = url.pathname === "/item_list" && id.includes("_frame") ? `<iframe id="inner" src="/item_frame?id=${id}_inner" style="display:block;width:560px;height:300px"></iframe>` : "";

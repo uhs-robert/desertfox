@@ -21,7 +21,33 @@ if (!item_act.desertfox_item_act_ready && host) {
     if (!current.item) throw new RuntimeRefusal("No current item");
     return current as { item: Element; link?: Element | undefined };
   };
+  const checked = (box: Element) => (box.matches("input") ? (box as HTMLInputElement).checked : box.getAttribute("aria-checked") === "true");
+  // The list as item mode reads it now, with the keys of its items and the places of the range and its anchor, or nothing outside visual item mode. It is read again before each click, so a list the page redraws, or a click that removes a row, never gives a stale node or a shifted place.
+  type Listed = [items?: Element[], keys?: string[], from?: number, to?: number, anchor?: number];
+  const read_list = async () => {
+    let list: Listed = [];
+    await host.run_command_("item.range", "item", { take: (...taken: Listed) => (list = taken) });
+    return list;
+  };
   host.register_handler_("page.item_action", async (args) => {
+    if (args.action === "toggle_range") {
+      const [items, keys = [], from = 0, to = 0, anchor = 0] = await read_list();
+      const anchor_box = items?.[anchor] && checkbox_in(items[anchor]);
+      if (!anchor_box) throw new RuntimeRefusal("No checkbox in the anchor item");
+      const target = !checked(anchor_box);
+      let changed = 0;
+      // A click moves the focus onto its box. The cursor's item held it, and the next move starts from there.
+      const held = document.activeElement as HTMLElement | null;
+      // From the last row to the first: a click that removes a row then never moves a row not yet visited, whatever the keys are made of.
+      for (const key of keys.slice(from, to + 1).reverse()) {
+        const [now = [], now_keys = []] = await read_list();
+        const item = now[now_keys.indexOf(key)];
+        const box = item && checkbox_in(item);
+        if (box && checked(box) !== target) (click_like_a_hint(box as HTMLElement), changed++);
+      }
+      held?.focus();
+      return host.show_toast_(`${changed} changed`);
+    }
     const current = await current_item();
     const toggle = args.action === "toggle";
     const clicked = toggle ? checkbox_in(current.item, args.target as string) : (document.activeElement === tabbed && current.item.contains(tabbed) ? tabbed : current.link);

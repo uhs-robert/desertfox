@@ -518,7 +518,7 @@ const MEDIA_KEYS: ModeBindings = {
 // The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys, `gi`, the media keys, the keys that start insert, caret, visual and ignore mode, the find repeat keys and `<C-v>`, and any other key goes to the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
-const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L", "am", "aa", "ap", "as", "aS", "ar", "av", "aV", "al", "ah", "aP", "af", "A", "i", "v", "V", "gV", "n", "N", "*", "#", "<S-Escape>", "<S-Insert>", "<AC-Escape>", "<AC-`>", ",i", "<C-v>"];
+const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L", "am", "aa", "ap", "as", "aS", "ar", "av", "aV", "al", "ah", "aP", "af", "A", "i", "V", "gV", "n", "N", "*", "#", "<S-Escape>", "<S-Insert>", "<AC-Escape>", "<AC-`>", ",i", "<C-v>"];
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
 const keys_copied_to_item = Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence));
 const ITEM_KEYS: ModeBindings = {
@@ -535,6 +535,7 @@ const ITEM_KEYS: ModeBindings = {
   "<Enter>": { id: "page.item_action", args: { action: "open" }, label: "Open the item's link, or click the focused element in it" },
   "<Tab>": { id: "page.item_focus", args: { direction: "next" }, label: "Focus the next element in the item" },
   "<S-Tab>": { id: "page.item_focus", args: { direction: "prev" }, label: "Focus the previous element in the item" },
+  v: [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }],
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
   h: item_step("left", "Item to the left, or scroll left"),
@@ -543,6 +544,28 @@ const ITEM_KEYS: ModeBindings = {
   "{": item_step("prev_section", "Previous section"),
   gg: item_step("first", "First item, or scroll to top"),
   G: item_step("last", "Last item, or scroll to bottom"),
+};
+
+// The keys of visual item mode, which marks a range of items from the item where `v` was pressed (the anchor) to the item the cursor keys move to. `v` or Escape ends the mode back to item mode.
+const extend_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, extend: true }, label });
+const ITEM_VISUAL_KEYS: ModeBindings = {
+  // The selection belongs to one list, so picking another list ends it and goes on in item mode.
+  I: [{ id: "mode.set", args: { mode: "item" } }, ...(PICK_LIST as { id: string }[])] as KeyBinding,
+  j: extend_step("down", "Extend to the next item"),
+  k: extend_step("up", "Extend to the previous item"),
+  h: extend_step("left", "Extend to the item on the left"),
+  l: extend_step("right", "Extend to the item on the right"),
+  "}": extend_step("next_section", "Extend to the next section"),
+  "{": extend_step("prev_section", "Extend to the previous section"),
+  gg: extend_step("first", "Extend to the first item"),
+  G: extend_step("last", "Extend to the last item"),
+  "<Space>": { id: "page.item_action", args: { action: "toggle_range" }, label: "Toggle the checkboxes of the range" },
+  o: { id: "page.item", args: { direction: "other_end", extend: true }, label: "Swap the ends of the selection" },
+  v: { id: "mode.set", args: { mode: "item" }, label: "End the selection" },
+  "<Escape>": { id: "mode.escape" },
+  "<C-[>": { id: "mode.escape" },
+  "?": { id: "help.whichkey", label: "Show the keys" },
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
 // The keys of grab mode. Enter drops where the element is. Escape puts a range input or a draggable element back first and releases a pointer drag where it is. [ and ] halve and double the step.
@@ -560,4 +583,4 @@ const GRAB_KEYS: ModeBindings = {
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS };
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS };

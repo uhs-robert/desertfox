@@ -123,8 +123,40 @@ test("only a picture at least 96 px wide is a thumbnail", () => {
 
 // The overlay drives the hover: `show` with the hover flag waits, a change of item or a clear undoes it.
 function overlay(mode: () => string = () => "item") {
-  return create_item_overlay(mode, () => ({ left_: () => false, stop_: () => {} }), () => {});
+  return create_item_overlay(mode, () => ({ left_: () => false, stop_: () => {} }), () => {}, () => undefined, () => {});
 }
+// Counts what the overlay tells the badge. Item mode outside visual sends nothing on any tick, and visual item mode sends the size once and a clear once.
+function counting(mode: () => string, visual: () => { cursor_: Element; range_: Element[] } | undefined) {
+  const counts: (number | undefined)[] = [];
+  return { counts, box: create_item_overlay(mode, () => ({ left_: () => false, stop_: () => {} }), () => {}, visual, (count) => counts.push(count)) };
+}
+
+test("item mode outside visual sends no count on any tick", () => {
+  const { counts, box } = counting(() => "item", () => undefined);
+  box.show(as_element(tile("a", false)), "div");
+  mock.timers.tick(1000);
+  assert.deepEqual(counts, []);
+  box.clear();
+  assert.deepEqual(counts, []);
+});
+
+test("visual item mode sends the size of the range when it changes, and one clear when the mode ends", () => {
+  const first = as_element(tile("a", false));
+  const range = [first, as_element(tile("b", false))];
+  let mode = "item_visual";
+  const { counts, box } = counting(() => mode, () => (mode === "item_visual" ? { cursor_: first, range_: range } : undefined));
+  box.show(first, "div");
+  mock.timers.tick(1000);
+  assert.deepEqual(counts, [2]);
+  range.push(as_element(tile("c", false)));
+  mock.timers.tick(100);
+  assert.deepEqual(counts, [2, 3]);
+  mode = "item";
+  mock.timers.tick(300);
+  assert.deepEqual(counts, [2, 3, undefined]);
+  box.clear();
+});
+
 const entered = () => events.filter((event) => event.startsWith("mouseenter"));
 const left = () => events.filter((event) => event.startsWith("mouseleave"));
 

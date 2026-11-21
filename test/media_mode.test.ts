@@ -505,7 +505,7 @@ test("the media panel lists the media keys, and the badge says MEDIA", () => {
   for (const key of ["?", "F", "h", "l", "m"]) assert.ok(rows.some((row) => row.keys === key), key);
   assert.equal(mode_label("media", false, "always"), "MEDIA");
   assert.equal(mode_label("media", false, "not_normal"), "MEDIA");
-  assert.deepEqual(badge_state("media", false, "always", undefined), { mode: "media", pass_next: false, setting: "always", recording: undefined, site_label: undefined });
+  assert.deepEqual(badge_state("media", false, "always", undefined), { mode: "media", pass_next: false, setting: "always", recording: undefined, site_label: undefined, count: undefined });
   assert.equal(badge_state("media", false, "off", undefined), undefined);
 });
 

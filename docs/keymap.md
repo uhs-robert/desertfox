@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 593 (normal 264, media 58, item 98, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 609 (normal 264, media 58, item 98, item_visual 16, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -430,7 +430,6 @@ Which-key group names:
 | `,i` | `mode ignore` | Set mode |
 | `f` | `hint` | Click element |
 | `F` | `hint --background` | Click element in background tab |
-| `v` | `mode caret` | Start caret mode |
 | `V` | `mode visual` | Start visual mode |
 | `;v` | `hint --caret --prose` | Start caret mode at text |
 | `;V` | `hint --visual --prose` | Start visual mode at text |
@@ -482,6 +481,7 @@ Which-key group names:
 | `<Enter>` | `item_action --open` | Open the item's link, or click the focused element in it |
 | `<Tab>` | `item_focus next` | Focus the next element in the item |
 | `<S-Tab>` | `item_focus prev` | Focus the previous element in the item |
+| `v` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
 | `h` | `page.item --left --hover` | Item to the left, or scroll left |
@@ -490,6 +490,27 @@ Which-key group names:
 | `{` | `page.item --prev-section --hover` | Previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
+
+### item_visual
+
+| Key | Command | Label |
+| --- | --- | --- |
+| `I` | `mode item ; hint --lists ; page.item --current` | Set mode |
+| `j` | `page.item --down --extend` | Extend to the next item |
+| `k` | `page.item --up --extend` | Extend to the previous item |
+| `h` | `page.item --left --extend` | Extend to the item on the left |
+| `l` | `page.item --right --extend` | Extend to the item on the right |
+| `}` | `page.item --next-section --extend` | Extend to the next section |
+| `{` | `page.item --prev-section --extend` | Extend to the previous section |
+| `gg` | `page.item --first --extend` | Extend to the first item |
+| `G` | `page.item --last --extend` | Extend to the last item |
+| `<Space>` | `item_action --toggle-range` | Toggle the checkboxes of the range |
+| `o` | `page.item --other-end --extend` | Swap the ends of the selection |
+| `v` | `mode item` | End the selection |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
 
 ### grab
 

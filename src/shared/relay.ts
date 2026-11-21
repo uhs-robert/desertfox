@@ -7,6 +7,7 @@ import type { Relay } from "./messages.ts";
 // `top` handlers draw in the top frame or take what the focused frame sends it. `frame` handlers act on one frame, named by its id.
 const RELAYED: Record<string, { bundle: BundleName; to: "top" | "frame" }> = {
   "ui.toast": { bundle: "ui", to: "top" },
+  "ui.badge_count": { bundle: "ui", to: "top" },
   "whichkey.draw": { bundle: "whichkey", to: "top" },
   "whichkey.erase": { bundle: "whichkey", to: "top" },
   "cmdline.open": { bundle: "cmdline", to: "top" },

@@ -148,5 +148,5 @@ define("hint.run", {
   bridge: false,
   runs_in: "content",
   bundle: "hints",
-  modes: ["normal", "media", "item"],
+  modes: ["normal", "media", "item", "item_visual"],
 });
