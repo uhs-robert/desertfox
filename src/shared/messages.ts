@@ -9,6 +9,7 @@ import type { SettingTag } from "./setting_list.ts";
 import type { SettingRow, Settings } from "./settings_table.ts";
 import type { BoundInvocation, Invocation } from "./invocation.ts";
 import type { KeymapMode } from "./keymap.ts";
+import type { TreeLeaf } from "./prefix_tree.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
 // the background falls back to a notification where no content script exists.
@@ -81,6 +82,8 @@ export type WhichKeyRow = {
   command: string;
   description: string;
   more: boolean;
+  // The guarded leaf of a key with `when_focus` or `when_present`. The background has no page, so the which-key bundle runs `leaf_for_page` on it to hide the row or relabel it.
+  chain?: TreeLeaf;
 };
 
 // From the `cmdline` host script when it mounts the line. The answer is a one-time ticket, or undefined outside a tab.

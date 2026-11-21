@@ -42,6 +42,7 @@ export const area_rules = [
   { globs: ["src/shared/{icons,key_caps,page_base}.*"], areas: ["help", "newtab"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
+  { globs: ["src/content/leaf_for_page.ts"], areas: ["keys", "whichkey"] },
   { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
   // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
   { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },

@@ -1,9 +1,11 @@
 // Key test cases of piece P4 (which-key). run.mjs finds this file by its name and calls run_cases with its helpers.
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["whichkey", "help"];
 
-export async function run_cases({ rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, wait_cmdline, hint_label_count }) {
+export async function run_cases({ config_copy, load_config_dir, setup, rdp, extension_id, take_shot, run_case, send_keys, press_keys, poll_until, open_page, wait_event, events, expect, sleep, settle_focus, close_tabs_with, in_active_tab, which_key_delay_ms, scroll_delta_by_press, scroll_of, run_line, wait_cmdline, hint_label_count }) {
   const whichkey_events = (mark, page_id) => events.slice(mark).filter((event) => event.type === "whichkey" && event.page_id === page_id);
 
   // The status and the compiled keymap are written in one call, but an open page installs the new keymap later: it asks after a tree_updated message, and nothing in the page shows when that reply came. A fresh page asks for the keymap as it starts, and its tree_read event is the proof that it holds the stored one, so each change ends in a new tab on the "wk" page id.
@@ -283,4 +285,46 @@ export async function run_cases({ rdp, extension_id, take_shot, run_case, send_k
       await send_keys("-k", "Escape");
     });
   }
+
+  // A guarded key shows in the panel only where its guard holds when the panel opens. Item mode on the ARIA tree page and on a page with no tree.
+  const toml = (value) => (typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(toml).join(", ")}]` : `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)} = ${toml(entry)}`).join(", ")} }`);
+  const LIST = "table.list tr.row";
+  await setup("load a row whose Q bind needs a list, for the guarded site-row panel pages", async () => {
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=wkq_*"', `bind = { X = { run = "page.item --direction=first ${LIST}", when_present = "${LIST}" } }`, ""].join("\n"));
+    await load_config_dir(dir);
+  });
+  const item_panel_rows = async (page, id, keys, with_results = false, in_item_mode = true) => {
+    await open_page(page, id, { new_tab: true });
+    if (in_item_mode) {
+      await run_line("mode item");
+      await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+    }
+    if (with_results) await in_active_tab(`(() => { const search = document.createElement("div"); search.innerHTML = '<table class="list"><tr class="row"><td>row</td></tr></table>'; document.body.prepend(search); document.activeElement?.blur(); return true; })()`);
+    const mark = events.length;
+    await press_keys(keys);
+    const shown = await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === id && event.value !== "", "the panel");
+    const rows = Number(shown.value.split(":")[1]);
+    await close_panel_of(id);
+    return rows;
+  };
+  await run_case("the z panel in item mode hides za zc zo off a tree and lists them in a focused tree", async () => {
+    const off_tree = await item_panel_rows("page", "wk_notree", "z");
+    expect(off_tree === 3, `a page with no tree listed ${off_tree} rows under z, wanted zt zz zb`);
+    await open_page("aria_tree", "wk_tree", { new_tab: true });
+    await run_line("mode item");
+    await poll_until("item mode", async () => (await in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode")`)) === "ITEM");
+    await press_keys("I");
+    await poll_until("the focus in the tree", async () => (await in_active_tab(`document.activeElement?.closest("[role=tree]") !== null`)) === true);
+    const mark = events.length;
+    await press_keys("z");
+    const shown = await wait_event(mark, (event) => event.type === "whichkey" && event.page_id === "wk_tree" && event.value !== "", "the z panel");
+    expect(Number(shown.value.split(":")[1]) === 6, `a focused tree listed ${shown.value} under z, wanted 6 rows`);
+    await close_panel_of("wk_tree");
+  });
+  await run_case("a site-row bind with no default shows in the first-key panel only while its guard holds", async () => {
+    const without = await item_panel_rows("controls", "wkq_none", ",w", false, false);
+    const with_list = await item_panel_rows("controls", "wkq_list", ",w", true, false);
+    expect(with_list === without + 1, `the panel had ${without} rows with no list and ${with_list} with one, wanted one more for X`);
+  });
 }

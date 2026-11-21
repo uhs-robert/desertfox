@@ -9,7 +9,7 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
 import { site_rules_view } from "../src/background/site_rules_view.ts";
-import { leaf_for_page } from "../src/content/run_leaf.ts";
+import { leaf_for_page } from "../src/content/leaf_for_page.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { compile_keymap } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
