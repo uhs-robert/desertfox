@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 609 (normal 264, media 58, item 98, item_visual 16, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 612 (normal 264, media 58, item 101, item_visual 16, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -477,6 +477,9 @@ Which-key group names:
 | `zt` | `page.item --current ; scroll.align --top` | Back to the current item, at the top |
 | `zz` | `page.item --current ; scroll.align` | Back to the current item, in the middle |
 | `zb` | `page.item --current ; scroll.align --bottom` | Back to the current item, at the bottom |
+| `za` | `tree --toggle --aria` | Fold or unfold the tree item |
+| `zc` | `tree --fold --aria` | Fold the tree item, or the parent of a leaf |
+| `zo` | `tree --unfold --aria` | Unfold the tree item |
 | `<Space>` | `item_action --toggle` | Toggle the item's checkbox |
 | `<Enter>` | `item_action --open` | Open the item's link, or click the focused element in it |
 | `<Tab>` | `item_focus next` | Focus the next element in the item |
@@ -484,10 +487,10 @@ Which-key group names:
 | `v` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `page.item --left --hover` | Item to the left, or scroll left |
-| `l` | `page.item --right --hover` | Item to the right, or scroll right |
-| `}` | `page.item --next-section --hover` | Next section |
-| `{` | `page.item --prev-section --hover` | Previous section |
+| `h` | `tree --parent --aria` | Parent item of the tree |
+| `l` | `tree --child --aria` | First child of the tree item, or open it |
+| `}` | `tree --next --aria` | Next sibling in the tree |
+| `{` | `tree --prev --aria` | Previous sibling in the tree |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 

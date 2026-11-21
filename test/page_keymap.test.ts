@@ -806,8 +806,8 @@ test("the drive row binds plain item moves, and the page reply turns them into f
   for (const key of ["I", "zz"]) assert.equal((await leaf_at(key)).steps[0]?.invocation.id === undefined, false, key);
   // The arrows cannot walk a list the row does not name, so the item-mode picker offers the row's list alone as well.
   assert.equal((await leaf_at("I")).steps[0]?.invocation.args?.["row_only"], true);
-  // A guard that fails falls through to the item key of the mode, which scrolls sideways when the page has no grid. It names no selector, so it stays as it is.
-  const fallback = (await leaf_at("h")).otherwise;
+  // A guard that fails falls through to the item key of the mode: its tree step, guarded on a treeitem, and then its move, which scrolls sideways when the page has no grid. The move names no selector, so it stays as it is.
+  const fallback = (await leaf_at("h")).otherwise?.otherwise;
   assert.deepEqual(fallback?.steps.map((step) => step.invocation.id), ["page.item"]);
   assert.equal(fallback?.steps[0]?.invocation.args?.["selector"], "");
   for (const url of ["https://docs.google.com/document/d/abc/edit", "https://drive.google.com/file/d/abc/view"]) assert.equal(await item_args_at(compiled, url, "j"), undefined, url);
@@ -827,13 +827,15 @@ test("a thread row's own } and { keep their guard, and a failed guard falls thro
     for (const [key, direction, action] of [["}", "next_section", "next"], ["{", "prev_section", "prev"]] as const) {
       const own = keys[key]!;
       assert.deepEqual([own.steps[0]?.invocation.id, own.steps[0]?.invocation.args?.["action"], own.when_present], ["page.tree", action, guard], `${key} on ${url}`);
-      const default_jump = own.otherwise!;
+      // The chain goes on through the default tree step, guarded on a treeitem, to the default jump.
+      assert.deepEqual([own.otherwise!.steps[0]?.invocation.args?.["preset"], own.otherwise!.when_present], ["aria", "[role=treeitem]"], key);
+      const default_jump = own.otherwise!.otherwise!;
       assert.deepEqual([default_jump.steps[0]?.invocation.id, default_jump.steps[0]?.invocation.args?.["direction"], default_jump.steps[0]?.invocation.args?.["selector"], default_jump.when_present], ["page.item", direction, "", undefined], key);
     }
   }
   // A page with no row keeps the plain section jump.
   const plain = (await ask(compiled, "https://example.test/"))!.keymap.modes.item!.children["}"] as TreeLeaf;
-  assert.deepEqual([plain.steps[0]?.invocation.args?.["direction"], plain.otherwise], ["next_section", undefined]);
+  assert.deepEqual([plain.steps[0]?.invocation.args?.["preset"], plain.otherwise?.steps[0]?.invocation.args?.["direction"], plain.otherwise?.otherwise], ["aria", "next_section", undefined]);
 });
 
 test("with item_select arrows a section jump of a row sends no arrows, as the current landing does", async () => {

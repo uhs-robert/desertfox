@@ -310,6 +310,28 @@ export function start_server() {
       </script>`;
       return response.end(page(`reddit_thread ${id}`, `<shreddit-comment-tree><section>${tree}</section></shreddit-comment-tree>${tall_filler}`, script));
     }
+    if (url.pathname === "/aria_tree") {
+      // A stand-in for an ARIA tree widget, as GitHub's file tree and Microsoft Learn's contents build one: nested `role=treeitem` with `aria-level` and `aria-expanded`, the children in a `role=group`, and a `role=none` wrapper between a group and its treeitem. The treeitems are t0 to t6: t0 holds t1 (which holds t2) and t3, t4 holds t5 and starts folded, t6 stands alone. The tree folds on ArrowLeft and ArrowRight and reads `keyCode` alone, as Learn does. Each key is recorded in the `keys` data attribute of the root element as its key code and the treeitem it reached. An id with `_ad` moves the focus by `aria-activedescendant` instead.
+      const item = (index, level, children = "", open) => `<div role="treeitem" id="t${index}" aria-level="${level}" tabindex="-1"${open === undefined ? "" : ` aria-expanded="${open}"`}><div class="label" style="height:36px">item t${index}</div>${children && `<div role="group" style="${open ? "" : "display:none"}">${children}</div>`}</div>`;
+      const wrapped = (inner) => `<div role="none">${inner}</div>`;
+      const tree = item(0, 1, wrapped(item(1, 2, wrapped(item(2, 3)), true)) + wrapped(item(3, 2)), true) + item(4, 1, wrapped(item(5, 2)), false) + item(6, 1);
+      const script = `<script>
+        document.documentElement.dataset.keys = "";
+        document.addEventListener("keydown", (event) => {
+          const item = event.target.closest?.("[role=treeitem]");
+          if (!item || (event.keyCode !== 37 && event.keyCode !== 39)) return;
+          document.documentElement.dataset.keys += event.keyCode + ":" + item.id + ",";
+          const expanded = item.getAttribute("aria-expanded");
+          if (expanded === null) return;
+          const open = event.keyCode === 39;
+          if (open === (expanded === "true")) return;
+          item.setAttribute("aria-expanded", String(open));
+          item.querySelector(":scope > [role=group]").style.display = open ? "" : "none";
+        });
+      </script>`;
+      const active = id.includes("_ad") ? ' aria-activedescendant="t0"' : "";
+      return response.end(page(`aria_tree ${id}`, `<div role="tree" style="width:400px"${active}>${tree}</div>${tall_filler}`, script));
+    }
     if (url.pathname === "/links") {
       // Two links up top, an anchor without href that ]l skips, and a link far below. The page reports each focus.
       const links = '<a href="#a" id="first">one</a> <a id="bare">bare</a> <a href="#b" id="second">two</a>' + tall_filler + '<a href="#c" id="last">three</a>';

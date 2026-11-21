@@ -147,7 +147,9 @@ function entries_for_mode(
       }
       const normalized = parsed.tokens.join("");
       // A keymap binding replaces no other binding, so it has nothing to run when its guard fails. The skip comes before the default keys it extends are dropped.
-      const guard = binding === null ? undefined : (["when_focus", "when_present", "otherwise"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined);
+      // The default keymap alone may guard a key: `fallback` is the binding that runs when the guard fails.
+      const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
+      const guard = binding === null ? undefined : (["when_focus", "when_present", "otherwise", "fallback"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined && (layer === "user" || name === "otherwise"));
       if (guard !== undefined) {
         warnings.push(`${mode}: skipped "${sequence}": ${guard} works only in a site row bind`);
         continue;
@@ -160,7 +162,6 @@ function entries_for_mode(
         if (earlier && earlier.source_index === source_index) {
           warnings.push(`${mode}: "${sequence}" and "${earlier.sequence}" are the same keys, kept "${sequence}"`);
         }
-        const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
         by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index, layer });
       }
     }
@@ -262,19 +263,24 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, when_present: _when_present, otherwise: _otherwise, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, when_present: _when_present, otherwise: _otherwise, fallback: _fallback, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count, ...(info.bundle && { bundle: info.bundle }) });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label, intent, when_focus, when_present, otherwise_page };
+  return { steps, label, intent, when_focus, when_present, otherwise_page, fallback: invocations[0]!.fallback };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
-  const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_group_names(entry.tokens, group_names), warnings);
+  const names = ancestor_group_names(entry.tokens, group_names);
+  const resolved = to_steps(mode, entry, resolve, settings, sources, names, warnings);
   if (!resolved) return;
+  // A guarded default key keeps the step its guard falls through to as the next leaf of its chain.
+  const guarded = resolved.when_present !== undefined || resolved.when_focus !== undefined;
+  const fallback = resolved.fallback && to_steps(mode, { ...entry, binding: resolved.fallback }, resolve, settings, sources, names, warnings);
+  const guards = !guarded ? {} : { ...(resolved.when_focus !== undefined && { when_focus: resolved.when_focus }), ...(resolved.when_present !== undefined && { when_present: resolved.when_present }), ...(fallback && { otherwise: { kind: "leaf" as const, ...(fallback.label !== undefined && { label: fallback.label }), steps: fallback.steps } }) };
 
   let branch = root;
   for (const [depth, token] of entry.tokens.entries()) {
@@ -289,7 +295,7 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
     } else if (existing) {
       warnings.push(`${mode}: skipped "${entry.sequence}": ${existing.kind === "leaf" ? "same keys as another binding" : "another binding already continues past it"}`);
     } else {
-      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps };
+      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps, ...guards };
     }
   }
 }

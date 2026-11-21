@@ -264,7 +264,8 @@ test("normal mode j and k scroll again with the setting on, and item mode walks 
   const compiled = compiled_with({ item_navigator: true });
   const first_step = (mode: "normal" | "item", key: string) => (compiled.modes[mode]!.children[key] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id;
   assert.deepEqual(["j", "k", "h", "l"].map((key) => first_step("normal", key)), ["scroll.lines", "scroll.lines", "scroll.pixels", "scroll.pixels"]);
-  assert.deepEqual(["j", "k", "h", "l"].map((key) => first_step("item", key)), ["page.item", "page.item", "page.item", "page.item"]);
+  assert.deepEqual(["j", "k", "h", "l"].map((key) => first_step("item", key)), ["page.item", "page.item", "page.tree", "page.tree"]);
+  assert.deepEqual(["h", "l"].map((key) => (compiled.modes.item!.children[key] as { otherwise?: { steps: { invocation: { id: string } }[] } }).otherwise?.steps[0]?.invocation.id), ["page.item", "page.item"], "the item moves stay behind the tree guard");
   assert.equal(compiled.site_rules?.some((rule) => rule.origin === "default" && rule.name === "item_navigator"), false, "no row of the setting remains");
 });
 

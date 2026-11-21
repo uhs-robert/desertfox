@@ -3,6 +3,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { check_args } from "../src/shared/registry/index.ts";
+import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 
 const command = registry.get("page.tree")!;
@@ -74,4 +75,30 @@ test("the Reddit thread rows come before the feed rows, bind the tree keys to co
   }
   const feed = entries.find(({ row }) => row.site === "https://www.reddit.com/*")!.row.keymap!.item!;
   assert.equal(feed["h"], undefined, "the feed rows keep h and l as they are");
+});
+
+test("the aria preset needs no selector or depth, and fold_by keys goes with the selector form", () => {
+  assert.equal(check_args(command, { action: "parent", preset: "aria" }).ok, true);
+  for (const action of ["parent", "child", "next", "prev", "fold", "unfold", "toggle"]) assert.equal(check_args(command, { action, preset: "aria" }).ok, true, action);
+  assert.equal(check_args(command, { action: "parent", preset: "aria", selector: "li" }).ok, false, "the preset reads its own selector");
+  assert.equal(check_args(command, { action: "parent", preset: "grove" }).ok, false);
+  assert.equal(check_args(command, { action: "parent" }).ok, false, "with no preset the selector is required");
+  assert.equal(check_args(command, { ...base, action: "fold", fold_by: "keys" }).ok, true);
+  assert.equal(check_args(command, { ...base, action: "fold", fold_by: "click", fold: "a.togg" }).ok, true);
+  assert.equal(check_args(command, { ...base, action: "fold", fold_by: "keys", fold: "a.togg" }).ok, false, "keys click nothing");
+  assert.equal(check_args(command, { ...base, action: "fold", fold_by: "drag" }).ok, false);
+  assert.equal(check_args(command, { action: "fold", preset: "aria", fold_by: "keys" }).ok, false);
+});
+
+test("the default item keys guard the tree keys on a treeitem and fall back to the item moves", () => {
+  const table = DEFAULT_KEYMAP.item! as Record<string, { id: string; args: Record<string, unknown>; when_present?: string; when_focus?: string; fallback?: { id: string; args: Record<string, unknown> } }>;
+  const expected = { h: "parent", l: "child", "}": "next", "{": "prev", za: "toggle", zc: "fold", zo: "unfold" };
+  for (const [key, action] of Object.entries(expected)) {
+    assert.equal(table[key]?.id, "page.tree", key);
+    assert.deepEqual(table[key]?.args, { action, preset: "aria" }, key);
+    assert.equal(table[key]?.when_present, "[role=treeitem]", key);
+    assert.equal(table[key]?.when_focus, "[role=treeitem]", key);
+    assert.equal(check_args(command, table[key]!.args).ok, true, key);
+  }
+  for (const key of ["h", "l", "}", "{"]) assert.equal(table[key]?.fallback?.id, "page.item", `${key} keeps its item move`);
 });

@@ -28,8 +28,9 @@ export type Prompt = {
 // `when_focus` is a CSS selector. It makes a site row bind run only while nothing has focus or the focused element sits on or inside an element it matches. Otherwise the key runs the binding the bind replaced. Like `label`, only the first invocation's counts.
 // `when_present` is a CSS selector too. The bind runs only while the page shows an element it matches, and falls through like `when_focus` otherwise. A bind with both runs only while both hold.
 // `otherwise` is `"page"` to hand the real key to the page when every guard fails, in place of the binding the bind replaced. Like a guard, only the first invocation's counts.
+// `fallback` is for the default keymap alone: the binding the key runs when a guard of this one fails. It ends the chain, so it carries no guard of its own.
 // `site_search` is set by the key compiler for a `site_keys` key: its letter, and the engines to pick from by page, in order. `args.engine` holds the first one, so the compile-time check has an engine to check.
-export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string; intent?: string; variant_label?: string; when_focus?: string; when_present?: string; otherwise?: "page"; site_search?: { letter: string; engines: string[] } };
+export type BoundInvocation = Invocation & { prompt?: Prompt; label?: string; intent?: string; variant_label?: string; when_focus?: string; when_present?: string; otherwise?: "page"; fallback?: BoundInvocation; site_search?: { letter: string; engines: string[] } };
 
 // One invocation, or an array that runs in order.
 export type KeyBinding = BoundInvocation | BoundInvocation[];
