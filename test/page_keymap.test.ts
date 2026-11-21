@@ -796,9 +796,10 @@ test("the drive row binds plain item moves, and the page reply turns them into f
     assert.deepEqual(leaf.steps.map((step) => step.count_rule), [leaf.steps[0]!.count_rule], key);
     assert.deepEqual(leaf.steps.map((step) => step.jump), [true], key);
   }
-  // Enter is bound so that one typed behind G or gg waits for the select. While a dialog is open the guard fails, and the real Enter goes to the page: no leaf stays behind it, not even the mode's item action open.
+  // Enter is bound so that one typed behind G or gg waits for the select. While a dialog is open, or focus sits on a button, link or role=button inside a file, the guard fails and the real Enter goes to the page: no leaf stays behind it, not even the mode's item action open.
   const enter = await leaf_at("<Enter>");
-  assert.equal(enter.when_present, `body:not(:has([role="dialog"]:focus-within)) ${grid}, body:not(:has([role="dialog"]:focus-within)) ${list}`);
+  const enter_guard = (item: string) => `body:not(:has([role="dialog"]:focus-within)):not(:has(${item} :is(button, a[href], [role="button"]):focus)) ${item}`;
+  assert.equal(enter.when_present, `${enter_guard(grid)}, ${enter_guard(list)}`);
   assert.deepEqual([enter.steps.map((step) => step.invocation.id), enter.steps[0]?.invocation.args?.["key"]], [["page.send_key"], "Enter"]);
   assert.deepEqual([enter.otherwise, enter.otherwise_page], [undefined, true]);
   // The row keeps its own keys beside the derived ones.

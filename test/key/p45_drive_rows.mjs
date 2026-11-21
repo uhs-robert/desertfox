@@ -83,6 +83,7 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
       const steps = { ArrowDown: () => per_line(), ArrowUp: () => -per_line(), ArrowLeft: () => -1, ArrowRight: () => 1 };
       document.addEventListener("keydown", (event) => {
         if (event.target.closest?.('[role="dialog"]')) return;
+        if (event.key === "Enter" && event.target.closest?.('button, a[href], [role="button"]')) return;
         const target = event.target.closest?.('[role="gridcell"][data-id], tr[data-id]');
         if (!target && selected < 0) return;
         const index = target ? Number(target.id.slice(1)) : selected;
@@ -412,6 +413,27 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await poll_until("Enter to open the selected file", async () => (await hash()) === wanted);
     // The bind sends its own Enter, which is not trusted. A trusted one means the guard failed and the page got the real key.
     expect((await in_active_tab(`document.getElementById("panel").dataset.enter_trusted`)) === "false", "the Drive bind did not run: the page got the real Enter");
+  });
+
+  // Tab (item mode) focuses a button inside a file. The sent Enter of the bind is not trusted and would click nothing, so the guard must fail and give the real key to the button.
+  await run_case("list view: Enter after Tab on a button inside a file clicks that button and opens no file", async () => {
+    await open_drive("list_child_button", "list");
+    await press_keys("j");
+    await poll_until("a file selected", async () => (await selected_file()) >= 1);
+    await in_active_tab(`(() => {
+      const button = document.createElement("button");
+      button.id = "more";
+      button.textContent = "more";
+      button.onclick = () => { document.body.dataset.more_clicks = String(Number(document.body.dataset.more_clicks ?? 0) + 1); };
+      document.activeElement.querySelector("td").append(button);
+      return true;
+    })()`);
+    await press_keys("-k", "Tab");
+    await expect_focus("more");
+    await press_keys("-k", "Return");
+    await poll_until("the button to be clicked", async () => (await in_active_tab(`document.body.dataset.more_clicks ?? 0`)) === "1");
+    await sleep(300);
+    expect((await hash()) === "#before", `Enter opened a file: ${await hash()}`);
   });
 
   for (const view of ["list", "grid"]) {
