@@ -227,6 +227,15 @@ export function start_server() {
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
       return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
+    if (url.pathname === "/item_covered") {
+      // Ten rows of a link each, 100 px high, or a quarter of the window in the `_bar` page so that it scrolls at any window size. A `_scroll` id puts them in a 300 px box with its own scroll above a text block, so the lower rows are inside the window but clipped by the box edge. A `_bar` id puts them in the page under a fixed bar that covers the top 45% of the window.
+      const row_height = id.includes("_scroll") ? "100px" : "25vh";
+      const rows = Array.from({ length: 10 }, (_, index) => `<div class="row" style="height:${row_height};margin:0 0 0 20px;width:500px"><a id="r${index}" href="#r${index}">Row ${index} title</a></div>`).join("");
+      const body = id.includes("_scroll")
+        ? `<div id="sc" style="height:300px;overflow-y:auto;width:560px">${rows}</div><p style="height:600px">Text under the box.</p>`
+        : `<div id="bar" style="position:fixed;top:0;left:0;right:0;height:45vh;background:#ccc;z-index:10">bar</div><div style="margin-top:45vh">${rows}</div><p style="height:600px">Text under the rows.</p>`;
+      return response.end(page(`item_covered ${id}`, body, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+    }
     if (url.pathname === "/item_list" || url.pathname === "/item_frame") {
       // Ten cards with a title link each, which the item finder takes for a list. The list is in the markup, so a page that starts in item mode finds it when it loads. A `_frame` id adds a same-origin frame with a list of its own, and a `_field` id a text field.
       const prefix = url.pathname === "/item_list" ? "c" : "f";
