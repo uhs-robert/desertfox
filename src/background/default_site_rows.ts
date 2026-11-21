@@ -80,13 +80,13 @@ const ARROW_MODE: SiteModeTable[string] = {
 };
 
 // Result pages that j and k walk item by item through `page.item` in item mode (the `item` keymap column, so j and k scroll in normal mode). Each row names the item and, where the item is not itself the link, the link inside it that takes focus, so Enter opens it. Selectors checked on live pages.
-const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last" | "current", hover = false): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction, ...(hover ? { hover } : {}) } });
+const item_step = (selector: string, link: string | undefined, direction: "down" | "up" | "left" | "right" | "first" | "last" | "current", hover = false, extent = ""): BoundInvocation => ({ id: "page.item", args: { selector, ...(link ? { link } : {}), direction, ...(hover ? { hover } : {}), ...(extent ? { extent } : {}) } });
 // gg and G go to the first and last item. `page.item` does nothing for them on a page that shows no item, so `when_present` hands those pages the plain scroll to the top and bottom.
-const end_binds = (selector: string, link: string | undefined, hover = false): BindingTable => ({
-  gg: { ...item_step(selector, link, "first", hover), when_present: selector },
-  G: { ...item_step(selector, link, "last", hover), when_present: selector },
+const end_binds = (selector: string, link: string | undefined, hover = false, extent = ""): BindingTable => ({
+  gg: { ...item_step(selector, link, "first", hover, extent), when_present: selector },
+  G: { ...item_step(selector, link, "last", hover, extent), when_present: selector },
 });
-const item_binds = (selector: string, link?: string, hover = false): BindingTable => ({ j: item_step(selector, link, "down", hover), k: item_step(selector, link, "up", hover), ...end_binds(selector, link, hover) });
+const item_binds = (selector: string, link?: string, hover = false, extent = ""): BindingTable => ({ j: item_step(selector, link, "down", hover, extent), k: item_step(selector, link, "up", hover, extent), ...end_binds(selector, link, hover, extent) });
 // A result is the block that holds a title link, so the box spans site, address, title and snippet. `.MjjYud` is a generated class, but the block is its own nesting level in every layout read, and when the class changes the selector matches nothing and j and k scroll as usual.
 const GOOGLE_ITEMS = item_binds("#search div.MjjYud:has(a > h3)", "a:has(> h3)");
 const DDG_ITEMS = item_binds('article[data-testid="result"]', 'a[data-testid="result-title-a"]');
@@ -150,14 +150,16 @@ const { gg: _gg, ...REDDIT_ITEMS } = item_binds("shreddit-feed shreddit-post, sh
 // The summary holds the author's profile link, which Enter would open. The `link` names a link no head holds, so Enter says there is none, as on a Hacker News comment. A thread page does not start item mode: the user presses I, which offers this list.
 const REDDIT_COMMENTS = "shreddit-comment > details > summary";
 const REDDIT_COMMENT_LINK = 'a[slot="full-post-link"]';
+// The comment's text is the head's cousin: the head's parent holds a grid whose second-level div holds `[slot=comment]`. Replies sit in a sibling of that wrapper, so the scoped path never reaches a reply's text when the comment's own is missing. The box and the long-comment rule then cover the author line and the text, not the action row.
+const REDDIT_COMMENT_EXTENT = ":scope > div > div > [slot=comment]";
 const reddit_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", intent: string): BoundInvocation => ({
   id: "page.tree",
   intent,
-  args: { action, selector: REDDIT_COMMENTS, link: REDDIT_COMMENT_LINK, depth: "depth", depth_from: "above", depth_at: "shreddit-comment", fold: "summary", folded: "details:not([open])" },
+  args: { action, selector: REDDIT_COMMENTS, link: REDDIT_COMMENT_LINK, depth: "depth", depth_from: "above", depth_at: "shreddit-comment", fold: "summary", folded: "details:not([open])", extent: REDDIT_COMMENT_EXTENT },
   when_present: REDDIT_COMMENTS,
 });
 const REDDIT_THREAD_ITEMS = {
-  ...item_binds(REDDIT_COMMENTS, REDDIT_COMMENT_LINK),
+  ...item_binds(REDDIT_COMMENTS, REDDIT_COMMENT_LINK, false, REDDIT_COMMENT_EXTENT),
   h: reddit_tree("parent", "Go to the parent comment"),
   l: reddit_tree("child", "Go to the first reply, or unfold a folded comment"),
   "}": reddit_tree("next", "Go to the next sibling comment"),

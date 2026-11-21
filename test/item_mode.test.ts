@@ -421,3 +421,11 @@ test("row_only is an argument of the lists filter alone", () => {
   assert.equal(check_args(hint, { filter: "lists", items: "li", row_only: true }).ok, true);
   assert.equal(check_args(hint, { filter: "links", row_only: true }).ok, false);
 });
+
+test("the generated landings carry the extent of the row's j", () => {
+  const down = { id: "page.item", args: { selector: "li.hit", extent: ":scope > p", direction: "down" } };
+  const table = with_item_landings({ site: "https://example.org/*", keymap: { item: { j: down } } } as never).keymap?.["item"] as Record<string, unknown>;
+  const landing = (table["I"] as { args?: Record<string, unknown> }[])[1]!;
+  assert.equal(landing.args?.["extent"], ":scope > p");
+  assert.equal((table["zz"] as { args?: Record<string, unknown> }[])[0]!.args?.["extent"], ":scope > p");
+});

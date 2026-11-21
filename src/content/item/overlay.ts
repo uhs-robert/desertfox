@@ -4,6 +4,7 @@ import { LAYERS } from "../../shared/layers.ts";
 import { follow_windows } from "../hints/follow.ts";
 import type { UserLeft } from "../user_left.ts";
 import { hover_at } from "./hover.ts";
+import { item_rect } from "./pick.ts";
 
 // Defaults are var() fallbacks, never declarations, as in the hint labels.
 const STYLE = `
@@ -22,8 +23,8 @@ const OVERFLOW_SCAN_LIMIT = 200;
 const HOVER_DELAY_MS = 300;
 
 // Under the pointer or while it holds the focus, the item's rectangle grows over the descendants that poke out of it, as a tile whose image zooms on hover or on focus (Google Shopping zooms on both). Otherwise, and on an item that clips its own content (an image tile that crops its image), it is the item's rectangle. The walk skips what a box inside the item clips (a carousel row), and that box with it. It also skips what the eye does not see: a hidden or transparent child (a menu) and one wholly outside the viewport (screen-reader text at left:-9999px), which would stretch the box on every tick.
-function covered_rect(item: Element) {
-  const own = item.getBoundingClientRect();
+function covered_rect(item: Element, extent?: string) {
+  const own = item_rect(item, extent);
   const clips = (element: Element) => getComputedStyle(element).overflow !== "visible";
   if (!item.matches(":hover, :focus-within") || clips(item)) return own;
   let { left, top, right, bottom } = own;
@@ -60,6 +61,7 @@ export function create_item_overlay(
   let item: Element | undefined;
   // The row's item selector, which the box follows the focus by. None while the box is the focus mark of `item.mark`, which is not a `page.item` box.
   let item_selector: string | undefined;
+  let item_extent: string | undefined;
   // The user's input since the box was last drawn.
   let user: UserLeft | undefined;
   // The ticks since the focus left the item, 0 while the item holds it. NaN while the focus has not been in the item, so a box drawn while the focus is elsewhere (a j that only scrolls) never runs out its grace: NaN counts on as NaN, which passes no limit.
@@ -77,7 +79,7 @@ export function create_item_overlay(
   const still_wanted = () => mode().startsWith("item") || (mode() === "normal" && !drawn_in?.startsWith("item"));
 
   const reposition = () => {
-    const rect = item && covered_rect(item);
+    const rect = item && covered_rect(item, item_extent);
     // The class sets every other property, so the inline style holds only the place or the hiding.
     box.style.cssText = !rect?.width || !rect.height ? "visibility:hidden" : `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
     while (marks.length < marked.length) root.append((marks[marks.length] = Object.assign(document.createElement("div"), { className: "desertfox-item-mark" })));
@@ -100,7 +102,7 @@ export function create_item_overlay(
     if (item!.contains(focused)) ticks_away = 0;
     else if (user!.left_()) clear();
     else if (focused !== focus_at_show && (holder = focused?.closest(item_selector!))) {
-      show(holder, item_selector);
+      show(holder, item_selector, undefined, item_extent);
       on_follow(holder);
     } else if (++ticks_away > PAGE_FOCUS_GRACE_TICKS) clear();
   };
@@ -124,7 +126,7 @@ export function create_item_overlay(
   }
 
   // Without a selector the box is the focus mark, which never hovers. A redraw on the same item keeps the count of a page script's hold on the focus. `hover` answers whether the item may still be hovered when the wait ends, and a redraw that asks the same keeps its hover. An item the box follows the page's focus to gets none.
-  function show(target: Element, selector?: string, hover?: () => boolean): void {
+  function show(target: Element, selector?: string, hover?: () => boolean, extent?: string): void {
     const changed = target !== item;
     if (changed) ticks_away = target.contains(document.activeElement) ? 0 : NaN;
     // A change of the item or of the request restarts the hover: a request that turns off cancels the wait or unhovers, and one that turns on waits.
@@ -137,6 +139,7 @@ export function create_item_overlay(
     mark(visual_now());
     item = target;
     item_selector = selector;
+    item_extent = extent;
     focus_at_show = document.activeElement;
     user?.stop_();
     user = watch_user();
@@ -149,7 +152,7 @@ export function create_item_overlay(
       const wanted = still_wanted();
       const found = wanted ? visual_now() : undefined;
       mark(found);
-      if (found && found.cursor_ !== item) show(found.cursor_, item_selector);
+      if (found && found.cursor_ !== item) show(found.cursor_, item_selector, undefined, item_extent);
       if (!wanted || !item?.isConnected || (!item_selector && !item.matches(":focus"))) return clear();
       follow_focus();
       reposition();

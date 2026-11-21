@@ -8,11 +8,19 @@ export type MoveDirection = "down" | "up" | "left" | "right";
 export type SectionDirection = "next_section" | "prev_section";
 export type ItemDirection = MoveDirection | SectionDirection | "first" | "last" | "current" | "other_end";
 // With no selector (undefined, or the empty text the validator fills in) the items come from the derived row (`ItemPage.derived`).
-export type ItemArgs = { selector?: string; link?: string; section?: string; direction: ItemDirection; times?: number; hover?: boolean; extend?: boolean };
+export type ItemArgs = { selector?: string; link?: string; section?: string; direction: ItemDirection; times?: number; hover?: boolean; extend?: boolean; extent?: string };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
 // Where the move starts. `on_item` is false when no item holds the focus or was the last move, and `index` is then the first item not above the view, or the item count when all are above it.
 export type Place = { index: number; on_item: boolean };
+
+// The item's box. With `extent` it runs down to the bottom of the element that selector finds from the item's parent, so a head whose text is a sibling (a Reddit comment's author line) reads and boxes as the whole comment. An element that does not show (a folded comment's text keeps its old box) adds nothing.
+export function item_rect(item: Element, extent?: string): Box & { width: number; height: number } {
+  const own = item.getBoundingClientRect();
+  const more = extent ? item.parentElement?.querySelector(extent) : undefined;
+  const bottom = more?.checkVisibility() ? Math.max(own.bottom, more.getBoundingClientRect().bottom) : own.bottom;
+  return { left: own.left, top: own.top, right: own.right, bottom, width: own.width, height: bottom - own.top };
+}
 
 const middle = (low: number, high: number) => (low + high) / 2;
 
@@ -93,7 +101,7 @@ export type ItemPage = EndPage & {
   // The page scroll of the plain keys, for a page where no item matches.
   scroll_by: (dx: number, dy: number) => void;
   // Draws the box around the item, which follows the focus among the items the selector matches.
-  highlight: (item: Element, selector: string, hover?: () => boolean) => void;
+  highlight: (item: Element, selector: string, hover?: () => boolean, extent?: string) => void;
   // Whether the box still shows an item. The pin ends with the box, which clears when the user scrolls or moves the focus.
   box_shown: () => boolean;
   // The finder's row, read when a move has no selector: the shown items, the link of each that takes the focus, a selector for the box to follow a page script's focus by, a fresh read when the list grew past its end, and whether it is a grid.
@@ -157,8 +165,8 @@ export const all_items = (page: ItemPage): Element[] => items_of(page, last_move
 
 // A move of visual item mode reads the same list as the item mode move before it: a row's selector, link and section carry over, so a row that names its items is not replaced by the finder's list.
 export const carry_row = (args: ItemArgs): ItemArgs => {
-  const { selector, link, section } = last_move?.args_ ?? {};
-  return args.extend && !args.selector ? ({ ...args, selector, link, section } as ItemArgs) : args;
+  const { selector, link, section, extent } = last_move?.args_ ?? {};
+  return args.extend && !args.selector ? ({ ...args, selector, link, section, extent } as ItemArgs) : args;
 };
 
 // Told of every item the cursor lands on, which visual item mode follows.
@@ -192,7 +200,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
       revealed = true;
     });
   }
-  const boxes = items.map((item) => item.getBoundingClientRect());
+  const boxes = items.map((item) => item_rect(item, args.extent));
   const place = place_of(items, page.focused(), last_move?.item_.deref(), boxes, page.view.innerHeight, last_move?.pin_y_ === page.view.scrollY && page.box_shown());
   // Current stays on the item the move would start from, or takes the first one in view, so a key sent next lands on an item and not on a toolbar button that holds the focus.
   if (direction === "current") return items.length === 0 ? undefined : land_on(page, items[Math.min(place.index, items.length - 1)]!, args);
@@ -218,7 +226,7 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
   const held = boxes[place.index];
   // A pinned item off screen has no end in view to read to.
   if (vertical && place.on_item && held!.bottom > 0 && held!.top < page.view.innerHeight && (direction === "down" ? held!.bottom > page.view.innerHeight : held!.top < 0)) {
-    page.highlight(items[place.index]!, row_selector(page, args), hover_check(args, items[place.index]!));
+    page.highlight(items[place.index]!, row_selector(page, args), hover_check(args, items[place.index]!), args.extent);
     return scroll();
   }
   const pick = pick_item(boxes, place, direction, steps);
@@ -231,9 +239,9 @@ export function move_item(page: ItemPage, args: ItemArgs): void | Outcome | Prom
 // Focuses the item, brings it into view (unless `reveal` is false) and draws the box. `]]` lands here too, on the first item a load added. The page-scroller ends skip the reveal so gg stays at the page top and G at the bottom, with the box on an item that may lie off screen.
 function land_on(page: ItemPage, item: Element, args: ItemArgs, reveal = true, pin = false): void {
   if (args.selector || !page.derived?.focus_none_?.()) focus_target(item, args.link || undefined, args.selector ? undefined : page.derived?.link_of_(item)).focus({ preventScroll: true });
-  const { top, left, bottom, right } = item.getBoundingClientRect();
+  const { top, left, bottom, right } = item_rect(item, args.extent);
   if (reveal && (top < 0 || left < 0 || bottom > page.view.innerHeight || right > page.view.innerWidth)) item.scrollIntoView({ block: bottom - top > page.view.innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" });
   last_move = { item_: new WeakRef(item), args_: args, pin_y_: pin ? page.view.scrollY : undefined };
   on_land?.(item);
-  page.highlight(item, row_selector(page, args), hover_check(args, item));
+  page.highlight(item, row_selector(page, args), hover_check(args, item), args.extent);
 }
