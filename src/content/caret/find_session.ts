@@ -16,6 +16,8 @@ import type { SelectionMark, SelectionMirror } from "./selection_mirror.ts";
 import { MAX_TEXT_CHARS, trees_alive } from "./text_model.ts";
 import type { DomPoint, TextModel } from "./text_model.ts";
 
+declare const browser: MessagingBrowser;
+
 // What the engine needs of the host script. A bundle reaches it through `window.desertfox_host`.
 type Host = Pick<BundleHostApi, "show_toast_">;
 

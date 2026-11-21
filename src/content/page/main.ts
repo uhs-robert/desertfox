@@ -12,6 +12,8 @@ import { arm_leave_watch, scroll_offset, type LeaveWatch } from "./leave_watch.t
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { JumpStep, MarkAnswer, MarkRequest, MarkStep, BackgroundToContent } from "../../shared/messages/index.ts";
 
+declare const browser: MessagingBrowser;
+
 type PageWindow = { desertfox_host?: BundleHostApi; desertfox_page_ready?: true };
 const page = window as unknown as PageWindow;
 

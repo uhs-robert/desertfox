@@ -28,6 +28,8 @@ import { browser_jump_store } from "./jump_store.ts";
 import type { SnippetDeps } from "./snippets.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 // Without a frame id the message reaches every frame, which shows a toast in each.
 export function send_to_tab(tab_id: number, message: BackgroundToContent, frame_id?: number): Promise<unknown> {
   return browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id });

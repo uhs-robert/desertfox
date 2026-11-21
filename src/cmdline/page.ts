@@ -30,6 +30,8 @@ import { status_widgets } from "./status.ts";
 import { create_word_lookup } from "./word_lookup.ts";
 import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 
+declare const browser: MessagingBrowser;
+
 // Starts with the page, not after the round trips of `open_line`, and after the built-in styles, so the theme beats the hex defaults.
 follow_theme(".desertfox-cmdline");
 follow_user_css();

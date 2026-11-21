@@ -25,6 +25,8 @@ import { page_selection_cursor } from "./page_selection.ts";
 import { first_visible_index, visible_index_range } from "./start_point.ts";
 import { indexes_in_range, pad_range } from "./visible_range.ts";
 
+declare const browser: MessagingBrowser;
+
 // `desertfox_pick_target` is the element a hint picked. The hints bundle sets it just before it enters the mode.
 type CaretWindow = { desertfox_host: BundleHostApi; desertfox_caret_ready?: true; desertfox_pick_target?: Element };
 const page = window as unknown as CaretWindow;

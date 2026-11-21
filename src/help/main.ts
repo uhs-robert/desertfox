@@ -33,6 +33,8 @@ import type { PageId, Route } from "./route.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
+declare const browser: MessagingBrowser;
+
 let stop_settings: (() => void) | undefined;
 let stop_keys: (() => void) | undefined;
 let site_keys_form: ReturnType<typeof mount_site_keys> | undefined;

@@ -3,6 +3,8 @@
 import type { Outcome } from "../shared/messages/content.ts";
 import { refused_as } from "../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 // What the handler answered over there, or undefined when the background refused or the frame never answered.
 export const relay_outcome = (to: "top" | number, id: string, args: Record<string, unknown>): Promise<Outcome | undefined> =>
   refused_as(browser.runtime.sendMessage({ type: "relay", to, id, args }) as Promise<Outcome | undefined>, undefined);

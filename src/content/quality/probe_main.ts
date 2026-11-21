@@ -6,6 +6,8 @@ import { has_player_handle, has_video_in } from "./find_video.ts";
 import { refused_as } from "../../shared/swallow.ts";
 import { create_probe } from "./probe.ts";
 
+declare const browser: MessagingBrowser;
+
 type ProbeWindow = QualityVideoState & { wrappedJSObject: PlayerHandlePage; desertfox_quality_probe?: ReturnType<typeof create_probe> };
 const probe_window = window as unknown as ProbeWindow;
 

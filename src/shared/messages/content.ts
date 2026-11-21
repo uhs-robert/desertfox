@@ -81,7 +81,7 @@ export type WhichKeyRow = {
 // `target_frame` is the frame whose keys opened a line that draws in the top frame: a command run from that line acts there.
 export type IssueCmdlineTicket = {
   type: "issue_cmdline_ticket";
-  target_frame?: number;
+  target_frame?: number | undefined;
 };
 
 // A frame asks the background to run one handler of a bundle in the top frame (`to: "top"`) or in another frame of its tab. Only the handlers `relay_plan` knows pass, each in its own direction. The background adds `from_frame` to the args.

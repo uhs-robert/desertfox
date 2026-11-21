@@ -1,4 +1,6 @@
 import { ignore_refusal } from "../shared/swallow.ts";
+
+declare const browser: MessagingBrowser;
 // The strip rule as the page and hints bundles read it: the background resolves the site's `strip_tracking` and the global list.
 
 export async function read_strip_patterns(page_address: string): Promise<readonly string[]> {

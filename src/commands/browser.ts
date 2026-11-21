@@ -5,6 +5,8 @@ import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
 import { best_effort } from "../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 const TOP_FRAME_ID = 0;
 
 export type BrowserDeps = {

@@ -60,6 +60,8 @@ import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
 import type { ThemeFileChange } from "./theme_message.ts";
 import type { HostStartChoice } from "../shared/messages/page.ts";
 
+declare const browser: MessagingBrowser;
+
 export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
 // The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
 export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request)));

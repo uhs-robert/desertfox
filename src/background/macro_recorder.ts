@@ -13,6 +13,8 @@ import { create_write_queue } from "./store_turns.ts";
 import { is_replaying } from "./macro_replay.ts";
 import { best_effort, refused_as } from "../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 export type Recording = { register: string; steps: BoundInvocation[] };
 
 type SessionArea = Pick<typeof browser.storage.session, "get" | "set" | "remove">;

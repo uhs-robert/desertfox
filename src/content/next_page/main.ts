@@ -15,6 +15,8 @@ import { move_box_after_load } from "./item_after_load.ts";
 import { watch_user_left } from "../user_left.ts";
 import type { ItemCursor } from "../item/pick.ts";
 
+declare const browser: MessagingBrowser;
+
 type NextPageWindow = { desertfox_host?: PageHostApi; desertfox_next_page_ready?: true };
 type ItemWindow = { desertfox_item_ready?: true };
 const next_page = window as unknown as NextPageWindow;

@@ -11,6 +11,8 @@ import { relay, relay_outcome } from "../content/relay.ts";
 import { is_too_small_to_show } from "../content/hidden_frame.ts";
 import { best_effort, refused_as } from "../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 type CmdlineWindow = { desertfox_host: BundleHostApi; desertfox_cmdline_ready?: true };
 const page = window as unknown as CmdlineWindow;
 

@@ -8,6 +8,8 @@ import { create_tab_media } from "../background/tab_media.ts";
 import { step_target, tab_steps } from "../background/tab_steps.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 
+declare const browser: MessagingBrowser;
+
 // The background's message listener hands each frame's mode report to this.
 export const tab_media = create_tab_media({
   // Read at call time: Node tools import this module, where there is no `browser`.

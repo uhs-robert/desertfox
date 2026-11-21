@@ -9,6 +9,8 @@ import { browser_cmdline_key, type CmdlineKeyReader } from "./cmdline_key.ts";
 import { draw_clock } from "./clock.ts";
 import { draw_digital_clock } from "./digital_clock.ts";
 
+declare const browser: MessagingBrowser;
+
 type WidgetSettings = Pick<Settings, "newtab_clock" | "newtab_date" | "newtab_clock_format" | "newtab_bookmarks" | "newtab_bookmarks_max" | "newtab_recent_tabs" | "newtab_recent_tabs_max" | "newtab_closed_tabs" | "newtab_closed_tabs_max" | "newtab_top_sites" | "newtab_top_sites_max" | "newtab_command_hint" | "newtab_links" | "newtab_weather" | "newtab_weather_city" | "newtab_weather_units" | "newtab_ip_info">;
 
 // Each widget needs only to be not `false`. The clock is analog unless set to "digital".

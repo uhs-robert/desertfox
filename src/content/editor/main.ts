@@ -10,6 +10,8 @@ import { RuntimeRefusal } from "../../shared/command.ts";
 import type { EditorAnswer, EditorOpen, BackgroundToContent, EditorDone } from "../../shared/messages/index.ts";
 import { refused_as } from "../../shared/swallow.ts";
 
+declare const browser: MessagingBrowser;
+
 // The host refuses more than this many bytes of text, so a longer field is refused here and no doomed request goes out.
 const MAX_EDITOR_BYTES = 128 * 1024;
 
