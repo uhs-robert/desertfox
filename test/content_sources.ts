@@ -11,6 +11,7 @@ const navigation = "navigation";
 export const CONTENT_SOURCES: Record<string, AdmissionClause> = {
   "src/content/ask_keymap.ts": before_first_key,
   "src/content/badge_hosts.ts": bundle_host,
+  // Gates whether the ui bundle loads at all.
   "src/content/badge_state.ts": bundle_host,
   "src/content/bundle_host.ts": bundle_host,
   "src/content/bundles.ts": bundle_host,
@@ -36,7 +37,7 @@ export const CONTENT_SOURCES: Record<string, AdmissionClause> = {
   "src/content/run_leaf.ts": before_first_key,
   "src/content/scroll_box.ts": scrolling,
   "src/content/scroll_target.ts": scrolling,
-  "src/content/shadow.ts": scrolling,
+  "src/content/shadow.ts": before_first_key,
   "src/content/shown.ts": before_first_key,
   "src/content/site_mode.ts": before_first_key,
   "src/content/site_rule.ts": before_first_key,
@@ -50,6 +51,6 @@ export const CONTENT_SOURCES: Record<string, AdmissionClause> = {
   "src/shared/keys/matcher.ts": before_first_key,
   "src/shared/keys/token.ts": before_first_key,
   "src/shared/prefix_tree.ts": before_first_key,
-  "src/shared/register_names.ts": bundle_host,
+  "src/shared/register_names.ts": before_first_key,
   "src/shared/swallow.ts": before_first_key,
 };
