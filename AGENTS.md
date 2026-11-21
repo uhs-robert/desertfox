@@ -25,6 +25,7 @@ If the behavior of the code and the design disagree, stop and ask the maintainer
 ## Architecture rules
 
 - Define each command once, in the registry. Keymaps, the command line, help and which-key reference commands and never define behavior.
+- Make a page-side `onMessage` listener answer only its own message types and return `undefined` for the rest. The help and newtab pages load `content.js` and the bundles, so those listeners hear every message that a content script sends the background. An answer to a type the listener does not own replaces the background's answer.
 - Check args only in the one validator. Keys, the command line, the native host and snippets all pass through it.
 - Keep the content script within the size guard and admission rule in "Content script size", with no runtime dependency. Load anything else on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
