@@ -105,7 +105,7 @@ import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { create_tab_modes, hand_back_parked_frame, is_cross_origin, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
-import type { SnippetCall } from "./snippets.ts";
+import type { SnippetCall } from "../shared/messages/content.ts";
 
 const tab_modes = create_tab_modes(browser.storage.local);
 // Queued first, so the clear never removes a fresh report.

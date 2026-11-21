@@ -1,7 +1,6 @@
 // Messages that content scripts, bundles and the command line page send to the background with `runtime.sendMessage`. The `type` field selects the shape.
 
 import type { BundleName } from "../bundles.ts";
-import type { QualityProbe, QualityReport } from "../quality.ts";
 import type { CommandMeta, Mode } from "../command.ts";
 import type { WhichKeyBorder } from "../config.ts";
 import type { Settings } from "../settings_table.ts";
@@ -420,10 +419,14 @@ export type HintFramesUnhover = {
 // From the `hints` bundle once the labels are shown: how long finding and labeling took. Kept for `debug.perf`.
 export type RecordTiming = { type: "record_timing"; name: string; ms: number };
 
-export type ContentToBackground = RecordTiming | HintFramesStart | HintFramesReport | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover | MediaPin | QualityReport | QualityProbe | RunRequest | ModeChanged | Relay | FrameCue | LeaveTabInsert | LoadBundle | ListKeys | ReadRepeatPreview | IssueCmdlineTicket | OpenCmdline | RecordCmdline | CompleteItems | TabRowsActionRequest | OpenHelp | RecordStep | ReadKeymap | ReplayEnd | ReplayStop | FindScan | ImageAction | InspectPick | ReadHintSelectors | ReadStripPatterns | RegisterRequest | MarkRequest | MarkStep | JumpRequest | JumpLeave | EditorOpen;
 
 // How a command ended. Done is `{ ok: true }`. A handler that returns nothing is done, and one that throws is failed.
 // Cancelled means the user left a waiting step (Escape, an unrelated key, a page change), so the rest of a sequence does not run and nothing is shown.
 export type Outcome = { ok: true; cancelled?: true } | { ok: false; message: string };
 
 export type RunResponse = { ok: true; cancelled?: true } | { ok: false; refusal: Refusal };
+
+// Sent by `desertfox.run` inside a snippet. `depth` is the level of the calling snippet.
+export type SnippetCall = { type: "snippet_run"; command_text: string; depth: number };
+
+export type SnippetAnswer = { ok: true } | { ok: false; message: string };

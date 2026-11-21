@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import type { SnippetEntry } from "../../src/shared/config.ts";
 import { snippet_deps } from "../../src/background/browser_deps.ts";
-import { create_snippets, MAX_SNIPPET_DEPTH, type SnippetCall } from "../../src/background/snippets.ts";
+import { create_snippets, MAX_SNIPPET_DEPTH } from "../../src/background/snippets.ts";
+import type { SnippetCall } from "../../src/shared/messages/content.ts";
 import { create_router } from "../../src/background/router.ts";
 import { make_fake } from "./fakes.ts";
 

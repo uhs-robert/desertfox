@@ -3,3 +3,4 @@ export type * from "./content.ts";
 export type * from "./page.ts";
 export type * from "./ports.ts";
 export type * from "./tab.ts";
+export type * from "./map.ts";

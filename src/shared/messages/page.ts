@@ -194,4 +194,3 @@ export type HostStartPending = { config_dir: string; host_digest: string; browse
 export type HostStartChoice = { type: "host_start_choice"; choice: "use_folder" | "keep_browser"; host_digest: string; browser_digest: string };
 export type HostStartChoiceAnswer = { ok: true; message: string } | { ok: false; message: string; problems?: string[] };
 
-export type PageToBackground = HostStartChoice | ConfigFilesRequest | ChangeSetting | ListSettings | ListFontNames | ListBindings | CheckBinding | ChangeKeymap | ListEngines | ChangeEngines | ListAliases | ChangeAliases | ListQuickmarks | ChangeQuickmarks | ListImportedThemes | ChangeImportedThemes | ToolbarRequest | SiteKeysRequest | PreviewConfigImport | CommitConfigImport | ExportConfig | ListSnippets | RemoveSnippet | ExportSessions | ImportSessions;
