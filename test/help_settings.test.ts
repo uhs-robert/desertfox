@@ -9,6 +9,7 @@ import { mount_settings, update_row } from "../src/help/settings_page.ts";
 import { can_reset, control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
 import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages/page.ts";
+import { stub_send } from "./support/stub_send.ts";
 
 // The config and the settings.toml it came from, so a write to the file keeps the other settings.
 function install_fake_browser(file_settings: Record<string, unknown>) {
@@ -49,10 +50,10 @@ async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys((await startup.get_config()).local_themes ?? {}), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
-  const send = async (message: unknown) => {
+  const send = stub_send<"change_setting" | "list_settings" | "list_font_names">(async (message) => {
     const request = message as { type: string };
     return request.type === "list_settings" ? messages.list() : messages.change(message as never);
-  };
+  });
   const changes: (string | undefined)[] = [];
   const session = create_settings_session({ send, engines: ["google", "ddg"], resolve_keys, on_change: (name) => changes.push(name) });
   await session.load();
@@ -209,7 +210,7 @@ test("unmounting stops the listener, and a load that ends after it adds none", a
   // The container has no group boxes, so the session loads and nothing is drawn.
   const container = { querySelector: () => null, prepend: () => undefined } as never;
   let last_send: Promise<unknown> = Promise.resolve();
-  const send = (message: unknown) => (last_send = (message as { type: string }).type === "list_settings" ? messages.list() : messages.change(message as never));
+  const send = stub_send<"change_setting" | "list_settings" | "list_font_names">((message) => (last_send = (message as { type: string }).type === "list_settings" ? messages.list() : messages.change(message as never)));
   // The send has answered and the load's continuation has run.
   const settled = async () => {
     await last_send;
@@ -272,10 +273,10 @@ test("the font settings suggest the names the background answers, and no other t
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
-  const send = async (message: unknown) => {
+  const send = stub_send<"change_setting" | "list_settings" | "list_font_names">(async (message) => {
     const type = (message as { type: string }).type;
     return type === "list_font_names" ? names : type === "list_settings" ? messages.list() : messages.change(message as never);
-  };
+  });
   const session = create_settings_session({ send, engines: [], resolve_keys: (text) => text, on_change: () => undefined });
   await session.load();
   assert.deepEqual(session.field("font_family")!.control, { type: "text", suggestions: names });
@@ -288,11 +289,11 @@ test("a font ask that fails leaves the font settings with no suggestions", async
   const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
   await startup.get_config();
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
-  const send = async (message: unknown) => {
+  const send = stub_send<"change_setting" | "list_settings" | "list_font_names">(async (message) => {
     const type = (message as { type: string }).type;
     if (type === "list_font_names") throw new Error("background restarting");
     return type === "list_settings" ? messages.list() : messages.change(message as never);
-  };
+  });
   const session = create_settings_session({ send, engines: [], resolve_keys: (text) => text, on_change: () => undefined });
   assert.equal(await session.load(), true);
   assert.deepEqual(session.field("font_family")!.control, { type: "text", suggestions: [] });

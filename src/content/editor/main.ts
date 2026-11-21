@@ -72,7 +72,7 @@ function finish(host: BundleHostApi, { token, text }: EditorDone): Promise<boole
 
 // The edited text must not be lost, and must not overwrite the newer text. The toast says so only when the register took it.
 async function keep_in_register(host: BundleHostApi, text: string, reason: string, note = ""): Promise<void> {
-  const saved = (await refused_as(browser.runtime.sendMessage({ type: "register_yank", name: "", text }), undefined)) as { ok?: boolean; message?: string } | undefined;
+  const saved = await refused_as(browser.runtime.sendMessage({ type: "register_yank", name: "", text }), undefined);
   if (saved?.ok !== true) return host.show_toast_(`${note}The edited text (${text.length} characters) could not be saved to a register${saved?.message ? `: ${saved.message}` : ""}`);
   const why = reason === "changed" ? "The field changed while the editor was open." : "The field did not take the edited text.";
   host.show_toast_(`${note}${why} The edited text is in the unnamed register: paste it with <C-r>"`);

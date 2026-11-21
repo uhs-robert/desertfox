@@ -10,7 +10,7 @@ import type { CopyFormat } from "../handlers/copy.ts";
 import { selected_text } from "./selection.ts";
 import { arm_leave_watch, scroll_offset, type LeaveWatch } from "./leave_watch.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { JumpStep, MarkAnswer, MarkRequest, MarkStep, BackgroundToContent } from "../../shared/messages/index.ts";
+import type { JumpStep, MarkRequest, MarkStep, BackgroundToContent } from "../../shared/messages/index.ts";
 
 declare const browser: MessagingBrowser;
 
@@ -21,7 +21,7 @@ const page = window as unknown as PageWindow;
 // A step of the jump list asks the same way and gets the entry the cursor moved to, or nothing to scroll to when the background went to another tab.
 async function ask_at_scroll(host: BundleHostApi, watch: LeaveWatch, message: { type: MarkRequest["type"]; key: string; arrival?: number } | Pick<JumpStep, "type" | "step" | "arrival"> | Pick<MarkStep, "type" | "direction" | "steps">) {
   const box = host.scroll_box_();
-  const answer = (await browser.runtime.sendMessage({ ...message, url: location.href, x: box.scrollLeft, y: box.scrollTop })) as MarkAnswer;
+  const answer = await browser.runtime.sendMessage({ ...message, url: location.href, x: box.scrollLeft, y: box.scrollTop });
   if (!answer.ok) throw new RuntimeRefusal(answer.message);
   if (message.type === "mark_set" || answer.x === undefined) return;
   box.scrollTo({ left: answer.x, top: answer.y, behavior: "instant" });

@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { can_save, create_themes_session, name_problem } from "../src/help/themes_model.ts";
 import type { ChangeImportedThemes, ListImportedThemes } from "../src/shared/messages/page.ts";
+import { stub_send } from "./support/stub_send.ts";
 
 const SCHEME = Array.from({ length: 16 }, (_, at) => `base${at.toString(16).padStart(2, "0")}: "${(at * 17).toString(16).padStart(2, "0").repeat(3)}"`).join("\n");
 const NAMED = `scheme: "My Scheme"\n${SCHEME}\n`;
 
 function session(answer: (message: ListImportedThemes | ChangeImportedThemes) => unknown) {
   const sent: (ListImportedThemes | ChangeImportedThemes)[] = [];
-  return { sent, themes: create_themes_session({ send: async (message) => (sent.push(message), answer(message)), on_change: () => undefined }) };
+  return { sent, themes: create_themes_session({ send: stub_send<"list_imported_themes" | "change_imported_themes">(async (message) => (sent.push(message), answer(message))), on_change: () => undefined }) };
 }
 
 test("typing a scheme gives a live preview and a suggested name, with no request sent", () => {

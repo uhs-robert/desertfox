@@ -22,7 +22,7 @@ probe_window.desertfox_quality_probe ??= create_probe({
   address: () => location.href,
   report: (video) => {
     probe_window.desertfox_quality_video = video;
-    return refused_as(browser.runtime.sendMessage({ type: "quality_probe", address: location.href } satisfies QualityProbe) as Promise<boolean>, false);
+    return refused_as(browser.runtime.sendMessage({ type: "quality_probe", address: location.href } satisfies QualityProbe), false);
   },
   // Media events do not bubble, but a capture listener on the document sees them.
   watch: (on_media) => {

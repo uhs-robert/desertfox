@@ -33,7 +33,7 @@ if (!page.desertfox_text_ready) {
   host.register_handler_("register.paste", async (args) => {
     const name = args.name as string;
     const target = deepest_focused_element();
-    const value = (await browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead)) as string | unknown[] | undefined;
+    const value = await browser.runtime.sendMessage({ type: "register_read", name } satisfies RegisterRead);
     if (typeof value !== "string" || value === "") throw new RuntimeRefusal(value === undefined || value === "" ? `Register ${name} is empty` : `Register ${name} holds a macro, not text`);
     // The read is async and keys are not held, so focus may have moved on to a field the user did not paste into.
     if (deepest_focused_element() !== target) throw new RuntimeRefusal("Focus moved while the register was read");

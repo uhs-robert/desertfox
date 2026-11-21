@@ -19,7 +19,6 @@ import { mount_pairs } from "./pairs_page.ts";
 import { ALIASES_KIND, QUICKMARKS_KIND } from "./pairs_model.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import { QUICKMARK_STORAGE_KEY } from "../background/storage_keys.ts";
-import type { ListSnippetsAnswer } from "../shared/messages/page.ts";
 import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { mount_files } from "./files_page.ts";
@@ -184,7 +183,7 @@ function land_on(route: Route, cause: "first" | "moved"): void {
 
 // What the key editor's command field offers: the command line names and aliases, the aliases of the config, and the snippets. The check validates the whole text, so these only complete the first word.
 async function command_names(): Promise<string[]> {
-  const snippets = (await refused_as(browser.runtime.sendMessage({ type: "list_snippets" }), undefined)) as ListSnippetsAnswer | undefined;
+  const snippets = await refused_as(browser.runtime.sendMessage({ type: "list_snippets" }), undefined);
   const { config } = await load_effective_config();
   const names = [
     ...(await load_commands_file()).commands.flatMap((command) => [command.name ?? command.id, ...(command.aliases ?? [])]),

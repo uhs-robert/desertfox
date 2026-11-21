@@ -1,7 +1,8 @@
 // No DOM: the state of the import-a-theme section under the theme picker. It parses the pasted or picked scheme as the user types, so the preview and the problems are live,
 // and sends a save or a remove to the background, which parses the text again before it stores anything.
 
-import type { ChangeImportedThemes, ChangeImportedThemesAnswer, ListImportedThemes, ListImportedThemesAnswer } from "../shared/messages/page.ts";
+import type { ChangeImportedThemes, ListImportedThemes } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import { MAX_SCHEME_CHARS, parse_base16, suggested_theme_name, theme_name_problem } from "../shared/theme/base16.ts";
 import type { ImportedScheme } from "../shared/theme/base16.ts";
 import type { PickedFile } from "./transfer_model.ts";
@@ -27,7 +28,7 @@ export type ThemesState = {
 };
 
 export type ThemesDeps = {
-  send: (message: ListImportedThemes | ChangeImportedThemes) => Promise<unknown>;
+  send: Ask<Pick<PageRequests, "list_imported_themes" | "change_imported_themes">>;
   on_change: () => void;
 };
 
@@ -40,16 +41,16 @@ export const can_save = (state: ThemesState): boolean => !state.busy && state.sc
 export function create_themes_session(deps: ThemesDeps) {
   const state: ThemesState = { names: [], kept_names: [], loaded: false, text: "", name: "", name_typed: false, busy: false };
 
-  const ask = async <T>(message: ListImportedThemes | ChangeImportedThemes): Promise<T | { ok: false; message: string }> => {
+  const ask = async <R extends ListImportedThemes | ChangeImportedThemes>(message: R) => {
     try {
-      return (await deps.send(message)) as T;
+      return await deps.send(message);
     } catch (error) {
-      return { ok: false, message: message_of(error) };
+      return { ok: false as const, message: message_of(error) };
     }
   };
 
   async function refresh(): Promise<void> {
-    const answer = await ask<ListImportedThemesAnswer>({ type: "list_imported_themes" });
+    const answer = await ask({ type: "list_imported_themes" });
     if (answer.ok) {
       state.names = answer.names;
       state.kept_names = answer.kept_names ?? [];
@@ -132,7 +133,7 @@ export function create_themes_session(deps: ThemesDeps) {
     state.busy = true;
     delete state.message;
     deps.on_change();
-    const answer = await ask<ChangeImportedThemesAnswer>(request);
+    const answer = await ask(request);
     state.busy = false;
     if (answer.ok) {
       state.message = { ok: true, text: answer.message };

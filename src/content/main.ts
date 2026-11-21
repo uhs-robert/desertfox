@@ -356,7 +356,7 @@ const reply_text = new WeakMap<PageKeymap, string>();
 let installed_text: string | undefined;
 
 function read_page_keymap(): Promise<PageKeymap | undefined> {
-  return (browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()), url: location.href } satisfies ReadKeymap) as Promise<string | undefined>).then((reply) => {
+  return browser.runtime.sendMessage({ type: "read_keymap", join: !matcher_installed && page_mode.get_mode_() === "normal" && !is_editable_element(deepest_focused_element()), url: location.href } satisfies ReadKeymap).then((reply) => {
     if (reply === undefined) return undefined;
     const keymap = JSON.parse(reply) as PageKeymap;
     reply_text.set(keymap, reply);
