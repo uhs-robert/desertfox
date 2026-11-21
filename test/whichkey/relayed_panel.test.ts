@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_relayed_panel } from "../../src/content/whichkey/relayed_panel.ts";
-import type { WhichKeyPanel } from "../../src/shared/messages.ts";
+import type { WhichKeyPanel } from "../../src/shared/messages/content.ts";
 
 // The count a document starts from: its start time in ms.
 const DOC = 1000;

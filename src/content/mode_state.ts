@@ -1,7 +1,7 @@
 // The mode of this frame and the one-shot "pass the next key" flag. Pure, so the transitions are testable.
 
 import type { Mode } from "../shared/index.ts";
-import type { MediaStep } from "../shared/messages.ts";
+import type { MediaStep } from "../shared/messages/tab.ts";
 import { is_caret_mode } from "../shared/command.ts";
 
 // The mode a fullscreen change brings, or the media mode starting or ending in another frame, or undefined when the mode stays. Normal mode starts the media mode and the item mode. The two also take each other, so `aa` in item mode and the Escape back from media mode reach every frame in either order. Insert, ignore, hint and the reading modes win, and only the held mode ends with the step (visual item mode ends with item mode's).

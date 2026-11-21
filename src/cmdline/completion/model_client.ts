@@ -2,7 +2,7 @@
 // The model sends a snapshot, then patches numbered one more each. A patch that skips a number means a missed one, so the client asks for a new snapshot and ignores patches until it lands.
 
 import { group_labels } from "../../shared/group_name.ts";
-import type { GroupRow, SessionItem, TabItem, TabModelMessage, TabRow } from "../../shared/messages.ts";
+import type { SessionItem, TabItem, GroupRow, TabModelMessage, TabRow } from "../../shared/messages/index.ts";
 
 export type ModelClientDeps = {
   // The window of the line's tab: only it marks `%` and `#`, and it lists first.

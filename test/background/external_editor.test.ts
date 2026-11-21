@@ -4,7 +4,7 @@ import { create_external_editor, ext_of_request, make_editor_ext_for } from "../
 import type { EditorCollectReply } from "../../src/background/native_client.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
-import type { EditorDone, EditorOpen } from "../../src/shared/messages.ts";
+import type { EditorOpen, EditorDone } from "../../src/shared/messages/index.ts";
 
 const request = (token = "t1"): EditorOpen => ({ type: "editor_open", token, text: "hello", insert: false });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));

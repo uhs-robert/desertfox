@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import type { ToastKind } from "../../src/shared/messages.ts";
+import type { ToastKind } from "../../src/shared/messages/tab.ts";
 
 type FakeNode = Record<string, unknown> & { removed: boolean };
 

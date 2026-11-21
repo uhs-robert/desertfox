@@ -6,7 +6,7 @@ import { answer_mark_request, create_mark_store } from "../../src/background/mar
 import type { MarkArea } from "../../src/background/mark_store.ts";
 import type { PageReady, PageWatch } from "../../src/background/page_ready.ts";
 import { JUMP_READ_TIMEOUT_MS } from "../../src/background/router.ts";
-import type { MarkJump } from "../../src/shared/messages.ts";
+import type { MarkJump } from "../../src/shared/messages/content.ts";
 
 const tab = (id: number, url: string, extra: Partial<MarkTab> = {}): MarkTab => ({ id, window_id: 1, index: id, url, incognito: false, last_accessed: id, discarded: false, ...extra });
 const from = { id: 1, window_id: 1, incognito: false };

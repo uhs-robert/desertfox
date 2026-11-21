@@ -2,7 +2,7 @@
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
 import type { HintFramesMessage } from "../../background/hint_frames.ts";
-import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages.ts";
+import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
@@ -37,7 +37,7 @@ import type { FieldDirection } from "./focus_fields.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
-import type { HeadingItem, RecordTiming } from "../../shared/messages.ts";
+import type { HeadingItem, RecordTiming } from "../../shared/messages/content.ts";
 import { arm_leave_watch } from "../page/leave_watch.ts";
 import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
 

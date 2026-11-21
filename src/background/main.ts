@@ -1,6 +1,6 @@
 import "./command_modules.ts";
 import { best_effort, ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
-import type { BackgroundToContent, ContentToBackground, DevtoolsHello, FocusedFrameMode, FocusPage, MediaStep, PageToBackground } from "../shared/messages.ts";
+import type { ContentToBackground, PageToBackground, DevtoolsHello, BackgroundToContent, FocusedFrameMode, FocusPage, MediaStep } from "../shared/messages/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
 import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";

@@ -5,7 +5,7 @@ import { el } from "./render.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
 import { create_transfer_session, can_commit, read_folder_files, read_zip_file, reach_block, SNIPPET_GLOSS, SNIPPET_WARNING } from "./transfer_model.ts";
 import type { ExportFile, PickedFile, ReachSegment, Review, TransferSession } from "./transfer_model.ts";
-import type { ImportReach, InstalledSnippet, SnippetPreview } from "../shared/messages.ts";
+import type { ImportReach, InstalledSnippet, SnippetPreview } from "../shared/messages/page.ts";
 import type { TransferDeps } from "./transfer_model.ts";
 
 export function button(label: string, on_click: () => void, disabled = false): HTMLButtonElement {

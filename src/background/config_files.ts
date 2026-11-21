@@ -1,6 +1,6 @@
 // The answer to the files editor's messages: the stored files out, one save in.
 
-import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages.ts";
+import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages/page.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { AUTOCONFIG_FILE } from "../shared/config_build/source_files.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";

@@ -5,7 +5,7 @@ import { create_register_store } from "../../src/background/register_store.ts";
 import { check_play_step, make_macro_handlers } from "../../src/commands/macro.ts";
 import { create_macro_replay } from "../../src/background/macro_replay.ts";
 import type { MacroReplay } from "../../src/background/macro_replay.ts";
-import type { RunResponse } from "../../src/shared/messages.ts";
+import type { RunResponse } from "../../src/shared/messages/content.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { apply_count } from "../../src/background/count.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";

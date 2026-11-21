@@ -5,7 +5,7 @@ import { answer_config_import, read_import_source, strip_top_folder } from "../.
 import { ConfigRefusal } from "../../src/background/config_reload.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
-import type { ConfigImportPreview, ImportSource } from "../../src/shared/messages.ts";
+import type { ConfigImportPreview, ImportSource } from "../../src/shared/messages/page.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_which_key_session } from "../../src/content/whichkey/session.ts";
-import type { WhichKeyPanel } from "../../src/shared/messages.ts";
+import type { WhichKeyPanel } from "../../src/shared/messages/content.ts";
 
 const panel: WhichKeyPanel = { title: ["keys"], rows: [{ keys: "j", command: "Down", description: "", more: false }], border: "square" };
 

@@ -2,7 +2,7 @@
 // The `page`, `hints` and `next_page` bundles all arm it, so a page only scrolled with `j` still reports once a hint follow or `]]` leaves it. The first arm in a document wins and the window holds the watch.
 // Each push or traverse committed within the document also feeds `listen_`, in any frame, for code that must react to it (hint mode ends on it).
 
-import type { JumpLeave, JumpPush } from "../../shared/messages.ts";
+import type { JumpLeave, JumpPush } from "../../shared/messages/content.ts";
 import { mark_page_url } from "../../shared/mark_names.ts";
 import type { BundleHostApi } from "../bundle_host.ts";
 

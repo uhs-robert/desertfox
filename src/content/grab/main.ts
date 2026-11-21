@@ -1,7 +1,7 @@
 // The `grab` bundle: drags an element from the keys. `grab.mode` takes a hint pick, the way `caret.mode` does: the hints bundle leaves the element in `desertfox_pick_target` and passes the action as `mode`. `hint --grab` asks the hints bundle for a second pick, the target, and drives the drag to it. `hint --grab_move` holds the element and enters grab mode, whose keys (`grab.move`, `grab.drop`, `grab.cancel`) move, drop and cancel it.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import type { Outcome } from "../../shared/messages.ts";
+import type { Outcome } from "../../shared/messages/content.ts";
 import { abort, center_of, drive, FLING_SETTLE_MS, FLING_STEPS, nudge, press, release, scale_step, snap_scroll, start_fling } from "./drag.ts";
 import type { Direction, Held } from "./drag.ts";
 

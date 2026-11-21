@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_mark_list_handlers } from "../../src/commands/mark_list.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
-import type { MarkItem } from "../../src/shared/messages.ts";
+import type { MarkItem } from "../../src/shared/messages/content.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 

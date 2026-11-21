@@ -6,7 +6,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import { engine_of_page } from "../shared/engines/index.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
-import type { AddBundleScriptAnswer, BackgroundToContent, ContainerStore, Refusal, ToastKind } from "../shared/messages.ts";
+import type { ContainerStore, Refusal, AddBundleScriptAnswer, BackgroundToContent, ToastKind } from "../shared/messages/index.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_dynamic_values } from "../shared/registry/params.ts";
 import { registry } from "../shared/registry/builtin.ts";

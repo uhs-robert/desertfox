@@ -4,7 +4,7 @@
 import { remove_badge_hosts } from "./badge_hosts.ts";
 import { bundles } from "./bundles.ts";
 import { DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import type { BadgeState } from "./ui/mode_label.ts";
 
 const MISSING = "DesertFox could not load ui";

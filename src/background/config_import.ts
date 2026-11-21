@@ -7,7 +7,7 @@ import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { AUTOCONFIG_FILE, KNOWN_TOP_LEVEL, labeled_path, type ConfigFiles } from "../shared/config_build/source_files.ts";
-import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ImportSource, PreviewConfigImport, SnippetPreview } from "../shared/messages.ts";
+import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ImportSource, PreviewConfigImport, SnippetPreview } from "../shared/messages/page.ts";
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";

@@ -11,7 +11,7 @@ import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import type { Row } from "../../src/cmdline/completion/sources.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
-import type { CompleteItemsAnswer, EngineItem, TabItem } from "../../src/shared/messages.ts";
+import type { CompleteItemsAnswer, EngineItem, TabItem } from "../../src/shared/messages/content.ts";
 import { FIXTURE_NOW, history_fixture } from "../support/history_fixture.ts";
 import { rank_pipeline, visit_of } from "../support/rank_pipeline.ts";
 

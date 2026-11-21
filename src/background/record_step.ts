@@ -4,7 +4,7 @@
 import type { CommandDef } from "../shared/command.ts";
 import type { CheckedArgs } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { Outcome } from "../shared/messages.ts";
+import type { Outcome } from "../shared/messages/content.ts";
 import { check_args, type EnumSources } from "../shared/registry/check_args.ts";
 import { as_stored, type RepeatMemory } from "./repeat_memory.ts";
 import { warn_and_go } from "../shared/swallow.ts";

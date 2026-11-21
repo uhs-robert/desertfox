@@ -6,7 +6,7 @@
 // and everything after it travels over that port, which page scripts never hold.
 
 import type { Invocation } from "../shared/invocation.ts";
-import type { HeadingItem } from "../shared/messages.ts";
+import type { HeadingItem } from "../shared/messages/content.ts";
 
 export type HostToPage =
   // Sent once the page said it is ready, with the port in its transfer list. The page trades `ticket` with the

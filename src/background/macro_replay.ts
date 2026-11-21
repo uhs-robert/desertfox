@@ -5,7 +5,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { RunResponse } from "../shared/messages.ts";
+import type { RunResponse } from "../shared/messages/content.ts";
 import { LAST_PLAYED_REGISTER } from "../shared/register_names.ts";
 import { PAGE_READY_TIMEOUT_MS, type PageReady, type PageWatch } from "./page_ready.ts";
 import { best_effort, warn_and_go } from "../shared/swallow.ts";

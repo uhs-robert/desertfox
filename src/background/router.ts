@@ -2,7 +2,7 @@
 
 import type { CheckedArgs, CommandContext, CommandDef, ContextSource, ContextSourceName, Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { BackgroundToContent, Outcome, Refusal, RunResponse } from "../shared/messages.ts";
+import type { Outcome, Refusal, RunResponse, BackgroundToContent } from "../shared/messages/index.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_context_source } from "../shared/registry/params.ts";

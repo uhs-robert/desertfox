@@ -4,7 +4,7 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages.ts";
+import type { BookmarkItem, BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages/content.ts";
 import { available_engine_names } from "./availability.ts";
 import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";

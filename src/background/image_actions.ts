@@ -1,7 +1,7 @@
 // Copy a picture to the clipboard, or save a file, from an address a hint picked. The background does it all, because its host permission lets a fetch cross sites.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { ImageAction, Outcome } from "../shared/messages.ts";
+import type { ImageAction, Outcome } from "../shared/messages/content.ts";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 

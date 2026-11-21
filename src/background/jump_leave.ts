@@ -8,7 +8,7 @@
 
 import { place_in_tab, url_origin } from "../shared/jump_names.ts";
 import { mark_page_url } from "../shared/mark_names.ts";
-import type { JumpLeave } from "../shared/messages.ts";
+import type { JumpLeave } from "../shared/messages/content.ts";
 import type { JumpStore, Leaving, LeavingVerdict } from "./jump_store.ts";
 import type { MarkSender } from "./mark_store.ts";
 

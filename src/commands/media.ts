@@ -1,5 +1,5 @@
 import { define } from "../shared/registry/builtin.ts";
-import type { MediaStep, Ping } from "../shared/messages.ts";
+import type { MediaStep, Ping } from "../shared/messages/tab.ts";
 import { MEDIA_ACTIONS } from "../shared/media.ts";
 import { MEDIA_VALUE_PATTERNS } from "../shared/media_values.ts";
 import { run_media, type MediaArgs, type MediaDeps } from "../background/media_actions.ts";

@@ -5,7 +5,7 @@
 
 import { current_keymap } from "../shared/prefix_tree.ts";
 import { stored_keymap } from "./keymap_source.ts";
-import type { EditorAnswer, EditorDone, EditorOpen } from "../shared/messages.ts";
+import type { EditorAnswer, EditorOpen, EditorDone } from "../shared/messages/index.ts";
 import { site_columns_for, site_value } from "./page_keymap.ts";
 import type { EditorCollectReply, EditorStartRequest } from "./native_client.ts";
 import { create_write_queue } from "./store_turns.ts";

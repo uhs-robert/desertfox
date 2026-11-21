@@ -1,7 +1,7 @@
 // The `quality` bundle seen from the background: one request to one site player of a tab, and the completion rows of `media quality `.
 
 import type { QualityAnswer, QualityReport, QualityRequest } from "../shared/quality.ts";
-import type { RegisterItem } from "../shared/messages.ts";
+import type { RegisterItem } from "../shared/messages/content.ts";
 import { refused_as } from "../shared/swallow.ts";
 
 // The reports that frames push when the bundle runs in them. A request listens for its tab while it waits, so a report that arrives with no request waiting is dropped.

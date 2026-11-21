@@ -80,7 +80,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 - The table in `areas.mjs` is `area_rules`. The first matching rule wins, so order matters.
 - A rule with no areas (README files, icons) selects nothing.
-- The shared rule lists the key path and the command contract (for example `background/main.ts`, `shared/messages.ts`, `content/editable.ts`, and `manifest.json`). A change to one of these files selects every area, so every piece runs.
+- The shared rule lists the key path and the command contract (for example `background/main.ts`, `shared/messages/*.ts`, `content/editable.ts`, and `manifest.json`). A change to one of these files selects every area, so every piece runs.
 - A src file that matches no rule fails `test/key/areas.test.ts`. Add its glob to `area_rules`. The same test fails when a piece has no `areas` or names an unknown area.
 - A new piece needs its `areas` line. A new feature needs a name in `area_names`, a rule and the pieces that list it.
 - Add `keys` to a piece that exercises how bindings compile, merge or match, not to every piece that presses keys.

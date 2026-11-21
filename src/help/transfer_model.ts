@@ -1,7 +1,7 @@
 // No DOM: the state of the settings page's transfer section. It picks the files to import, holds the preview and the user's consent per snippet, and builds the export zips.
 // Nothing is sent to be stored until `commit`, and `commit` sends only the snippets the user ticked, with the code the preview showed.
 
-import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions, ImportReach, ImportSource, InstalledSnippet, KeyGroup, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, ReachList, RemoveSnippet } from "../shared/messages.ts";
+import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, ExportConfig, ExportConfigAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions, ImportReach, ImportSource, InstalledSnippet, KeyGroup, ListSnippets, ListSnippetsAnswer, PreviewConfigImport, ReachList, RemoveSnippet } from "../shared/messages/page.ts";
 import { DEFAULT_ZIP_LIMITS, write_zip, ZipError, type ZipLimits } from "../shared/zip.ts";
 
 export const CONFIG_ZIP_NAME = "desertfox-config.zip";

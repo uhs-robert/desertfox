@@ -4,7 +4,7 @@ import { WARNINGS_STORAGE_KEY } from "../background/storage_keys.ts";
 import { site_pattern, site_state } from "../background/toolbar.ts";
 import type { SiteState } from "../background/toolbar.ts";
 import { effective_settings } from "../shared/config.ts";
-import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/messages.ts";
+import type { ChangeSetting, ToolbarAnswer, ToolbarRequest } from "../shared/messages/page.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { follow_theme } from "../shared/theme/apply.ts";
 import { DISABLED_STORAGE_KEY, HOST_CONNECTED_STORAGE_KEY } from "../background/storage_keys.ts";

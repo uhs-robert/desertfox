@@ -8,7 +8,7 @@ import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
 import { mount_settings, update_row } from "../src/help/settings_page.ts";
 import { can_reset, control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";
 import { touches_settings } from "../src/shared/storage_watch.ts";
-import type { SettingListRow } from "../src/shared/messages.ts";
+import type { SettingListRow } from "../src/shared/messages/page.ts";
 
 // The config and the settings.toml it came from, so a write to the file keeps the other settings.
 function install_fake_browser(file_settings: Record<string, unknown>) {

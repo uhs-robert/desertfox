@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_history_handlers } from "../../src/commands/history.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
-import type { HistoryItem } from "../../src/shared/messages.ts";
+import type { HistoryItem } from "../../src/shared/messages/content.ts";
 import type { PickedHistory } from "../../src/background/rank_index.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import type { Where } from "../../src/commands/open_target.ts";

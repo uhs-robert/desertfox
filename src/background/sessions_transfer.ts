@@ -1,7 +1,7 @@
 // The settings page's sessions export and import. The page downloads and reads the file itself, so this answers with text and takes text.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { ConfigImportAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions } from "../shared/messages.ts";
+import type { ConfigImportAnswer, ExportSessions, ExportSessionsAnswer, ImportSessions } from "../shared/messages/page.ts";
 import type { SessionStore } from "./session_store.ts";
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));

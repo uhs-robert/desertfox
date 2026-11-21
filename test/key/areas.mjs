@@ -15,7 +15,8 @@ const shared_files = [
   "src/commands/{command,copy,mode}.ts",
   "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,shown,site_mode,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
-  "src/shared/{command,index,key_test_build,load_commands,messages,swallow}.ts",
+  "src/shared/{command,index,key_test_build,load_commands,swallow}.ts",
+  "src/shared/messages/*.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
 

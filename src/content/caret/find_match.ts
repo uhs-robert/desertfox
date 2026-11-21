@@ -1,5 +1,5 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
-import type { FindScanAnswer } from "../../shared/messages.ts";
+import type { FindScanAnswer } from "../../shared/messages/content.ts";
 
 // The pure half of page search: a query to a search, the match list over the model's text, and which match is next.
 // A match is the pair of arrays `from` and `to`, one entry each, in text order. A page can hold hundreds of thousands, so no object per match.

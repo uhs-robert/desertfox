@@ -1,7 +1,7 @@
 // One short message on the page.
 
 import { LAYERS } from "../shared/layers.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import { create_surface, mount_surface } from "./surface.ts";
 
 export const STYLE = `

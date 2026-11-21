@@ -6,7 +6,7 @@ import type { MarkClearScope } from "../background/mark_store.ts";
 import { is_private_context } from "../background/register_store.ts";
 import { MARK_ADD_KEY } from "../shared/mark_names.ts";
 import { listed_marks } from "../shared/mark_text.ts";
-import type { MarkItem, ToastKind } from "../shared/messages.ts";
+import type { MarkItem, ToastKind } from "../shared/messages/index.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { current_tab_url } from "./open_target.ts";
 

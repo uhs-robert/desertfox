@@ -10,7 +10,7 @@ import { browser_macro_recorder } from "../background/macro_recorder.ts";
 import type { MacroRecorder } from "../background/macro_recorder.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
-import type { Outcome, ToastKind } from "../shared/messages.ts";
+import type { Outcome, ToastKind } from "../shared/messages/index.ts";
 import { wired_macro_replay } from "../background/macro_replay.ts";
 import type { MacroReplay } from "../background/macro_replay.ts";
 

@@ -7,7 +7,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { answer_host_start_choice } from "../../src/background/host_start.ts";
-import type { HostStartPending } from "../../src/shared/messages.ts";
+import type { HostStartPending } from "../../src/shared/messages/page.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 

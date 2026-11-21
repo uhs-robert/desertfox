@@ -3,7 +3,7 @@
 // Nothing on the wait awaits a browser call: Firefox can leave an injection or a message to a navigating frame unanswered, and only the deadline ends the wait then.
 
 import { clean_letters, make_labels } from "../content/hints/labels.ts";
-import type { HintFramesCollect, HintFramesEnd, HintFramesLabels, HintFramesPick, HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesUnhover, Outcome } from "../shared/messages.ts";
+import type { HintFramesEnd, HintFramesPick, HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesUnhover, Outcome, HintFramesCollect, HintFramesLabels } from "../shared/messages/index.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "./storage_keys.ts";
 import { keep_chain, refused_as, best_effort } from "../shared/swallow.ts";
 

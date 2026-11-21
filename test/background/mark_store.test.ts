@@ -10,7 +10,7 @@ import { wire_private_cleanup } from "../../src/background/store_turns.ts";
 import type { MarkArea } from "../../src/background/mark_store.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "../../src/background/storage_keys.ts";
 import { MAX_MARK_PAGES } from "../../src/shared/mark_names.ts";
-import type { MarkRequest } from "../../src/shared/messages.ts";
+import type { MarkRequest } from "../../src/shared/messages/content.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 

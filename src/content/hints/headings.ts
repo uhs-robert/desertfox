@@ -3,7 +3,7 @@
 
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { HeadingJump } from "../align_target.ts";
-import type { HeadingItem } from "../../shared/messages.ts";
+import type { HeadingItem } from "../../shared/messages/content.ts";
 import { best_match } from "../../shared/score.ts";
 import { collect, scrollport_top_of, scroll_clips_in_page } from "./candidates.ts";
 import { HEADINGS, is_heading, rendered_text } from "./heading_match.ts";

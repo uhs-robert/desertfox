@@ -19,7 +19,7 @@ import { mount_pairs } from "./pairs_page.ts";
 import { ALIASES_KIND, QUICKMARKS_KIND } from "./pairs_model.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import { QUICKMARK_STORAGE_KEY } from "../background/storage_keys.ts";
-import type { ListSnippetsAnswer } from "../shared/messages.ts";
+import type { ListSnippetsAnswer } from "../shared/messages/page.ts";
 import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { mount_files } from "./files_page.ts";

@@ -8,7 +8,7 @@ import type { HistoryNode, RankInputs, Snapshot } from "./completion_rank.ts";
 import type { RankedReply, RankRequest, RankSource } from "../shared/rank_port.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { pick_entry } from "../shared/folder_pick.ts";
-import type { HistoryItem } from "../shared/messages.ts";
+import type { HistoryItem } from "../shared/messages/content.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
 // The history events, in the order Firefox fired them.

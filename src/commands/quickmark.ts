@@ -7,7 +7,7 @@ import { is_private_context } from "../background/register_store.ts";
 import { shorten_address } from "../shared/mark_text.ts";
 import { QUICKMARK_KEY } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
-import type { ToastKind } from "../shared/messages.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { current_tab_url, open_in, own_pages, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";

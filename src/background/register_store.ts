@@ -4,7 +4,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { RegisterItem, RegisterRequest } from "../shared/messages.ts";
+import type { RegisterItem, RegisterRequest } from "../shared/messages/content.ts";
 import { BLACK_HOLE_REGISTER, CLIPBOARD_REGISTER, register_kind, SEARCH_DIRECTION_REGISTER, SEARCH_QUERY_REGISTER, storage_name, UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "./storage_keys.ts";

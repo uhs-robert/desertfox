@@ -3,7 +3,7 @@
 // check is the one validator. Nobody can type a missing value into a prompt here, so a command that needs one refuses with its usage.
 
 import type { Mode } from "../shared/command.ts";
-import type { RunResponse, Refusal } from "../shared/messages.ts";
+import type { RunResponse, Refusal } from "../shared/messages/content.ts";
 import { parse_command_line } from "../shared/registry/index.ts";
 import type { CommandLookup, EnumSources } from "../shared/registry/index.ts";
 import type { RouteRequest, ActiveTab } from "./router.ts";

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { actions_of, CHECK_DELAY_MS, create_keys_session, matches_filter, row_id } from "../src/help/keys_model.ts";
 import { create_key_capture } from "../src/help/keys_page.ts";
-import { STALE_MOVE_REFUSAL } from "../src/shared/messages.ts";
-import type { BindingRow } from "../src/shared/messages.ts";
+import { STALE_MOVE_REFUSAL } from "../src/shared/messages/page.ts";
+import type { BindingRow } from "../src/shared/messages/page.ts";
 
 const row = (over: Partial<BindingRow> & { keys: string; text: string }): BindingRow => ({ mode: "normal", origin: "default", ...over });
 

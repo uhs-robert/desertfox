@@ -1,7 +1,7 @@
 // The `caret` bundle: caret mode, both visual modes, and page search. Loaded on the first entry into one of these modes or the first search, it registers a sink for each mode and
 // the handlers of `caret.move`, `visual.act`, `visual.object`, `visual.open` and the `find.*` commands.
 
-import type { Outcome, RunResponse } from "../../shared/messages.ts";
+import type { Outcome, RunResponse } from "../../shared/messages/content.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { find_char_hit, find_char_matches, is_screen_unit, move_once } from "./motion.ts";
 import type { CharFind, Direction, MotionUnit, ScreenMotion } from "./motion.ts";

@@ -7,7 +7,7 @@ import { host_channel, install_hashes_of, main_install_command, release_install_
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
-import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages.ts";
+import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages/page.ts";
 
 export type PermissionDeps = {
   has: () => Promise<boolean>;

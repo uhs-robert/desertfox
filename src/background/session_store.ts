@@ -2,7 +2,7 @@
 // The browser calls (reading tabs, creating windows and tabs) live in `commands/session.ts`.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { SessionItem } from "../shared/messages.ts";
+import type { SessionItem } from "../shared/messages/content.ts";
 import { SESSIONS_STORAGE_KEY } from "./storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
 

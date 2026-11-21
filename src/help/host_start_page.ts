@@ -4,7 +4,7 @@ import { el } from "./render.ts";
 import { button, download } from "./transfer_page.ts";
 import { create_transfer_session } from "./transfer_model.ts";
 import type { TransferDeps } from "./transfer_model.ts";
-import type { HostFileChange } from "../shared/messages.ts";
+import type { HostFileChange } from "../shared/messages/page.ts";
 import type { HostStartSession } from "./host_start_model.ts";
 
 const CHANGE_TEXT: Record<HostFileChange["kind"], string> = {

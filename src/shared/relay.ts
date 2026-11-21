@@ -2,7 +2,7 @@
 
 import type { BundleName } from "./bundles.ts";
 import type { Invocation } from "./invocation.ts";
-import type { Relay } from "./messages.ts";
+import type { Relay } from "./messages/content.ts";
 
 // `top` handlers draw in the top frame or take what the focused frame sends it. `frame` handlers act on one frame, named by its id.
 const RELAYED: Record<string, { bundle: BundleName; to: "top" | "frame" }> = {

@@ -3,7 +3,7 @@
 // It stays small because it runs inside the page's own script world.
 
 import type { BundleHostApi } from "../content/bundle_host.ts";
-import type { HeadingItem, Outcome } from "../shared/messages.ts";
+import type { HeadingItem, Outcome } from "../shared/messages/content.ts";
 import { LAYER_ATTRIBUTE, LAYERS, RESTACKED_EVENT } from "../shared/layers.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";

@@ -3,7 +3,7 @@
 // All pages sit in one value, so one queue orders the writes and evicting the oldest page is one edit.
 
 import { RuntimeRefusal } from "../shared/command.ts";
-import type { MarkAnswer, MarkItem, MarkJump, MarkRequest, MarkStep } from "../shared/messages.ts";
+import type { MarkAnswer, MarkItem, MarkJump, MarkRequest, MarkStep } from "../shared/messages/content.ts";
 import { is_global_mark, MARK_ADD_KEY, MARK_JUMP_KEY, mark_page_url, mark_slot, MAX_MARK_PAGES, MAX_MARK_URL_CHARS, PREVIOUS_MARK } from "../shared/mark_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { MARK_PRIVATE_STORAGE_KEY, MARK_STORAGE_KEY } from "./storage_keys.ts";

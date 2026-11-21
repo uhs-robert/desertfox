@@ -1,5 +1,5 @@
 import type { Mode } from "../../shared/index.ts";
-import type { LeaveTabInsert } from "../../shared/messages.ts";
+import type { LeaveTabInsert } from "../../shared/messages/content.ts";
 import { bundles } from "../bundles.ts";
 import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { page_mode } from "../page_mode.ts";
