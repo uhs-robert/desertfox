@@ -1,6 +1,6 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import { get_config } from "../background/config_store.ts";
+import { get_config } from "../background/config_main.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_quickmark_store } from "../background/quickmark_store.ts";
 import { is_private_context } from "../background/register_store.ts";

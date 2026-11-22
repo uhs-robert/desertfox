@@ -1,6 +1,6 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { change_edits, get_config } from "../background/config_store.ts";
-import { set_in_settings_file, toggle_in_settings_file, unset_in_settings_file } from "../background/startup.ts";
+import { change_edits, get_config } from "../background/config_main.ts";
+import { set_in_settings_file, toggle_in_settings_file, unset_in_settings_file } from "../background/config_main.ts";
 import { outcome_kind, outcome_note, unset_toast } from "../background/settings_file.ts";
 import type { FileWriteOutcome, UnsetResult } from "../background/settings_file.ts";
 import type { CommandContext } from "../shared/command.ts";

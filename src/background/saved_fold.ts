@@ -1,5 +1,5 @@
 // The fold of the settings older versions saved in the browser (`desertfox_saved_settings`) into settings.toml.
-// Every start runs it (`fold_saved_layer` in `startup.ts`). A saved value beat the file's before, so each one written into settings.toml keeps the setting in force as it was.
+// Every start runs it (`fold_saved_layer` in `config_start.ts`). A saved value beat the file's before, so each one written into settings.toml keeps the setting in force as it was.
 // The consent settings stay in the browser by design, and a few others stay because settings.toml cannot carry them yet (`SavedFold`).
 
 import { TomlError } from "smol-toml";

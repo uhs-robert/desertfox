@@ -1,5 +1,5 @@
 // The move of the engines layer that older versions kept in the browser (`desertfox_engine_edits`) into the Engines page's two files, and of a saved `default_engine` edit into settings.toml.
-// The start runs it (`move_engine_layer` in `startup.ts`) until nothing is left. The layer loads after every engine and keymap.d file, and the page's files load after the usual numbered ones, so the move keeps what runs. A piece that cannot move stays in the layer, which keeps building over the files.
+// The start runs it (`move_engine_layer` in `config_start.ts`) until nothing is left. The layer loads after every engine and keymap.d file, and the page's files load after the usual numbered ones, so the move keeps what runs. A piece that cannot move stays in the layer, which keeps building over the files.
 
 import { TomlError } from "smol-toml";
 import { RuntimeRefusal } from "../shared/command.ts";

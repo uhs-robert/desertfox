@@ -10,7 +10,7 @@ import { create_bridge_run } from "./bridge_run.ts";
 import { NoSuchTab } from "./bridge_run.ts";
 import type { BridgeRunTarget } from "./bridge_run.ts";
 import { config_url_target, own_pages } from "../shared/url_build.ts";
-import { get_config } from "./config_store.ts";
+import { get_config } from "./config_main.ts";
 import { no_repeat_memory } from "./repeat_memory.ts";
 import { create_tab_switch } from "./tab_switch.ts";
 import type { TabSwitch } from "./tab_switch.ts";

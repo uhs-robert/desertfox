@@ -563,13 +563,12 @@ test("each config service keeps its own current config, so a fresh one starts fr
   assert.equal((await first.get_config()).settings.hint_letters, "xy");
 });
 
-test("the production startup.ts and config_store.ts exports share one store", async () => {
+test("the production config_main.ts exports share one store", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   install_fake_browser(host);
-  const store = await import("../../src/background/config_store.ts");
-  const startup = await import("../../src/background/startup.ts");
-  await store.get_config();
+  const main = await import("../../src/background/config_main.ts");
+  await main.get_config();
   host.files = settings_file('hint_letters = "xy"\n');
-  await startup.reload_config();
-  assert.equal((await store.get_config()).settings.hint_letters, "xy");
+  await main.reload_config();
+  assert.equal((await main.get_config()).settings.hint_letters, "xy");
 });
