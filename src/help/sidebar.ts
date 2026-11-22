@@ -12,7 +12,7 @@ import type { Section } from "./sections.ts";
 export const ONLY_CHANGED_CLASS = "desertfox-only-changed";
 
 // The filter is a class on the settings box. The stylesheet (home.html) hides the rows whose `data-changed` is false and the groups left with none, so a refresh of the rows needs no code here.
-export function clear_only_changed(): void {
+function clear_only_changed(): void {
   document.querySelector(".desertfox-settings")?.classList.toggle(ONLY_CHANGED_CLASS, false);
   const box = document.querySelector<HTMLInputElement>(".desertfox-only-changed-toggle");
   if (box) box.checked = false;
