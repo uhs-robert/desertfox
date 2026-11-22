@@ -56,7 +56,7 @@
   @media (prefers-reduced-motion: reduce) { .desertfox-help-sections-toggle svg { transition: none; } }
   .desertfox-help-sections-toggle:hover { background: color-mix(in srgb, var(--desertfox-fg-core) 12%, transparent); }
   .desertfox-help-sections { display: flex; flex-direction: column; margin-left: 1rem; font-size: .9em; }
-  /* Section links read like body links. The one for the section on screen takes secondary (render.ts sets aria-current="location" as the page scrolls). */
+  /* Section links read like body links. The one for the section on screen takes secondary (sidebar.ts sets aria-current="location" as the page scrolls). */
   .desertfox-help-sections a { min-height: 0; color: var(--desertfox-primary); }
   .desertfox-help-sections a[aria-current="location"] { color: var(--desertfox-secondary); font-weight: 600; }
   .desertfox-help-sections[hidden] { display: none; }
@@ -75,7 +75,7 @@
   .desertfox-help h2 { margin: var(--desertfox-space-4) 0 var(--desertfox-space-3); padding-bottom: var(--desertfox-space-1); border-bottom: 1px solid var(--desertfox-border); font-size: 1.35em; line-height: 1.3; }
   .desertfox-help h1:focus, .desertfox-help h2:focus { outline: none; }
   .desertfox-help h3 { margin: 0 0 var(--desertfox-space-1); font-size: 1.1em; }
-  /* data-accent (render.ts) picks the bar color per command group. A card with none, such as a site rule, takes primary. */
+  /* data-accent (commands_view.ts) picks the bar color per command group. A card with none, such as a site rule, takes primary. */
   .desertfox-help-command { --bar: var(--desertfox-primary); }
   .desertfox-help-command[data-accent="1"] { --bar: var(--desertfox-accent); }
   .desertfox-help-command[data-accent="2"] { --bar: var(--desertfox-info); }
@@ -175,7 +175,7 @@
   .desertfox-settings-row[data-changed] .desertfox-site-rule-effect { margin: 0 .35rem .2rem 0; background: color-mix(in srgb, var(--desertfox-fg-core) 15%, transparent); color: inherit; }
   .desertfox-settings-more > summary { cursor: pointer; font-size: .85em; }
   .desertfox-settings-more > p { margin: .25rem 0 0; }
-  /* The changed-only filter: render.ts sets the class on the settings box and settings_page.ts sets data-changed on each row. */
+  /* The changed-only filter: settings_view.ts sets the class on the settings box and settings_page.ts sets data-changed on each row. */
   .desertfox-settings-none-changed { display: none; }
   .desertfox-only-changed .desertfox-settings-row[data-changed="false"] { display: none; }
   .desertfox-only-changed .desertfox-settings-section:not(:has(.desertfox-settings-row[data-changed="true"])) { display: none; }

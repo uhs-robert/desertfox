@@ -191,7 +191,7 @@ test("a command link lands on the Commands page with the decoded id", () => {
 });
 
 test("the help page scrolls to and highlights the command card the way it does an engine row", () => {
-  const render = readFileSync(new URL("../src/help/render.ts", import.meta.url), "utf8");
+  const render = readFileSync(new URL("../src/help/commands_view.ts", import.meta.url), "utf8");
   const main = readFileSync(new URL("../src/help/main.ts", import.meta.url), "utf8");
   assert.match(render, /card\.id = command_anchor\(command\.id\)/);
   assert.match(main, /route\.command !== undefined \? command_anchor\(route\.command\)/);
