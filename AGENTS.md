@@ -77,7 +77,7 @@ A folder README is a code map. It does not hold behavior specs.
 - One line per file, at most 200 characters: what the file owns and when to open it.
 - Add the rules that span files: what the folder must not import, which file owns a thing, where to start.
 - Point to the design for the behavior. Do not copy behavior, size figures or history into a README.
-- A trap at one call site is a comment there. Other behavior goes in the design area file for that folder, listed in `docs/design.md`.
+- A trap at one call site is a comment there. Other behavior goes in the design area files whose header names the folder (a folder can map to several areas), listed in `docs/design.md`.
 - Pattern folders (every file the same shape) get one line in the parent's map.
 
 ## Commands

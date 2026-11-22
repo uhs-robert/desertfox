@@ -19,7 +19,7 @@ The tool reads `~/.config/desertfox/` by default. Every data file is TOML. The b
 | `command_aliases.toml` | Extra command line names, for example `g = "open.search"`. |
 | `quickmarks.toml` | Quickmarks: one letter or digit mapped to an address, for example `g = "https://github.com"`. `M<key>` adds entries in browser storage on top of these, and the stored entry wins for the same key. |
 | `settings.toml` | Settings such as the which-key delay and the new tab page. |
-| `snippets/*.js` | One custom command per file. See [Snippets](#snippets). |
+| `snippets/*.js` | One custom command per file. See [Snippets](../design.md#snippets). |
 | `themes/<name>.toml` | A local theme that `theme = "<name>"` picks. Every file counts, and the theme importer saves each scheme here. See [Themes](#themes). |
 | `style.css` | Custom CSS for the DesertFox surfaces. See [Styles](#styles). |
 

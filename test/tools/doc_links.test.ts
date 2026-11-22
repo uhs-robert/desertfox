@@ -7,9 +7,13 @@ import { test } from "node:test";
 const DESIGN_MAP = "docs/design.md";
 const DESIGN_AREAS = "docs/design";
 
-const markdown_files = execFileSync("git", ["ls-files", "*.md"], {
-  encoding: "utf8",
-})
+const markdown_files = execFileSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "*.md"],
+  {
+    encoding: "utf8",
+  },
+)
   .split("\n")
   .filter(
     (file) =>

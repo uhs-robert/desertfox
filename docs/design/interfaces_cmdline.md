@@ -1,8 +1,8 @@
 # Command line and invocations
 
 Area: the command line, completion and invocations.
-READMEs: `src/cmdline/README.md`, `src/cmdline/completion/README.md`.
-Source: `src/cmdline`, `src/cmdline/completion`.
+READMEs: `src/cmdline/README.md`, `src/cmdline/completion/README.md`, `src/shared/README.md`.
+Source: `src/cmdline`, `src/cmdline/completion`, `src/shared`.
 
 ## Invocations and prompts
 

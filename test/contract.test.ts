@@ -1,4 +1,4 @@
-// The design.md registry examples as CommandDef values. `tsc` fails the build
+// The docs/design/registry.md registry examples as CommandDef values. `tsc` fails the build
 // when a shared type drifts from the design, so this file is the contract check.
 import assert from "node:assert/strict";
 import { test } from "node:test";

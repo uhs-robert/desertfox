@@ -1,8 +1,8 @@
 # Caret, search, registers, macros and marks
 
 Area: caret, search, registers, macros, marks and finder.
-READMEs: `src/content/caret/README.md`, `src/content/text/README.md`.
-Source: `src/content/caret`, `src/content/text`.
+READMEs: `src/content/caret/README.md`, `src/content/text/README.md`, `src/background/README.md`.
+Source: `src/content/caret`, `src/content/text`, `src/background`.
 
 ### Caret and visual
 

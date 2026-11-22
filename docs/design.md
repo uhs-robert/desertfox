@@ -10,26 +10,26 @@ The measurements this design rests on are in [firefox-behavior.md](firefox-behav
 
 This file holds the constraints, decisions, snippets, routing, the content script size rule, release channels, scope, trade-offs, risks and open work. Each area below has its own file under `docs/design/`. A moved section keeps its title here with a pointer.
 
-| Area | File | Size |
-| --- | --- | --- |
-| The command registry | [design/registry.md](design/registry.md) | 16 KB |
-| Keys and modes | [design/keys.md](design/keys.md) | 12 KB |
-| The config files, settings, styles, themes and the site table | [design/config.md](design/config.md) | 58 KB |
-| How config reaches the browser and saved edits | [design/config_delivery.md](design/config_delivery.md) | 30 KB |
-| Bundles and loading | [design/bundles.md](design/bundles.md) | 44 KB |
-| The command line, completion and invocations | [design/interfaces_cmdline.md](design/interfaces_cmdline.md) | 29 KB |
-| Hints, grab and actions | [design/interfaces_hints.md](design/interfaces_hints.md) | 26 KB |
-| Media keys and media mode | [design/interfaces_media.md](design/interfaces_media.md) | 18 KB |
-| Caret, search, registers, macros, marks and finder | [design/interfaces_caret_search_marks.md](design/interfaces_caret_search_marks.md) | 32 KB |
-| Which-key, help, new tab, popup and external editor | [design/interfaces_pages.md](design/interfaces_pages.md) | 29 KB |
-| Tab sessions, groups, split view, live model, unload and reload | [design/interfaces_tabs.md](design/interfaces_tabs.md) | 17 KB |
-| The native host | [design/host.md](design/host.md) | 28 KB |
+| Area | File |
+| --- | --- |
+| The command registry | [design/registry.md](design/registry.md) |
+| Keys and modes | [design/keys.md](design/keys.md) |
+| The config files, settings, styles, themes and the site table | [design/config.md](design/config.md) |
+| How config reaches the browser and saved edits | [design/config_delivery.md](design/config_delivery.md) |
+| Bundles and loading | [design/bundles.md](design/bundles.md) |
+| The command line, completion and invocations | [design/interfaces_cmdline.md](design/interfaces_cmdline.md) |
+| Hints, grab and actions | [design/interfaces_hints.md](design/interfaces_hints.md) |
+| Media keys and media mode | [design/interfaces_media.md](design/interfaces_media.md) |
+| Caret, search, registers, macros, marks and finder | [design/interfaces_caret_search_marks.md](design/interfaces_caret_search_marks.md) |
+| Which-key, help, new tab, popup and external editor | [design/interfaces_pages.md](design/interfaces_pages.md) |
+| Tab sessions, groups, split view, live model, unload and reload | [design/interfaces_tabs.md](design/interfaces_tabs.md) |
+| The native host | [design/host.md](design/host.md) |
 
 ## Constraints from Firefox
 
 These were measured on Firefox 159 with real key presses. They shape every choice below.
 
-- A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus. The address bar keyword `df` runs commands on these pages (see "Command line and completion").
+- A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus. The address bar keyword `df` runs commands on these pages (see [Command line and completion](design/interfaces_cmdline.md#command-line-and-completion)).
 - `moz-extension://` pages do not match `<all_urls>`, so no content script runs on them by itself. The help page loads `content.js` with a script tag, and `tabs.sendMessage` reaches it like any other tab.
 - The `commands` API (Firefox shortcuts) catches a modifier chord such as `Alt+J` everywhere except on a page that cancels the key first. Firefox rejects bare keys and Shift plus a letter there.
 - A `document_start` listener is ready 11-58 ms (median 27) after the first byte of a page. Keys before that moment are lost. Navigating from a live page keeps the old listener until the new page commits.

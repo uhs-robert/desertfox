@@ -1,4 +1,4 @@
-// The design.md registry examples, built into a fresh registry per test.
+// The docs/design/registry.md registry examples, built into a fresh registry per test.
 import { create_registry } from "../../src/shared/registry/index.ts";
 import type { CommandInput, Registry } from "../../src/shared/registry/index.ts";
 
