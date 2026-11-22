@@ -8,7 +8,7 @@ DesertFox is a keyboard-first Firefox extension built around one command registr
 
 ## Where to look
 
-Read the design for an area before you change it. Read a folder's README before you change or research code in that folder.
+Read the design for an area before you change it. Read a folder's README before you change or research code in that folder. The README is a code map. The behavior it points to is in the design.
 
 | Topic                                      | File                                                   |
 | ------------------------------------------ | ------------------------------------------------------ |
@@ -68,6 +68,16 @@ This repository is public.
 - The build shortens every object property whose name ends in `_`, in every bundle (background, help, popup and newtab included). Use the suffix only on a property that never leaves the extension scripts. Never put it on a name that crosses storage, a message or the native host. Never put it on a name in the DOM, the manifest, CSS, a page or browser API, or JSON. Do not put it on variables, functions or parameters. One exception: a variable or parameter that feeds a shorthand property, or comes from a destructure, keeps the suffix, because it shares the property's name.
 - Never leave a promise floating: `await` it, or put `void` before it when its result is not needed. The lint (`no-floating-promises`, `no-misused-promises`, src and tools) fails otherwise. Never write a silent `.catch` inline (the lint fails it, `no-restricted-syntax`). Name the reason with a helper from `src/shared/swallow.ts`: `ignore_refusal` for a refusal the browser is expected to give (stale tab, window or container id), `best_effort` for a message to a tab or frame that may have no listener, `keep_chain` for a queue tail whose real error reaches the caller, `refused_as(promise, fallback)` for a read with a stated fallback, and `warn_and_go(label)` as the handler where our own bug could hide.
 - Do not use emoji in code.
+
+## Folder READMEs
+
+A folder README is a code map. It does not hold behavior specs.
+
+- One line per file, at most 200 characters: what the file owns and when to open it.
+- Add the rules that span files: what the folder must not import, which file owns a thing, where to start.
+- Point to the design for the behavior. Do not copy behavior, size figures or history into a README.
+- A trap at one call site is a comment there. Other behavior goes in `docs/design.md`.
+- Pattern folders (every file the same shape) get one line in the parent's map.
 
 ## Commands
 
