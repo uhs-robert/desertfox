@@ -1,4 +1,4 @@
-// The escapes of a copied link, shared by the page link (`handlers/copy.ts`) and the link list (`hints/yank_links.ts`).
+// The escapes of a copied link, shared by the page link (`content/handlers/copy.ts`) and the link list (`content/hints/yank_links.ts`).
 // Pure and import-free, so the hints bundle can use it without pulling in the toast proxy.
 
 // Square brackets in a title would end the link text early.

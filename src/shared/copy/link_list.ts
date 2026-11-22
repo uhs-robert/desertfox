@@ -1,4 +1,4 @@
-// The lines of a copied link list, shared by the page links (`hints/yank_links.ts`) and the open tabs (`commands/copy_tabs.ts`), so both read alike.
+// The lines of a copied link list, shared by the page links (`content/hints/yank_links.ts`) and the open tabs (`commands/copy_tabs.ts`), so both read alike.
 // Pure and DOM-free, so the background can use it too.
 
 import { link_text, markdown_address, org_address } from "./link_escape.ts";
