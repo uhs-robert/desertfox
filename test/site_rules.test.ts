@@ -8,7 +8,7 @@ import { all_off_step } from "../src/content/site_rule.ts";
 import { list_keys } from "../src/background/list_keys.ts";
 import { normal_tree_for, site_columns_for } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
-import { empty_config } from "../src/background/config_load.ts";
+import { empty_config } from "../src/shared/config/config_load.ts";
 import "../src/background/command_modules.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, is_freed } from "../src/shared/prefix_tree.ts";

@@ -3,7 +3,7 @@
 import type { CommandMeta } from "../shared/command.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { ConfigRefusal, KEPT_CURRENT, build_files_config } from "./config_reload.ts";
-import type { FilesSlot, LoadedConfig } from "./config_load.ts";
+import type { FilesSlot, LoadedConfig } from "../shared/config/config_load.ts";
 import { layer_files } from "./config_transfer.ts";
 import type { AliasEdits, EngineEdits } from "./edit_layers.ts";
 

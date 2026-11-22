@@ -5,7 +5,7 @@ import { parse } from "smol-toml";
 import "../../src/background/command_modules.ts";
 import { build_files_config, ConfigRefusal } from "../../src/background/config_reload.ts";
 import { fold_kept_notes, fold_moved_note, saved_layer_folded } from "../../src/background/saved_fold.ts";
-import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import type { SettingOverrides } from "../../src/shared/config.ts";
 import { answer_host_start_choice } from "../../src/background/host_start.ts";
 import type { HostStartPending } from "../../src/shared/messages/page.ts";

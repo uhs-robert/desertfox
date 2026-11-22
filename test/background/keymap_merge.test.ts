@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compile_config } from "../../src/background/compile.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { make_fake } from "./fakes.ts";
 import { merge_keymaps } from "../../src/background/keymap_merge.ts";
 

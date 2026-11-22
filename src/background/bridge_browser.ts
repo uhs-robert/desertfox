@@ -17,7 +17,7 @@ import type { TabSwitch } from "./tab_switch.ts";
 import { create_router } from "./router.ts";
 import type { RouterDeps } from "./router.ts";
 import { ignore_refusal, warn_and_go } from "../shared/swallow.ts";
-import { HOST_CONNECTED_STORAGE_KEY } from "./storage_keys.ts";
+import { HOST_CONNECTED_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 const as_bridge_window = (window: browser.windows.Window): BridgeWindow | undefined =>
   window.id === undefined ? undefined : { id: window.id, focused: window.focused === true, private: window.incognito === true };

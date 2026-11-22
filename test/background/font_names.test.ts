@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_font_names } from "../../src/background/font_names.ts";
-import { FONT_NAMES_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FONT_NAMES_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import type { MeasureWidth } from "../../src/shared/font_candidates.ts";
 
 const has_hack: MeasureWidth = (font) => (font.includes('"Hack"') ? 99 : 50);

@@ -21,6 +21,8 @@ Types and constants that fix the hand-off formats between the background page, t
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which. Also `MEDIA_PANEL_HANDLER`, the handler id the background sends to `whichkey`.
 - `help_route.ts` (in `page/`): the help page ids, the hash parser (`parse_route`) and the help URL builders. The popup, the background, the commands and the help page share it.
 - `icon_cache.ts` (in `page/`): the favicon cache in `storage.local` (`favicon_cache`), which the background saver fills and the new tab page reads. The storage is passed in, so the module needs no browser global.
+- `storage_keys.ts` (in `config/`): every `storage.local` key the background owns. The keymap key lives in `prefix_tree.ts`, the theme and user CSS keys in `theme/apply.ts`.
+- `config_load.ts` (in `config/`): reads the stored config, the setting edits and `build_config_status`. It touches `browser.storage`, so the background and every extension page import it.
 - `url_build.ts`: pure URL math. `parent_url` and `root_url`, `url_target` (text to a URL) and `config_url_target` (the same under a config's engines), the two engine fillers: `engine_search_url` for typed text and `engine_url`, which follows `fallback` when the page cannot fill the slots, and `own_pages`. The slot table and the template filler are in `engines/`.
 - `page_bundle_tag.ts`: the extension pages' side of a bundle load. `listen_for_bundle_requests` adds a bundle's `<script src>` tag when the background asks, joins repeat asks and answers after the script has run.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.

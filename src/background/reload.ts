@@ -1,6 +1,6 @@
 // Support for `config.reload`: the marker before the reload and the repair of open tabs after it.
 
-import { REINJECT_REPORT_STORAGE_KEY, RELOAD_PENDING_STORAGE_KEY } from "./storage_keys.ts";
+import { REINJECT_REPORT_STORAGE_KEY, RELOAD_PENDING_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 export async function mark_reload_pending(): Promise<void> {
   await browser.storage.local.set({ [RELOAD_PENDING_STORAGE_KEY]: Date.now() });

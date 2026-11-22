@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const KEY_FILES = ["src/background/slots.ts", "src/background/storage_keys.ts", "src/shared/prefix_tree.ts", "src/shared/storage_watch.ts", "src/shared/theme/apply.ts"];
+const KEY_FILES = ["src/background/slots.ts", "src/shared/config/storage_keys.ts", "src/shared/prefix_tree.ts", "src/shared/storage_watch.ts", "src/shared/theme/apply.ts"];
 
 // Names that start with `desertfox_` but are not storage keys: native host and port names, a message mark, a page flag and the practice page's session keys.
 const NOT_STORAGE_KEYS: Record<string, string[]> = {

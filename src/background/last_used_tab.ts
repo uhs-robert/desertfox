@@ -2,7 +2,7 @@
 // Normal and private windows keep separate records, so the command never crosses into or out of a private window, as the tab list never does.
 
 import { ignore_refusal } from "../shared/swallow.ts";
-import { LAST_USED_TAB_STORAGE_KEY } from "./storage_keys.ts";
+import { LAST_USED_TAB_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { NO_WINDOW } from "./window_focus.ts";
 

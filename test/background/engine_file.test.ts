@@ -6,7 +6,7 @@ import { load_layers } from "../../src/background/edit_layers.ts";
 import { holds_engine, PAGE_FILE_MARKER, page_path_is_hand_file } from "../../src/background/engine_file.ts";
 import { KEYS_FILE_MARKER } from "../../src/background/engine_keys_file.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
-import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { build_files_config } from "../../src/background/config_reload.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 

@@ -6,7 +6,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY, valid_quickmark_entries } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import { create_write_queue } from "./store_turns.ts";
-import { QUICKMARK_PRIVATE_STORAGE_KEY, QUICKMARK_STORAGE_KEY } from "./storage_keys.ts";
+import { QUICKMARK_PRIVATE_STORAGE_KEY, QUICKMARK_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 export type QuickmarkArea = Pick<typeof browser.storage.local, "get" | "set" | "remove">;
 

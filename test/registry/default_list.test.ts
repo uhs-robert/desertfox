@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compile_config } from "../../src/background/compile.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { create_completer } from "../../src/cmdline/completion/sources.ts";
 import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
 import { build_help_model } from "../../src/help/model.ts";

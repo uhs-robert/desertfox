@@ -8,7 +8,7 @@ import type { BoundInvocation } from "../shared/invocation.ts";
 import { can_repeat } from "./record_step.ts";
 import type { RecordStep, StepOrigin, StepOutcome } from "./record_step.ts";
 import { as_stored } from "./repeat_memory.ts";
-import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "./storage_keys.ts";
+import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { is_replaying } from "./macro_replay.ts";
 import { best_effort, refused_as } from "../shared/swallow.ts";

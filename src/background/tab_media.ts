@@ -2,7 +2,7 @@
 // It lives in `storage.session`, so a restarted background still knows and a browser restart clears it.
 
 import type { Mode } from "../shared/command.ts";
-import { TAB_MEDIA_STORAGE_PREFIX, TAB_MEDIA_TOP_STORAGE_PREFIX } from "./storage_keys.ts";
+import { TAB_MEDIA_STORAGE_PREFIX, TAB_MEDIA_TOP_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { best_effort, keep_chain, refused_as } from "../shared/swallow.ts";
 import { with_frame, without_stale_off, type HoldFrames, type SendStep, type StepQueue } from "./tab_steps.ts";
 

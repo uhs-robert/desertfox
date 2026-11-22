@@ -3,7 +3,7 @@
 import type { DevtoolsPick } from "../shared/messages/ports.ts";
 import { PICK_EXPIRY_MS } from "../shared/inspect.ts";
 import type { InspectAnswer } from "../shared/inspect.ts";
-import { INSPECT_PENDING_STORAGE_KEY } from "./storage_keys.ts";
+import { INSPECT_PENDING_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
 
 export type RelayPort = { postMessage: (message: DevtoolsPick) => void };

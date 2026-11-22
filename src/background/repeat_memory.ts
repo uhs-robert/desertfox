@@ -4,7 +4,7 @@ import type { CommandDef } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { apply_count } from "./count.ts";
 import { print_command } from "../shared/registry/print_command.ts";
-import { REPEAT_PRIVATE_STORAGE_KEY, REPEAT_STORAGE_KEY } from "./storage_keys.ts";
+import { REPEAT_PRIVATE_STORAGE_KEY, REPEAT_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;

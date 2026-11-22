@@ -1,7 +1,7 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { MANUAL_HINT } from "../background/host_update.ts";
 import { host_update, native_host } from "../background/startup.ts";
-import { FIREFOX_PAGE_NOTICE_STORAGE_KEY } from "../background/storage_keys.ts";
+import { FIREFOX_PAGE_NOTICE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { HELP_PAGE_FILE } from "../shared/page/help_route.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";

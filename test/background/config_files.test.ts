@@ -4,7 +4,7 @@ import "../../src/background/command_modules.ts";
 import { template_for } from "../../src/help/file_templates.ts";
 import { answer_config_files } from "../../src/background/config_files.ts";
 import { ConfigRefusal } from "../../src/background/config_reload.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");

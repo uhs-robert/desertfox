@@ -3,7 +3,7 @@ import "../src/background/command_modules.ts";
 import { test } from "node:test";
 import { create_settings_messages } from "../src/background/settings_message.ts";
 import { stringify } from "smol-toml";
-import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../src/shared/config/storage_keys.ts";
 import { CONFIG_FORMAT_VERSION } from "../src/shared/config.ts";
 import { mount_settings, update_row } from "../src/help/settings_page.ts";
 import { can_reset, control_of, create_settings_session, LAYER_LABEL, problem_with, value_of_text } from "../src/help/settings_model.ts";

@@ -1,14 +1,14 @@
 // The pure half of `config.reload` and of a config import: raw file text in, the config to store and run out.
-// Its own file because the build pulls in smol-toml, and `config_load.ts` also goes into the help and new tab pages.
+// Its own file because the build pulls in smol-toml, and `shared/config/config_load.ts` also goes into the help and new tab pages.
 
 import type { CommandMeta } from "../shared/command.ts";
 import type { MergedConfig } from "../shared/config.ts";
 import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
-import { pick_config } from "./config_load.ts";
+import { pick_config } from "../shared/config/config_load.ts";
 import { css_limit_breaches } from "./css_limits.ts";
-import type { FilesSlot, LoadedConfig } from "./config_load.ts";
+import type { FilesSlot, LoadedConfig } from "../shared/config/config_load.ts";
 
 export type ApplyAction = "reload" | "import" | "remove" | "edit" | "layer" | "setting";
 

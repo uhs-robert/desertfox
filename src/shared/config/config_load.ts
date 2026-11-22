@@ -1,11 +1,11 @@
 // Picks the config the extension runs on: the files the last `config.reload` or import built, kept in `storage.local`,
 // then defaults.
 
-import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../shared/config.ts";
-import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../shared/config.ts";
-import { valid_quickmark_entries } from "../shared/quickmark_names.ts";
-import { is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
-import type { ConfigFiles } from "../shared/config_build/source_files.ts";
+import { apply_edits, CONFIG_FORMAT_VERSION, effective_settings, NO_EDITS, with_fallback_engines } from "../config.ts";
+import type { MergedConfig, SettingEdits, SettingOverrides, Settings, SnippetEntry } from "../config.ts";
+import { valid_quickmark_entries } from "../quickmark_names.ts";
+import { is_setting_name, SETTING_SPECS } from "../settings_schema.ts";
+import type { ConfigFiles } from "../config_build/source_files.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, LAYERED_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "./storage_keys.ts";
 
 export type ConfigSource = "files" | "defaults";

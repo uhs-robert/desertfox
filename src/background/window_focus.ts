@@ -1,6 +1,6 @@
 // The windows in the order they were last focused, newest first, for the bare `tab.attach`. Kept in `storage.session` so a background restart keeps the order.
 
-import { WINDOW_FOCUS_STORAGE_KEY } from "./storage_keys.ts";
+import { WINDOW_FOCUS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set">;

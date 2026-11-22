@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_session_store, normalize_session_name, plan_restore, session_age } from "../../src/background/session_store.ts";
 import type { SessionStorage, SessionTab } from "../../src/background/session_store.ts";
-import { SESSIONS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { SESSIONS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 
 function fake_storage(initial?: unknown) {
   const values = new Map<string, unknown>(initial === undefined ? [] : [[SESSIONS_STORAGE_KEY, initial]]);

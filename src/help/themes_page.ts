@@ -7,7 +7,7 @@ import { can_save, create_themes_session, name_problem } from "./themes_model.ts
 import type { ThemesDeps, ThemesSession } from "./themes_model.ts";
 import type { ImportedScheme } from "../shared/theme/base16.ts";
 import { role_tokens } from "../shared/theme/tokens.ts";
-import { FILES_SOURCE_STORAGE_KEY } from "../background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 

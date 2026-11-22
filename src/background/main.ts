@@ -60,7 +60,7 @@ import { MEDIA_PANEL_HANDLER } from "../shared/bundles.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
-import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
+import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";

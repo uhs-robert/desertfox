@@ -1,6 +1,6 @@
 // The register `@@` plays: the last one a play named, in `storage.session`. A normal window and the private windows each have one, apart, so a private play never shows in a normal window.
 
-import { MACRO_LAST_PLAYED_PRIVATE_STORAGE_KEY, MACRO_LAST_PLAYED_STORAGE_KEY } from "./storage_keys.ts";
+import { MACRO_LAST_PLAYED_PRIVATE_STORAGE_KEY, MACRO_LAST_PLAYED_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 
 type SessionArea = Pick<typeof browser.storage.session, "get" | "set" | "remove">;

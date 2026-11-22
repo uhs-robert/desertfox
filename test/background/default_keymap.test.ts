@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { ANY_KEY, LIVE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { TreeBranch } from "../../src/shared/prefix_tree.ts";

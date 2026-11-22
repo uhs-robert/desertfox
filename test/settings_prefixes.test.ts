@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { compile_config } from "../src/background/compile.ts";
-import { empty_config } from "../src/background/config_load.ts";
+import { empty_config } from "../src/shared/config/config_load.ts";
 import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";

@@ -1,7 +1,7 @@
 // The tab each window was on before its current one: the tab `#` marks in the tab list. `lastAccessed` cannot give it,
 // because a tab opened in the background gets that time at creation and would look like the tab the user came from.
 
-import { PREVIOUS_TAB_STORAGE_PREFIX } from "./storage_keys.ts";
+import { PREVIOUS_TAB_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 
 type PreviousTabStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;

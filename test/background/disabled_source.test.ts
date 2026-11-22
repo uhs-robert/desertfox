@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_disabled_source } from "../../src/background/browser_deps.ts";
-import { DISABLED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { DISABLED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 
 // A storage whose reads wait for the test to release them, and an event the test fires by hand.
 function make(initial: boolean | undefined) {

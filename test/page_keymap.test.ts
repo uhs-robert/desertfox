@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CONFIG_STATUS_STORAGE_KEY } from "../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY } from "../src/shared/config/storage_keys.ts";
 import { create_media_quality } from "../src/background/media_quality.ts";
 import { hint_selectors_reply, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, page_keymap_for, page_mode_trees_for, read_keymap_reply, site_columns_for, site_value, top_frame_address_of } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { list_keys } from "../src/background/list_keys.ts";
-import { empty_config } from "../src/background/config_load.ts";
+import { empty_config } from "../src/shared/config/config_load.ts";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";

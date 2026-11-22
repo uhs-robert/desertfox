@@ -34,7 +34,7 @@ const tabs = [0, 1, 2].map((index) => ({ id: 10 + index, index, windowId: 1, act
 await import("../../src/background/command_modules.ts");
 const { make_router_deps } = await import("../../src/background/browser_deps.ts");
 const { create_router } = await import("../../src/background/router.ts");
-const { DISABLED_STORAGE_KEY } = await import("../../src/background/storage_keys.ts");
+const { DISABLED_STORAGE_KEY } = await import("../../src/shared/config/storage_keys.ts");
 const { registry } = await import("../../src/shared/registry/builtin.ts");
 
 const memory: RepeatMemory = { save: async () => undefined, load: async () => undefined };
