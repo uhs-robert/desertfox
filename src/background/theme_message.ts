@@ -1,4 +1,4 @@
-// The base16 importer's messages: the names of the theme files, and one change of them (save, remove). A change goes through `set_theme_file` in `startup.ts`, which changes `themes/<name>.toml` in the browser copy and through the native host, as a `:set` changes settings.toml.
+// The base16 importer's messages: the names of the theme files, and one change of them (save, remove). A change goes through `set_theme_file` in `config_setting_writes.ts`, which changes `themes/<name>.toml` in the browser copy and through the native host, as a `:set` changes settings.toml.
 // Also the move of the imports an older version kept in browser storage into those files, which a start runs once.
 
 import { stringify, TomlError } from "smol-toml";

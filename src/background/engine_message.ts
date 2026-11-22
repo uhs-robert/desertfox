@@ -1,5 +1,5 @@
 // The Search engines section's messages: the engines the page added, and one change of them (add, remove, the starter set).
-// A change goes through `change_engine_file` in `startup.ts`: the page's engines live in `search_engines.d/zz-desertfox.toml` (`engine_file.ts`) and their key letters in `keymap.d/zz-desertfox.toml` (`engine_keys_file.ts`), which the copy holds and the native host writes, as a `:set` writes settings.toml.
+// A change goes through `change_engine_file` in `config_setting_writes.ts`: the page's engines live in `search_engines.d/zz-desertfox.toml` (`engine_file.ts`) and their key letters in `keymap.d/zz-desertfox.toml` (`engine_keys_file.ts`), which the copy holds and the native host writes, as a `:set` writes settings.toml.
 // The engines and letters an older version added to the browser's engines layer move into the files at the first start (`engine_layer_move.ts`). A piece that cannot move stays in the layer until a start or a save moves it.
 
 import type { MergedConfig } from "../shared/config.ts";
