@@ -138,7 +138,8 @@ type TypeOf<R> = R extends { type: infer T } ? T : never;
 
 // `M` narrows the requests a caller may send. The answer is read from the full map, so a send typed for all requests is assignable to a send typed for a few.
 export type Ask<M = ToBackground> = <R extends AnyRequest<M>>(message: R) => Promise<AnswerOf<ToBackground, TypeOf<R> & keyof ToBackground>>;
-export type AskTab = <R extends AnyRequest<ToTab>>(tab_id: number, message: R, options?: browser.tabs._SendMessageOptions) => Promise<AnswerOf<ToTab, TypeOf<R> & keyof ToTab> | undefined>;
+export type TabAnswer<R> = AnswerOf<ToTab, TypeOf<R> & keyof ToTab> | undefined;
+export type AskTab = <R extends AnyRequest<ToTab>>(tab_id: number, message: R, options?: browser.tabs._SendMessageOptions) => Promise<TabAnswer<R>>;
 
 // The global `browser` with typed sends. A sender file declares `declare const browser: MessagingBrowser;`, which shadows the global in that file only and emits nothing. A global overload cannot do this: the library's `any` overload wins.
 export type MessagingBrowser = Omit<typeof browser, "runtime" | "tabs"> & {

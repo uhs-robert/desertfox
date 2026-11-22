@@ -99,7 +99,7 @@ async function open_in_editor(field: Element, text: string, through_clipboard: b
   // Registered before the send, because a quick editor can end before the answer to the send arrives.
   open_edits.set(token, { field, original: text, through_clipboard });
   const request: EditorOpen = { type: "editor_open", token, text, insert: args.insert === true, url: location.href, ...(typeof args.ext === "string" ? { ext: args.ext } : {}) };
-  const answer = (await browser.runtime.sendMessage(request).catch((error: unknown) => ({ ok: false, message: String(error) }))) as EditorAnswer;
+  const answer = await browser.runtime.sendMessage(request).catch((error: unknown): EditorAnswer => ({ ok: false, message: String(error) }));
   if (!answer.ok) {
     open_edits.delete(token);
     throw new RuntimeRefusal(answer.message);

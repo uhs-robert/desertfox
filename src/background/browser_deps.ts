@@ -6,7 +6,7 @@ import type { MergedConfig } from "../shared/config.ts";
 import { engine_of_page } from "../shared/engines/index.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
-import type { ContainerStore, Refusal, AddBundleScriptAnswer, BackgroundToContent, ToastKind } from "../shared/messages/index.ts";
+import type { ContainerStore, Refusal, BackgroundToContent, TabAnswer, ToastKind } from "../shared/messages/index.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { is_dynamic_values } from "../shared/registry/params.ts";
 import { registry } from "../shared/registry/builtin.ts";
@@ -31,7 +31,7 @@ import { ignore_refusal } from "../shared/swallow.ts";
 declare const browser: MessagingBrowser;
 
 // Without a frame id the message reaches every frame, which shows a toast in each.
-export function send_to_tab(tab_id: number, message: BackgroundToContent, frame_id?: number): Promise<unknown> {
+export function send_to_tab<R extends BackgroundToContent>(tab_id: number, message: R, frame_id?: number): Promise<TabAnswer<R>> {
   return browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id });
 }
 
@@ -199,7 +199,7 @@ export const bundle_loader_deps: BundleLoaderDeps = {
     const started_ms = performance.now();
     let ok = false;
     try {
-      const answer = (await send_to_tab(tab_id, { type: "add_bundle_script", file }, frame_id)) as AddBundleScriptAnswer | undefined;
+      const answer = await send_to_tab(tab_id, { type: "add_bundle_script", file }, frame_id);
       if (!answer?.ok) throw new Error(answer?.message ?? "the page did not answer");
       ok = true;
     } finally {

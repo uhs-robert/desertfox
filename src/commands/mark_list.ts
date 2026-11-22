@@ -43,7 +43,7 @@ export const browser_mark_list_deps: MarkListDeps = {
   items: async (ctx) => browser_mark_store.items(await current_tab_url(ctx), await is_private_context(ctx)),
   jump: async (ctx, key) => {
     if (ctx.tab_id === undefined) throw new RuntimeRefusal("No tab to jump in");
-    const reply = (await send_to_tab(ctx.tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key }, bundle: "page" }] }, 0)) as { ok?: boolean; message?: string } | undefined;
+    const reply = await send_to_tab(ctx.tab_id, { type: "run_in_content", invocations: [{ id: "mark.jump", args: { key }, bundle: "page" }] }, 0);
     if (reply?.ok === false) throw new RuntimeRefusal(reply.message ?? "Mark jump failed");
   },
   remove: async (ctx, key) => browser_mark_store.remove(key, await current_tab_url(ctx), await is_private_context(ctx)),

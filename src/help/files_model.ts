@@ -1,6 +1,7 @@
 // No DOM: the state of the settings page's files editor. It lists the stored config files, holds the text being edited and sends each save to the background.
 // The background decides. A refused save keeps the draft here, shows every problem and leaves the stored files alone.
 
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import type { ConfigFilesAnswer, ConfigFilesRequest, SnippetPreview } from "../shared/messages/page.ts";
 import { edit_problem } from "../shared/config_file_path.ts";
 import { NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
@@ -19,7 +20,7 @@ export type FilesState = {
   accepted: boolean;
 };
 
-export type FilesDeps = { send: (message: ConfigFilesRequest) => Promise<unknown>; on_change: () => void; user_css_hold?: UserCssHold };
+export type FilesDeps = { send: Ask<Pick<PageRequests, "config_files">>; on_change: () => void; user_css_hold?: UserCssHold };
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -32,8 +33,7 @@ export function create_files_session(deps: FilesDeps) {
     (deps.user_css_hold ?? NO_USER_CSS_HOLD).set(state.consent !== undefined);
     deps.on_change();
   };
-  const ask = (message: Parameters<FilesDeps["send"]>[0]) =>
-    deps.send(message).then((answer) => answer as ConfigFilesAnswer, (error: unknown) => ({ ok: false, message: message_of(error) }) as ConfigFilesAnswer);
+  const ask = (message: ConfigFilesRequest) => deps.send(message).catch((error: unknown): ConfigFilesAnswer => ({ ok: false, message: message_of(error) }));
 
   // Rereads the stored files. A file that changed under an unedited draft is loaded into it, with its new base. An edited draft stays, and the base check refuses its save with the reopen message.
   async function load(): Promise<void> {

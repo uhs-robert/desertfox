@@ -1,5 +1,6 @@
 // Messages on the long-lived ports: the devtools page and the tab model.
 
+// From the devtools page, as the first message on its port: which tab its toolbox inspects.
 export type DevtoolsHello = {
   type: "devtools_hello";
   tab_id: number;
@@ -9,8 +10,6 @@ export type DevtoolsHello = {
 export type DevtoolsPick = {
   type: "devtools_pick";
 };
-
-// From an extension page (the settings page, the popup): sets or resets one setting. `value` is the typed value, checked by the setting's own check. `layer` defaults to `saved`, which a set reaches only for a consent setting. A reset drops the saved and the temp edit.
 
 export type TabRow = {
   id: number;
