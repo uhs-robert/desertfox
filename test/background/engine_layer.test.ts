@@ -10,14 +10,14 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../../src/shared/prefix_tree.ts";
 import { readFileSync } from "node:fs";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?engines_${tag}`)) as Startup;
+type Startup = ConfigService;
 
 async function started(tag: string, files: Files = { "settings.toml": "" }) {
   const host = { files };
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup(tag);
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   const messages = create_engine_messages({
@@ -33,7 +33,7 @@ async function started_with_layer(tag: string, layer: Record<string, unknown>, f
   const host = { files };
   const browser = install_fake_browser(host);
   browser.local[ENGINE_EDITS_STORAGE_KEY] = layer;
-  const startup = await fresh_startup(tag);
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   const messages = create_engine_messages({ read_engine_state: startup.read_engine_state, change_engine_file: startup.change_engine_file, read_starter: async () => "" });
@@ -56,7 +56,7 @@ test("an added engine is in the config and binds its key letter, and survives a 
   assert.ok((await startup.get_config()).search_engines.wiki);
   assert.ok((await startup.get_config()).search_engines.other);
 
-  const restarted = await fresh_startup("add_restart");
+  const restarted = fresh_config_service();
   assert.ok((await restarted.get_config()).search_engines.wiki);
   assert.equal((await restarted.get_config()).keymap.search_keys?.w, "wiki");
   assert.match(host.files["keymap.d/zz-desertfox.toml"]!, /^w = "wiki"$/m);

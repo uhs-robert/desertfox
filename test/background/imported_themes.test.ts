@@ -13,10 +13,9 @@ import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?imported_themes_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const SCHEME = `scheme: "Gruvbox dark, medium"
 base00: "282828"
@@ -53,7 +52,7 @@ const messages_of = (startup: Startup) => create_theme_messages({ read_files: st
 // A profile that read the folder once through the host, as after `,r`, so its changes go to the folder.
 async function started(files: Files = { "settings.toml": "" }, host: Host = { files }) {
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   return { host, startup, messages: messages_of(startup), ...browser };
@@ -163,7 +162,7 @@ test("removing a theme that is not in use leaves the setting and the published t
   assert.deepEqual(await messages.change(remove("dusk_one")), { ok: true, message: "Removed the theme dusk_one, and themes/dusk_one.toml is deleted from the config folder." });
   assert.equal(host.files["settings.toml"], 'theme = "other"\n');
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(OTHER_SCHEME));
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal((await restarted.get_config()).settings.theme, "other");
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
@@ -173,7 +172,7 @@ test("a settings.d file that picks the theme refuses its removal and names that 
   const { host, messages, local } = await started({ "settings.toml": "", "settings.d/look.toml": 'theme = "oasis_night"\n' });
   await messages.change(save("dusk_one", SCHEME));
   host.files = { ...host.files, "settings.d/look.toml": 'theme = "dusk_one"\n' };
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.reload_config();
   const answer = await messages_of(startup).change(remove("dusk_one"));
   assert.deepEqual(answer, { ok: false, message: 'settings.d/look.toml sets theme = "dusk_one". Change it there before you remove the theme.' });
@@ -204,7 +203,7 @@ test("without the host a save changes the copy and waits, and the next start wri
   assert.equal(host.files["themes/dusk_one.toml"], undefined);
 
   host.granted = true;
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["themes/dusk_one.toml"], file_of(SCHEME));
   assert.equal(unsynced_of(local), undefined);
@@ -251,7 +250,7 @@ test("an import and a pick of it sent back to back both reach the folder, the th
   assert.equal(unsynced_of(local), undefined);
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(SCHEME));
 
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
@@ -288,7 +287,7 @@ async function with_stored_imports(files: Files, saved: Record<string, unknown>,
 
 test("the first start moves the stored imports into theme files and the saved pick into settings.toml, once", async () => {
   const { host, local, sent } = await with_stored_imports({ "settings.toml": "# mine\n" }, { theme: "dusk_one", newtab_ip_info: true });
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["themes/dusk_one.toml"], file_of(SCHEME));
   assert.equal(host.files["themes/other.toml"], file_of(OTHER_SCHEME));
@@ -301,7 +300,7 @@ test("the first start moves the stored imports into theme files and the saved pi
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(SCHEME));
 
   sent.length = 0;
-  const again = await fresh_startup();
+  const again = fresh_config_service();
   await again.reload_config_at_start();
   assert.ok(!sent.some((message) => message.cmd === "write_config_file"), "a second start wrote again");
 });
@@ -311,7 +310,7 @@ test("with the host off the moved files wait in the record, and the next start w
   const host: Host = { files };
   const { local } = await with_stored_imports(files, { theme: "other" }, host);
   host.granted = false;
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(local[THEME_EDITS_STORAGE_KEY], undefined);
   assert.deepEqual(unsynced_of(local), { "themes/dusk_one.toml": null, "themes/other.toml": null, "settings.toml": "" });
@@ -320,7 +319,7 @@ test("with the host off the moved files wait in the record, and the next start w
   assert.equal(host.files["themes/other.toml"], undefined);
 
   host.granted = true;
-  const later = await fresh_startup();
+  const later = fresh_config_service();
   await later.reload_config_at_start();
   assert.equal(host.files["themes/other.toml"], file_of(OTHER_SCHEME));
   assert.equal(host.files["settings.toml"], 'theme = "other"\n');
@@ -339,12 +338,12 @@ test("a stop after the files are stored and before the list is dropped moves not
     }
     return remove_key(key);
   };
-  const crashed = await fresh_startup();
+  const crashed = fresh_config_service();
   await crashed.reload_config_at_start();
   assert.ok(stopped);
   assert.notEqual(local[THEME_EDITS_STORAGE_KEY], undefined);
 
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(local[THEME_EDITS_STORAGE_KEY], undefined);
   assert.deepEqual(Object.keys(host.files).filter((path) => path.startsWith("themes/")).sort(), ["themes/dusk_one.toml", "themes/other.toml"]);
@@ -354,7 +353,7 @@ test("a stop after the files are stored and before the list is dropped moves not
 
 test("a stored import whose name a theme file of other text holds moves to <name>-browser, and the saved pick follows it", async () => {
   const { host, local } = await with_stored_imports({ "settings.toml": "", "themes/dusk_one.toml": HAND_THEME }, { theme: "dusk_one" });
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["themes/dusk_one.toml"], HAND_THEME);
   assert.equal(host.files["themes/dusk_one-browser.toml"], file_of(SCHEME));
@@ -374,7 +373,7 @@ test("a saved pick of an import stays a saved edit, under the new name, while a 
 
 test("a pick and an import sent while the start moves the stored imports land after the move", async () => {
   const { host, local } = await with_stored_imports({ "settings.toml": "" }, { theme: "dusk_one" });
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   const starting = restarted.reload_config_at_start();
   const picking = restarted.set_in_settings_file("theme", "other");
   const saving = messages_of(restarted).change(save("third", SCHEME));
@@ -450,7 +449,7 @@ test("a pick of a saved theme the folder lacks waits for the theme file, and the
   assert.deepEqual(local[THEME_STORAGE_KEY], mapped(SCHEME));
 
   host.settings_only_host = false;
-  const updated = await fresh_startup();
+  const updated = fresh_config_service();
   await updated.reload_config_at_start();
   assert.equal(host.files["themes/dusk_one.toml"], file_of(SCHEME));
   assert.equal(host.files["settings.toml"], 'theme = "dusk_one"\n');
@@ -463,14 +462,14 @@ test("the moved imports and the moved pick reach the folder in an order that bui
   const host: Host = { files };
   const { local } = await with_stored_imports(files, { theme: "dusk_one" }, host);
   host.settings_only_host = true;
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["settings.toml"], "");
   assert.equal(host.files["themes/dusk_one.toml"], undefined);
   assert.equal(local[THEME_EDITS_STORAGE_KEY], undefined);
 
   host.settings_only_host = false;
-  const updated = await fresh_startup();
+  const updated = fresh_config_service();
   await updated.reload_config_at_start();
   assert.equal(host.files["settings.toml"], 'theme = "dusk_one"\n');
   assert.ok(await builds(updated));
@@ -491,12 +490,12 @@ test("a remove of the theme in use clears settings.toml before the delete, and a
   assert.equal(host.files["themes/dusk_one.toml"], file_of(SCHEME));
   assert.equal(unsynced_of(local), undefined);
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
-  assert.ok(await builds(await fresh_startup()));
+  assert.ok(await builds(fresh_config_service()));
 });
 
 test("with no config folder, a remove of the theme in use says once that only the browser copy changed", async () => {
   const browser = install_fake_browser({ files: {}, granted: false });
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   const messages = messages_of(startup);
   await messages.change(save("dusk_one", SCHEME));

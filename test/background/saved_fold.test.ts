@@ -10,10 +10,9 @@ import type { SettingOverrides } from "../../src/shared/config.ts";
 import { answer_host_start_choice } from "../../src/background/host_start.ts";
 import type { HostStartPending } from "../../src/shared/messages/page.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?saved_fold_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const problems_of = (files: Files): string[] => {
   try {
@@ -168,7 +167,7 @@ function watch_toasts(fake: ReturnType<typeof install_fake_browser>["fake"]): st
 async function old_profile(saved: SettingOverrides, files: Files = { "settings.toml": "# mine\n" }) {
   const host: { files: Files; granted?: boolean; refuse?: string[] } = { files };
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   browser.local[SAVED_SETTINGS_STORAGE_KEY] = saved;
@@ -176,7 +175,7 @@ async function old_profile(saved: SettingOverrides, files: Files = { "settings.t
 }
 
 async function first_start() {
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.reload_config_at_start();
   return startup;
 }
@@ -276,7 +275,7 @@ test("a profile that never read a folder keeps the saved settings until a host s
 
 test("while the copies-differ question waits the saved settings stay, Use the folder keeps them on top, and the next start moves them", async () => {
   const { host, local, toasts } = await old_profile({ which_key_delay_ms: 5 }, { "settings.toml": 'hint_letters = "ab"\n' });
-  const seeded = await fresh_startup();
+  const seeded = fresh_config_service();
   await seeded.save_config_file("settings.toml", 'hint_letters = "typed"\n', 'hint_letters = "ab"\n');
   host.files = { "settings.toml": 'hint_letters = "xy"\n' };
   const startup = await first_start();
@@ -300,7 +299,7 @@ test("an editor save that lands between the start read and the fold keeps the sa
   const old_host = host as typeof host & { old_host?: boolean };
   // A host from before the write verbs, so a fold's write waits and only the copy holds the values.
   old_host.old_host = true;
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   let saved_by_editor: Promise<unknown> | undefined;
   const remove = fake.storage.local.remove;
   // The start read clears the question key in its own queue turn, so a save asked for then lands before the fold's turn.
@@ -318,7 +317,7 @@ test("an editor save that lands between the start read and the fold keeps the sa
 
 test("changes queued during the fold land after it, so a :set of a folded name wins", async () => {
   const { host, local, fake } = await old_profile({ which_key_delay_ms: 5, hint_letters: "qw" });
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   const queued: Promise<unknown>[] = [];
   const get = fake.storage.local.get;
   // The fold reads the question key alone first thing in its queue turn, so changes asked for then wait behind it.

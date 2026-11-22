@@ -10,9 +10,9 @@ import { answer_host_start_choice } from "../../src/background/host_start.ts";
 import type { HostStartPending } from "../../src/shared/messages/page.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?layers_${tag}`)) as Startup;
+type Startup = ConfigService;
 
 // The command id a key runs in the stored compiled keymap, or undefined when the key is unbound.
 const bound = (local: Record<string, unknown>, mode: "normal" | "browser", keys: string) => {
@@ -25,7 +25,7 @@ const set_keymap = (startup: Startup, edits: KeymapEdits) => startup.change_laye
 async function started(tag: string, files: Files = { "settings.toml": "" }) {
   const host = { files };
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup(tag);
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   return { host, startup, ...browser };
@@ -49,7 +49,7 @@ test("a key edit wins over keymap.toml and survives a reload, an import, a files
   assert.equal(bound(local, "normal", "J"), "tab.close");
   assert.equal(bound(local, "normal", "K"), "tab.next");
 
-  const restarted = await fresh_startup("survives_restart");
+  const restarted = fresh_config_service();
   await restarted.get_config();
   assert.equal(bound(local, "normal", "J"), "tab.close");
 });
@@ -139,14 +139,14 @@ test("a browser edit moves the Firefox shortcuts, a normal edit leaves them, and
 test("a key edit stays on top when a start applies the folder, and when the page answers to use the folder", async () => {
   const host = { files: { "keymap.toml": '[normal]\nJ = "tab.prev"\n' } as Files };
   const { local } = install_fake_browser(host);
-  const first = await fresh_startup("host_start_first");
+  const first = fresh_config_service();
   await first.get_config();
   await first.reload_config();
   await set_keymap(first, { normal: { J: "tab.close" } });
 
   // The browser copy holds no browser change, so the start applies the folder at once.
   host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\nK = "tab.goto"\n' };
-  const silent = await fresh_startup("host_start_silent");
+  const silent = fresh_config_service();
   await silent.reload_config_at_start();
   assert.equal(bound(local, "normal", "K"), "tab.goto");
   assert.equal(bound(local, "normal", "J"), "tab.close");
@@ -155,7 +155,7 @@ test("a key edit stays on top when a start applies the folder, and when the page
   const base = (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["keymap.toml"]!;
   await silent.save_config_file("keymap.toml", '[normal]\nJ = "tab.next"\n', base);
   host.files = { "keymap.toml": '[normal]\nJ = "tab.goto"\nK = "tab.next"\n' };
-  const asked = await fresh_startup("host_start_asked");
+  const asked = fresh_config_service();
   await asked.reload_config_at_start();
   const pending = local[HOST_START_PENDING_STORAGE_KEY] as HostStartPending;
   assert.ok(pending, "a question is pending");

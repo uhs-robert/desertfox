@@ -12,9 +12,9 @@ import { create_autoconfig_mirror } from "../../src/background/autoconfig_mirror
 import { NativeHostError } from "../../src/background/native_client.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?reload_${tag}`)) as Startup;
+type Startup = ConfigService;
 
 const settings_file = (body: string): Files => ({ "settings.toml": body });
 const snippet_file = (id: string) => `// id: ${id}\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\nreturn 1;\n`;
@@ -24,7 +24,7 @@ const set_temp = (startup: Startup, name: string, value: unknown) => startup.cha
 test("a reload applies the files in place, and a temp edit stays on top", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local } = install_fake_browser(host);
-  const startup = await fresh_startup("in_place");
+  const startup = fresh_config_service();
   await startup.get_config();
   await set_temp(startup, "which_key_delay_ms", 7);
 
@@ -35,14 +35,14 @@ test("a reload applies the files in place, and a temp edit stays on top", async 
   assert.deepEqual(status_of(local).temp, ["which_key_delay_ms"]);
 
   // A restart picks the stored files config, with no host call.
-  const after_restart = await fresh_startup("in_place_restart");
+  const after_restart = fresh_config_service();
   assert.equal((await after_restart.get_config()).settings.hint_letters, "ab");
 });
 
 test("a :set already in the queue lands before the reload, and the reload keeps it", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { session } = install_fake_browser(host);
-  const startup = await fresh_startup("set_then_reload");
+  const startup = fresh_config_service();
   await startup.get_config();
   const set = set_temp(startup, "hint_letters", "xy");
   const reload = startup.reload_config();
@@ -55,7 +55,7 @@ test("a :set already in the queue lands before the reload, and the reload keeps 
 test("a :set started while a reload publishes waits for it, so the reload cannot overwrite the edit", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { fake, local } = install_fake_browser(host);
-  const startup = await fresh_startup("set_during_reload");
+  const startup = fresh_config_service();
   await startup.get_config();
   const working = fake.tabs.query;
   let slow_next = true;
@@ -77,18 +77,18 @@ test("a :set started while a reload publishes waits for it, so the reload cannot
 test("a start on defaults, then a reload and a restart, ends on the stored files", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local } = install_fake_browser(host);
-  const before = await fresh_startup("files_slot");
+  const before = fresh_config_service();
   await before.get_config();
   assert.equal(status_of(local).source, "defaults");
   await before.reload_config();
-  const after = await fresh_startup("files_slot_restart");
+  const after = fresh_config_service();
   assert.equal((await after.get_config()).settings.hint_letters, "ab");
   assert.equal(status_of(local).source, "files");
 });
 
 test("a first start with no files slot runs on defaults, with no snippets or engines of its own", async () => {
   const { local } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("neither");
+  const startup = fresh_config_service();
   const config = await startup.get_config();
   assert.equal(status_of(local).source, "defaults");
   assert.deepEqual(config.snippets, []);
@@ -98,7 +98,7 @@ test("a first start with no files slot runs on defaults, with no snippets or eng
 test("a stale managed source in storage.local is replaced by the first publish", async () => {
   const { local } = install_fake_browser({ files: {} });
   local[CONFIG_STATUS_STORAGE_KEY] = { source: "managed", settings: {}, managed_file_hint: "x", saved: [], temp: [], configured: [] };
-  const startup = await fresh_startup("stale_managed");
+  const startup = fresh_config_service();
   await startup.get_config();
   assert.equal(status_of(local).source, "defaults");
   assert.equal("managed_file_hint" in status_of(local), false);
@@ -107,7 +107,7 @@ test("a stale managed source in storage.local is replaced by the first publish",
 test("two reloads at once run one after the other and the second one's files win", async () => {
   const host = { files: { ...settings_file('hint_letters = "ab"\n'), "snippets/one.js": snippet_file("twice.one") } };
   const { sent } = install_fake_browser(host);
-  const startup = await fresh_startup("two_reloads");
+  const startup = fresh_config_service();
   await startup.get_config();
   let replies = 0;
   // The first host read waits, so the second reload is queued while the first is still running.
@@ -130,7 +130,7 @@ test("two reloads at once run one after the other and the second one's files win
 test("a reload replaces the snippets: a removed one is gone and a kept one is not defined twice", async () => {
   const host = { files: { "snippets/a.js": snippet_file("swap.first"), "snippets/b.js": snippet_file("swap.kept") } as Files };
   install_fake_browser(host);
-  const startup = await fresh_startup("snippet_swap");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   assert.ok(registry.get("swap.first"));
@@ -146,7 +146,7 @@ test("a reload replaces the snippets: a removed one is gone and a kept one is no
 test("a reload that fails while it publishes leaves the old config, snippets, tree and stored files whole", async () => {
   const host = { files: { ...settings_file('hint_letters = "ab"\n'), "snippets/a.js": snippet_file("half.old") } as Files };
   const { local, fake } = install_fake_browser(host);
-  const startup = await fresh_startup("half_way");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   const tree_before = structuredClone(local[COMPILED_KEYMAP_STORAGE_KEY]);
@@ -176,7 +176,7 @@ test("a reload that fails while it publishes leaves the old config, snippets, tr
 test("a failed store of the files config rolls the publish back", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local, fake } = install_fake_browser(host);
-  const startup = await fresh_startup("store_fails");
+  const startup = fresh_config_service();
   await startup.get_config();
   const tree_before = structuredClone(local[COMPILED_KEYMAP_STORAGE_KEY]);
   const working = fake.storage.local.set;
@@ -194,7 +194,7 @@ test("a failed store of the files config rolls the publish back", async () => {
 test("a tab opened while the reload runs is told about the new tree", async () => {
   const host: { files: Files; reply?: () => Promise<unknown> } = { files: settings_file('hint_letters = "ab"\n') };
   const { tabs, told } = install_fake_browser(host);
-  const startup = await fresh_startup("tab_opens");
+  const startup = fresh_config_service();
   await startup.get_config();
   host.reply = async () => {
     tabs.push({ id: 42 });
@@ -213,7 +213,7 @@ for (const [name, host_setup, expected] of [
   test(`a reload where ${name} keeps the current config and says why`, async () => {
     const host = { files: settings_file('hint_letters = "ab"\n'), ...host_setup };
     const { local } = install_fake_browser(host);
-    const startup = await fresh_startup(`refused_${name}`);
+    const startup = fresh_config_service();
     await startup.get_config();
     const tree_before = structuredClone(local[COMPILED_KEYMAP_STORAGE_KEY]);
     const refusal = await startup.reload_config().then(
@@ -231,7 +231,7 @@ for (const [name, host_setup, expected] of [
 test("a reload with problems in the files keeps the current config and names the problems", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local } = install_fake_browser(host);
-  const startup = await fresh_startup("problems");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   host.files = { "settings.toml": "hint_letters = \n", "notes.txt": "" };
@@ -269,7 +269,7 @@ test("build_files_config allows @namespace and data: addresses", () => {
 test("a reload with remote CSS in the own folder keeps the current config and names the file and line", async () => {
   const host: { files: Files } = { files: { ...settings_file('hint_letters = "ab"\n'), "style.css": ".a { color: red }\n" } };
   install_fake_browser(host);
-  const startup = await fresh_startup("remote_css_reload");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   host.files = { ...settings_file('hint_letters = "cd"\n'), "style.d/x.css": `\n${remote_css}` };
@@ -284,7 +284,7 @@ test("a reload with remote CSS in the own folder keeps the current config and na
 test("a files editor save with remote CSS is refused and the file is not saved", async () => {
   const host = { files: { ...settings_file('hint_letters = "ab"\n'), "style.css": ".a { color: red }\n" } };
   install_fake_browser(host);
-  const startup = await fresh_startup("remote_css_save");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   await assert.rejects(startup.save_config_file("style.css", `@import "https://t.test/a.css";\n`, ".a { color: red }\n"), (error: Error) => {
@@ -298,7 +298,7 @@ test("a files editor save with remote CSS is refused and the file is not saved",
 test("the build skips autoconfig.toml, which the host writes beside the files", async () => {
   const host = { files: { ...settings_file('hint_letters = "ab"\n'), "autoconfig.toml": "hint_letters = 1\n" } };
   install_fake_browser(host);
-  const startup = await fresh_startup("autoconfig_skipped");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   assert.equal((await startup.get_config()).settings.hint_letters, "ab");
@@ -309,7 +309,7 @@ const NOTE = "# The key edits made in the browser, as keymap.d mode tables. Sett
 test("a change to the saved edits rewrites autoconfig.toml with the key edits alone, and a temp change writes nothing", async () => {
   const host = { files: {} };
   const { sent, local } = install_fake_browser(host);
-  const startup = await fresh_startup("mirror_on_save");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.change_edits((current) => ({ ...current, saved: { bridge: true } }));
   await set_temp(startup, "which_key_delay_ms", 3);
@@ -325,7 +325,7 @@ const set_keys = (startup: Startup, keys: Record<string, Record<string, string>>
 
 test("a key edit alone writes autoconfig.toml with an unbind as an empty string and a browser table", async () => {
   const { sent } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("mirror_keys");
+  const startup = fresh_config_service();
   await startup.get_config();
   await set_keys(startup, { normal: { J: "tab.close", K: "" }, browser: { "<A-x>": "tab.next" } });
   await settle();
@@ -334,7 +334,7 @@ test("a key edit alone writes autoconfig.toml with an unbind as an empty string 
 
 test("interleaved saved settings and key edits write the key edits alone, in commit order", async () => {
   const { sent } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("mirror_interleaved");
+  const startup = fresh_config_service();
   await startup.get_config();
   // A value an older version saved, which the mirror held then.
   await startup.change_edits((current) => ({ ...current, saved: { hint_letters: "xy", bridge: true } }));
@@ -347,7 +347,7 @@ test("interleaved saved settings and key edits write the key edits alone, in com
 
 test("a rolled back key edit writes nothing, and removing every edit writes the header-only file", async () => {
   const { sent, fake } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("mirror_rollback");
+  const startup = fresh_config_service();
   await startup.get_config();
   const working = fake.tabs.query;
   fake.tabs.query = async () => {
@@ -365,7 +365,7 @@ test("a rolled back key edit writes nothing, and removing every edit writes the 
 
 test("a rolled back :set writes nothing", async () => {
   const { sent, fake } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("mirror_set_rollback");
+  const startup = fresh_config_service();
   await startup.get_config();
   const working = fake.tabs.query;
   fake.tabs.query = async () => {
@@ -379,7 +379,7 @@ test("a rolled back :set writes nothing", async () => {
 
 test("a saved site_rules list stays out of autoconfig.toml, which parses as the key edits alone", async () => {
   const { sent } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("mirror_tables");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.change_edits((current) => ({ ...current, saved: { site_rules: [{ site: "a.test", off: true }] } }));
   await set_keys(startup, { normal: { J: "tab.close" } });
@@ -390,7 +390,7 @@ test("a saved site_rules list stays out of autoconfig.toml, which parses as the 
 
 test("a layer change that leaves the key edits as they were does not write", async () => {
   const { sent } = install_fake_browser({ files: {} });
-  const startup = await fresh_startup("mirror_unchanged_keys");
+  const startup = fresh_config_service();
   await startup.get_config();
   await set_keys(startup, { normal: { J: "tab.close" } });
   await settle();
@@ -406,7 +406,7 @@ test("a host failure on the autoconfig write keeps the edit and warns once", asy
   const original_warn = console.warn;
   console.warn = (...args: unknown[]) => void warnings.push(args.join(" "));
   try {
-    const startup = await fresh_startup("mirror_fails");
+    const startup = fresh_config_service();
     await startup.get_config();
     await startup.change_edits((current) => ({ ...current, saved: { bridge: true } }));
     await startup.change_edits((current) => ({ ...current, saved: { bridge: false } }));
@@ -452,7 +452,7 @@ test("the mirror writes in order, keeps quiet without the permission, and warns 
 test("a reader during the swap waits for the commit and sees the config that matches the registry", async () => {
   const host = { files: { "snippets/a.js": snippet_file("gap.old") } as Files };
   const { fake } = install_fake_browser(host);
-  const startup = await fresh_startup("swap_gap");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   host.files = { "snippets/b.js": snippet_file("gap.new") };
@@ -478,7 +478,7 @@ test("a reader during the swap waits for the commit and sees the config that mat
 test("a reader during a swap that fails gets the old config back", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { fake } = install_fake_browser(host);
-  const startup = await fresh_startup("swap_gap_fails");
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   host.files = settings_file('hint_letters = "cd"\n');
@@ -502,7 +502,7 @@ test("the reload counts every warning the help page shows, not only the load war
   const chords = Array.from({ length: 11 }, (_, index) => `"<A-F${index + 1}>" = "tab.next"`).join("\n");
   const host = { files: { "keymap.toml": `[browser]\n${chords}\n` } as Files };
   const { local } = install_fake_browser(host);
-  const startup = await fresh_startup("all_warnings");
+  const startup = fresh_config_service();
   await startup.get_config();
   const reloaded = await startup.reload_config();
   const shown = local[WARNINGS_STORAGE_KEY] as string[];
@@ -513,11 +513,11 @@ test("the reload counts every warning the help page shows, not only the load war
 test("the build warnings of a reload survive a restart", async () => {
   const host = { files: { "search_engines.toml": '[-dash]\nurl = "https://a.test/?q={query}"\n' } as Files };
   const { local } = install_fake_browser(host);
-  const startup = await fresh_startup("warnings_restart");
+  const startup = fresh_config_service();
   await startup.get_config();
   const reloaded = await startup.reload_config();
   assert.ok(reloaded.warnings >= 1);
-  const after = await fresh_startup("warnings_restart_after");
+  const after = fresh_config_service();
   await after.get_config();
   const shown = local[WARNINGS_STORAGE_KEY] as string[];
   assert.ok(shown.some((warning) => /starts with "-"/.test(warning)), shown.join("\n"));
@@ -546,4 +546,30 @@ test("config.reload turns any other failure into a refusal that keeps the config
     assert.match(error.message, /^Config not reloaded, the current one stays: disk full\. Run config\.reload again, and debug\.restart if it keeps failing\.$/);
     return true;
   });
+});
+
+test("each config service keeps its own current config, so a fresh one starts from storage and not from another", async () => {
+  const host = { files: settings_file('hint_letters = "ab"\n') };
+  install_fake_browser(host);
+  const first = fresh_config_service();
+  await first.get_config();
+  host.files = settings_file('hint_letters = "xy"\n');
+  await first.reload_config();
+  const second = fresh_config_service();
+  assert.equal((await first.get_config()).settings.hint_letters, "xy");
+  assert.equal((await second.get_config()).settings.hint_letters, "xy");
+  host.files = settings_file('hint_letters = "pq"\n');
+  await second.reload_config();
+  assert.equal((await first.get_config()).settings.hint_letters, "xy");
+});
+
+test("the production startup.ts and config_store.ts exports share one store", async () => {
+  const host = { files: settings_file('hint_letters = "ab"\n') };
+  install_fake_browser(host);
+  const store = await import("../../src/background/config_store.ts");
+  const startup = await import("../../src/background/startup.ts");
+  await store.get_config();
+  host.files = settings_file('hint_letters = "xy"\n');
+  await startup.reload_config();
+  assert.equal((await store.get_config()).settings.hint_letters, "xy");
 });

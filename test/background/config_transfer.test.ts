@@ -11,8 +11,9 @@ import { exportable_key_edits } from "../../src/background/keymap_message.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
+type Startup = ConfigService;
 
 const snippet_file = (id: string) => `// id: ${id}\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\n// requires: repo\nglobalThis.ran = true;\n`;
 
@@ -38,7 +39,7 @@ test("the installed snippet list shows each header and flags one that does not p
 test("removing a snippet rebuilds without it, and a key that binds it refuses the removal and keeps it", async () => {
   const host = { files: { "snippets/a.js": snippet_file("user.mine"), "snippets/b.js": snippet_file("user.other") } as Files };
   const fake = install_fake_browser(host);
-  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   const deps = { read_files: async () => (await load_files_source()).files, read_saved: async () => ({}), read_keymap_edits: async () => ({ edits: {}, skipped: [] }), remove: startup.remove_snippet };
@@ -105,7 +106,7 @@ test("the key edits export as a keymap.d file that sorts after every one there",
 test("an export with key edits imports on a fresh profile to the same compiled keymap", async () => {
   const files: Files = { "keymap.toml": '[normal]\nJ = "tab.prev"\n', "keymap.d/zzz.toml": '[normal]\nK = "tab.goto"\n' };
   const source = install_fake_browser({ files });
-  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   await startup.change_layers("keymap", () => ({ normal: { J: "tab.close", K: "", Jx: "tab.next" }, browser: { "<A-x>": "tab.next" } }));
@@ -114,7 +115,7 @@ test("an export with key edits imports on a fresh profile to the same compiled k
   const compiled_before = source.local[COMPILED_KEYMAP_STORAGE_KEY];
 
   const fresh = install_fake_browser({ files: {} });
-  const restored = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  const restored = fresh_config_service();
   await restored.get_config();
   await restored.import_config({ kind: "zip", bytes: write_zip((exported as { config_files: Files }).config_files) }, {});
   assert.deepEqual(fresh.local[COMPILED_KEYMAP_STORAGE_KEY], compiled_before);
@@ -123,7 +124,7 @@ test("an export with key edits imports on a fresh profile to the same compiled k
 test("a key edit that runs a snippet refuses its removal, and the export answer names an edit that no longer reads", async () => {
   const host = { files: { "snippets/b.js": snippet_file("keyed.snippet") } as Files };
   install_fake_browser(host);
-  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   await startup.change_layers("keymap", () => ({ normal: { zz: "keyed.snippet" } }));
@@ -138,7 +139,7 @@ test("the export leaves out a key edit whose snippet header no longer allows its
   const header = (modes: string) => `// id: stale.modes\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\n// modes: ${modes}\nglobalThis.ran = true;\n`;
   const host = { files: { "snippets/s.js": header("normal, visual") } as Files };
   install_fake_browser(host);
-  const startup = (await import(`../../src/background/startup.ts?transfer_${Math.random()}`)) as Startup;
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   await startup.change_layers("keymap", () => ({ normal: { J: "tab.close" }, visual: { zz: "stale.modes" } }));

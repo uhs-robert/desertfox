@@ -7,10 +7,9 @@ import { FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNS
 import { outcome_note, replayed_on_folder } from "../../src/background/settings_file.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?tables_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const MINE = [
   "# My settings",
@@ -53,7 +52,7 @@ async function writes_held(held: unknown[], count: number): Promise<void> {
 
 async function reloaded(host: { files: Files; granted?: boolean; old_host?: boolean }) {
   const fake = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   return { ...fake, startup };
@@ -347,7 +346,7 @@ test("the settings page's link list keeps each link that stays, writes the new o
   const text = host.files["settings.toml"];
   assert.ok(text.includes('label = "Docs" # the manual\nurl = "https://docs.test/"\n\n[[newtab_links]]\nlabel = "Say \\"hi\\" \\\\ é 東京"\nurl = "https://new.test/?q=a#b"\ngroup = "Ünï"\n\n[[newtab_links]]\nlabel = "Mail"'), text);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], {});
-  const reloaded_startup = await fresh_startup();
+  const reloaded_startup = fresh_config_service();
   await reloaded_startup.reload_config();
   assert.deepEqual(JSON.parse(JSON.stringify((await reloaded_startup.get_config()).settings.newtab_links)), LINKS);
 });
@@ -370,7 +369,7 @@ test("a cleared link list is written as an empty list, stays empty after a reloa
   const { startup } = await reloaded(host);
   assert.deepEqual(await startup.set_in_settings_file("newtab_links", []), { kind: "written" });
   assert.equal(host.files["settings.toml"], MINE.slice(0, MINE.indexOf("[[newtab_links]]")).replace('# home row\n', "# home row\nnewtab_links = []\n"));
-  const reloaded_startup = await fresh_startup();
+  const reloaded_startup = fresh_config_service();
   await reloaded_startup.reload_config();
   assert.deepEqual((await reloaded_startup.get_config()).settings.newtab_links, []);
   assert.deepEqual(await reloaded_startup.unset_in_settings_file("newtab_links"), { kind: "written" });

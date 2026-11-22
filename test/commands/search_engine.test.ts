@@ -10,7 +10,7 @@ import { empty_config } from "../../src/shared/config/config_load.ts";
 import { FILES_CONFIG_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { create_router } from "../../src/background/router.ts";
 import { no_repeat_memory } from "../../src/background/repeat_memory.ts";
-import { get_config } from "../../src/background/startup.ts";
+import { get_config } from "../../src/background/config_store.ts";
 import { current_page } from "../../src/commands/open_target.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";

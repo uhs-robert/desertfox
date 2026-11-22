@@ -11,10 +11,9 @@ import { PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
 import { default_engine_names } from "../../src/shared/config.ts";
 import { parse } from "smol-toml";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?every_setting_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const MINE = '# My settings\n\nhint_letters = "abc" # home row\n\n# Fewer words\nnext_patterns = [\n  "next",\n  "more",\n]\ntoast_ms = 2000\n\n# Rules\n[[site_rules]]\nsite = "*://x.test/*"\noff = true\n';
 // A hand edit of hint_letters.
@@ -33,7 +32,7 @@ async function writes_held(held: unknown[], count: number): Promise<void> {
 
 async function reloaded(host: { files: Files; granted?: boolean; old_host?: boolean }) {
   const fake = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   return { ...fake, startup };
@@ -276,7 +275,7 @@ test("a :set while the copies-differ question waits is written, the question sta
     // A browser change and a folder change, so the start stores the question.
     await before_restart.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
     host.files = { ...host.files, "keymap.toml": '[normal]\n"zx" = "tab.next"\n' };
-    const startup = await fresh_startup();
+    const startup = fresh_config_service();
     await startup.reload_config_at_start();
     assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 
@@ -346,7 +345,7 @@ test("every awkward string goes through the file, parses back and reloads as the
   const { startup } = await reloaded(host);
   for (const [name, value] of AWKWARD_VALUES) assert.deepEqual(await startup.set_in_settings_file(name, value), { kind: "written" }, name);
   const parsed = parse(host.files["settings.toml"]!) as Record<string, unknown>;
-  const reloaded_startup = await fresh_startup();
+  const reloaded_startup = fresh_config_service();
   await reloaded_startup.reload_config();
   const { settings } = await reloaded_startup.get_config();
   for (const [name, value] of AWKWARD_VALUES) {

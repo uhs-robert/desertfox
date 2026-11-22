@@ -10,6 +10,7 @@ import { can_reset, control_of, create_settings_session, LAYER_LABEL, problem_wi
 import { touches_settings } from "../src/shared/storage_watch.ts";
 import type { SettingListRow } from "../src/shared/messages/page.ts";
 import { stub_send } from "./support/stub_send.ts";
+import { fresh_config_service, type ConfigService } from "./background/fresh_config_service.ts";
 
 // The config and the settings.toml it came from, so a write to the file keeps the other settings.
 function install_fake_browser(file_settings: Record<string, unknown>) {
@@ -47,7 +48,7 @@ const stored_settings_toml = (local: Record<string, unknown>) => (local[FILES_SO
 // A session wired to the real background handlers over fake storage. `other_tab` sends the same messages, as a `:set` in another tab would.
 async function make(file_settings: Record<string, unknown> = {}, resolve_keys: (text: string) => string = (text) => text) {
   const fake = install_fake_browser(file_settings);
-  const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
+  const startup = fresh_config_service();
   await startup.get_config();
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys((await startup.get_config()).local_themes ?? {}), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = stub_send<"change_setting" | "list_settings" | "list_font_names">(async (message) => {
@@ -270,7 +271,7 @@ test("update_row sets data-changed, the tag text and the tag title for each top 
 test("the font settings suggest the names the background answers, and no other text setting does", async () => {
   const names = ["Cantarell", "Hack"];
   install_fake_browser({});
-  const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
+  const startup = fresh_config_service();
   await startup.get_config();
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = stub_send<"change_setting" | "list_settings" | "list_font_names">(async (message) => {
@@ -286,7 +287,7 @@ test("the font settings suggest the names the background answers, and no other t
 
 test("a font ask that fails leaves the font settings with no suggestions", async () => {
   install_fake_browser({});
-  const startup = (await import(`../src/background/startup.ts?help_settings_${Math.random()}`)) as typeof import("../src/background/startup.ts");
+  const startup = fresh_config_service();
   await startup.get_config();
   const messages = create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => [], set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file });
   const send = stub_send<"change_setting" | "list_settings" | "list_font_names">(async (message) => {

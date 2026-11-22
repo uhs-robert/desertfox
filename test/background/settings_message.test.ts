@@ -5,6 +5,7 @@ import { create_settings_messages } from "../../src/background/settings_message.
 import { is_extension_page } from "../../src/background/extension_page.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
 // A browser that keeps storage in memory. `fail_session_writes` makes the temp layer's writes throw, after the saved layer's write has landed.
 function install_fake_browser(file_settings: Record<string, unknown>) {
@@ -48,7 +49,7 @@ function install_fake_browser(file_settings: Record<string, unknown>) {
 
 async function make(file_settings: Record<string, unknown> = {}) {
   const fake = install_fake_browser(file_settings);
-  const startup = (await import(`../../src/background/startup.ts?settings_message_${Math.random()}`)) as typeof import("../../src/background/startup.ts");
+  const startup = fresh_config_service();
   await startup.get_config();
   return { ...fake, startup, messages: create_settings_messages({ change_edits: startup.change_edits, read_layers: startup.read_settings_layers, read_theme_names: async () => Object.keys((await startup.get_config()).local_themes ?? {}), set_in_file: startup.set_in_settings_file, unset_in_file: startup.unset_in_settings_file }) };
 }
