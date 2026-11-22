@@ -29,6 +29,7 @@ if (!page.desertfox_ui_ready) {
   // The size of the range of visual item mode, from the child frame that holds it. The top frame keeps it for the badge, apart from the other frames' counts.
   page.desertfox_host.register_handler_("ui.badge_count", (args) => (page.desertfox_host as PageHostApi).visual_count_(args.count, args.from_frame));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
+    // ui_proxy sends `{}` to hide the badge, so the fields can be missing.
     const { mode, pass_next, setting, recording, site_label, count } = args as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.
     if (mode === "media" && document.fullscreenElement) return show_mode_label(undefined);

@@ -2,6 +2,7 @@
 
 import type { PageHostApi } from "../bundle_host.ts";
 import { all_items, carry_row, current_item, follow_item, move_item, read_cursor, watch_lands } from "./pick.ts";
+import type { ItemArgs } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { in_view_, live_derived_row } from "./derived.ts";
 import { args_for_pin, lists_with_row, pick_list } from "./lists.ts";
@@ -47,7 +48,7 @@ if (!item_window.desertfox_item_ready && host) {
   });
   watch_lands(selection.land_);
   host.register_handler_("page.item", (args) => {
-    const item_args = carry_row(args);
+    const item_args = carry_row(args as ItemArgs);
     // `current` with extend starts a selection at the item it lands on, which is how `v` begins. Any other extend moves the cursor from where a redraw left it.
     if (item_args.extend) item_args.direction === "current" ? selection.start_next_land_(true) : selection.tick_();
     try {

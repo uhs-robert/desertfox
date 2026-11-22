@@ -9,6 +9,7 @@ import { args_for_count } from "./invocation_args.ts";
 // A command whose code sits in a bundle runs through the bundle host, which loads the bundle on the first run. A bundle that registers no handler yet refuses with `needs <bundle name>`.
 const lazy_handler = ({ id, bundle }: Invocation): ContentHandler => {
   if (!bundle) throw new Error(`${id} cannot run in the page`);
+  // `id as string` lifts the page.item narrowing: the registry validated these args, so they need no map check.
   return { run: (args) => (id === "page.item" && !args.selector ? scroll_if_refused(args, bundles.run_command_(id as string, bundle, args, `needs ${bundle}`)) : bundles.run_command_(id, bundle, args, `needs ${bundle}`)) };
 };
 

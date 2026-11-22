@@ -78,6 +78,8 @@ test("an internal id names a handler the bundle registers and is not a registry 
 const map_entries = [...text_of("src/content/bundle_calls.ts").matchAll(/^ {2}"?([\w.]+)"?: \{ bundle: "(\w+)";/gm)].map((match) => [match[1]!, match[2] as BundleName] as const);
 
 test("every entry of the bundle call map is a handler its bundle registers", () => {
+  // A reformatted entry would drop out of the scan, so the count must match the text.
+  assert.equal(map_entries.length, text_of("src/content/bundle_calls.ts").split('bundle: "').length - 1, "an entry of bundle_calls.ts does not match the scan pattern");
   assert.ok(map_entries.length > 25, "the map scan found too few entries");
   for (const [id, name] of map_entries) assert.ok(registered_ids(name).includes(id), `bundle_calls.ts says ${name} registers ${id}, which it does not`);
 });

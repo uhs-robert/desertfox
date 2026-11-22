@@ -71,7 +71,8 @@ type BundleCalls = {
   "item.current": { bundle: "item"; args: { take: (item: Element | undefined, link: Element | undefined) => void } };
   "item.range": { bundle: "item"; args: { take: (...range: ItemRange) => void } };
   "item.cursor": { bundle: "item"; args: { take: (cursor: ItemCursor | undefined) => void } };
-  "page.item": { bundle: "item"; args: ItemArgs };
+  // Callers pass fields that may be undefined (tree reads them from its own args), which `exactOptionalPropertyTypes` refuses on ItemArgs itself.
+  "page.item": { bundle: "item"; args: { [Key in keyof ItemArgs]: ItemArgs[Key] | undefined } };
 
   "page.send_key": { bundle: "site_actions"; args: SendKeyArgs };
   "page.clipboard": { bundle: "site_actions"; args: ClipboardArgs };
@@ -81,4 +82,3 @@ type BundleCalls = {
 export type ArgsOf<Id extends string> = Id extends keyof BundleCalls ? BundleCalls[Id]["args"] : Record<string, unknown>;
 // The bundle that registers the id. The name a caller passes must be it.
 export type BundleOf<Id extends string> = Id extends keyof BundleCalls ? BundleCalls[Id]["bundle"] : BundleName;
-export type CallIds = keyof BundleCalls;

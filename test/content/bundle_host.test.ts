@@ -333,6 +333,14 @@ test("a sink that handles a token keeps it from the keymap", () => {
 // The handler is a stub here, so the field is a stand-in.
 const INPUT_ARGS = { field_: {} as Element, before_: "" };
 
+test("the bundle call map rejects an arg of the wrong type", () => {
+  const page = make_page();
+  // Never called. tsc fails on the directive if the map stops checking, for example by collapsing to any.
+  // @ts-expect-error item.mark takes an element, not a number
+  const wrong_arg = () => page.host.api.run_command_("item.mark", "item", { element: 1 });
+  assert.equal(typeof wrong_arg, "function");
+});
+
 test("toasts and badge updates requested before the ui bundle loads are kept and run in order, without holding keys", async () => {
   const page = make_page();
   const drawn: string[] = [];
