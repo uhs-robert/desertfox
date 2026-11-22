@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { make_favicon_cache } from "../../src/newtab/icon_cache.ts";
+import { make_favicon_cache } from "../../src/shared/page/icon_cache.ts";
 import { make_favicon_saver, source_key, type IconRedraw } from "../../src/background/favicon_saver.ts";
 
 const PNG = "data:image/png;base64,PNG1";

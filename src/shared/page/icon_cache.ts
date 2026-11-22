@@ -1,4 +1,4 @@
-import { keep_chain } from "../shared/swallow.ts";
+import { keep_chain } from "../swallow.ts";
 
 // Site icons for the cards, kept in `storage.local` so the page loads no remote icon. Each is a 32x32 PNG data: URL that the background redraws from the tab icon (`background/favicon_saver.ts`).
 export const FAVICON_CACHE_KEY = "favicon_cache";
