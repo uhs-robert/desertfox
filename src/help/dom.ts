@@ -1,8 +1,10 @@
-// The DOM toolkit the help pages share. It imports no page, so the Settings pages can import it without a cycle through render.ts.
+// The DOM toolkit the help pages share. It imports no page, so the Settings pages can import it without a cycle through the page files.
 
 import { copy_text } from "../content/caret/copy_text.ts";
-import type { Inline } from "./blocks.ts";
+import type { Block, Inline } from "./blocks.ts";
 import { key_caps } from "../shared/key_caps.ts";
+import { PAGES } from "../shared/page/help_route.ts";
+import type { PageId } from "../shared/page/help_route.ts";
 
 export type Child = Node | string;
 
@@ -63,5 +65,23 @@ export function new_tab_link(title: string, url: string, class_name?: string): H
   link.setAttribute("href", url);
   link.setAttribute("target", "_blank");
   link.setAttribute("rel", "noopener noreferrer");
+  return link;
+}
+
+export function block_node(block: Block): HTMLElement {
+  switch (block.kind) {
+    case "heading": return el(`h${block.level}`, undefined, block.text);
+    case "paragraph": return el("p", undefined, ...block.inlines.map(inline_node));
+    case "tip": return el("div", "desertfox-help-tip", el("strong", "desertfox-help-tip-label", "Tip"), ": ", ...block.inlines.map(inline_node));
+    case "list": return el("ul", undefined, ...block.items.map((item) => el("li", undefined, ...item.map(inline_node))));
+    case "code_block": return code_block_node(block.text, block.language);
+  }
+}
+
+const page_hash = (id: PageId): string => PAGES.find((page) => page.id === id)!.hash;
+
+export function page_link(text: string, id: PageId): HTMLElement {
+  const link = el("a", undefined, text);
+  link.setAttribute("href", page_hash(id));
   return link;
 }
