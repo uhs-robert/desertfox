@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
-import { EXCEPTIONS } from "./import_boundaries.ts";
+import { CONTENT_EXCEPTIONS, EXCEPTIONS } from "./import_boundaries.ts";
 
 const PAGE_FOLDERS = ["help", "newtab", "popup", "devtools", "cmdline"];
 const ALLOWED_FOLDERS: Record<string, string[]> = {
@@ -69,6 +69,41 @@ test("every import between src folders follows the one-way rule or is a listed e
 test("every listed exception is still a forbidden import", () => {
   const stale = Object.keys(EXCEPTIONS).filter((edge) => !forbidden.includes(edge));
   assert.deepEqual(stale, [], `These exceptions no longer match an import. Remove them from test/import_boundaries.ts:\n${stale.join("\n")}`);
+});
+
+// A src/content folder other than lib, or a root file (folder ""). handlers/ is the core command folder that the root may import.
+const content_folder_of = (path: string) => {
+  const parts = path.split("/");
+  return parts.length > 2 ? parts[1]! : "";
+};
+const is_content_cross_bundle = (edge: string) => {
+  const [from, to] = edge.split(" -> ") as [string, string];
+  if (!from.startsWith("content/") || !to.startsWith("content/")) return false;
+  const [from_folder, to_folder] = [content_folder_of(from), content_folder_of(to)];
+  if (to_folder === "" || to_folder === "lib" || from_folder === to_folder) return false;
+  return !(from_folder === "" && to_folder === "handlers");
+};
+const content_forbidden = [...edges].filter(is_content_cross_bundle);
+
+test("no content bundle imports another bundle folder unless listed", () => {
+  const unlisted = content_forbidden.filter((edge) => !(edge in CONTENT_EXCEPTIONS));
+  assert.deepEqual(
+    unlisted,
+    [],
+    `These imports break the content rule in AGENTS.md. Move the shared code into src/content/lib instead of adding an exception:\n${unlisted.join("\n")}`,
+  );
+});
+
+test("every listed content exception is still a cross-bundle import", () => {
+  const stale = Object.keys(CONTENT_EXCEPTIONS).filter((edge) => !content_forbidden.includes(edge));
+  assert.deepEqual(stale, [], `These content exceptions no longer match an import. Remove them from test/import_boundaries.ts:\n${stale.join("\n")}`);
+});
+
+test("every content exception names the PR that removes it or is permanent", () => {
+  const unnamed = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => !/^(PR [4-7]|permanent)$/.test(owner));
+  assert.deepEqual(unnamed, []);
+  const permanent = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => owner === "permanent");
+  assert.ok(permanent.every(([edge]) => edge.includes("-> content/quality/")), "only media to quality is permanent");
 });
 
 test("every exception names the cluster that removes it", () => {
