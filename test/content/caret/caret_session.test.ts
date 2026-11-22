@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_sessions } from "../../../src/content/caret/caret_session.ts";
 import type { Session } from "../../../src/content/caret/caret_session.ts";
-import { yank_text } from "../../../src/content/caret/copy_text.ts";
+import { yank_text } from "../../../src/shared/copy/copy_text.ts";
 import type { Mode } from "../../../src/shared/command.ts";
 import type {
   CaretMode,

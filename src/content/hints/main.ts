@@ -12,7 +12,7 @@ import type { ModeAction, HintAction, Place } from "./actions.ts";
 import { hand_to_devtools } from "./inspect.ts";
 import { prompt_pick } from "./prompt_line.ts";
 import { collect_pick } from "./collect_copy.ts";
-import { copy_yank } from "../caret/copy_text.ts";
+import { copy_yank } from "../../shared/copy/copy_text.ts";
 import { keeps_narrowing, drop_targets_of } from "./drop_targets.ts";
 import { list_targets, collect, drop_off_screen, keep_text_matches, text_of, keep_visible_deduplicated, query_for, scroll_clips_in_page, weak_test_for, window_of, with_site_selectors } from "./candidates.ts";
 import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";

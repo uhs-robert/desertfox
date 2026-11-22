@@ -3,7 +3,7 @@
 import { exec_clipboard_command } from "../site_actions/clipboard.ts";
 import type { ClipboardCommandDocument } from "../site_actions/clipboard.ts";
 import { queued_in_page } from "../site_actions/send_key.ts";
-import { copy_text } from "../caret/copy_text.ts";
+import { copy_text } from "../../shared/copy/copy_text.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import { refused_as } from "../../shared/swallow.ts";

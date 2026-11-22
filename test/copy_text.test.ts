@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { copy_text, copy_yank, yank_text } from "../src/content/caret/copy_text.ts";
+import { copy_text, copy_yank, yank_text } from "../src/shared/copy/copy_text.ts";
 
 test("copy_text answers true once the clipboard took the text", async () => {
   const written: string[] = [];

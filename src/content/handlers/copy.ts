@@ -1,6 +1,6 @@
 import type { CopyFormat } from "../../shared/command.ts";
 import type { Outcome } from "../../shared/messages/content.ts";
-import { copy_yank } from "../caret/copy_text.ts";
+import { copy_yank } from "../../shared/copy/copy_text.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../../shared/copy/strip_tracking.ts";
 import { link_text, markdown_address, org_address } from "../../shared/copy/link_escape.ts";

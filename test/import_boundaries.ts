@@ -6,6 +6,4 @@ export const EXCEPTIONS: Record<string, string> = {
   "background/omnibox.ts -> cmdline/completion/live.ts": "C9",
   "background/omnibox.ts -> cmdline/completion/sources.ts": "C9",
   "background/omnibox.ts -> cmdline/word_lookup.ts": "C9",
-  "help/grant_panel.ts -> content/caret/copy_text.ts": "C8",
-  "help/dom.ts -> content/caret/copy_text.ts": "C8",
 };
