@@ -1,7 +1,7 @@
 // The rows of the local widgets: recently closed tabs and the most visited sites. Both read the browser on the page itself, so nothing leaves the machine and no permission beyond `sessions` and `history` is needed.
 import { closed_tab_rows, type ClosedSession } from "../background/complete_items.ts";
 import { is_web_url } from "../shared/config.ts";
-import { icon_field, site_host } from "./icon_cache.ts";
+import { icon_field, site_host } from "../shared/page/icon_cache.ts";
 import type { CachedIcons, ListRow } from "./lists.ts";
 
 // Newest closed first, as `getRecentlyClosed` gives them. A click restores the session, so the tab comes back with its history.

@@ -16,7 +16,7 @@ import { stored_keymap } from "./keymap_source.ts";
 import { listed_by_search } from "./history_cache.ts";
 import { browser_rank_service_deps, start_rank_service } from "./rank_service.ts";
 import { clear_on_history_removed } from "./history_clear.ts";
-import { make_favicon_cache } from "../newtab/icon_cache.ts";
+import { make_favicon_cache } from "../shared/page/icon_cache.ts";
 import { make_favicon_saver, redraw_icon_png } from "./favicon_saver.ts";
 import { shared_previous_tabs } from "./previous_tab.ts";
 import { shared_last_used_tabs } from "./last_used_tab.ts";

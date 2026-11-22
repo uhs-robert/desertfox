@@ -71,7 +71,7 @@ export const area_rules = [
     areas: ["help"],
   },
   { globs: ["src/newtab/**"], areas: ["newtab"] },
-  { globs: ["src/background/favicon_saver.ts"], areas: ["newtab"] },
+  { globs: ["src/background/favicon_saver.ts", "src/shared/page/icon_cache.ts"], areas: ["newtab"] },
   // The storage watcher feeds the new tab and help redraws and the theme sheet of every content surface.
   { globs: ["src/shared/storage_watch.ts"], areas: ["help", "newtab", "ui"] },
   // The key lookup names keys on the help pages and the new tab hint.

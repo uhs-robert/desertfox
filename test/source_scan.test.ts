@@ -29,7 +29,7 @@ const BOUNDARY_TYPE_FILES: Record<string, string> = {
   "src/background/tab_media.ts": "MediaHold and TopState are stored in storage.session",
   "src/background/tab_modes.ts": "TabModeRecord is stored and ModeReport is sent by content scripts",
   "src/cmdline/protocol.ts": "HostToPage and PageToHost cross window.postMessage",
-  "src/newtab/icon_cache.ts": "FaviconEntry is stored in storage.local",
+  "src/shared/page/icon_cache.ts": "FaviconEntry is stored in storage.local",
   "src/newtab/net_widget.ts": "StoredEntry is stored in storage.local",
   "src/shared/config.ts": "the built config is stored under FILES_CONFIG_STORAGE_KEY",
   "src/shared/invocation.ts": "invocations are stored in the slot table, the repeat memory and registers",

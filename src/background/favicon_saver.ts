@@ -1,5 +1,5 @@
 // Saves a 32x32 copy of each visited site's icon for the new tab page. Firefox hands the background every tab icon as a data: image (any size or format), so nothing here makes a request. The page then reads only the small copies.
-import { FAVICON_CACHE_MAX_ENTRIES, FAVICON_ENTRY_MAX_CHARS, FAVICON_SIZE, site_host, type FaviconCache } from "../newtab/icon_cache.ts";
+import { FAVICON_CACHE_MAX_ENTRIES, FAVICON_ENTRY_MAX_CHARS, FAVICON_SIZE, site_host, type FaviconCache } from "../shared/page/icon_cache.ts";
 
 // An input larger than this is not worth decoding for a 32px tile.
 const MAX_SOURCE_CHARS = 512 * 1024;

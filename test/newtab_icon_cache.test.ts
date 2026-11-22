@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FAVICON_CACHE_KEY, FAVICON_CACHE_MAX_ENTRIES, FAVICON_ENTRY_MAX_CHARS, icons_by_host, make_favicon_cache, with_icon, type FaviconEntry } from "../src/newtab/icon_cache.ts";
+import { FAVICON_CACHE_KEY, FAVICON_CACHE_MAX_ENTRIES, FAVICON_ENTRY_MAX_CHARS, icons_by_host, make_favicon_cache, with_icon, type FaviconEntry } from "../src/shared/page/icon_cache.ts";
 
 const ICON = "data:image/png;base64,AAAA";
 const entry = (host: string, icon = ICON, source = `key-${host}`): FaviconEntry => ({ host, icon, source });
