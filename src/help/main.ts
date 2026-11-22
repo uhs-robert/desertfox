@@ -27,8 +27,8 @@ import { create_files_session } from "./files_model.ts";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../background/storage_keys.ts";
 import { create_host_start_session } from "./host_start_model.ts";
 import { mount_host_start } from "./host_start_page.ts";
-import { parse_route } from "./route.ts";
-import type { PageId, Route } from "./route.ts";
+import { parse_route } from "../shared/page/help_route.ts";
+import type { PageId, Route } from "../shared/page/help_route.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 

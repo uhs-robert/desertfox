@@ -1,6 +1,6 @@
 // Opens the Quick Start page once, on the first install. An update never opens it.
 
-import { HELP_PAGE_FILE, PAGES } from "../help/route.ts";
+import { HELP_PAGE_FILE, PAGES } from "../shared/page/help_route.ts";
 
 const QUICK_START_HASH = PAGES.find((page) => page.id === "quick-start")!.hash;
 

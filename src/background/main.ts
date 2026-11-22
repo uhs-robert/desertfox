@@ -8,7 +8,7 @@ import type { BackgroundToContent, DevtoolsHello, FocusedFrameMode, MediaStep, T
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
 import { container_names, read_disabled, container_stores, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
-import { HELP_PAGE_FILE } from "../help/route.ts";
+import { HELP_PAGE_FILE } from "../shared/page/help_route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_frame_cue } from "./frame_cue.ts";

@@ -1,4 +1,4 @@
-import { command_help_url, PAGES, site_rules_help_url } from "../help/route.ts";
+import { command_help_url, PAGES, site_rules_help_url } from "../shared/page/help_route.ts";
 import { create_matcher, type MatchResult } from "../shared/keys/matcher.ts";
 import { normal_tree_for, site_columns_for } from "./page_keymap.ts";
 import { parse_sequence } from "../shared/keys/notation.ts";

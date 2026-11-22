@@ -5,7 +5,7 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import type { Block, Inline } from "../src/help/blocks.ts";
 import "../src/background/command_modules.ts";
 import { quick_start_blocks, quick_start_fallbacks } from "../src/help/quick_start.ts";
-import { parse_route } from "../src/help/route.ts";
+import { parse_route } from "../src/shared/page/help_route.ts";
 import { compile_keymap } from "../src/shared/keys/compiler.ts";
 import { command_meta } from "../src/shared/registry/index.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
