@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
 import { test } from "node:test";
+import ts from "typescript";
 import { EXCEPTIONS } from "./import_boundaries.ts";
 
 const PAGE_FOLDERS = ["help", "newtab", "popup", "devtools", "cmdline"];
@@ -24,18 +25,27 @@ const sources = readdirSync(new URL("src", root), { recursive: true, encoding: "
   .filter((path) => path.endsWith(".ts") && !path.endsWith(".d.ts"))
   .sort();
 
-// Type-only imports are kept: `import type` and `export type ... from` match like the others. Comment lines are dropped so an example in a comment is no edge.
-const IMPORT = /(?:\b(?:import|export)\s[^;"']*?\bfrom\s*|\bimport\s*\(?\s*)["'](\.[^"']*)["']/g;
-const code_of = (path: string) =>
-  readFileSync(new URL(`src/${path}`, root), "utf8")
-    .split("\n")
-    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
-    .join("\n");
+// Import declarations, `export ... from` and `import()` calls, read from the syntax tree, so a comment or a string never adds or hides an edge. `import type` counts like any import. Only string-literal relative specifiers are followed.
+export function relative_specifiers(source: string): string[] {
+  const found: string[] = [];
+  const visit = (node: ts.Node) => {
+    const specifier =
+      ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+        ? node.moduleSpecifier
+        : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+          ? node.arguments[0]
+          : undefined;
+    if (specifier && ts.isStringLiteralLike(specifier) && specifier.text.startsWith(".")) found.push(specifier.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile("scan.ts", source, ts.ScriptTarget.Latest, true));
+  return found;
+}
 
 const edges = new Set<string>();
 for (const file of sources) {
-  for (const match of code_of(file).matchAll(IMPORT)) {
-    edges.add(`${file} -> ${posix.normalize(posix.join(dirname(file), match[1]!))}`);
+  for (const specifier of relative_specifiers(readFileSync(new URL(`src/${file}`, root), "utf8"))) {
+    edges.add(`${file} -> ${posix.normalize(posix.join(dirname(file), specifier))}`);
   }
 }
 
@@ -64,4 +74,16 @@ test("every listed exception is still a forbidden import", () => {
 test("every exception names the cluster that removes it", () => {
   const unnamed = Object.entries(EXCEPTIONS).filter(([, cluster]) => !/^C([1-9]|10)$/.test(cluster));
   assert.deepEqual(unnamed, []);
+});
+
+test("the extractor finds each import form and ignores comments and strings", () => {
+  const found = (source: string) => relative_specifiers(source);
+  assert.deepEqual(found('import { a } from "./a.ts";'), ["./a.ts"]);
+  assert.deepEqual(found('import type { T } from "./t.ts";'), ["./t.ts"]);
+  assert.deepEqual(found('export { b } from "./b.ts";\nexport type { U } from "./u.ts";'), ["./b.ts", "./u.ts"]);
+  assert.deepEqual(found('import "./side.ts";'), ["./side.ts"]);
+  assert.deepEqual(found('const m = await import("./dyn.ts");'), ["./dyn.ts"]);
+  assert.deepEqual(found("const s = \"import x from './s.ts'\";\n// import y from './c.ts'"), []);
+  assert.deepEqual(found('/* c */ import { d } from "./d.ts";'), ["./d.ts"]);
+  assert.deepEqual(found('import { z } from "pkg";'), []);
 });
