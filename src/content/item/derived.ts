@@ -1,5 +1,5 @@
 // The derived row of the page: what the finder found, kept for the document so a key press does not read the page again.
-// The finder answers every top-level list, and one of them is active. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
+// The finder answers every top-level list, and one of them is active. A read first makes active the list that holds the keyboard focus, whether it is long or pick-only. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
 
 import { find_items, FINDER_BUDGET_MS, LONG_BUDGET_MS } from "./finder.ts";
 import type { Found, Region } from "./finder.ts";
@@ -27,6 +27,8 @@ export type DerivedDeps = {
   in_view_: (element: Element) => number;
   // What follows the last item of the list. A feed that loads more, or a `]]` load-more, changes it.
   tail_: (items: Element[]) => unknown[];
+  // The element that holds the keyboard focus.
+  focus_: () => Element | null;
 };
 
 // A pin is a pick of a list that a site row's keys do not walk: `pinned_` says whether one is on, after a read that drops it when its list is gone or the address changed. `grew_` reads the page again when something new follows the last item, and says whether it did. A move at the end of the list asks it. `grid_` says whether the kept answer is a grid.
@@ -99,7 +101,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
           const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)) || (!!active_home && region.home_ === active_home));
           // A read that ran out of time shows nothing about the list, so only a whole read that lacks it drops the pin.
           if (pin && !old && !found.timed_out_) pin = undefined;
-          const active = (hold ? old : most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
+          const active = (hold ? old : found.regions.find((region) => region.items.some((item) => item.contains(deps.focus_()))) ?? most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
           if (!(pin && found.timed_out_)) remember(active);
           kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
         }
@@ -167,4 +169,5 @@ export const live_derived_row = (): DerivedRow =>
     is_shown_: is_shown,
     in_view_,
     tail_: list_tail,
+    focus_: () => document.activeElement,
   });

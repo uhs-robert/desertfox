@@ -561,6 +561,7 @@ function real_derived_page(focused_index: number) {
     is_shown_: () => true,
     in_view_: () => 1,
     tail_: () => [state.footer],
+    focus_: () => null,
   });
   return { ...fake, state };
 }
@@ -671,7 +672,7 @@ test("picking a side list again after a pick of the row's list takes the focus a
 test("an ARIA list with focus_none_ takes no focus on a pick or a landing, draws the box and gives the row as its link", () => {
   const { page, items, log, shown, selectors } = fake_page(list, true, -1);
   const region = { kind: "list" as const, items: items as unknown as Element[], links: new Map(items.map((entry) => [entry, entry])), pick_only_: true as const, focus_none_: true as const, box_selector_: "[role=option]" } as never;
-  const derived = create_derived_row({ find_: () => ({ ...(region as object), regions: [region] }) as never, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [] });
+  const derived = create_derived_row({ find_: () => ({ ...(region as object), regions: [region] }) as never, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [], focus_: () => null });
   page.derived = derived;
   derived.items_();
   const focuses: string[] = [];

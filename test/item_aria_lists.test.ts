@@ -184,9 +184,15 @@ test("rows of a native table grid are items, and its header row is not", () => {
   assert.equal(region!.box_selector_, "[role=row],tr:not([role])");
 });
 
+// A saved node has no `contains`, which the derived row calls on each item to find the focus.
+const with_contains = (found: ReturnType<typeof find_items>) => {
+  for (const region of found.regions) for (const entry of region.items) Object.assign(entry as object, { contains: () => false });
+  return found;
+};
+
 test("a page whose only list is an ARIA grid starts nothing: the derived row answers no item before a pick", () => {
   const page = page_of(widget("grid", rows(10, "row")));
-  const row = create_derived_row({ find_: () => find_items(saved_reader(page)) as never, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [] });
+  const row = create_derived_row({ find_: () => with_contains(find_items(saved_reader(page))) as never, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [], focus_: () => null });
   assert.deepEqual(row.items_(), []);
   assert.equal(row.lists_().length, 1);
 });
