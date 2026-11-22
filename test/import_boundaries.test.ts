@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
-import { EXCEPTIONS } from "./import_boundaries.ts";
+import { CONTENT_EXCEPTIONS, EXCEPTIONS } from "./import_boundaries.ts";
 
 const PAGE_FOLDERS = ["help", "newtab", "popup", "devtools", "cmdline"];
 const ALLOWED_FOLDERS: Record<string, string[]> = {
@@ -25,7 +25,7 @@ const sources = readdirSync(new URL("src", root), { recursive: true, encoding: "
   .filter((path) => path.endsWith(".ts") && !path.endsWith(".d.ts"))
   .sort();
 
-// Import declarations, `export ... from` and `import()` calls, read from the syntax tree, so a comment or a string never adds or hides an edge. `import type` counts like any import. Only string-literal relative specifiers are followed.
+// Import declarations, `export ... from`, `import()` calls and `import("...")` types, read from the syntax tree, so a comment or a string never adds or hides an edge. `import type` counts like any import. Only string-literal relative specifiers are followed.
 export function relative_specifiers(source: string): string[] {
   const found: string[] = [];
   const visit = (node: ts.Node) => {
@@ -34,7 +34,9 @@ export function relative_specifiers(source: string): string[] {
         ? node.moduleSpecifier
         : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
           ? node.arguments[0]
-          : undefined;
+          : ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)
+            ? node.argument.literal
+            : undefined;
     if (specifier && ts.isStringLiteralLike(specifier) && specifier.text.startsWith(".")) found.push(specifier.text);
     ts.forEachChild(node, visit);
   };
@@ -71,6 +73,43 @@ test("every listed exception is still a forbidden import", () => {
   assert.deepEqual(stale, [], `These exceptions no longer match an import. Remove them from test/import_boundaries.ts:\n${stale.join("\n")}`);
 });
 
+// A src/content folder other than lib, or a root file (folder ""). handlers/ is the core command folder that the root may import. cmdline/host.ts counts as a root file, so it may not import a bundle folder either.
+const CONTENT_ROOT_IMPORTERS = ["cmdline/host.ts"];
+const content_folder_of = (path: string) => {
+  if (CONTENT_ROOT_IMPORTERS.includes(path)) return "";
+  const parts = path.split("/");
+  return parts.length > 2 ? parts[1]! : "";
+};
+const is_content_cross_bundle = (edge: string) => {
+  const [from, to] = edge.split(" -> ") as [string, string];
+  if (!(from.startsWith("content/") || CONTENT_ROOT_IMPORTERS.includes(from)) || !to.startsWith("content/")) return false;
+  const [from_folder, to_folder] = [content_folder_of(from), content_folder_of(to)];
+  if (to_folder === "" || to_folder === "lib" || from_folder === to_folder) return false;
+  return !(from_folder === "" && to_folder === "handlers");
+};
+const content_forbidden = [...edges].filter(is_content_cross_bundle);
+
+test("no content bundle imports another bundle folder unless listed", () => {
+  const unlisted = content_forbidden.filter((edge) => !(edge in CONTENT_EXCEPTIONS));
+  assert.deepEqual(
+    unlisted,
+    [],
+    `These imports break the content rule in AGENTS.md. Move the shared code into src/content/lib instead of adding an exception:\n${unlisted.join("\n")}`,
+  );
+});
+
+test("every listed content exception is still a cross-bundle import", () => {
+  const stale = Object.keys(CONTENT_EXCEPTIONS).filter((edge) => !content_forbidden.includes(edge));
+  assert.deepEqual(stale, [], `These content exceptions no longer match an import. Remove them from test/import_boundaries.ts:\n${stale.join("\n")}`);
+});
+
+test("every content exception names the PR that removes it or is permanent", () => {
+  const unnamed = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => !/^(PR [4-7]|permanent)$/.test(owner));
+  assert.deepEqual(unnamed, []);
+  const permanent = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => owner === "permanent");
+  assert.ok(permanent.every(([edge]) => edge.startsWith("content/media/") && edge.includes("-> content/quality/")), "only media to quality is permanent");
+});
+
 test("every exception names the cluster that removes it", () => {
   const unnamed = Object.entries(EXCEPTIONS).filter(([, cluster]) => !/^C([1-9]|10)$/.test(cluster));
   assert.deepEqual(unnamed, []);
@@ -86,4 +125,5 @@ test("the extractor finds each import form and ignores comments and strings", ()
   assert.deepEqual(found("const s = \"import x from './s.ts'\";\n// import y from './c.ts'"), []);
   assert.deepEqual(found('/* c */ import { d } from "./d.ts";'), ["./d.ts"]);
   assert.deepEqual(found('import { z } from "pkg";'), []);
+  assert.deepEqual(found('type A = typeof import("./t.ts");\ntype B = import("./u.ts").Foo;'), ["./t.ts", "./u.ts"]);
 });
