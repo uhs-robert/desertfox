@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
-import { empty_config, pick_config } from "../../src/background/config_load.ts";
+import { empty_config, pick_config } from "../../src/shared/config/config_load.ts";
 
 const file = (marker: string) => ({ format_version: CONFIG_FORMAT_VERSION, css: marker });
 

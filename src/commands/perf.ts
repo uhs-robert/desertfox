@@ -1,5 +1,5 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { BUNDLE_LOADS_STORAGE_KEY } from "../background/storage_keys.ts";
+import { BUNDLE_LOADS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { browser_timing_log } from "../background/timing_browser.ts";
 import { format_timings, summarize_timings, toast_summary } from "../background/timing_summary.ts";
 import type { Timing } from "../background/timing_log.ts";

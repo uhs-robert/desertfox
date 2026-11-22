@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
-import { build_config_status, checked_edit_layer, empty_config, with_edits } from "../../src/background/config_load.ts";
+import { build_config_status, checked_edit_layer, empty_config, with_edits } from "../../src/shared/config/config_load.ts";
 import { apply_edits, CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import type { SettingOverrides } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
-import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 
 test("an edit wins over the config, a temp edit wins over a saved one, and the rest of the config stays", () => {
   const settings = apply_edits({ which_key_delay_ms: 100, hint_letters: "ab" }, { saved: { which_key_delay_ms: 500, light_intensity: 2 }, temp: { which_key_delay_ms: 900 } });

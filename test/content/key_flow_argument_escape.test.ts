@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import { create_key_flow } from "../../src/content/key_flow.ts";
 import { create_mode_state } from "../../src/content/mode_state.ts";

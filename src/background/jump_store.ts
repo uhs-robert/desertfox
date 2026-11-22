@@ -6,7 +6,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import { JUMP_SAME_PLACE_PX, MAX_JUMPS, type JumpEntry } from "../shared/jump_names.ts";
 import { MAX_MARK_URL_CHARS } from "../shared/mark_names.ts";
 import { create_write_queue } from "./store_turns.ts";
-import { JUMP_PRIVATE_STORAGE_KEY, JUMP_STORAGE_KEY } from "./storage_keys.ts";
+import { JUMP_PRIVATE_STORAGE_KEY, JUMP_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 type JumpList = { entries: JumpEntry[]; cursor: number };
 // A page that went away leaves its last offset here, per tab, until the tab shows another page or the page loads again.

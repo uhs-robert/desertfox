@@ -3,7 +3,7 @@
 import { FONT_CANDIDATES, merge_font_names, probe_fonts } from "../shared/font_candidates.ts";
 import type { MeasureWidth } from "../shared/font_candidates.ts";
 import { keep_chain } from "../shared/swallow.ts";
-import { FONT_NAMES_STORAGE_KEY } from "./storage_keys.ts";
+import { FONT_NAMES_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 export type FontNamesDeps = {
   storage: Pick<typeof browser.storage.local, "get" | "set">;

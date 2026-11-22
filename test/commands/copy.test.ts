@@ -62,7 +62,7 @@ test("copy.url drops the tracking parameters of the shipped list, and an empty l
     document: { title: "A", querySelector: () => null },
   });
   const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
-  const { CONFIG_STATUS_STORAGE_KEY } = await import("../../src/background/storage_keys.ts");
+  const { CONFIG_STATUS_STORAGE_KEY } = await import("../../src/shared/config/storage_keys.ts");
   const { strip_patterns_for } = await import("../../src/background/strip_patterns.ts");
   // The background answers the ask: the page address goes in, the names to drop come out.
   const stored = (settings: object) => ({ runtime: { sendMessage: async (message: { type: string; address: string }) => (message.type === "read_strip_patterns" ? strip_patterns_for({ get: async () => ({ [CONFIG_STATUS_STORAGE_KEY]: { settings } }) } as never, message.address) : { ok: true }) } });

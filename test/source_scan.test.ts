@@ -12,7 +12,7 @@ const AFTER_MEMBER = /^\s*\??:/;
 // Files whose types cross the extension boundary, where the build's mangleProps: /_$/ (tools/build.mjs) must not rename a property: it would change the name on the wire or on disk and silently break stored data.
 const BOUNDARY_TYPE_FILES: Record<string, string> = {
   "src/background/browser_deps.ts": "the bundle-load entries it builds are stored for `debug.perf` to read",
-  "src/background/config_load.ts": "ConfigStatus and FilesSource are stored",
+  "src/shared/config/config_load.ts": "ConfigStatus and FilesSource are stored",
   "src/background/edit_layers.ts": "the keymap, engine, alias and imported theme edits are stored",
   "src/background/external_editor.ts": "EditorJob is stored in storage.session",
   "src/background/hint_frames.ts": "HintFramesSession is stored in storage.session and its messages cross frames",

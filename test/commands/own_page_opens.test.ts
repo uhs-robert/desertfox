@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
-import { FILES_CONFIG_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
 // The config loads once per process, so this file holds the tests that need the built-in page as the home page.

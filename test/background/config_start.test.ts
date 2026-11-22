@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
 import { IMPORT_DIR_LABEL } from "../../src/background/config_import.ts";
-import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { answer_host_start_choice, CHOICE_SETTLED, CHOICE_STALE } from "../../src/background/host_start.ts";
 import type { HostStartChoice, HostStartPending } from "../../src/shared/messages/page.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";

@@ -3,7 +3,7 @@
 import type { MergedConfig } from "../shared/config.ts";
 import { show_toast_on_tab } from "./browser_deps.ts";
 import type { HostHashes, HostUpdateDeps, HostUpdateState } from "./host_update.ts";
-import { HOST_UPDATE_STORAGE_KEY } from "./storage_keys.ts";
+import { HOST_UPDATE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 function hashes_of(value: unknown): HostHashes | undefined {
   const { version, sha256 } = (value ?? {}) as { version?: unknown; sha256?: unknown };

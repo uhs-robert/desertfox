@@ -7,7 +7,7 @@ import { PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
 import { KEYS_FILE_MARKER } from "../../src/background/engine_keys_file.ts";
 import { engine_layer_moved, merged_by_path } from "../../src/background/engine_layer_move.ts";
 import { create_engine_messages } from "../../src/background/engine_message.ts";
-import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 

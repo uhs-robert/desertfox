@@ -19,7 +19,7 @@ import { create_load_log } from "./load_log.ts";
 import { browser_timing_log } from "./timing_browser.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import type { ReinjectDeps } from "./reload.ts";
-import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "./storage_keys.ts";
+import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { deliver_refusal, deliver_toast } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
 import { ask_page_bundle, ask_selection } from "./selection_ask.ts";

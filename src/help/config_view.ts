@@ -1,6 +1,6 @@
 // Turns the config status into the config source line and the apply steps for the help page's Settings. No DOM here, so tests read the rows.
 
-import type { ConfigSource, ConfigStatus } from "../background/config_load.ts";
+import type { ConfigSource, ConfigStatus } from "../shared/config/config_load.ts";
 
 export type ConfigView = {
   source_text: string;

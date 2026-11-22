@@ -7,7 +7,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { ConfigImportPreview, ImportSource } from "../../src/shared/messages/page.ts";
 import { write_zip } from "../../src/shared/zip.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 
 type Startup = typeof import("../../src/background/startup.ts");

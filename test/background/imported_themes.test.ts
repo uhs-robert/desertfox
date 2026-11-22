@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { stringify } from "smol-toml";
 import "../../src/background/command_modules.ts";
 import { answer_config_transfer } from "../../src/background/config_transfer.ts";
-import { load_edits } from "../../src/background/config_load.ts";
+import { load_edits } from "../../src/shared/config/config_load.ts";
 import { create_theme_messages, imports_moved_to_files, stored_imports_of } from "../../src/background/theme_message.ts";
-import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, THEME_EDITS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { DEFAULT_SETTINGS } from "../../src/shared/config.ts";
 import { build_setting_list } from "../../src/shared/setting_list.ts";
 import { parse_base16 } from "../../src/shared/theme/base16.ts";
@@ -421,7 +421,7 @@ test("the picker lists the theme file names after the built-in ones, without rep
 });
 
 test("a config stored with the single local_theme key still gives that theme", async () => {
-  const { pick_config } = await import("../../src/background/config_load.ts");
+  const { pick_config } = await import("../../src/shared/config/config_load.ts");
   const theme = mapped(SCHEME);
   const stored = { format_version: 1, keymap: {}, search_engines: {}, command_aliases: {}, quickmarks: {}, settings: {}, snippets: [], css: "", local_theme: { name: "mine", colors: theme } };
   const { CONFIG_FORMAT_VERSION } = await import("../../src/shared/config.ts");

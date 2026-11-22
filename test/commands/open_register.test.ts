@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "../../src/background/storage_keys.ts";
+import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "../../src/shared/config/storage_keys.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";

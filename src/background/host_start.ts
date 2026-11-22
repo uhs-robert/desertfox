@@ -6,7 +6,7 @@ import { AUTOCONFIG_FILE } from "../shared/config_build/source_files.ts";
 import type { HostFileChange, HostStartChoice, HostStartChoiceAnswer, HostStartPending } from "../shared/messages/page.ts";
 import { ConfigRefusal } from "./config_reload.ts";
 import type { ConfigFilesReply } from "./native_client.ts";
-import { HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "./storage_keys.ts";
+import { HOST_START_APPLIED_STORAGE_KEY, HOST_START_KEPT_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 // The host writes autoconfig.toml itself, from the key edits, and the build never reads it. Left in, it would make every key edit a difference, and a folder holding only it would count as filled.
 export function compared_files(files: ConfigFiles): ConfigFiles {

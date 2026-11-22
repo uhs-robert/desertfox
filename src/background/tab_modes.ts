@@ -4,7 +4,7 @@
 
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import { TAB_MODE_STORAGE_PREFIX } from "./storage_keys.ts";
+import { TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { keep_chain, refused_as } from "../shared/swallow.ts";
 
 type ModeStorage = Pick<typeof browser.storage.local, "get" | "set" | "remove">;

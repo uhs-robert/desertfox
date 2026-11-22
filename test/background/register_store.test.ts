@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { answer_register_request, create_register_store, describe_value } from "../../src/background/register_store.ts";
 import { wire_private_cleanup } from "../../src/background/store_turns.ts";
 import type { RegisterArea } from "../../src/background/register_store.ts";
-import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "../../src/background/storage_keys.ts";
+import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "../../src/shared/config/storage_keys.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 
 function fake_area(values = new Map<string, unknown>()) {

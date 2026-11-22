@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { create_settings_messages } from "../../src/background/settings_message.ts";
 import { is_extension_page } from "../../src/background/extension_page.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
-import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 
 // A browser that keeps storage in memory. `fail_session_writes` makes the temp layer's writes throw, after the saved layer's write has landed.
 function install_fake_browser(file_settings: Record<string, unknown>) {

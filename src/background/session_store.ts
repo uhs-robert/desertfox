@@ -3,7 +3,7 @@
 
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { SessionItem } from "../shared/messages/content.ts";
-import { SESSIONS_STORAGE_KEY } from "./storage_keys.ts";
+import { SESSIONS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
 
 export type SessionTab = {

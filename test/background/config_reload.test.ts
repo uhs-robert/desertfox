@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { test } from "node:test";
 import { parse } from "smol-toml";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { CONFIG_FORMAT_VERSION } from "../../src/shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
-import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { build_files_config, ConfigRefusal } from "../../src/background/config_reload.ts";
 import { create_autoconfig_mirror } from "../../src/background/autoconfig_mirror.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { test } from "node:test";
 import { make_settings_handlers } from "../../src/commands/settings.ts";
-import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { replayed_on_folder } from "../../src/background/settings_file.ts";

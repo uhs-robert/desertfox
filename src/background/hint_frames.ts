@@ -4,7 +4,7 @@
 
 import { clean_letters, make_labels } from "../content/hints/labels.ts";
 import type { HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesMessage, Outcome } from "../shared/messages/index.ts";
-import { HINT_FRAMES_STORAGE_PREFIX } from "./storage_keys.ts";
+import { HINT_FRAMES_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { keep_chain, refused_as, best_effort } from "../shared/swallow.ts";
 
 declare const browser: MessagingBrowser;

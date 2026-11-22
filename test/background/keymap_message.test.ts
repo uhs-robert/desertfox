@@ -3,7 +3,7 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import type { CompileInput } from "../../src/background/compile.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
 import type { EditLayers, KeymapEdits } from "../../src/background/edit_layers.ts";
 import { binding_rows, create_keymap_messages, exportable_key_edits } from "../../src/background/keymap_message.ts";

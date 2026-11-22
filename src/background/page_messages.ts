@@ -16,7 +16,7 @@ import {
 import { exportable_key_edits } from "./keymap_message.ts";
 import { dropped_warning } from "./engine_layer.ts";
 import { outcome_note } from "./settings_file.ts";
-import { load_edits, load_files_source } from "./config_load.ts";
+import { load_edits, load_files_source } from "../shared/config/config_load.ts";
 import { browser_quickmark_store } from "./quickmark_store.ts";
 import type { FileWriteOutcome } from "./settings_file.ts";
 import type { create_settings_messages } from "./settings_message.ts";

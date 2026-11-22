@@ -1,7 +1,7 @@
 // Every `storage.local` key the background owns. The compiled keymap key lives in `shared/prefix_tree.ts`, the theme and user CSS keys in `shared/theme/apply.ts`.
 
 // The raw files and the config the last `config.reload` or import built from them. `FILES_CONFIG_STORAGE_KEY`, defined in `shared/storage_watch.ts` because a reload ends with a write of it.
-export { FILES_CONFIG_STORAGE_KEY } from "../shared/storage_watch.ts";
+export { FILES_CONFIG_STORAGE_KEY } from "../storage_watch.ts";
 
 // The raw file text that config was built from, with its folder label, so an import can rebuild it with its own files on top.
 // A key of its own, written in the same `set` as the config: the pages read the config at every redraw and need none of the text.
@@ -20,7 +20,7 @@ export const SETTINGS_FILE_UNSYNCED_STORAGE_KEY = "desertfox_settings_file_unsyn
 export const WARNINGS_STORAGE_KEY = "desertfox_warnings";
 
 // Where the config came from and the settings in force: `CONFIG_STATUS_STORAGE_KEY`, defined in `shared/storage_watch.ts` for the pages that follow it.
-export { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
+export { CONFIG_STATUS_STORAGE_KEY } from "../storage_watch.ts";
 
 // The theme name the desktop last pushed over the bridge. `theme = "desktop"` follows it. Local storage, so it stays on this machine and survives a restart.
 export const DESKTOP_THEME_STORAGE_KEY = "desertfox_desktop_theme";

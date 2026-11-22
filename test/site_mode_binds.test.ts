@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { list_keys } from "../src/background/list_keys.ts";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
-import { empty_config } from "../src/background/config_load.ts";
+import { empty_config } from "../src/shared/config/config_load.ts";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";

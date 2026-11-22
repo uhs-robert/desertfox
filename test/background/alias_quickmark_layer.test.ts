@@ -6,7 +6,7 @@ import { load_layers } from "../../src/background/edit_layers.ts";
 import { create_alias_messages } from "../../src/background/alias_message.ts";
 import { create_quickmark_messages } from "../../src/background/quickmark_message.ts";
 import { browser_quickmark_store } from "../../src/background/quickmark_store.ts";
-import { ALIAS_EDITS_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { ALIAS_EDITS_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import type { HostStartPending } from "../../src/shared/messages/page.ts";
 import { answer_host_start_choice } from "../../src/background/host_start.ts";
 import { write_zip } from "../../src/shared/zip.ts";

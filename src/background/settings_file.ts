@@ -15,7 +15,7 @@ import { parsed, remove_top_level_key, same_value, set_top_level_key } from "./t
 import type { TomlValue } from "./toml_key_edit.ts";
 import { remove_table_rows, set_table_rows } from "./toml_table_edit.ts";
 import type { TomlRow } from "./toml_table_edit.ts";
-import { SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "./storage_keys.ts";
+import { SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { host_file_of } from "./native_client.ts";
 
 export const SETTINGS_FILE = "settings.toml";

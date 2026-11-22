@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_router_deps } from "../../src/background/browser_deps.ts";
 import { compile_config } from "../../src/background/compile.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import { create_router } from "../../src/background/router.ts";
 import type { TreeLeaf } from "../../src/shared/prefix_tree.ts";
 import { make_fake } from "./fakes.ts";

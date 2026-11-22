@@ -11,7 +11,7 @@ import type { CommitConfigImport, ConfigImportAnswer, ConfigImportPreview, Impor
 import { read_folder, read_zip, ZipError } from "../shared/zip.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
-import { IMPORT_DIR_LABEL } from "./config_load.ts";
+import { IMPORT_DIR_LABEL } from "../shared/config/config_load.ts";
 import { import_reach, no_reach } from "./import_reach.ts";
 import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
 

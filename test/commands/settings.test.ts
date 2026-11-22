@@ -7,7 +7,7 @@ import { FILE_WRITTEN_SETTINGS, is_consent_setting, SETTING_NAMES, SETTING_SPECS
 import type { SettingsDeps } from "../../src/commands/settings.ts";
 import type { FileWriteOutcome } from "../../src/background/settings_file.ts";
 import type { UnsetResult } from "../../src/background/settings_file.ts";
-import { empty_config } from "../../src/background/config_load.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { NO_EDITS } from "../../src/shared/config.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides } from "../../src/shared/config.ts";

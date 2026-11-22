@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_macro_recorder } from "../../src/background/macro_recorder.ts";
-import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 
 function make() {

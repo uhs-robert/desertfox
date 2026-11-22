@@ -4,8 +4,8 @@ import { plan_set_value, plan_unset, set_toast } from "../shared/settings_plan.t
 import type { TomlValue } from "./toml_key_edit.ts";
 import { outcome_note, SETTINGS_FILE, unset_toast } from "./settings_file.ts";
 import type { FileWriteOutcome, UnsetResult } from "./settings_file.ts";
-import type { ConfigSource } from "./config_load.ts";
-import { build_config_status } from "./config_load.ts";
+import type { ConfigSource } from "../shared/config/config_load.ts";
+import { build_config_status } from "../shared/config/config_load.ts";
 import { build_setting_list } from "../shared/setting_list.ts";
 import type { MergedConfig, SettingEdits, Settings } from "../shared/config.ts";
 import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer } from "../shared/messages/page.ts";

@@ -2,7 +2,7 @@
 // It lives in `storage.session`, so a restarted background still knows and a browser restart clears it. It reuses the media step message, which the frames already take.
 
 import type { Mode } from "../shared/command.ts";
-import { ITEM_RESUME_STORAGE_PREFIX, TAB_ITEM_STORAGE_PREFIX } from "./storage_keys.ts";
+import { ITEM_RESUME_STORAGE_PREFIX, TAB_ITEM_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { best_effort, keep_chain } from "../shared/swallow.ts";
 import { with_frame, without_stale_off, type HoldFrames, type SendStep, type StepQueue } from "./tab_steps.ts";
 import type { ItemStart } from "./page_keymap.ts";

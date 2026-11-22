@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import "../../src/background/command_modules.ts";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/background/storage_keys.ts";
+import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { files_before_unsynced, unsynced_of_stored } from "../../src/background/settings_file.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 

@@ -1,7 +1,7 @@
 // What the command line page asks of the background: the history to walk, the commands and the lists that bare words read from.
 
 import type { CmdlineOpened } from "../shared/messages/content.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TARGET_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "./storage_keys.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TARGET_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
 
 export const HISTORY_LIMIT = 100;

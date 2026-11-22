@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { empty_config, pick_config } from "../src/background/config_load.ts";
+import { empty_config, pick_config } from "../src/shared/config/config_load.ts";
 import { url_target } from "../src/shared/url_build.ts";
 import { CONFIG_FORMAT_VERSION, DEFAULT_SETTINGS, FALLBACK_ENGINE, FALLBACK_ENGINE_NAME, with_fallback_engines } from "../src/shared/config.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";

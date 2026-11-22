@@ -9,7 +9,7 @@ import type { EditorAnswer, EditorOpen, EditorDone } from "../shared/messages/in
 import { site_columns_for, site_value } from "./page_keymap.ts";
 import type { EditorCollectReply, EditorStartRequest } from "./native_client.ts";
 import { create_write_queue } from "./store_turns.ts";
-import { EDITOR_JOBS_STORAGE_KEY } from "./storage_keys.ts";
+import { EDITOR_JOBS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { best_effort, refused_as } from "../shared/swallow.ts";
 
 export type EditorJob = { job: string; tab_id: number; token: string; frame_id: number; is_private: boolean; orphaned?: true };
