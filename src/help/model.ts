@@ -290,7 +290,7 @@ export function visible_commands_model(model: HelpModel, show_advanced: boolean,
 
 export const advanced_count = (model: HelpModel): number => model.groups.reduce((total, group) => total + group.commands.filter((command) => command.advanced).length, 0);
 
-// The public styling surface from design.md "Styles" and "Themes".
+// The public styling surface from docs/design/config.md "Styles" and "Themes".
 const ROLE_MEANINGS: Record<Role, string> = {
   bg_core: "Background of every DesertFox part",
   bg_mantle: "A background on top of bg_core, for panels and rows",

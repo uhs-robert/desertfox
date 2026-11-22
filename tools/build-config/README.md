@@ -1,6 +1,6 @@
 # build-config
 
-Lints the user config directory. It merges the files, parses snippets and key bindings, and checks every argument and theme, with the same code the extension runs on `config.reload`. It writes nothing Firefox reads. `docs/design.md` describes the config format.
+Lints the user config directory. It merges the files, parses snippets and key bindings, and checks every argument and theme, with the same code the extension runs on `config.reload`. It writes nothing Firefox reads. `docs/design/config.md` describes the config format.
 
 The merge, check and parse code lives in `src/shared/config_build/` (see its README) and uses no Node API. This folder holds what needs Node:
 

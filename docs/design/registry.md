@@ -1,0 +1,86 @@
+# Registry
+
+Area: the command registry.
+READMEs: `src/shared/registry/README.md`, `src/commands/README.md`, `src/background/README.md`.
+Source: `src/shared/registry`, `src/commands`, `src/background`.
+
+## Registry
+
+The registry lives in the background page. A command is plain data plus a handler:
+
+```ts
+define("tab.close", {
+  label: "Close tab",
+  intent: "Close the current tab and focus the next one, or close the tabs around it.",
+  params: [
+    { name: "side", type: "enum", values: ["none", "all_before", "all_after", "focus_previous"],
+      default: "none", short: { all_before: "B", all_after: "A", focus_previous: "P" },
+      value_labels: { focus_previous: "and focus previous" } },
+  ],
+  runs_in: "background",
+  count: "repeat",
+  run: async (ctx, { focus }) => { /* ... */ },
+});
+
+define("open.search", {
+  label: "Search",
+  intent: "Search with a keyword engine from the search engine list.",
+  name: "search",
+  params: [
+    { name: "engine", type: "enum", values: from_engines },
+    { name: "query", type: "string", main: true, default: { from: "selection" } },
+    { name: "where", type: "enum", values: WHERE, default: "here",
+      short: { tab: "t", background: "b", window: "w" } },
+    { name: "container", type: "string", values: from_containers, short: "c",
+      when: { where: ["tab", "background", "window"] } },
+  ],
+  runs_in: "background",
+  run: async (ctx, { engine, query, where, container }) => { /* ... */ },
+});
+```
+
+The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init.lua`) so the two lists have one shape:
+
+- `id`: `group.name`, lowercase with underscores. Same pattern as Oasis actions.
+- `name`: the command line name, set by hand. It is optional, and it holds no `.`. The full id always works on the command line, and it is the name of most commands: you type `tab.close`, `window.new`, `tab.pin`. Only two kinds of command get a name. The one-word commands are `open`, `search`, `paste`, `copy`, `hint`, `heading`, `find` and `github`. The family words are `tab` (switch), `bookmark` (open), `history` (open), `zoom` (set), `scroll` (lines), `mode` (set) and `help` (open), one per group, for the main action. Names are never derived from the id, because derived names collide (`tab.close` and `window.close`).
+- `aliases`: more command line names. The defaults ship none.
+- `label`: a short title in sentence case ("Close tab"). Which-key, the palette and completion show it. A key shows this label plus a phrase for each arg its binding sets, see [Which-key](interfaces_pages.md#which-key).
+- `intent`: plain text on one line. Its first sentence is the summary that the completion list shows: it starts with a verb, takes at most 60 characters and names no other command. Later sentences are detail. Help, the status page and which-key hover show all of it. The registry rejects an empty or multi-line one, and a test holds every built-in command to the summary rule.
+- `params`: typed and named. The types are `int`, `float`, `string`, `bool` and `enum`. `key` is one key press (one character, so `a`, `Z`, `'`). It takes `pattern` for the set a command accepts and no `optional`, `values` or `strict`. A command has at most one `key` param. On the command line a required `key` param is a bare word (`markadd a`), and one with a default is a flag (`--slot=a`). A param with no `default` that applies, no `optional` and no `when` is required. The order is for display only.
+- Value rules, plain data that travels in `commands.json`: `min` (the smallest value of an `int`), `pattern` (the source of a regular expression that a `string` must match), `format` (`"url"`: a `string` must be an absolute address, as `URL.canParse` reads it), `strict` (a `string` with a static `values` list accepts only those values, where `values` alone is completion only) and `optional` (a `string` or `enum` may be left out or empty and then reads as `""`, in place of `default: ""`) and `value_of` (a `string` holds the value of the setting named by a sibling `strict` param, and `check_args` checks it with that setting's entry in `SETTING_SPECS`, an empty value passing). `strict` compares exactly, like an enum value. `check_args` applies them. The registry checks at define time that each sits on a param type that can carry it.
+- `value_labels`: on an `enum` param with a fixed value list, a short phrase for each value ("and focus previous"). Which-key adds the phrase to the label when a binding sets that value, and completion shows it beside the value. Every key must be one of `values`, and a value that is the default in every context has no phrase. A value with no phrase reads as the raw value with spaces for underscores. The registry checks this at define time.
+- `description`: one sentence for a flag, under the same rule as the first sentence of an `intent`. A string on a bool or valued param. A map from value to sentence on an enum with a fixed value list, with no entry for a value that is the default in every context. Completion shows it beside the flag. Every flag of a built-in command has one, and a test checks it. The registry checks the sentence at define time when one is present.
+- `main`: the one `string` param that config and the command line take as the subject, for example the URL of `open` or the query of `search`. At most one per command.
+- `short`: the one-letter flag of a param. A string for a bool or a valued param (`short: "r"` gives `-r`, `short: "c"` on a string gives `-c=Work`). A map from value to letter for an enum with a fixed value list (`{ tab: "t" }` gives `-t`). Never on `main`, `rest` or an enum with a runtime list. `-t -b -w` mean where (tab, background, window) and `-c` means container on every command that has those params. A default value gets no letter, because the printer leaves it out.
+- `rest`: marks a `string` param as text with spaces. The grammar already lets the `main` value run to the end of the line.
+- `when`: the param is valid only if one other param has one of the listed values. For example, `container` needs `where` to open a new tab or window, because Firefox cannot change the container of an open tab. This is the only kind of condition, apart from the default list, `value_when` and `pattern_arms` below. A command that needs more is split into two commands. A new window with no `container` keeps the container and private state of the tab that opened it, and a private tab refuses a named container.
+- Default list: `default: [{ value, when }, ..., plain]`, an ordered list of arms with an optional plain value last. Each arm uses the `when` syntax, and unlike a param's own `when` it may name several params, which must all have a listed value (AND). The first arm that holds wins, else the plain value applies, else the param has no default and is required. This holds for a param with `when` too: when its `when` holds and no arm does, the param is required, so `media seek percent` needs its count while `media seek up` defaults to one. `open.url` sets `default: [{ value: "", when: { where: ["tab", "window", "background"] } }]` on `url`, so `open` with no URL is an error for `here` and opens the new tab page elsewhere. A hint `action` can default to `play_pause` for the `media` filter and to `here` otherwise. An arm may name a param that has a default list itself, the define check refuses a cycle and names its path (`action -> filter -> action`), and an arm that names several params makes the param depend on each of them. The list travels in `commands.json`. Help prints the plain value first, then each arm: `here; play_pause when filter is media`, and `background when filter is links and rapid is true` for an arm with two params. A value that is the default under only some arms keeps its flag, short, phrase and description, because it is a choice elsewhere. Flag completion hides the value that is the default for the flags already typed. The printer drops an arg equal to the default that the other args give, so `.` replays the same value. The key compiler stores the resolved default in the leaf.
+- `value_when`: on an `enum` param, `{ value: { sibling: [values], ... } }`. The value is allowed only while every named sibling has a listed value (AND, as in a default arm). A value with no entry is allowed everywhere, so a new sibling value gets no restricted enum value until someone lists it. `check_args` checks the final value, explicit or default, so a combination that makes no sense is an error on the command line and never compiles into a key. A hint `action` of `background` needs a `filter` that has an address, and `mute` needs `media`. The define check refuses a key that is not one of `values`, a bad sibling, and a default arm whose value its own condition does not allow (the arm must name every sibling the rule names). The rules travel in `commands.json`.
+- `pattern_arms`: on a `string` param, `[{ pattern, when }, ...]`. The final text must match the pattern of the first arm whose `when` holds (several siblings allowed, AND). Each value of a sibling, such as the `action` of `media`, so takes its own value set, which one `pattern` cannot give. With no arm holding, the plain `pattern`, if any, applies instead. A `when` param may also carry a default list: when its `when` holds and no arm of the list does, the param is required, so `media seek percent` needs its count while `media seek up` defaults to one. The arms travel in `commands.json`.
+- Every static argument rule lives in the param schema, and one `check_args` applies it for the command line, key map compile, `tools/build-config` and the router. A context source (`@selection`) passes the check as a marker, so the router runs `check_args` again on the expanded text. `help` takes a page name (`quick_start`) or a command id, matched exactly. A command handler never judges argument values. It reports only runtime failures, such as a tab that is gone, a refusal from Firefox or an empty selection, and throws them as `RuntimeRefusal`. `test/registry/handler_static_rules.test.ts` fails when a background handler throws anything else on args the schema accepts.
+- `default`: a value, or a context source (`{ from: "current_url" }`, `"selection"`, `"clipboard"`, `"bookmark_title"`, the title of the current page's bookmark, `"search_query"`, the query of the search results page, read back through the engines' URL templates). A context source can carry `then`, a second source read when the first has nothing: `{ from: "selection", then: "search_query" }` is the default of the `query` of `search`. The router fills a context source where it is available, so a background command can ask for the page selection.
+- `runs_in`: `background` or `content`. The router sends the invocation to that side. A command never runs in both.
+- `needs`: what must be true to run it. `content` means a content script in the tab. A permission name means an optional permission. The router refuses with a message instead of failing silently. A command that needs a permission only for some args (`page.reload` with `clear`) checks it in the handler and throws `RuntimeRefusal`. Either way the message names `:permissions.grant <permission>`, which opens the grant panel.
+- `count`: what a numeric prefix does. `repeat` runs the command that many times. A param name fills that param, for example `tab.goto` takes the count as its `index`. `ignore` drops it.
+- `repeat_limit`: the largest count prefix the router accepts, for a command whose repeats are hard to undo. It needs a `count` rule other than `ignore`. A bigger prefix is refused with a toast (`A count of 100 is over the limit of 20 for tab.close`) before any step of the request runs, so `.`, `3.`, macro replay and snippets refuse the same way and a sequence never runs half. A typed param count (`tab.unload --count=100`) is not a prefix and is not limited. `tab.close` and `tab.unload` carry 20. A yes/no confirmation line, so a big count can still run, is a possible follow-up.
+- `bridge`: whether a program outside the browser may run the command through the bridge socket (see [Bridge host](host.md#bridge-host)). Every built-in command states it with `bridge: true` or `bridge: false`, and a test fails when one does not. The tab commands that move between tabs (not `tab.switch`, which matches a title or address and so tells a caller which tabs exist, and not `tab.close`, which closes whole sides of the tab bar: the id-addressed `activate` and `close` verbs behind `bridge_share_tabs` do both), `tab.mute`, `open.url`, `media.act`, the `scroll.*` commands and the mode commands (`mode.set`, `mode.insert`, `mode.escape`) say true. The rest say false. A hard-coded never-list wins over a true.
+- `repeatable`: whether `.` can replay the command. The default is true. These commands opt out: `command.repeat`, `browser.close_all`, `browser.focus_page`, `config.reload`, `debug.perf`, `debug.restart`, `page.print`, `page.save_pdf`, `frame.exit`, `help.open`, `help.key`, `native.install`, `native.update`, `permissions.grant`, `engine.show`, `settings.set`, `settings.toggle` and `settings.unset`, and the page commands that only change a mode or open a prompt: `mode.set`, `mode.escape`, `mode.pass_next`, `hint.key`, `find.open`, `help.whichkey`, every `cmdline.*` and `list.*` command, `caret.move` and `visual.act` (a motion replays in normal mode, where it does not apply). One command opts out by its args: `page.reload` is not repeatable with `clear` set to `all`, so `.` and a macro never run a clear of every site. The `repeatable` field takes a function of the checked args for this.
+- `jumps`: whether a successful run moves the view in the tab it ran in, so the router records the place it left in the jump list. Absent means false, and a command without it pays nothing. The field takes a function of the checked args: `open.url`, `open.search`, `open.anything`, `open.clipboard` and `page.follow` jump only with `where` set to `here`. `scroll.to`, `find.next`, `find.prev`, `heading.go`, `page.heading`, `mark.step` and `mark.jump` always jump. Reading and recording are in the jump list paragraph under Marks.
+- `modes`: the modes where a key can run the command. The default is normal.
+- `completion`: where the command line list offers the command. Absent means always. `hidden` means never, and a list of modes means only when the line was opened from one of them. Typing the name still runs the command.
+- `advanced`: `true` for a rarely used command (`config.reload`, `debug.restart`, `native.install`, `native.update`). Only the help Commands page reads it: the cards stay hidden until `#/commands?advanced` (the "Show advanced commands" button sets it), and a `#command=<id>` link still shows its card. Completion, keys and which-key ignore it.
+- `run`: the handler. It gets the context (tab, frame, mode) and the checked args.
+
+Validation is strict and happens in one place, the same as `Act.resolve` in Oasis. The command line, keys, the native host and the palette all pass through it.
+
+Define-time checks cover names and params too:
+
+- `name` and `aliases` are unique across all commands, snippets included.
+- At most one param is `main`, and it is a `string`.
+- A long flag names at most one param of a command: no two enum params share a value, and no bool name repeats a value. `_` reads as `-` in a flag, and no value or bool is called `help`. Names and values are lowercase with underscores.
+- A short letter is one ASCII letter, never `h`, and unique within the command.
+- A `when`, and every param named in the `when` of a default arm, is a param that exists, with valid values, and never the param itself.
+
+A set of options where at most one can apply, for example open, background tab or copy link for a hint, is one `enum` param with a value per option. Two flags from the set both set that param, so the command line rejects them together. No list of exclusions exists. This turns the hint command into five params: `action`, `filter`, `selector` (with `when: { filter: "custom" }`), `text` and the `rapid` switch.
+
+A build step writes `commands.json` from the registry: id, name, aliases, label, intent, params, count, repeat_limit, modes, completion and advanced. Help, the palette, which-key and the native `list` verb read it. The content script does not load it.

@@ -24,7 +24,7 @@ All R cells: 2026-11-14, Firefox 160.0 (headless, fresh profile per tool, defaul
 
 A site is scored by whether a keyboard user can get around it with the tool. The three core tasks are: move around the site, open links and controls by hint, and leave a text field. Any keys count, with default settings: the tool's own keys or the site's own keys, with the tool active. A key path counts only if a user can find it without reading the extension's docs. If a main task has no lasting key path, because keys stay trapped or every step needs a click again, the mark is ❌. If the main tasks work but a step needs one click first, or movement works only with some keys, the mark is ⚠️. If the main tasks work by keyboard alone, the mark is ✅.
 
-DesertFox lets a user override key bindings for one site. A `site_rules` row in the user's config matches a site by address pattern and binds keys for it, for example `h` to `page send_key ArrowLeft`. A user can fix a site this way on their own machine. The rows DesertFox ships live in `src/background/default_site_rows.ts`. A pull request that adds a row shares a fix with every user. How to set a row is in [Site table](design.md#site-table).
+DesertFox lets a user override key bindings for one site. A `site_rules` row in the user's config matches a site by address pattern and binds keys for it, for example `h` to `page send_key ArrowLeft`. A user can fix a site this way on their own machine. The rows DesertFox ships live in `src/background/default_site_rows.ts`. A pull request that adds a row shares a fix with every user. How to set a row is in [Site table](design/config.md#site-table).
 
 Site extras that the site's own keys already cover, such as YouTube play and volume, stay out of the mark. Starting in insert mode where the site focused a field is correct and is not scored. A check the rig cannot score on a page is left out of the mark, and the note names it.
 
@@ -66,7 +66,7 @@ The site integration cells were updated on 2026-11-17 to match the rows that shi
 
 A frame from another site that takes the focus on its own, such as a sign-in popup or an embed, is parked: DesertFox hands the focus back to the page, so page keys such as `j` work at once. The frame is parked once, and only when no click or key reached it and its focus is not on a text field. A frame from the same site, or one that focuses a field, keeps the keys as before.
 
-Hints reach into the parked frame, so `f` labels the page and that frame. A click or a hint into the frame enters frame mode, and the badge reads FRAME. `gF` returns to the page. The design is in [`design.md`](design.md).
+Hints reach into the parked frame, so `f` labels the page and that frame. A click or a hint into the frame enters frame mode, and the badge reads FRAME. `gF` returns to the page. The design is in [`design/interfaces_hints.md`](design/interfaces_hints.md), "Hints across frames".
 
 ## Source checks of the rivals
 
