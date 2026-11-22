@@ -85,3 +85,17 @@ export const command_help_url = (base: string, command_id: string): string => `$
 
 // The URL of the Site Rules page for one address, encoded so any address stays one value.
 export const site_rules_help_url = (base: string, address: string): string => `${base}#/site-rules?address=${encodeURIComponent(address)}`;
+
+export type HelpTabPlan = { kind: "update"; tab_id: number; url: string } | { kind: "create"; url: string; opener?: { openerTabId: number; windowId?: number | undefined } };
+
+// A tab already on the help page navigates by hash, which its hashchange handler routes. Any other tab opens a new one beside it.
+export function plan_help_tab(
+  help_page_url: string,
+  target_url: string,
+  asking_tab: { id: number | undefined; window_id: number | undefined; url: string | undefined },
+): HelpTabPlan {
+  if (asking_tab.id === undefined) return { kind: "create", url: target_url };
+  const on_help_page = asking_tab.url !== undefined && asking_tab.url.split("#")[0] === help_page_url;
+  if (on_help_page) return { kind: "update", tab_id: asking_tab.id, url: target_url };
+  return { kind: "create", url: target_url, opener: { openerTabId: asking_tab.id, windowId: asking_tab.window_id } };
+}

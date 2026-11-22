@@ -14,7 +14,8 @@ import { stored_keymap } from "./keymap_source.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 
 import { is_available } from "./availability.ts";
-import { normal_tree_for, page_mode_trees_for, site_columns_for } from "./page_keymap.ts";
+import { page_mode_trees_for } from "./page_keymap.ts";
+import { normal_tree_for, site_columns_for } from "../shared/site/site_columns.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
 // The modes where the matcher reads `"` as the register prefix.

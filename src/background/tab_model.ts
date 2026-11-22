@@ -8,7 +8,8 @@
 import type { GroupRow, TabModelMessage, TabModelRequest, TabRow } from "../shared/messages/ports.ts";
 import { site_key } from "../shared/site_key.ts";
 import { TAB_MODEL_PORT_NAME, TAB_MODEL_PORT_NORMAL, TAB_MODEL_PORT_PRIVATE } from "../shared/tab_model_port.ts";
-import { listed_favicon, numbered_windows, read_container_identities } from "./complete_items.ts";
+import { numbered_windows, read_container_identities } from "./complete_items.ts";
+import { listed_favicon } from "../shared/completion/tab_rows.ts";
 import type { ContainerIdentity, WindowLike } from "./complete_items.ts";
 import { refused_as } from "../shared/swallow.ts";
 

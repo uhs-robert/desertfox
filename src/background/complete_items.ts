@@ -1,10 +1,10 @@
 // The tabs, bookmarks, engines and windows the command line page lists for `tab`, `bookmark`, `search` and `tab.attach`. That page cannot read them itself: only the
 // background knows which tab asked, so only it can keep private tabs out of a normal line and refuse a page that never opened a line.
-// The pure readers here (`listed_tabs`, `flatten_bookmarks`, `bookmark_items`) are also imported by the new tab page, which reads its own lists and filters private tabs itself (`newtab/lists.ts`).
+// The pure row readers are in `shared/completion/tab_rows.ts`.
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkItem, BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, RegisterItem, SessionItem, TabContainer, TabItem, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages/content.ts";
+import type { BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, RegisterItem, SessionItem, TabContainer, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages/content.ts";
 import { available_engine_names } from "./availability.ts";
 import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
@@ -13,48 +13,15 @@ import type { TabActionDeps } from "./tab_actions.ts";
 import { describe_result, set_unloaded } from "./tab_discard.ts";
 import type { DiscardDeps } from "./tab_discard.ts";
 import { history_row } from "./history_cache.ts";
-import { one_line, SKIPPED_SCHEMES, with_usage, usage_by_url, history_items } from "./completion_rank.ts";
+import { with_usage, usage_by_url, history_items } from "./completion_rank.ts";
+import { bookmark_items, closed_tab_rows, flatten_bookmarks, is_bookmark_node, listed_tabs, one_line } from "../shared/completion/tab_rows.ts";
+import type { BookmarkNode, ContainerMarks, LineScope, ListedTab, TabLike } from "../shared/completion/tab_rows.ts";
 import type { HistoryNode, OpenSettings, RankInputs, Usage } from "./completion_rank.ts";
 import type { RankSource } from "../shared/rank_port.ts";
 import { rank_usage_for } from "./rank_service.ts";
 import { browser_register_store } from "./register_store.ts";
 import { browser_session_storage, make_session_store } from "./session_store.ts";
 import { refused_as, warn_and_go } from "../shared/swallow.ts";
-
-export type TabLike = {
-  id?: number | undefined;
-  index: number;
-  windowId?: number | undefined;
-  title?: string | undefined;
-  url?: string | undefined;
-  incognito: boolean;
-  favIconUrl?: string | undefined;
-  cookieStoreId?: string | undefined;
-  active?: boolean | undefined;
-  pinned?: boolean | undefined;
-  audible?: boolean | undefined;
-  mutedInfo?: { muted?: boolean | undefined } | undefined;
-  discarded?: boolean | undefined;
-  splitViewId?: number | undefined;
-  lastAccessed?: number | undefined;
-};
-
-// The containers by cookie store id, as `contextualIdentities` names them.
-export type ContainerMarks = ReadonlyMap<string, TabContainer>;
-
-// Firefox hands loaded, restored and discarded tab favicons over as data: URLs (measured on six sites in Firefox 160), and a busy site's runs to about 24 KB (reddit, 23682 characters). The tab model port carries each row's favicon in every snapshot and patch, so 100 such tabs send about 2.4 MB per command line open. A longer favicon falls back to the plain glyph.
-const MAX_DATA_FAVICON = 32768;
-
-// Only data: favicons pass: the extension CSP blocks remote images, and a chrome: favicon would fail to load in the page anyway.
-export function listed_favicon(url: string | undefined): string | undefined {
-  return url && /^data:image\//i.test(url) && url.length <= MAX_DATA_FAVICON ? url : undefined;
-}
-
-// A tab the line can list. The page gets `TabItem` only.
-export type ListedTab = TabItem & { window_id: number };
-
-// The window and privacy of the tab that holds the line.
-export type LineScope = { window_id: number; incognito: boolean };
 
 export type WindowLike = {
   id?: number | undefined;
@@ -66,39 +33,6 @@ export type WindowLike = {
 
 // A window the line can offer. The page gets `WindowItem` only.
 export type NumberedWindow = WindowItem & { id: number; incognito: boolean; last_used: number };
-
-export type BookmarkNode = { id?: string | undefined; unmodifiable?: string | undefined; type?: string | undefined; title?: string | undefined; url?: string | undefined; dateAdded?: number | undefined; children?: BookmarkNode[] | undefined };
-
-// A normal line lists only normal tabs and a private line only private tabs. The line's own window comes first, so
-// that is where a number lands when several windows are listed.
-export function listed_tabs(tabs: readonly TabLike[], scope: LineScope, containers: ContainerMarks = new Map(), previous_tab_id?: number): ListedTab[] {
-  const shown = tabs.filter((tab) => tab.id !== undefined && tab.windowId !== undefined && tab.incognito === scope.incognito);
-  return shown
-    .map((tab): ListedTab => {
-      const favicon = listed_favicon(tab.favIconUrl);
-      const container = tab.cookieStoreId === undefined ? undefined : containers.get(tab.cookieStoreId);
-      return {
-        id: tab.id as number,
-        window_id: tab.windowId as number,
-        number: tab.index + 1,
-        title: one_line(tab.title || tab.url || ""),
-        url: tab.url ?? "",
-        ...(favicon ? { favicon } : {}),
-        ...(container ? { container } : {}),
-        // Another window's active tab is not the current one, so only the line's window marks `%` and `#`.
-        ...(tab.active && tab.windowId === scope.window_id ? { active: true as const } : {}),
-        // `previous_tab_id` is the line's window's, but a tab moved to another window keeps its id, so only the line's window marks `#`. A closed tab is not in `shown`, so it marks nothing.
-        ...(tab.id === previous_tab_id && !tab.active && tab.windowId === scope.window_id ? { alternate: true as const } : {}),
-        ...(tab.pinned ? { pinned: true as const } : {}),
-        // A muted tab that plays sound is audible too, and the speaker would contradict the crossed one.
-        ...(tab.audible && !tab.mutedInfo?.muted ? { audible: true as const } : {}),
-        ...(tab.mutedInfo?.muted ? { muted: true as const } : {}),
-        ...(tab.discarded ? { discarded: true as const } : {}),
-        ...(tab.splitViewId !== undefined && tab.splitViewId !== -1 ? { split: true as const } : {}),
-      };
-    })
-    .sort((a, b) => Number(b.window_id === scope.window_id) - Number(a.window_id === scope.window_id) || a.window_id - b.window_id || a.number - b.number);
-}
 
 // Every normal window with its place in `windows.getAll` (popups still count a place, so numbers stay stable), whatever its privacy: a typed number for a window the list hides still has to be found, to be refused by name.
 export function numbered_windows(windows: readonly WindowLike[]): NumberedWindow[] {
@@ -112,19 +46,6 @@ export function numbered_windows(windows: readonly WindowLike[]): NumberedWindow
 // The windows of the line's own privacy, without the line's own window.
 export const listed_windows = (windows: readonly WindowLike[], scope: LineScope): NumberedWindow[] =>
   numbered_windows(windows).filter((window) => window.incognito === scope.incognito && window.id !== scope.window_id);
-
-// Every node of the bookmark tree, folders included, newest added first. `getTree` has no cap, unlike `getRecent`, so an old bookmark still opens.
-export function flatten_bookmarks(roots: readonly BookmarkNode[]): BookmarkNode[] {
-  const flat: BookmarkNode[] = [];
-  const walk = (nodes: readonly BookmarkNode[]) => {
-    for (const node of nodes) {
-      flat.push(node);
-      if (node.children) walk(node.children);
-    }
-  };
-  walk(roots);
-  return flat.sort((a, b) => (b.dateAdded ?? 0) - (a.dateAdded ?? 0));
-}
 
 // A folder of the tree with its path from the root, and the bookmarks directly inside it (no subfolders). The titles are display text Firefox localizes, so two folders can share a path.
 export type FolderNode = { id: string; path: string; managed: boolean; bookmarks: BookmarkNode[] };
@@ -148,21 +69,6 @@ export function folder_nodes(roots: readonly BookmarkNode[]): FolderNode[] {
 export const folder_items = (folders: readonly FolderNode[]): FolderItem[] =>
   folders.map((folder) => ({ name: folder.path, description: `${folder.bookmarks.length} ${folder.bookmarks.length === 1 ? "bookmark" : "bookmarks"}` }));
 
-// A bookmark proper: not a folder or a separator, and it has an address.
-export const is_bookmark_node = (node: BookmarkNode): node is BookmarkNode & { url: string } => (node.type === undefined || node.type === "bookmark") && !!node.url;
-
-// Newest first, as `flatten_bookmarks` gives them. Folders, separators and a repeated address drop out.
-export function bookmark_items(nodes: readonly BookmarkNode[]): BookmarkItem[] {
-  const seen = new Set<string>();
-  const items: BookmarkItem[] = [];
-  for (const node of nodes) {
-    if (!is_bookmark_node(node) || seen.has(node.url)) continue;
-    seen.add(node.url);
-    items.push({ title: one_line(node.title || node.url), url: node.url });
-  }
-  return items;
-}
-
 // The `bookmark` list: `bookmark_items` rows, each with the folders that hold a copy of its address, newest copy first. Every folder is listed, so a row's index is its place in `folders`.
 export function bookmark_rows(nodes: readonly BookmarkNode[], folders: readonly FolderNode[], usage: Usage = new Map()): BookmarkRows {
   const copies = new Map<string, { added: number; folder: number }[]>();
@@ -182,13 +88,6 @@ export type BookmarkView = { rows: BookmarkRows; folders: FolderNode[] };
 export function bookmark_view(roots: readonly BookmarkNode[], usage: Usage = new Map()): BookmarkView {
   const folders = folder_nodes(roots);
   return { rows: bookmark_rows(flatten_bookmarks(roots), folders, usage), folders };
-}
-
-// A tab of a closed-tab session with an address worth opening again. Newest first, as `getRecentlyClosed` gives them. Windows, private tabs (which `getRecentlyClosed` returns while their window is open) and tabs with no session id drop out.
-export type ClosedSession = { tab?: { sessionId?: string | undefined; title?: string | undefined; url?: string | undefined; incognito?: boolean | undefined } | undefined };
-
-export function closed_tab_rows(sessions: readonly ClosedSession[]): ClosedTabRow[] {
-  return sessions.flatMap(({ tab }) => (tab?.sessionId && tab.url && !tab.incognito && !SKIPPED_SCHEMES.test(tab.url) ? [{ session_id: tab.sessionId, title: one_line(tab.title || tab.url), url: tab.url }] : []));
 }
 
 // Each tab of the privacy asked for, with the time it was last active.

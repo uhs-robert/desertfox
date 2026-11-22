@@ -9,9 +9,9 @@ import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
 import { rows_in_settings_file, settings_d_file_that_hides, settings_d_site_rules, with_setting_in_files } from "./settings_file.ts";
-import { is_pass_shaped } from "./site_keys.ts";
+import { is_pass_shaped } from "../shared/site/site_keys.ts";
 import type { TomlValue } from "./toml_key_edit.ts";
-import { saved_popup_rows } from "./toolbar.ts";
+import { saved_popup_rows } from "../shared/site/site_state.ts";
 
 // What the fold changes. `saved` is what stays in the layer, the same object when nothing moved.
 // `moved`: names now in settings.toml, or dropped because the file already said the same. `held`: names a settings.d file sets, which wins over settings.toml, so the saved value stays on top of it.

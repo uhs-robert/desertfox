@@ -6,7 +6,7 @@ import { prune_tree } from "../src/shared/keys/prune_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../src/shared/prefix_tree.ts";
 import { all_off_step } from "../src/content/site_rule.ts";
 import { list_keys } from "../src/background/list_keys.ts";
-import { normal_tree_for, site_columns_for } from "../src/background/page_keymap.ts";
+import { normal_tree_for, site_columns_for } from "../src/shared/site/site_columns.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import "../src/background/command_modules.ts";

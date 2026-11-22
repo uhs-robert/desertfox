@@ -1,6 +1,6 @@
 // The Site Rules page: the rows of the site table that fit one address.
 
-import type { RuleColumn, KeyChange, SiteRuleRowView } from "../background/site_rules_view.ts";
+import type { RuleColumn, KeyChange, SiteRuleRowView } from "../shared/site/site_rules_view.ts";
 import type { HelpModel } from "./model.ts";
 import { el, table_of } from "./dom.ts";
 

@@ -1,8 +1,8 @@
 // What the site table does to one page: each row that fits the page address, in table order, with the columns it sets and the keys it changes. Built from the stored keymap's rows. Which row decides a column comes from `resolve_site_columns`, and whether a key change reaches the page comes from `normal_tree_for`, the step the keys use.
 
-import type { CompiledKeymap, SiteBind, SiteRule, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
-import { resolve_site_columns } from "../shared/match_pattern.ts";
-import { hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, type PageSiteColumns } from "./page_keymap.ts";
+import type { CompiledKeymap, SiteBind, SiteRule, TreeLeaf, TreeNode } from "../prefix_tree.ts";
+import { resolve_site_columns } from "../match_pattern.ts";
+import { hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, type PageSiteColumns } from "./site_columns.ts";
 
 // One column a row sets, shown as text. `shadowed` means an earlier matching row already decides it.
 export type RuleColumn = { name: string; value: string; shadowed: boolean };

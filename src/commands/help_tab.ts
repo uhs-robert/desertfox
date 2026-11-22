@@ -1,4 +1,4 @@
-import { plan_help_tab } from "../background/open_help.ts";
+import { plan_help_tab } from "../shared/page/help_route.ts";
 import type { CommandContext } from "../shared/command.ts";
 
 // Opens a help page URL beside the asking tab, or navigates in place when that tab already shows the help page.

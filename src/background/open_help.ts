@@ -1,6 +1,6 @@
 import { command_help_url, PAGES, site_rules_help_url } from "../shared/page/help_route.ts";
 import { create_matcher, type MatchResult } from "../shared/keys/matcher.ts";
-import { normal_tree_for, site_columns_for } from "./page_keymap.ts";
+import { normal_tree_for, site_columns_for } from "../shared/site/site_columns.ts";
 import { parse_sequence } from "../shared/keys/notation.ts";
 import { ANY_KEY, is_freed, type CompiledKeymap } from "../shared/prefix_tree.ts";
 
@@ -70,17 +70,3 @@ export function key_command_id_on_page(keymap: CompiledKeymap | undefined, addre
 
 // The names `:help` completes: the help pages, then every command id.
 export const help_name_choices = (command_ids: Iterable<string>): string[] => [...PAGES.map(page_name), ...command_ids];
-
-export type HelpTabPlan = { kind: "update"; tab_id: number; url: string } | { kind: "create"; url: string; opener?: { openerTabId: number; windowId?: number | undefined } };
-
-// A tab already on the help page navigates by hash, which its hashchange handler routes. Any other tab opens a new one beside it.
-export function plan_help_tab(
-  help_page_url: string,
-  target_url: string,
-  asking_tab: { id: number | undefined; window_id: number | undefined; url: string | undefined },
-): HelpTabPlan {
-  if (asking_tab.id === undefined) return { kind: "create", url: target_url };
-  const on_help_page = asking_tab.url !== undefined && asking_tab.url.split("#")[0] === help_page_url;
-  if (on_help_page) return { kind: "update", tab_id: asking_tab.id, url: target_url };
-  return { kind: "create", url: target_url, opener: { openerTabId: asking_tab.id, windowId: asking_tab.window_id } };
-}

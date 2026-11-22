@@ -5,7 +5,7 @@ import { empty_config } from "../src/shared/config/config_load.ts";
 import "../src/background/command_modules.ts";
 import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
-import { site_rules_view } from "../src/background/site_rules_view.ts";
+import { site_rules_view } from "../src/shared/site/site_rules_view.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 
 const SHEETS = "https://docs.google.com/spreadsheets/d/abc/edit";

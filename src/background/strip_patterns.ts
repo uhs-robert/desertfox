@@ -1,7 +1,8 @@
 // The `strip_tracking_params` names that apply to an address: the global list when the site's `strip_tracking` is on, none when it is off.
 
 import { CONFIG_STATUS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
-import { site_columns_for, site_value } from "./page_keymap.ts";
+import { site_value } from "./page_keymap.ts";
+import { site_columns_for } from "../shared/site/site_columns.ts";
 import { DEFAULT_SETTINGS, DEFAULT_STRIP_TRACKING_PARAMS } from "../shared/default_settings.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";

@@ -5,12 +5,13 @@ import { stored_keymap } from "./keymap_source.ts";
 import { ANY_KEY, is_freed } from "../shared/prefix_tree.ts";
 import { HINT_SITE_SETTINGS, ITEM_SELECT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS, QUALITY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
 import { is_default_value } from "../shared/keys/compiler.ts";
-import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageFrees, PageKeymap, PageSiteMode, SiteBind, SiteRule, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageKeymap, PageSiteMode, SiteBind, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { with_item_select } from "./item_select.ts";
-import { frees_of, is_empty_tree, prune_tree, type KeyRule } from "../shared/keys/prune_tree.ts";
+import { frees_of } from "../shared/keys/prune_tree.ts";
 import type { PerSiteName, Settings } from "../shared/settings_table.ts";
-import { matches_any_address, resolve_site_columns, type ResolvedSiteColumns, type SiteModeColumn } from "../shared/match_pattern.ts";
+import type { SiteModeColumn } from "../shared/match_pattern.ts";
+import { graft_binds, normal_tree_for, site_columns_for, type PageSiteColumns } from "../shared/site/site_columns.ts";
 
 type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
@@ -31,14 +32,6 @@ export const sender_at = <S extends { url?: string | undefined }>(sender: S, url
 // A value about the whole tab, such as its zoom, follows the top page, so every frame resolves it against the top frame's address. A value about one frame's own content resolves against `[sender.url]`.
 export const top_frame_address_of = (sender: { frameId?: number | undefined; url?: string | undefined; tab?: { url?: string | undefined } | undefined }): string | undefined =>
   sender.frameId === 0 ? sender.url : sender.tab?.url;
-
-export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
-
-// The page's columns of the site table, for the page's key handling and for which-key alike.
-export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses));
-
-// The rows that fit the page, in table order.
-export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
 
 // A row that binds or passes j or k in normal mode gives those keys to the site (Kagi moves its own highlight), and item mode would take them back.
 const site_claims_item_keys = (columns: PageSiteColumns): boolean =>
@@ -106,37 +99,6 @@ export async function media_quality_is_idle(storage: KeymapStorage): Promise<boo
   const keymap = current_keymap(await stored_keymap(storage));
   const global = keymap?.frame_site_globals?.media_quality ?? DEFAULT_SETTINGS.media_quality;
   return (global === "off" || global === "auto") && !(keymap?.site_rules ?? []).some(({ values }) => values !== undefined && Object.hasOwn(values, "media_quality") && values.media_quality !== "off" && values.media_quality !== "auto");
-}
-
-// The bind among `all` whose keys are a proper prefix of this bind's keys. It is a complete binding, so it hides this bind.
-export const hiding_bind = (all: readonly SiteBind[], { tokens }: SiteBind): SiteBind | undefined => all.find((other) => other.tokens.length < tokens.length && other.tokens.every((token, index) => tokens[index] === token));
-
-// A guarded bind keeps the leaf it replaces at the end of its chain of choices, so the key falls through to it when every guard fails. A choice with no guard ends the chain. A bind with `otherwise = "page"` keeps nothing: a failed guard leaves no leaf, and the content script hands the real key to the page. A replaced branch is not kept: falling through to it means waiting for more keys after the key already ran.
-const is_guarded = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || leaf.when_present !== undefined;
-const with_otherwise = (leaf: TreeLeaf, replaced: TreeNode | undefined): TreeLeaf =>
-  !is_guarded(leaf) || replaced?.kind !== "leaf" || leaf.otherwise_page ? leaf : { ...leaf, otherwise: leaf.otherwise ? with_otherwise(leaf.otherwise, replaced) : replaced };
-
-// A bound key replaces whatever the tree holds at that key. A key under a leaf of the tree turns the leaf into a branch, and a bind that is a prefix of tree keys replaces the whole subtree. Copies the path and never mutates the input.
-export function graft_binds(root: TreeBranch | undefined, binds: Readonly<Record<string, SiteBind>>): TreeBranch {
-  const grafted: TreeBranch = root ?? { kind: "branch", children: {} };
-  const put = (branch: TreeBranch, tokens: readonly string[], leaf: TreeLeaf): TreeBranch => {
-    const [token, ...rest] = tokens as [string, ...string[]];
-    const below = branch.children[token];
-    const child: TreeNode = rest.length === 0 ? with_otherwise(leaf, below) : put(below?.kind === "branch" ? below : { kind: "branch", children: {} }, rest, leaf);
-    return { ...branch, children: { ...branch.children, [token]: child } };
-  };
-  // A bind that sits under another bind is dropped, as a complete binding hides the keys under it in a keymap. The compiler warns about the pair for rows of one site. Under a leaf of the tree itself a bind wins and the leaf becomes a branch.
-  const all = Object.values(binds);
-  return all.filter((bind) => hiding_bind(all, bind) === undefined).reduce((tree, { tokens, leaf }) => put(tree, tokens, leaf), grafted);
-}
-
-// The normal tree under the page's columns. `off` wins over all of it. Binds go onto the tree first, then the key rule prunes, so `pass` frees a bound key and `only` keeps it. A page whose key rule leaves no normal binding is all off and keeps the whole tree, so `,i` can leave ignore mode.
-export function normal_tree_for(normal: TreeBranch | undefined, columns: PageSiteColumns): { tree: TreeBranch | undefined; all_off: boolean } | { tree: TreeBranch; all_off: false; frees: PageFrees } {
-  if (columns.off === true) return { tree: normal, all_off: true };
-  const bound = columns.bind === undefined ? normal : graft_binds(normal, columns.bind);
-  if (columns.keys === undefined) return { tree: bound, all_off: false };
-  const pruned = prune_tree(bound, columns.keys);
-  return is_empty_tree(pruned) ? { tree: normal, all_off: true } : { tree: pruned, all_off: false, frees: frees_of(columns.keys) };
 }
 
 // The trees of the other keymap modes with the page's binds for them. Like `modes.<name>`, they skip a page that is off, and `pass` and `only` do not reach them: those prune the normal tree. A mode with no tree of its own starts from an empty one. The page reply and which-key both read them here.
