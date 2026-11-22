@@ -677,6 +677,27 @@ test("an end command keeps its list when the focus is in another", () => {
   assert.deepEqual(names(row.items_(true)), ["l1", "l2"]);
 });
 
+test("a focus left in a list that scrolled out of view does not block the hand-over to the list in view", () => {
+  const list_a = [own_focus_item("a1"), own_focus_item("a2")];
+  const list_b = [own_focus_item("b1"), own_focus_item("b2")];
+  const { state, row } = setup(list_a);
+  state.others = [list_b];
+  assert.deepEqual(names(row.items_()), ["a1", "a2"]);
+  state.focus = list_a[0]!;
+  list_a.forEach((entry) => (entry.shown = false));
+  assert.deepEqual(names(row.items_()), ["b1", "b2"]);
+});
+
+test("a pinned list keeps the answer when the focus is in another list", () => {
+  const long_items = [own_focus_item("l1"), own_focus_item("l2")];
+  const short_items = [own_focus_item("s1"), own_focus_item("s2")];
+  const { state, row } = with_short_list(long_items, short_items);
+  row.items_();
+  row.pin_(row.lists_()[1]!);
+  state.focus = long_items[0]!;
+  assert.deepEqual(names(row.items_()), ["s1", "s2"]);
+});
+
 // The pin: a picked list that a site row's keys cannot walk stays active until the address changes, the list leaves, or `unpin_`.
 function pinned_setup() {
   const related = [item("r1"), item("r2")];
