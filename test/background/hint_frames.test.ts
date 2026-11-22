@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { assign_labels, create_hint_frames, HINT_FRAMES_PICK_MS, HINT_FRAMES_WAIT_MS, type HintFrames, type HintFramesDeps } from "../../src/background/hint_frames.ts";
 import type { HintFramesMessage } from "../../src/shared/messages/content.ts";
-import { make_labels } from "../../src/content/hints/labels.ts";
+import { make_labels } from "../../src/shared/hints/labels.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "../../src/shared/config/storage_keys.ts";
 
 const TAB = 7;

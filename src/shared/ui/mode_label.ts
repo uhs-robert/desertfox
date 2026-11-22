@@ -1,6 +1,6 @@
 // What the mode indicator says. Pure, so it is testable without a DOM.
 
-import type { Mode, ModeIndicator } from "../../shared/index.ts";
+import type { Mode, ModeIndicator } from "../index.ts";
 
 const MODE_LABELS: Partial<Record<Mode, string>> = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE", media: "MEDIA", grab: "GRAB", item: "ITEM", item_visual: "VISUAL" };
 

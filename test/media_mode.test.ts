@@ -14,7 +14,7 @@ import type { Mode } from "../src/shared/command.ts";
 import { MODES } from "../src/shared/command.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";
 import { panel_after_prefix } from "../src/background/list_keys.ts";
-import { mode_label } from "../src/content/ui/mode_label.ts";
+import { mode_label } from "../src/shared/ui/mode_label.ts";
 import { media_panel_admitted } from "../src/content/whichkey/media_panel.ts";
 import { badge_state } from "../src/content/badge_state.ts";
 import { check_args } from "../src/shared/registry/index.ts";

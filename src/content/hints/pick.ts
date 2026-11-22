@@ -2,7 +2,7 @@
 
 import { is_chord } from "../../shared/keys/token.ts";
 import { is_hint_char } from "./hint_keys.ts";
-import { narrow } from "./labels.ts";
+import { narrow } from "../../shared/hints/labels.ts";
 import { rank_items } from "./rank.ts";
 
 export type Typed = { typed: string; still_possible_: number[] };

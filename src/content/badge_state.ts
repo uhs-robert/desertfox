@@ -2,7 +2,7 @@
 // Hint and command line modes draw their own surface and the setting can show nothing, so those skip the bundle, unless a recording keeps the badge up.
 
 import type { Mode, ModeIndicator } from "../shared/index.ts";
-import type { BadgeState } from "./ui/mode_label.ts";
+import type { BadgeState } from "../shared/ui/mode_label.ts";
 
 // A site mode runs inside normal mode, so its label counts only there, and it shows with the setting `not_normal` too.
 export function badge_state(mode: Mode, pass_next: boolean, setting: ModeIndicator, recording: string | undefined, site_label?: string, count?: number): BadgeState | undefined {

@@ -17,7 +17,7 @@ import { create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
-import { mode_label } from "../src/content/ui/mode_label.ts";
+import { mode_label } from "../src/shared/ui/mode_label.ts";
 
 const compiled_with = (settings: Record<string, unknown> = {}) => {
   const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });

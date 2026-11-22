@@ -10,7 +10,7 @@ import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
 import { badge_state } from "../src/content/badge_state.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
-import { mode_label } from "../src/content/ui/mode_label.ts";
+import { mode_label } from "../src/shared/ui/mode_label.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { compile_keymap, create_matcher } from "../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";

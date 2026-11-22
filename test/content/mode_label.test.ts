@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mode_label } from "../../src/content/ui/mode_label.ts";
+import { mode_label } from "../../src/shared/ui/mode_label.ts";
 import { badge_state } from "../../src/content/badge_state.ts";
 
 test("mode label follows the mode_indicator setting", () => {

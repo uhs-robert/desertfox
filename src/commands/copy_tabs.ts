@@ -7,10 +7,10 @@ import { browser_complete_items_deps, read_tabs } from "../background/complete_i
 import type { ListedTab } from "../shared/completion/tab_rows.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
-import { format_link_list, is_web_address, LIST_FORMATS } from "../content/link_list.ts";
-import type { ListFormat } from "../content/link_list.ts";
+import { format_link_list, is_web_address, LIST_FORMATS } from "../shared/copy/link_list.ts";
+import type { ListFormat } from "../shared/copy/link_list.ts";
 import { strip_resolver } from "../background/strip_patterns.ts";
-import { strip_tracking } from "../content/strip_tracking.ts";
+import { strip_tracking } from "../shared/copy/strip_tracking.ts";
 import { YANK_REGISTER_PARAM } from "./register_param.ts";
 import { refused_as } from "../shared/swallow.ts";
 

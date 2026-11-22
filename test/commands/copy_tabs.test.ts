@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { make_copy_tabs_handler } from "../../src/commands/copy_tabs.ts";
 import type { CopyTabsDeps } from "../../src/commands/copy_tabs.ts";
-import { format_link_list } from "../../src/content/link_list.ts";
+import { format_link_list } from "../../src/shared/copy/link_list.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { CommandContext } from "../../src/shared/command.ts";

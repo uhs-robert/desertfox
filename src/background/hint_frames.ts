@@ -2,7 +2,7 @@
 // The session lives in `storage.session`, so a restarted background still routes typed keys and picks. Only the wait for reports is in memory: a restart ends it, and the keyboard frame's start request fails with it.
 // Nothing on the wait awaits a browser call: Firefox can leave an injection or a message to a navigating frame unanswered, and only the deadline ends the wait then.
 
-import { clean_letters, make_labels } from "../content/hints/labels.ts";
+import { clean_letters, make_labels } from "../shared/hints/labels.ts";
 import type { HintFramesPickAnswer, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesMessage, Outcome } from "../shared/messages/index.ts";
 import { HINT_FRAMES_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { keep_chain, refused_as, best_effort } from "../shared/swallow.ts";
