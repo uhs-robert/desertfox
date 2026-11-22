@@ -6,6 +6,7 @@ import type { WhichKeyBorder } from "../config.ts";
 import type { Settings } from "../settings_table.ts";
 import type { BoundInvocation, Invocation } from "../invocation.ts";
 import type { TreeLeaf } from "../prefix_tree.ts";
+import type { HintFramesCollect, HintFramesLabels } from "./tab.ts";
 
 // Why a command did not run. The content script shows `message` as a toast,
 // the background falls back to a notification where no content script exists.
@@ -430,3 +431,6 @@ export type RunResponse = { ok: true; cancelled?: true } | { ok: false; refusal:
 export type SnippetCall = { type: "snippet_run"; command_text: string; depth: number };
 
 export type SnippetAnswer = { ok: true } | { ok: false; message: string };
+
+// Every message a frame of a hint session receives or sends on its own.
+export type HintFramesMessage = HintFramesCollect | HintFramesLabels | HintFramesTyped | HintFramesPick | HintFramesEnd | HintFramesUnhover;

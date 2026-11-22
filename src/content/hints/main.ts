@@ -1,9 +1,8 @@
 // The `hints` bundle: registers the hint sink and the `hint.run` handler with the host.
 // `hint.run` enters hint mode at once, finds and labels the visible elements, then waits for a label to be typed.
 
-import type { HintFramesMessage } from "../../background/hint_frames.ts";
-import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, Outcome } from "../../shared/messages/content.ts";
-import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
+import type { HintFramesPick, HintFramesPickAnswer, HintFramesReport, HintFramesStart, HintFramesStartAnswer, HintFramesTyped, HintFramesMessage, Outcome } from "../../shared/messages/content.ts";
+import { CONFIG_STATUS_STORAGE_KEY } from "../../shared/storage_watch.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { unhover } from "./hover.ts";
 import { click_like_a_hint, enter_frame, has_usable_address, is_inside_link, is_media, OPEN_PLACES, perform, starts_mode, takes_typing } from "./actions.ts";

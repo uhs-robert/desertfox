@@ -1,5 +1,5 @@
 // Command definition: the one shape the registry stores, the validator checks
-// and `commands.json` is cut from. Types, plus the list of runtime modes.
+// and `commands.json` is cut from. Types, plus the list of runtime modes and the value lists the commands and their content handlers share.
 
 import type { BundleName } from "./bundles.ts";
 import type { Outcome } from "./messages/content.ts";
@@ -10,6 +10,16 @@ export type ParamType = "int" | "float" | "string" | "bool" | "enum" | "key";
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
 export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line", "media", "grab", "item", "item_visual"] as const;
 export type Mode = (typeof MODES)[number];
+
+// The modes `mode.set` can switch to.
+export const SETTABLE_MODES = ["normal", "insert", "ignore", "caret", "visual", "visual_line", "item", "item_visual"] as const;
+
+// The values of the `format` param of `copy.url`.
+export const COPY_FORMATS = ["plain", "canonical", "short", "title", "markdown", "org"] as const;
+export type CopyFormat = (typeof COPY_FORMATS)[number];
+
+// The `axis` default of `scroll.to`.
+export const SCROLL_TO_DEFAULT_AXIS = "y";
 
 // The reading modes: a caret in the page text, with or without a selection.
 const CARET_MODES: readonly Mode[] = ["caret", "visual", "visual_line"];

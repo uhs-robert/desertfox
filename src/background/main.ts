@@ -56,7 +56,7 @@ import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_rows } from "./quality_levels.ts";
 import { tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
-import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
+import { MEDIA_PANEL_HANDLER } from "../shared/bundles.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";

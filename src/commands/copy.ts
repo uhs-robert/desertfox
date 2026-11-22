@@ -1,4 +1,4 @@
-import { COPY_FORMATS } from "../content/handlers/copy.ts";
+import { COPY_FORMATS } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { YANK_REGISTER_PARAM } from "./register_param.ts";
 

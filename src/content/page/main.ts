@@ -6,7 +6,7 @@ import { align_focus } from "../handlers/align.ts";
 import { focus_first_input } from "../handlers/focus_input.ts";
 import { mark_text_entry } from "../text/entry.ts";
 import { copy_page_url } from "../handlers/copy.ts";
-import type { CopyFormat } from "../handlers/copy.ts";
+import type { CopyFormat } from "../../shared/command.ts";
 import { selected_text } from "./selection.ts";
 import { arm_leave_watch, scroll_offset, type LeaveWatch } from "./leave_watch.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";

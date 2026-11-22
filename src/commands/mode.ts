@@ -1,4 +1,4 @@
-import { SETTABLE_MODES } from "../content/handlers/mode.ts";
+import { SETTABLE_MODES } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
 
