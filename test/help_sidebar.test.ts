@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { at_page_end, close_drawer_on_escape, close_drawer_on_window_blur, mark_current_section, refresh_current_section, render_help, reset_group_state, section_hash, update_config_source } from "../src/help/render.ts";
+import { render_help, update_config_source } from "../src/help/render.ts";
+import { section_hash } from "../src/help/sections.ts";
+import { at_page_end, close_drawer_on_escape, close_drawer_on_window_blur, mark_current_section, refresh_current_section, reset_group_state } from "../src/help/sidebar.ts";
 import { parse_route, site_rules_help_url } from "../src/shared/page/help_route.ts";
 import type { Route } from "../src/shared/page/help_route.ts";
 import type { Block } from "../src/help/blocks.ts";
