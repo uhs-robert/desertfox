@@ -23,7 +23,7 @@ import type { AliasState } from "./alias_message.ts";
 import type { LayeredBuild } from "./engine_layer.ts";
 import { build_config_status, load_config, load_edits, load_effective_config, load_files_source, store_edits, with_edits } from "../shared/config/config_load.ts";
 import type { FilesSource, LoadedConfig } from "../shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "./default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../shared/keys/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "./default_site_rows.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { THEME_STORAGE_KEY, USER_CSS_STORAGE_KEY } from "../shared/theme/apply.ts";

@@ -3,7 +3,7 @@
 
 import type { CommandMeta } from "../command.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
-import { DEFAULT_KEYMAP } from "../../background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../keys/default_keymap.ts";
 import { resolve_key_docs } from "../key_docs.ts";
 import { compile_keymap } from "../keys/compiler.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../settings_docs.ts";

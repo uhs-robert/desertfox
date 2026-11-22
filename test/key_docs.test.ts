@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import "../src/background/command_modules.ts";
 import { BINDINGS, bound_key } from "../src/shared/bound_keys.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";

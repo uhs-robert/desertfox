@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { open_quick_start_on_install } from "../src/background/first_install.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import type { Block, Inline } from "../src/help/blocks.ts";
 import "../src/background/command_modules.ts";
 import { quick_start_blocks, quick_start_fallbacks } from "../src/help/quick_start.ts";

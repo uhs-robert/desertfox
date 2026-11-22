@@ -8,7 +8,7 @@ Example: `copy.tabs`, commit `c6c5ec6b`.
 
 1. Add or extend a module in `src/commands/`. Call `define` with the id, label, intent and params. Recipe: [`src/commands/README.md`](../src/commands/README.md).
 2. Import a new module in `src/background/command_modules.ts`.
-3. Bind a default key in `src/background/default_keymap.ts`, if the command has one.
+3. Bind a default key in `src/shared/keys/default_keymap.ts`, if the command has one.
 4. Run `just docs-gen`. It rewrites [`keymap.md`](keymap.md).
 5. Add a test in `test/commands/`, and the command's id and command line name to the list in `test/commands/flags.test.ts`.
 6. Put each new `src/` file in a glob of `test/key/areas.mjs`. `test/key/areas.test.ts` fails on a file no glob covers.
@@ -33,7 +33,7 @@ Example: the `prompt` action, commit `f51dcc82`.
 
 1. Add the action in `src/content/hints/actions.ts`. A larger action gets its own file in `src/content/hints/`, as `prompt_line.ts` does. Wire the pick in `src/content/hints/main.ts`.
 2. In `src/commands/hint.ts`, add the action to `values`, `value_when` (the condition that allows it), `short`, `value_labels` and `description` of the action param, and to the intent text. Add a case to `test/registry/value_when.test.ts`.
-3. Bind a key in `src/background/default_keymap.ts`, then run `just docs-gen`.
+3. Bind a key in `src/shared/keys/default_keymap.ts`, then run `just docs-gen`.
 4. Add unit tests in `test/hints/`, and a case in `test/key/p6_hints.mjs`. Add one in `test/key/p6_frames.mjs` when the action behaves differently in a frame.
 5. Run `just build`. It fails when `content.js` passes its size guard. Hint code lives in the on-demand `hints` bundle, so keep it out of `content.js`: see "Content script size" in [`AGENTS.md`](../AGENTS.md).
 6. In [`src/content/hints/README.md`](../src/content/hints/README.md), add a bullet for a new file and extend the `actions.ts` entry.

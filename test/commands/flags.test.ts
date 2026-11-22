@@ -88,7 +88,7 @@ test("only these commands opt out of `.`, so a new command repeats unless someon
 });
 
 test("the search keys run in caret and visual mode too, and the registry lets them", async () => {
-  const { DEFAULT_KEYMAP } = await import("../../src/background/default_keymap.ts");
+  const { DEFAULT_KEYMAP } = await import("../../src/shared/keys/default_keymap.ts");
   for (const mode of ["caret", "visual"] as const) {
     for (const [key, id] of [["/", "find.open"], ["?", "find.open"], ["*", "find.open"], ["#", "find.open"], ["n", "find.next"], ["N", "find.prev"]] as const) {
       assert.equal((DEFAULT_KEYMAP[mode]![key] as { id: string }).id, id, `${mode} ${key}`);

@@ -1,6 +1,6 @@
 # Binding map
 
-The default keymap, generated from `src/background/default_keymap.ts`. Do not edit between the markers. Run `just docs-gen` after a change to it. `npm test` fails when the tables are stale.
+The default keymap, generated from `src/shared/keys/default_keymap.ts`. Do not edit between the markers. Run `just docs-gen` after a change to it. `npm test` fails when the tables are stale.
 
 Search engine keys (`s`, `S`, `,`) and container keys (`c`, `C`) come from the user's config, so no row lists them. The config generates them from `search_keys` and `container_keys`. One default is left unbound on purpose. `ZZ` closes every window with no undo, so users bind it in their config.
 

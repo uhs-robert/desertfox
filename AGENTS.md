@@ -114,7 +114,7 @@ After `just build`, reload the add-on in Firefox. A rebuilt `dist/` under a load
 
 Reproduce a visual bug and record it, at 60 fps so flicker shows, before you ask the maintainer or build a fix.
 
-`docs/keymap.md` is generated between its markers from `src/background/default_keymap.ts`. Edit it, then run `just docs-gen`. `just test` fails when the doc is stale.
+`docs/keymap.md` is generated between its markers from `src/shared/keys/default_keymap.ts`. Edit it, then run `just docs-gen`. `just test` fails when the doc is stale.
 
 `just test` gives each run its own `TMPDIR` under `/tmp/desertfox-test-run.*`, removes it at the end, and fails naming anything a test left in it. JS tests make scratch dirs with `make_tmp_dir` from `test/support/tmp_dir.ts`.
 

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import { create_media_discovery, create_tab_media, FRAME_ALIVE_LIMIT_MS, LINE_CLOSE_GRACE_MS } from "../src/background/tab_media.ts";
 import { create_step_queue } from "../src/background/tab_steps.ts";
 import { create_mode_state, fullscreen_step, takes_media_step } from "../src/content/mode_state.ts";

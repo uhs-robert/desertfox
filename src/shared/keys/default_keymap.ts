@@ -1,5 +1,5 @@
-import type { KeymapConfig, ModeBindings } from "../shared/keymap.ts";
-import type { BoundInvocation, KeyBinding } from "../shared/invocation.ts";
+import type { KeymapConfig, ModeBindings } from "../keymap.ts";
+import type { BoundInvocation, KeyBinding } from "../invocation.ts";
 
 // The source of docs/keymap.md: `just docs-gen` regenerates its tables from this file.
 // Search engine keys (`s`, `S`, `,`) and container keys (`c`) come from the user's config.

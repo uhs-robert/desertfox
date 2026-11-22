@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { apply_count } from "../../src/background/count.ts";
-import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import type { BoundInvocation } from "../../src/shared/invocation.ts";
 import { check_args, parse_command_line } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
