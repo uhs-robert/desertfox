@@ -83,6 +83,9 @@ export type ConfigTransferDeps = {
 
 const message_of = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+export function answer_config_transfer(request: ExportConfig, deps: ConfigTransferDeps): Promise<ExportConfigAnswer>;
+export function answer_config_transfer(request: ListSnippets, deps: ConfigTransferDeps): Promise<ListSnippetsAnswer>;
+export function answer_config_transfer(request: RemoveSnippet, deps: ConfigTransferDeps): Promise<ConfigImportAnswer>;
 export async function answer_config_transfer(request: ExportConfig | ListSnippets | RemoveSnippet, deps: ConfigTransferDeps): Promise<ExportConfigAnswer | ListSnippetsAnswer | ConfigImportAnswer> {
   try {
     if (request.type === "list_snippets") return { ok: true, snippets: installed_snippets(await deps.read_files()) };

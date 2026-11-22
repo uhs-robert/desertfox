@@ -157,6 +157,8 @@ export type ConfigImportDeps = {
 };
 
 // The settings page's two import messages. Every failure becomes the answer's message, and a refusal already says what stays.
+export function answer_config_import(request: PreviewConfigImport, deps: ConfigImportDeps): Promise<ConfigImportPreview>;
+export function answer_config_import(request: CommitConfigImport, deps: ConfigImportDeps): Promise<ConfigImportAnswer>;
 export async function answer_config_import(request: PreviewConfigImport | CommitConfigImport, deps: ConfigImportDeps): Promise<ConfigImportPreview | ConfigImportAnswer> {
   try {
     if (request.type === "preview_config_import") return await deps.preview(request.source);
