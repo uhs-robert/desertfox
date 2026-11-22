@@ -1,6 +1,6 @@
 // Draws the Search engines section of the settings page from an engines session (`engines_model.ts`).
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { button } from "./transfer_page.ts";
 import { can_save, create_engines_session, form_problems } from "./engines_model.ts";
 import type { EnginesDeps, EnginesSession, EngineForm } from "./engines_model.ts";

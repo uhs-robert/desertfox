@@ -1,6 +1,6 @@
 // Draws the settings page from a session and wires its controls. The session (`settings_model.ts`) holds the state, so this file only turns fields into nodes and events into session calls.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { site_rule_effects } from "./site_rule_effect.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import { can_reset, create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";

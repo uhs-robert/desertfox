@@ -1,6 +1,6 @@
 // Draws the files editor of the settings page from a files session (`files_model.ts`): the stored files, a text box for the open one, every build problem, and for a snippet the consent screen of the import review.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
 import type { FilesSession } from "./files_model.ts";
 import { button, snippet_card } from "./transfer_page.ts";

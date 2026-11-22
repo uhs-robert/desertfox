@@ -1,7 +1,7 @@
 // Draws the import-a-theme section under the theme picker from a themes session (`themes_model.ts`): a box for pasted text or a picked file,
 // a live preview of the hint label, mode badges, toasts and which-key panel in the scheme's colors, and the list of theme files with a Remove button each.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { button, picker } from "./transfer_page.ts";
 import { can_save, create_themes_session, name_problem } from "./themes_model.ts";
 import type { ThemesDeps, ThemesSession } from "./themes_model.ts";

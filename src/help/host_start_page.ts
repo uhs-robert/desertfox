@@ -1,6 +1,6 @@
 // Draws the banner at the top of the settings page while a host start waits on the user (`host_start_model.ts`): what using the config folder would change, an export of the browser copy, and the two choices.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { button, download } from "./transfer_page.ts";
 import { create_transfer_session } from "./transfer_model.ts";
 import type { TransferDeps } from "./transfer_model.ts";
