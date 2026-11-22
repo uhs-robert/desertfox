@@ -2,6 +2,7 @@
 // into this frame. It registers through `register_sink_` and `register_handler_` and enters its mode with `set_mode_`.
 // main.ts puts all three on `window.desertfox_host`. The host counts every wait on a load, and key_flow holds keys until none is left.
 
+import type { ArgsOf, BundleOf } from "./bundle_calls.ts";
 import { last_blurred_element } from "./handlers/page.ts";
 import { end_flight, scroll_target } from "./handlers/scroll.ts";
 import { BUNDLE_FOR_MODE } from "../shared/bundles.ts";
@@ -25,7 +26,8 @@ export type BundleHandler = (args: Record<string, unknown>) => HandlerResult;
 // What a bundle sees of the host.
 export type BundleHostApi = {
   register_sink_: (mode: Mode, sink: Sink) => void;
-  register_handler_: (command_id: string, handler: BundleHandler) => void;
+  // The args of an id in `bundle_calls.ts` are typed there. Any other id takes a record.
+  register_handler_: <Id extends string>(command_id: Id, handler: (args: ArgsOf<Id>) => HandlerResult) => void;
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode_: (mode: Mode) => void;
   get_mode: () => Mode;
@@ -33,7 +35,7 @@ export type BundleHostApi = {
   escape_: () => void;
   // Runs a handler of another bundle, loading that bundle first if needed. The id need not be a registry command: a bundle may offer handlers only its sibling calls. The args are bundle-internal and unchecked by the validator, and may hold functions.
   // The answer is the handler's real outcome, and stays pending while the handler waits on the user. A missing handler or a failed load answers failed.
-  run_command_: (command_id: string, name: BundleName, args: Record<string, unknown>) => Promise<Outcome>;
+  run_command_: <Id extends string>(command_id: Id, name: BundleOf<Id>, args: ArgsOf<Id>) => Promise<Outcome>;
   show_toast_: (message: string) => void;
   // The field the last Escape left, which a bundle cannot see.
   last_blurred_: () => Element | undefined;
@@ -116,6 +118,7 @@ export function create_bundle_host() {
   // This call holds keys for the load only, never while the handler's promise is pending. A captured-key leaf holds them itself, through `hold_keys_until_`.
   // `args` reaches the handler as given. Nothing validates it, so it holds whatever the caller and the handler agree on, functions included. Take it only from bundle code, never from keymap or command-line input, which the registry validates first.
   // `hold` false is for drawing, which nobody awaits, so a failure there goes to `show_error_`.
+  function run_command_<Id extends string>(command_id: Id, name: BundleOf<Id>, args: ArgsOf<Id>, missing: string, hold?: boolean): Promise<Outcome>;
   function run_command_(command_id: string, name: BundleName, args: Record<string, unknown>, missing: string, hold = true): Promise<Outcome> {
     const run = !unanswered.has(name) && handlers.get(command_id);
     const answer = run
@@ -182,7 +185,7 @@ export function create_bundle_host() {
     // What a bundle sees.
     api: {
       register_sink_: (mode, sink) => void sinks.set(mode, sink),
-      register_handler_: (command_id, handler) => void handlers.set(command_id, handler),
+      register_handler_: (command_id, handler) => void handlers.set(command_id, handler as BundleHandler),
       set_mode_: (mode) => void set_mode_(mode),
       get_mode: () => current_mode,
       escape_: () => in_mode_order_(() => deps.escape_?.()),

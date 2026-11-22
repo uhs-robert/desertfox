@@ -1,5 +1,6 @@
 // The `tree` bundle: `page.tree`, which moves and folds through nested items (the comments of a thread) by their depth. Loaded on the first press.
 
+import type { ArgsOf, BundleOf } from "../bundle_calls.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import { refused_as } from "../../shared/swallow.ts";
 import type { PageHostApi } from "../bundle_host.ts";
@@ -52,7 +53,7 @@ if (!tree_window.desertfox_tree_ready && host) {
   tree_window.desertfox_tree_ready = true;
   // The landing is `page.item`'s own, so focus, scroll, the box and the last move match j. It starts from the item that holds the focus, so the target takes the focus first, and scrolls into view first because a focus off screen is not the start.
   // A failed outcome (the item bundle did not load) stops the run with its message.
-  const ask = async (id: string, args: Record<string, unknown>, bundle: "item" | "site_actions" = "item") => {
+  const ask = async <Id extends string>(id: Id, args: ArgsOf<Id>, bundle = "item" as BundleOf<Id>) => {
     const outcome = await host.run_command_(id, bundle, args);
     if (!outcome.ok) throw new RuntimeRefusal(outcome.message);
   };

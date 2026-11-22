@@ -36,9 +36,10 @@ import type { FieldDirection } from "./focus_fields.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../strip_tracking.ts";
 import { DEFAULT_STRIP_TRACKING_PARAMS } from "../../shared/default_settings.ts";
-import type { HeadingItem, RecordTiming } from "../../shared/messages/content.ts";
+import type { RecordTiming } from "../../shared/messages/content.ts";
 import { arm_leave_watch } from "../page/leave_watch.ts";
 import { best_effort, ignore_refusal } from "../../shared/swallow.ts";
+import type { ListRegion } from "../bundle_calls.ts";
 
 declare const browser: MessagingBrowser;
 
@@ -260,11 +261,11 @@ let picking = false;
 
 const perform_pick = (current: PickArgs, element: HTMLElement, hand_over?: HandOver) => {
   // A list's pick makes the list active and focuses what j focuses, the title link, so Enter opens it.
-  const region = current.args.filter === "lists" ? (list_targets.get(element) as { links: Map<Element, HTMLElement | undefined> } | undefined) : undefined;
+  const region = current.args.filter === "lists" ? (list_targets.get(element) as ListRegion | undefined) : undefined;
   // For `enter_item` the bundle also focuses the link of the first item shown, when the pick makes another list active: the landing that follows starts from the focus, so it never takes an item a scroll box clips.
   if (region) {
-    const focus = region.links.get(element) ?? element;
-    void page.desertfox_host.run_command_("item.lists", "item", { region, focus, selector: current.args.items });
+    const focus = (region.links.get(element) ?? element) as HTMLElement;
+    void page.desertfox_host.run_command_("item.lists", "item", { region, focus, selector: current.args.items as string | undefined });
     element = focus;
   }
   if (current.action === "prompt") return prompt_pick(element, current.args.command as string, current.with_background_, hand_over ? (text) => (hand_over(text), Promise.resolve(done)) : open_line_);
@@ -298,7 +299,7 @@ const shows = (item: Element): boolean => {
 // Each frame fills its own map from its own item bundle, before it collects.
 const fill_list_targets = async (selector: unknown, row_only: unknown): Promise<void> => {
   list_targets.clear();
-  await page.desertfox_host.run_command_("item.lists", "item", { selector, row_only, take: (regions: { items: Element[] }[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
+  await page.desertfox_host.run_command_("item.lists", "item", { selector: selector as string | undefined, row_only: row_only as boolean | undefined, take: (regions: ListRegion[]) => regions.forEach((region) => { const first = region.items.find(shows); if (first) list_targets.set(first, region); }) });
 };
 
 const texts_of = (found: Found[]): string[] => found.map((item) => text_of(item.element));
@@ -572,7 +573,7 @@ function register(host: PageHostApi): void {
   host.register_handler_("hint.key", () => done);
 
   // The command line asks for the list and `report` hands it back, so the answer does not go through the background.
-  host.register_handler_("heading.list", (args) => void (args.report as (items: HeadingItem[]) => void)(take_snapshot().rows));
+  host.register_handler_("heading.list", (args) => void args.report(take_snapshot().rows));
   host.register_handler_("heading.go", (args) => go_to_heading(String(args.heading)));
   host.register_handler_("heading.clear", () => clear_snapshot());
 

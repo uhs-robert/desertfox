@@ -330,30 +330,41 @@ test("a sink that handles a token keeps it from the keymap", () => {
   assert.equal(page.state.get_mode_(), "normal");
 });
 
+// The handler is a stub here, so the field is a stand-in.
+const INPUT_ARGS = { field_: {} as Element, before_: "" };
+
+test("the bundle call map rejects an arg of the wrong type", () => {
+  const page = make_page();
+  // Never called. tsc fails on the directive if the map stops checking, for example by collapsing to any.
+  // @ts-expect-error item.mark takes an element, not a number
+  const wrong_arg = () => page.host.api.run_command_("item.mark", "item", { element: 1 });
+  assert.equal(typeof wrong_arg, "function");
+});
+
 test("toasts and badge updates requested before the ui bundle loads are kept and run in order, without holding keys", async () => {
   const page = make_page();
   const drawn: string[] = [];
-  page.host.run_command_("ui.badge", "ui", { label: "NORMAL" }, "ui missing", false);
-  page.host.run_command_("ui.toast", "ui", { message: "first" }, "ui missing", false);
-  page.host.run_command_("ui.toast", "ui", { message: "second" }, "ui missing", false);
+  page.host.run_command_("ui.badge", "ui", { mode: "normal" }, "ui missing", false);
+  page.host.run_command_("ui.toast", "ui", { message: "first", duration_ms: 1000 }, "ui missing", false);
+  page.host.run_command_("ui.toast", "ui", { message: "second", duration_ms: 1000 }, "ui missing", false);
   assert.equal(page.loads.length, 1);
   assert.equal(page.host.is_loading_(), false);
   page.press("x");
   assert.deepEqual(page.events, ["run log_x"]);
   page.loads[0]!.finish(true, () => {
-    page.host.api.register_handler_("ui.badge", (args) => void drawn.push(`badge ${args.label}`));
+    page.host.api.register_handler_("ui.badge", (args) => void drawn.push(`badge ${args.mode}`));
     page.host.api.register_handler_("ui.toast", (args) => void drawn.push(`toast ${args.message}`));
   });
   await page.settle();
-  assert.deepEqual(drawn, ["badge NORMAL", "toast first", "toast second"]);
-  page.host.run_command_("ui.toast", "ui", { message: "third" }, "ui missing", false);
+  assert.deepEqual(drawn, ["badge normal", "toast first", "toast second"]);
+  page.host.run_command_("ui.toast", "ui", { message: "third", duration_ms: 1000 }, "ui missing", false);
   assert.equal(drawn.at(-1), "toast third");
   assert.equal(page.loads.length, 1);
 });
 
 test("when the ui bundle cannot load, the error is reported once and does not ask for the bundle again by itself", async () => {
   const page = make_page();
-  page.host.run_command_("ui.toast", "ui", { message: "lost" }, "ui missing", false);
+  page.host.run_command_("ui.toast", "ui", { message: "lost", duration_ms: 1000 }, "ui missing", false);
   page.loads[0]!.finish(false);
   await page.settle();
   assert.deepEqual(page.errors, ["DesertFox could not load ui"]);
@@ -484,7 +495,7 @@ test("a registered handler runs in the caller's turn, and a pending handler does
 test("a call made after the bundle registered but before its load answered runs after the calls queued on the load", async () => {
   const page = make_page();
   const ran: string[] = [];
-  const first = page.host.run_command_("text.input", "text", {}, "", false);
+  const first = page.host.run_command_("text.input", "text", INPUT_ARGS, "", false);
   page.host.api.register_handler_("text.input", () => void ran.push("input"));
   page.host.api.register_handler_("text.flush", () => void ran.push("flush"));
   const second = page.host.run_command_("text.flush", "text", {}, "");
@@ -503,9 +514,9 @@ test("a call made after the bundle registered but before its load answered runs 
 test("a load that never answers keeps the calls made in the gap waiting, and once it fails the next call runs at once", async () => {
   const page = make_page();
   const ran: string[] = [];
-  const queued = page.host.run_command_("text.input", "text", {}, "");
+  const queued = page.host.run_command_("text.input", "text", INPUT_ARGS, "");
   page.host.api.register_handler_("text.input", () => void ran.push("input"));
-  const in_gap = page.host.run_command_("text.input", "text", {}, "");
+  const in_gap = page.host.run_command_("text.input", "text", INPUT_ARGS, "");
   page.press("x");
   await page.settle();
   assert.deepEqual(ran, []);
@@ -516,7 +527,7 @@ test("a load that never answers keeps the calls made in the gap waiting, and onc
   assert.deepEqual([await queued, await in_gap], [{ ok: true }, { ok: true }]);
   await page.settle();
   assert.deepEqual(page.events, ["run log_x"]);
-  void page.host.run_command_("text.input", "text", {}, "");
+  void page.host.run_command_("text.input", "text", INPUT_ARGS, "");
   assert.deepEqual(ran, ["input", "input", "input"]);
   assert.equal(page.loads.length, 1);
   assert.equal(page.host.is_loading_(), false);

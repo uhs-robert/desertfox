@@ -1,7 +1,6 @@
 // The `whichkey` bundle: registers handlers. With a prefix it shows the keys that can follow, without one it hides the panel.
 
 import type { BundleHostApi } from "../bundle_host.ts";
-import type { PendingPrefix } from "../key_flow.ts";
 import type { ListKeys, ReadRepeatPreview, WhichKeyPanel } from "../../shared/messages/content.ts";
 import { MEDIA_PANEL_HANDLER } from "../../shared/bundles.ts";
 import { media_panel_admitted } from "./media_panel.ts";
@@ -17,9 +16,6 @@ declare const browser: MessagingBrowser;
 
 type WhichKeyWindow = { desertfox_host: BundleHostApi; desertfox_whichkey_ready?: true };
 const page = window as unknown as WhichKeyWindow;
-
-// What content.js sends on each prefix change: the setting values ride along because the timer here has no keymap.
-type PrefixArgs = { prefix?: PendingPrefix; at_once?: boolean; delay_ms?: number; skip?: readonly string[] };
 
 // The top frame draws the panel, so a panel for a subframe's keys sits where the user looks. Each message carries a count, because two relays can overtake each other (see relayed_panel.ts).
 const relayed = create_relayed_panel(show_panel, hide_panel);
@@ -61,9 +57,8 @@ const follow_prefix = create_which_key_timer(
 if (!page.desertfox_whichkey_ready) {
   page.desertfox_whichkey_ready = true;
   page.desertfox_host.register_handler_("whichkey", (args) => {
-    const call = args as PrefixArgs;
-    ({ delay_ms, skip } = call);
-    follow_prefix(call.prefix, call.at_once);
+    ({ delay_ms, skip } = args);
+    follow_prefix(args.prefix, args.at_once);
   });
   // Not commands: only the background relays them, from a subframe's bundle.
   page.desertfox_host.register_handler_("whichkey.draw", relayed.draw_);

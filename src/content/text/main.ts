@@ -27,9 +27,9 @@ if (!page.desertfox_text_ready) {
   });
   host.register_handler_("text.input", (args) => {
     // A cancelled answer tells the content script that no session is open, so the next edit comes through.
-    return recorder.on_input(args.field_ as Element, args.before_ as string, args.type_ as string, args.autocomplete_ as string) ? undefined : { ok: true, cancelled: true };
+    return recorder.on_input(args.field_, args.before_, args.type_, args.autocomplete_) ? undefined : { ok: true, cancelled: true };
   });
-  host.register_handler_("text.flush", (args) => recorder.flush(args.after_ as string | undefined));
+  host.register_handler_("text.flush", (args) => recorder.flush(args.after_));
   host.register_handler_("register.paste", async (args) => {
     const name = args.name as string;
     const target = deepest_focused_element();

@@ -2,7 +2,7 @@
 
 import type { PageHostApi } from "../bundle_host.ts";
 import { all_items, carry_row, current_item, follow_item, move_item, read_cursor, watch_lands } from "./pick.ts";
-import type { ItemArgs, ItemCursor } from "./pick.ts";
+import type { ItemArgs } from "./pick.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { in_view_, live_derived_row } from "./derived.ts";
 import { args_for_pin, lists_with_row, pick_list } from "./lists.ts";
@@ -10,7 +10,6 @@ import { watch_user_left } from "../user_left.ts";
 import { create_item_start } from "./start.ts";
 import { create_selection } from "./selection.ts";
 import { best_effort } from "../../shared/swallow.ts";
-import type { Region } from "./finder.ts";
 import { is_shown } from "../shown.ts";
 
 declare const browser: MessagingBrowser;
@@ -49,7 +48,7 @@ if (!item_window.desertfox_item_ready && host) {
   });
   watch_lands(selection.land_);
   host.register_handler_("page.item", (args) => {
-    const item_args = carry_row(args as unknown as ItemArgs);
+    const item_args = carry_row(args as ItemArgs);
     // `current` with extend starts a selection at the item it lands on, which is how `v` begins. Any other extend moves the cursor from where a redraw left it.
     if (item_args.extend) item_args.direction === "current" ? selection.start_next_land_(true) : selection.tick_();
     try {
@@ -71,24 +70,24 @@ if (!item_window.desertfox_item_ready && host) {
     now_: () => performance.now(),
     on_unload_: (run, on) => (on ? addEventListener : removeEventListener)("beforeunload", run),
   });
-  host.register_handler_("item.start", (args) => start(args.selectors as string[] | undefined));
+  host.register_handler_("item.start", (args) => start(args.selectors));
   // The shared focus mark, asked for by the hints bundle after a focus move. The focus can have left by the time this bundle loads, and then there is nothing to mark.
   host.register_handler_("item.mark", (args) => {
-    const element = args.element as Element;
+    const element = args.element;
     // With no row selector the box is the focus mark.
     if (element.isConnected && element.matches(":focus")) overlay.show(element);
   });
-  host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region as Region<Element>, args.focus as HTMLElement | undefined, !!args.selector) : (args.take as (regions: unknown) => void)(lists_with_row(document, () => page.derived.lists_(), args.selector as string | undefined, !!args.row_only))));
+  host.register_handler_("item.lists", (args) => void (args.region ? pick_list(page.derived, args.region, args.focus, !!args.selector) : args.take(lists_with_row(document, () => page.derived.lists_(), args.selector, !!args.row_only))));
   // The hints bundle (item-first labels) and the item actions call this through `run_command_` and hand a callback that takes the item and its link.
   host.register_handler_("item.current", (args) => {
     const current = current_item(page);
-    (args.take as (item: Element | undefined, link: Element | undefined) => void)(current?.item_, current?.link_);
+    args.take(current?.item_, current?.link_);
   });
   // The item actions read the range of visual item mode (the items from the anchor to the cursor, and the anchor) through a callback, as for `item.current`.
   host.register_handler_("item.range", (args) => {
     const found = selection.tick_();
-    (args.take as (...list: unknown[]) => void)(found?.list_, found?.keys_, found?.from_, found?.to_, found?.anchor_);
+    args.take(found?.list_, found?.keys_, found?.from_, found?.to_, found?.anchor_);
   });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
-  host.register_handler_("item.cursor", (args) => (args.take as (cursor: ItemCursor | undefined) => void)(read_cursor(page, overlay.shown_())));
+  host.register_handler_("item.cursor", (args) => args.take(read_cursor(page, overlay.shown_())));
 }
