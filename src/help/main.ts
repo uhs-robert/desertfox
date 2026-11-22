@@ -2,7 +2,7 @@ import { load_commands_file } from "../shared/load_commands.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { build_config_status, load_effective_config } from "../shared/config/config_load.ts";
-import { default_engine_names, effective_settings } from "../shared/config.ts";
+import { default_engine_names } from "../shared/config.ts";
 import { WARNINGS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { follow_theme, follow_user_css } from "../shared/theme/apply.ts";
 import { follow_settings } from "../shared/storage_watch.ts";
@@ -16,22 +16,13 @@ import { update_config_source } from "./settings_view.ts";
 import { section_anchor } from "./sections.ts";
 import { close_drawer_on_escape, close_drawer_on_window_blur } from "./sidebar.ts";
 import { mount_grant_panel } from "./grant_panel.ts";
-import { mount_settings } from "./settings_page.ts";
-import { mount_site_keys, SITE_KEYS_CAPTURE_CLASS } from "./site_keys_page.ts";
-import { create_key_capture, mount_keys } from "./keys_page.ts";
-import { mount_engines } from "./engines_page.ts";
-import { mount_pairs } from "./pairs_page.ts";
-import { ALIASES_KIND, QUICKMARKS_KIND } from "./pairs_model.ts";
-import { touches_settings } from "../shared/storage_watch.ts";
-import { QUICKMARK_STORAGE_KEY } from "../shared/config/storage_keys.ts";
-import { create_user_css_gate, NO_USER_CSS_HOLD, type UserCssHold } from "./user_css_gate.ts";
-import { mount_transfer } from "./transfer_page.ts";
-import { mount_files } from "./files_page.ts";
-import { mount_themes } from "./themes_page.ts";
+import { create_settings_boxes } from "./settings_boxes.ts";
+import { SITE_KEYS_CAPTURE_CLASS } from "./site_keys_page.ts";
+import { create_key_capture } from "./keys_page.ts";
+import { create_user_css_gate } from "./user_css_gate.ts";
 import { create_files_session } from "./files_model.ts";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { create_host_start_session } from "./host_start_model.ts";
-import { mount_host_start } from "./host_start_page.ts";
 import { parse_route } from "../shared/page/help_route.ts";
 import type { PageId, Route } from "../shared/page/help_route.ts";
 import { refused_as } from "../shared/swallow.ts";
@@ -39,30 +30,17 @@ import { listen_for_bundle_requests } from "../shared/page_bundle_tag.ts";
 
 declare const browser: MessagingBrowser;
 
-let stop_settings: (() => void) | undefined;
-let stop_keys: (() => void) | undefined;
-let site_keys_form: ReturnType<typeof mount_site_keys> | undefined;
-let stop_engines: (() => void) | undefined;
-let stop_aliases: (() => void) | undefined;
-let stop_quickmarks: (() => void) | undefined;
-let stop_themes: (() => void) | undefined;
 let stop_section_hold: (() => void) | undefined;
 // Its one window listener is registered below, ahead of `content.js` and the drawer's Escape handler.
 const key_capture = create_key_capture();
 // Registered here, ahead of `content.js`, whose own capture listener stops a bound key such as j before any listener added later. Any key ends the section hold.
 window.addEventListener("keydown", () => stop_section_hold?.(), { capture: true, passive: true });
-// The hold of the mounted import section. A new mount replaces it, and the old one can no longer change the gate.
-let transfer_hold: UserCssHold = NO_USER_CSS_HOLD;
-// The same for the files editor, so its consent card and the import review never release each other.
-let files_hold: UserCssHold = NO_USER_CSS_HOLD;
 // One session for the page's life: leaving the settings route and coming back keeps an unsaved draft and a running save.
 const files_session = create_files_session({ send: (message) => browser.runtime.sendMessage(message), on_change: () => undefined });
-// Redraws the banner of the mounted settings route, if any.
-let draw_host_start: () => void = () => undefined;
 const host_start_session = create_host_start_session({
   read_pending: async () => (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY],
   send: (message) => browser.runtime.sendMessage(message),
-  on_change: () => draw_host_start(),
+  on_change: () => boxes.redraw(),
 });
 void host_start_session.load();
 // An import, a reload or another tab changed the stored files: the editor reads them again. A start, a choice or a swap changed the host start question: the banner follows.
@@ -112,47 +90,9 @@ function hold_section_in_view(heading: HTMLElement): void {
 function show_route(model: HelpModel, guide: Block[], engines: string[], cause: "first" | "moved" | "refresh"): void {
   const route = parse_route(location.hash);
   stop_section_hold?.();
-  stop_settings?.();
-  stop_settings = undefined;
-  site_keys_form?.stop();
-  site_keys_form = undefined;
-  stop_keys?.();
-  stop_keys = undefined;
-  stop_engines?.();
-  stop_engines = undefined;
-  stop_aliases?.();
-  stop_aliases = undefined;
-  stop_quickmarks?.();
-  stop_quickmarks = undefined;
-  stop_themes?.();
-  stop_themes = undefined;
+  boxes.stop_all();
   render_help(document.body, model, route, guide);
-  const settings_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-settings") : null;
-  if (settings_box) stop_settings = mount_settings(settings_box, (message) => browser.runtime.sendMessage(message), engines, browser.storage.onChanged as never, model.keys.reload, model.resolve_keys);
-  const site_keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-site-keys") : null;
-  if (site_keys_box) site_keys_form = mount_site_keys(site_keys_box, { send: (message) => browser.runtime.sendMessage(message), read_rules: async () => effective_settings((await load_effective_config()).config.settings).site_rules }, route.site_keys, key_capture, browser.storage.onChanged as never);
-  const keys_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-keys") : null;
-  if (keys_box) stop_keys = mount_keys(keys_box, { send: (message) => browser.runtime.sendMessage(message), names: command_names }, key_capture, browser.storage.onChanged as never);
-  const engines_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-engines") : null;
-  if (engines_box) stop_engines = mount_engines(engines_box, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never);
-  const aliases_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-aliases") : null;
-  if (aliases_box) stop_aliases = mount_pairs(aliases_box, ALIASES_KIND, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never, touches_settings);
-  // `M` writes the store without a publish, so the rows follow the store's key as well as the config.
-  const quickmarks_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-quickmarks") : null;
-  if (quickmarks_box) stop_quickmarks = mount_pairs(quickmarks_box, QUICKMARKS_KIND, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never, (changes, area) => touches_settings(changes, area) || (area === "local" && QUICKMARK_STORAGE_KEY in changes));
-  const themes_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-themes") : null;
-  if (themes_box) stop_themes = mount_themes(themes_box, { send: (message) => browser.runtime.sendMessage(message) }, browser.storage.onChanged as never);
-  const host_start_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-host-start") : null;
-  draw_host_start = host_start_box ? mount_host_start(host_start_box, host_start_session, (message) => browser.runtime.sendMessage(message)) : () => undefined;
-  draw_host_start();
-  const transfer_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-transfer") : null;
-  transfer_hold.dispose();
-  transfer_hold = open_user_css_hold();
-  if (transfer_box) mount_transfer(transfer_box, (message) => browser.runtime.sendMessage(message), transfer_hold);
-  const files_box = route.page === "settings" ? document.querySelector<HTMLElement>(".desertfox-files") : null;
-  files_hold.dispose();
-  files_hold = open_user_css_hold();
-  if (files_box) mount_files(files_box, files_session, files_hold);
+  boxes.mount_all(route, model, engines);
   shown_page = route.page;
   if (cause === "refresh") return;
   land_on(route, cause);
@@ -243,12 +183,13 @@ window.addEventListener("hashchange", () => {
   const route = parse_route(location.hash);
   if (route.page === shown_page && KEEPS_STATE_PAGES.includes(route.page)) {
     // A link that names a site points the form at it and keeps the rest of the page as it is.
-    if (route.site_keys !== undefined) site_keys_form?.set_site(route.site_keys);
+    if (route.site_keys !== undefined) boxes.set_site(route.site_keys);
     land_on(route, "moved");
   } else show_route(current.model_, current.guide, current.engines, "moved");
 });
 listen_for_bundle_requests();
 follow_theme(":root, .desertfox-help");
 const open_user_css_hold = create_user_css_gate(follow_user_css());
+const boxes = create_settings_boxes({ send: (message) => browser.runtime.sendMessage(message), on_changed: browser.storage.onChanged as never, key_capture, command_names, files_session, host_start_session, open_hold: open_user_css_hold });
 follow_settings(draw);
 mount_grant_panel(open_user_css_hold());
