@@ -125,7 +125,7 @@ test("a finder list that is also an ARIA feed is one region, the finder's", () =
 test("a short ARIA list lies after the finder's long and short lists, pick-only, and the start ignores it", () => {
   const short_rows: SavedNode[] = Array.from({ length: 5 }, (_, index) => ({ t: "div", a: { class: "note" }, r: [20, 1500 + index * 44, 500, 40], c: [{ t: "h3", r: [20, 1500 + index * 44, 400, 24], c: [{ t: "a", a: { href: `/n/${index}` }, r: [20, 1500 + index * 44, 400, 24], s: `A notification title text ${index}` }] }] }));
   const sidebar = widget("tree", rows(6, "treeitem", { tag: "li", top: 2000, width: 260 }));
-  const found = find_items(saved_reader(page_of({ t: "div", r: [20, 100, 600, 1200], c: cards(10, 100) }, { t: "div", r: [20, 1500, 500, 220], c: short_rows }, sidebar)));
+  const found = find_items(saved_reader(page_of({ t: "div", a: { class: "feed" }, r: [20, 100, 600, 1200], c: cards(10, 100) }, { t: "div", a: { class: "notes" }, r: [20, 1500, 500, 220], c: short_rows }, sidebar)));
   assert.deepEqual(
     found.regions.map((region) => region.pick_only_ ?? false),
     [false, true, true],

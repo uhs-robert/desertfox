@@ -320,3 +320,38 @@ test("a short h3 link to this page with a fragment, absolute or path-relative, i
 test("a short h2 link to another page is still a section name", () => {
   assert.equal(find_items(saved_reader(short_heading_entries("h2", (index) => `/user/${index}`))).items.length, 0);
 });
+
+// Three story cards in two rows (a lead card tall on one side, two stacked beside it): a top-stories block of a news front. Beside it sits nothing a list could be, so the block is the page's only list.
+function hero_block(left: number): SavedPage {
+  const card = (x: number, y: number, h: number, index: number): SavedNode => ({
+    t: "div",
+    a: { class: "story" },
+    r: [x, y, 300, h],
+    c: [
+      { t: "a", a: { href: `/story/${index}` }, r: [x, y, 300, 24], s: `Top story number ${index} headline`, c: [] },
+      { t: "p", r: [x, y + 30, 300, 60], n: 120, c: [] },
+    ],
+  });
+  const block: SavedNode = {
+    t: "div",
+    a: { class: "top" },
+    r: [left, 200, 640, 420],
+    c: [card(left, 200, 420, 0), card(left + 340, 200, 200, 1), card(left + 340, 420, 200, 2)],
+  };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 900], c: [{ t: "body", r: [0, 0, 1366, 900], c: [block] }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  return { view: { w: 1366, h: 682, doc_h: 900 }, root };
+}
+
+test("a hero block of three cards in two rows at the left of the view is a list of three", () => {
+  const found = find_items(saved_reader(hero_block(30)));
+  assert.equal(found.items.length, 3);
+});
+
+test("the same block in the right half of the view, a side rail card, is no list", () => {
+  assert.equal(find_items(saved_reader(hero_block(700))).items.length, 0);
+});

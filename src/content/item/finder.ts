@@ -1,7 +1,7 @@
 // The item finder: reads a page once and answers where its list or grid of items is, or that it is not sure. The answer is a derived row, the shape of a site row without the selectors: the items and the link that takes the focus in each.
 // It is pure over `PageReader`, so the live page (`dom_reader.ts`) and the saved pages of `test/fixtures/next_page/` run the same code. Unsure means `none`, and then the keys scroll as they do without it.
 
-import { ancestors, descendants, once, signature, stacked_items } from "../next_page/detect.ts";
+import { ancestors, descendants, once, signature } from "../next_page/detect.ts";
 import type { Box, PageReader } from "../next_page/detect.ts";
 import { find_aria_lists, holds } from "./aria_lists.ts";
 import { in_chrome, list_groups, plain_block } from "./groups.ts";
@@ -103,10 +103,11 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     stop: out_of_time,
   };
   const chrome = once((node: N) => in_chrome(reader, node));
-  // Only groups that stack in three rows and whose items mostly hold a title link can be lists. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
+  const rows_of = (group: Group<N>) => new Set(group.boxes.map((box) => Math.round(box.y / 8))).size;
+  // Only groups of three or more items in two rows and whose items mostly hold a title link can be lists. Three items in two rows are a top-stories block only when it starts in the left half of the view: a card in a side rail is no list, so there it takes three rows. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
   const groups = list_groups(reader, scope, rules).filter((group) => !chrome(group.parent));
   const merged = merge_batches(reader, nest_batches(reader, groups));
-  const lists = merged.filter((group) => stacked_items(reader, group.items) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+  const lists = merged.filter((group) => group.items.length >= 3 && rows_of(group) > (group.boxes[0]!.x < view.w / 2 ? 1 : 2) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
   if (out_of_time()) return { ...none<N>(), timed_out_: true };
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
@@ -116,7 +117,7 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const main_box = reader.box_(region);
   if (region !== reader.root_ && main_box && !gated.length) {
     const first_screen = main_box.y + view.h;
-    const small = merged.filter((group) => group.boxes[0]!.y < first_screen && new Set(group.boxes.map((box) => Math.round(box.y / 8))).size > 1 && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+    const small = merged.filter((group) => group.boxes[0]!.y < first_screen && rows_of(group) > 1 && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
     const top = top_of(small)[0];
     if (top) lists.push(top), gated.push(top);
   }
