@@ -1,7 +1,7 @@
 // The rows of the toolbar popup. No DOM, so tests read the rows.
 
 import type { SiteState } from "../background/toolbar.ts";
-import { PAGES } from "../help/route.ts";
+import { PAGES } from "../shared/page/help_route.ts";
 import { BUILT_IN_THEME_NAMES } from "../shared/theme_names.ts";
 import { REPO } from "../shared/native_host.ts";
 import type { ToolbarAnswer } from "../shared/messages/page.ts";

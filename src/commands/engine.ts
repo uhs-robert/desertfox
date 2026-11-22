@@ -1,4 +1,4 @@
-import { HELP_PAGE_FILE } from "../help/route.ts";
+import { HELP_PAGE_FILE } from "../shared/page/help_route.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 // The help page lists every engine with its origins. The bare engine name opens it at that row.

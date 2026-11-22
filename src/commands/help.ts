@@ -1,5 +1,5 @@
 import { help_name_choices, help_name_url, key_command_id_on_page } from "../background/open_help.ts";
-import { command_help_url, HELP_PAGE_FILE } from "../help/route.ts";
+import { command_help_url, HELP_PAGE_FILE } from "../shared/page/help_route.ts";
 import { open_help_url } from "./help_tab.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap, type CompiledKeymap } from "../shared/prefix_tree.ts";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_host_flag, create_notice, disabled_after_click, host_dot, release_url, site_card, theme_options, NOTICE_MS, SUPPORT_URL, COMMANDS_HASH, HOME_HASH, SETTINGS_HASH, SITE_RULES_HASH, WARNINGS_HASH, build_rows, site_keys_hash } from "../../src/popup/model.ts";
 import type { PopupInputs } from "../../src/popup/model.ts";
-import { parse_route } from "../../src/help/route.ts";
+import { parse_route } from "../../src/shared/page/help_route.ts";
 
 const base: PopupInputs = { disabled: false, site: { kind: "enabled", pattern: "*://*.a.test/*" }, warning_count: 2, version: "1.2.3", has_native_host: true, extra_theme_names: [], theme: "oasis_moonlight" };
 const ids = (inputs: PopupInputs) => build_rows(inputs).map((row) => row.id);

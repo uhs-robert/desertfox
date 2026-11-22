@@ -4,7 +4,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { build_help_model, group_title, STYLE_VARIABLES } from "../src/help/model.ts";
 import { read_only_note } from "../src/help/settings_model.ts";
-import { command_help_url, parse_route } from "../src/help/route.ts";
+import { command_help_url, parse_route } from "../src/shared/page/help_route.ts";
 import { DEFAULT_SETTINGS, effective_settings } from "../src/shared/config.ts";
 import { ROLES } from "../src/shared/theme/roles.ts";
 import { token_name } from "../src/shared/theme/tokens.ts";

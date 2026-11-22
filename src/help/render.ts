@@ -10,8 +10,8 @@ import { key_caps } from "../shared/key_caps.ts";
 import { grant_hash } from "../shared/permission_grant.ts";
 import { GROUPS } from "./settings_model.ts";
 import { practice_page } from "./practice_page.ts";
-import { ADVANCED_SUFFIX, PAGES } from "./route.ts";
-import type { PageId, Route } from "./route.ts";
+import { ADVANCED_SUFFIX, PAGES } from "../shared/page/help_route.ts";
+import type { PageId, Route } from "../shared/page/help_route.ts";
 
 export type Child = Node | string;
 
