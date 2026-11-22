@@ -101,7 +101,10 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
           const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)) || (!!active_home && region.home_ === active_home));
           // A read that ran out of time shows nothing about the list, so only a whole read that lacks it drops the pin.
           if (pin && !old && !found.timed_out_) pin = undefined;
-          const active = (hold ? old : found.regions.find((region) => region.items.some((item) => item.contains(deps.focus_()))) ?? most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
+          // A widget list that keeps the focus off its rows (`focus_none_`) keeps its pick against a focus that sits in a link elsewhere. A focus left behind in a list scrolled out of view counts for nothing, as in `place_of`.
+          const focus = deps.focus_();
+          const focused = hold || old?.focus_none_ ? undefined : most_in_view(found.regions.filter((region) => region.items.some((item) => item.contains(focus))));
+          const active = (hold ? old : focused ?? most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
           if (!(pin && found.timed_out_)) remember(active);
           kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
         }
