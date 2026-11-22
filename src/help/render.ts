@@ -14,10 +14,6 @@ import type { PageId, Route } from "../shared/page/help_route.ts";
 import { code_block_node, el, inline_node, new_tab_link, table_of } from "./dom.ts";
 import type { Child } from "./dom.ts";
 
-// The toolkit moved to dom.ts. These re-exports keep the old import path for tests and main.ts until the table PR removes them.
-export { copy_code_and_confirm, el, inline_node, new_tab_link } from "./dom.ts";
-export type { Child } from "./dom.ts";
-
 function key_list(rows: KeyRow[]): HTMLElement {
   const cell = el("div", "desertfox-help-keys");
   if (rows.length === 0) {

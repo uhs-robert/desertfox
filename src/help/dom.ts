@@ -1,4 +1,4 @@
-// The DOM toolkit the help pages share. It imports no page, so a page can import it without a cycle through render.ts.
+// The DOM toolkit the help pages share. It imports no page, so the Settings pages can import it without a cycle through render.ts.
 
 import { copy_text } from "../content/caret/copy_text.ts";
 import type { Inline } from "./blocks.ts";
