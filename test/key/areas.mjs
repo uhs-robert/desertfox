@@ -13,10 +13,11 @@ const shared_files = [
   "src/manifest.json",
   "src/background/{availability,browser_deps,content_messages,keymap_source,main,message_table,page_keymap,page_messages,refusal,router,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
-  "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,link_escape,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,shown,site_mode,site_rule}.ts",
+  "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,shown,site_mode,site_rule}.ts",
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,key_test_build,load_commands,swallow}.ts",
   "src/shared/messages/*.ts",
+  "src/shared/copy/link_escape.ts",
   "src/shared/site/site_columns.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
@@ -33,10 +34,10 @@ export const area_rules = [
   { globs: ["src/content/hidden_frame.ts"], areas: ["ui", "keys", "hints"] },
   // The top frame draws the line, which-key and toasts for a focused subframe, which p6_frames tests.
   { globs: ["src/{content,shared}/relay.ts", "src/background/frame_cue.ts"], areas: ["hints", "cmdline", "whichkey", "ui"] },
-  { globs: ["src/content/{link_list,strip_setting,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
+  { globs: ["src/content/strip_setting.ts", "src/shared/copy/{link_list,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
   // The user-left watch serves the next_page load wait and the end follow of page.item.
   { globs: ["src/content/user_left.ts", "src/content/pointer_events.ts"], areas: ["hints", "engines", "bundles", "keys"] },
-  { globs: ["src/content/hints/**", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/hints/**", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/content/item/**", "src/content/item_act/**", "src/content/tree/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles", "keys"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules,extension_page}.ts", "src/content/{bundle_calls,bundle_host,bundles}.ts", "src/content/text/**", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
@@ -109,7 +110,7 @@ export const area_rules = [
   { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
   { globs: ["src/popup/**", "src/background/toolbar.ts", "src/shared/site/site_state.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },
-  { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
+  { globs: ["src/shared/ui/mode_label.ts", "src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];
 
 // Supports ** (any depth), * (within one path part) and {a,b}. Nothing else is special.

@@ -3,7 +3,6 @@
 The `ui` bundle (`ui.js`), which the content script loads on first use. It draws the mode badge and the toast (a short message that disappears after `toast_ms`, or after `toast_error_ms` for an error: 3 and 6 seconds by default).
 
 - `main.ts`: the bundle entry. It registers two handlers with the host: `ui.toast` (shows `args.message`, styled by the optional `args.kind`: error, warning, info or success, error when unset, and hidden after `args.duration_ms`, which the content script picks by kind from the compiled keymap) and `ui.badge` (sets `args.label` and `args.mode`, and removes the badge when the label is undefined). A second run does not register again.
-- `mode_label.ts`: the text of the mode indicator. Pure.
 - `frame_hide_watch.ts`: the top frame watches the child frame that holds the keys and takes the focus back when that frame hides.
 
 The drawing code is in `../toast.ts` and `../mode_indicator.ts`. Both draw in a closed shadow root made by `../surface.ts`. Only this bundle runs them. 

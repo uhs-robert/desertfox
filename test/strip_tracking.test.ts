@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { strip_tracking } from "../src/content/strip_tracking.ts";
+import { strip_tracking } from "../src/shared/copy/strip_tracking.ts";
 import { DEFAULT_STRIP_TRACKING_PARAMS } from "../src/shared/default_settings.ts";
 
 const patterns = ["utm_*", "fbclid"];

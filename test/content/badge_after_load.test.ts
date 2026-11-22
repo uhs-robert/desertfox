@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
-import type { BadgeState } from "../../src/content/ui/mode_label.ts";
+import type { BadgeState } from "../../src/shared/ui/mode_label.ts";
 
 const NORMAL: BadgeState = { mode: "normal", pass_next: false, setting: "always", recording: undefined };
 

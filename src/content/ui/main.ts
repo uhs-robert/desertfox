@@ -2,8 +2,8 @@
 
 import type { BundleHostApi, PageHostApi } from "../bundle_host.ts";
 import { show_mode_label } from "../mode_indicator.ts";
-import { mode_label } from "./mode_label.ts";
-import type { BadgeState } from "./mode_label.ts";
+import { mode_label } from "../../shared/ui/mode_label.ts";
+import type { BadgeState } from "../../shared/ui/mode_label.ts";
 import { relay } from "../relay.ts";
 import { show_toast } from "../toast.ts";
 import { create_frame_hide_watch } from "./frame_hide_watch.ts";

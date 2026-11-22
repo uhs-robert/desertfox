@@ -12,7 +12,7 @@ import type { ItemArgs, ItemCursor } from "./item/pick.ts";
 import type { PendingPrefix } from "./key_flow.ts";
 import type { ClipboardArgs } from "./site_actions/clipboard.ts";
 import type { SendKeyArgs } from "./site_actions/send_key.ts";
-import type { BadgeState } from "./ui/mode_label.ts";
+import type { BadgeState } from "../shared/ui/mode_label.ts";
 
 export type ListRegion = Region<Element>;
 

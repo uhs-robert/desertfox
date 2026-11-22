@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clean_letters, DEFAULT_HINT_LETTERS, item_first, make_labels, narrow, overlap_groups, rotate } from "../../src/content/hints/labels.ts";
+import { clean_letters, DEFAULT_HINT_LETTERS, item_first, make_labels, narrow, overlap_groups, rotate } from "../../src/shared/hints/labels.ts";
 
 const HOME_ROW = [...DEFAULT_HINT_LETTERS];
 

@@ -11,8 +11,7 @@ Rules that span files:
 Entries:
 
 - `main.ts`: capture listener, message and mode wiring, the `blur_on_load` window. Not unit tested, it needs a DOM.
-- `strip_tracking.ts`, `strip_setting.ts`: the `strip_tracking_params` copy rule and the background ask for its names.
-- `link_list.ts`, `link_escape.ts`: lines of a copied link list and their bracket escaping. Pure.
+- `strip_setting.ts`: the background ask for the `strip_tracking_params` names (`shared/copy/strip_tracking.ts` applies them).
 - `ask_keymap.ts`: asks the background for the page's keymap at start and on `tree_updated`.
 - `key_flow.ts`: routes each key token: page, mode sink, `browser` chord or hold. Pure.
 - `run_leaf.ts`: runs a matched leaf here or sends it to the router. `holds_keys_after` says whether keys wait.

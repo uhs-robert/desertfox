@@ -10,7 +10,7 @@ import type { TabAnswer, TabInfo, TabVerb } from "./tab_switch.ts";
 import { create_bridge_events, TABS_OFF_EVENT } from "./bridge_events.ts";
 import type { TabChange } from "./bridge_events.ts";
 import { BUILT_IN_THEME_NAMES } from "../shared/theme_names.ts";
-import { mode_label } from "../content/ui/mode_label.ts";
+import { mode_label } from "../shared/ui/mode_label.ts";
 import { refused_as } from "../shared/swallow.ts";
 
 export const BRIDGE_HOST_NAME = "desertfox_bridge";
