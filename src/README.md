@@ -28,6 +28,7 @@ The code map. Read a folder's README before you change or research code in it.
 - [`popup/`](popup/README.md): the toolbar popup.
 - `icons/`: the extension icon. The build writes the grey off copy (`tools/grey_svg.mjs`).
 - [`shared/`](shared/README.md): what every folder shares: types and constants, settings, themes, search engines and URL math (`url_build.ts`).
+  - [`shared/completion/`](shared/completion/README.md): what the command line list offers (tokenizer, sources, clients of the background's models), plus the tab rows.
   - [`shared/keys/`](shared/keys/README.md): key notation, the prefix tree compiler and the matcher.
   - [`shared/config_build/`](shared/config_build/README.md): the pure config build from raw file text.
   - [`shared/theme/`](shared/theme/README.md): theme files, roles, derived tokens and applying a theme to a surface.

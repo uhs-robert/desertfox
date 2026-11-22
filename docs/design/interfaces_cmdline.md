@@ -1,7 +1,7 @@
 # Command line and invocations
 
 Area: the command line, completion and invocations.
-READMEs: `src/cmdline/README.md`, `src/shared/README.md`.
+READMEs: `src/cmdline/README.md`, `src/shared/completion/README.md`, `src/shared/README.md`.
 Source: `src/cmdline`, `src/shared/completion`, `src/shared`.
 
 ## Invocations and prompts
@@ -88,3 +88,13 @@ Tabs and bookmarks come from the background, because it knows the window and pri
 
 - Ranking by use. `open`, `history`, `bookmark` and the finder raise a text match by how much a page is used, and never lower one: score times (1 + boost), with the boost from 0 to 0.6, added before the exact-name bonus, so an exact name still leads. The background computes the boost once per line and list. Half of it comes from the visit count (by its log, full at 50 visits) and half from the last visit (it halves every 14 days). Firefox gives only those two numbers per page, not the visit list its own frecency reads. A bookmark, quickmark or closed tab takes the boost of its address's history row, so a bookmark opened daily ranks as a page visited daily, though the history row drops out as a duplicate. An open tab gets 0.3 plus its page's boost, within the same cap. A private line reads no history, so in `open` and the finder only its tabs get a boost. The `bookmark` list and its Enter read the boost on every line, so they agree. Site rows: in `open` and the finder, a typed word of at least 2 characters with no space that starts a label of a visited web host (`git` finds `github.com`, not `digital.com`) offers that host's home page, at the scheme of its newest visit, as a row of its own. Up to 3 hosts show, the most used first, and each ranks with the summed visits of all its pages. A host whose home page is already a row (a bookmark, history row, quickmark or tab) gets no site row. A private line gets none. Site rows rank by the same scorer on the host name.
 - Engines ride the same fetch (`kind: "engines"`) for the first word of `search`, `--engine=` and `engine.show`. A row shows the engine name and its label. The background marks each engine with a yes or no for whether the line's tab page can fill its slots, and sends no page data. A row the page cannot fill is dimmed and reads "unavailable" in the args column; `engine.show` marks none. A word that ends in a dot (`github.`) lists every engine under that prefix, deeper ones included. The parser still reads a hidden engine, so a picked or typed one runs and the router refuses it.
+
+#### How the completion code works
+
+Code map: `src/shared/completion/README.md`. The rules the lines there leave out:
+
+- `ranked_client.ts` asks the background for the rows of `open`, `history` and the finder, which rank there because they rank the history (`background/rank_service.ts`). It sends the word over the rank port with one request in flight per line, keeps only the newest word waiting behind it, drops a reply it no longer waits for, keeps the last 4 answers, clears them on `stale` and ends with the line. While an answer is on its way the list keeps the last ranked rows and reads `loading`.
+- `anything.ts` builds the finder's rows (`,,`, `open.anything`) from the tabs, the background's answer and the engines. It ranks the tabs here, drops an answer row whose address a tab holds, and merges the rest in by score, so every group ranks as one list, raised by the use boost each row carries. An equal score keeps the group order, and the search rows come last.
+- A finder row carries a `ref` (`shared/anything_ref.ts`) and the completion carries `highlight_first`, so `session.ts` highlights the first row while a query is typed and submits that row's reference in place of the text. `cmdline.submit` takes an optional `where` (`<S-Enter>`), which `session.ts` sets on a submitted command that has a `where` param.
+- `live.ts` and `model_client.ts` are pure: the page passes in the asking and the redraw. The tabs come from `model_client.ts`, not from `live.ts`.
+- `set`, `toggle` and `unset` complete setting names, then the values a setting lists, from the generated `shared/setting_completion.ts`. The page imports no setting rules, so it checks only the shape of a line (`check_args_shape`) and the background refuses a bad `:set` value at Enter.
