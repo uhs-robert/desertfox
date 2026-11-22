@@ -5,21 +5,22 @@ import { saved_reader } from "./support/snapshot_page.ts";
 import type { SavedNode, SavedPage } from "./support/snapshot_page.ts";
 
 // A stand-in for a notification inbox, written by hand: ten records in a list. Each record is a row of two blocks of one class: the title link on the left, and on the right the date with the avatars of the people in the thread. A record with one avatar has a lone link in its right block, which made the two blocks of such records a list of their own.
-function inbox({ side_height = 20, lone_avatar = [4, 8], count = 10, in_main = true, top = 188 } = {}): SavedPage {
-  const record = (index: number): SavedNode => {
-    const y = top + index * 56;
+function inbox({ side_height = 20, lone_avatar = [4, 8], count = 10, in_main = true, top = 188, hidden_main = false, one_row = false, untitled = false, sideways = false, short_above = 0 } = {}): SavedPage {
+  const record = (index: number, y0 = top): SavedNode => {
+    const y = one_row ? y0 : y0 + index * 56;
+    const x = one_row ? 253 + index * 360 : 253;
     const avatars = lone_avatar.includes(index) ? 1 : 2;
     return {
       t: "li",
       a: { class: "record unread" },
-      r: [253, y, 1084, 56],
+      r: [x, y, one_row ? 340 : 1084, 56],
       c: [
         {
           t: "div",
           a: { class: "row" },
           r: [261, y, 1076, 55],
           c: [
-            { t: "div", a: { class: "block main" }, r: [261, y, 782, 55], c: [{ t: "a", a: { class: "title", href: `/thread/${index}` }, r: [299, y, 744, 55], s: `owner/repo #${index} The title of thread number ${index}` }] },
+            { t: "div", a: { class: "block main" }, r: [261, y, 782, 55], c: [{ t: "a", a: { class: "title", href: `/thread/${index}` }, r: [299, y, 744, 55], s: untitled ? "" : `owner/repo #${index} The title of thread number ${index}` }] },
             {
               t: "div",
               a: { class: "block side" },
@@ -34,8 +35,11 @@ function inbox({ side_height = 20, lone_avatar = [4, 8], count = 10, in_main = t
       ],
     };
   };
-  const list: SavedNode = { t: "ul", a: { class: "records" }, r: [253, top, 1084, count * 56], c: Array.from({ length: count }, (_, index) => record(index)) };
-  const root: SavedNode = { t: "html", r: [0, 0, 1366, 852], c: [{ t: "body", r: [0, 0, 1366, 852], c: [in_main ? { t: "main", r: [0, 64, 1354, 788], c: [list] } : list] }] };
+  const list: SavedNode = { t: "ul", a: { class: "records" }, ...(sideways ? { x: 1 as const } : {}), r: [253, top, 1084, count * 56], c: Array.from({ length: count }, (_, index) => record(index)) };
+  // A short list of another class above the long one, both in the first screen.
+  const above: SavedNode[] = short_above ? [{ t: "ul", a: { class: "pinned" }, r: [253, 70, 1084, short_above * 56], c: Array.from({ length: short_above }, (_, index) => record(index, 70)) }] : [];
+  const main: SavedNode = { t: "main", r: [0, 64, 1354, 788], ...(hidden_main ? { h: 1 as const } : {}), c: [...above, list] };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 852], c: [{ t: "body", r: [0, 0, 1366, 852], c: [in_main ? main : list] }] };
   const link_up = (node: SavedNode, up: SavedNode | null) => {
     node.up = up;
     for (const child of node.c ?? []) link_up(child, node);
@@ -77,3 +81,52 @@ for (const [what, options] of [["with no main", { in_main: false }], ["below the
     assert.equal(find_items(saved_reader(inbox({ count: 2, ...options }))).kind, "none");
   });
 }
+
+test("a hidden main with a short list answers none and does not throw", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 2, hidden_main: true }))).kind, "none");
+});
+
+test("three items in one row are no short list", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 3, one_row: true }))).kind, "none");
+});
+
+test("records with no title link are no short list", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 3, untitled: true }))).kind, "none");
+});
+
+test("a short list that scrolls sideways is no short list", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 3, sideways: true }))).kind, "none");
+});
+
+// Main starts at y 64 and the view is 682 high, so its first screen ends at 746, past the 682 of the page's own first screen.
+test("a short list that starts inside the first screen of main, below the first screen of the page, is the answer", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 3, top: 720 }))).kind, "list");
+});
+
+test("a short list that starts just past the first screen of main is no list", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 3, top: 750 }))).kind, "none");
+});
+
+test("a long list keeps the answer over a short list above it", () => {
+  const found = find_items(saved_reader(inbox({ count: 10, top: 300, short_above: 3 })));
+  assert.equal(found.items.length, 10);
+  assert.equal(found.pick_only_, undefined);
+  assert.deepEqual(found.regions?.map((region) => region.items.length), [10, 3]);
+});
+
+// Two sections of three cards each. The sections alone are two rows, so only the short-list rule makes them the page's list, and the cards inside are the walk.
+test("a short list of sections walks the cards inside them", () => {
+  const card = (y: number, at: number): SavedNode => ({ t: "li", a: { class: "card" }, r: [261, y + at * 56, 1060, 56], c: [{ t: "a", a: { class: "title", href: `/card/${y}/${at}` }, r: [261, y + at * 56, 1060, 56], s: `A card of the section at ${y}, number ${at}` }] });
+  const section = (y: number): SavedNode => ({ t: "li", a: { class: "section" }, r: [253, y, 1084, 180], c: [{ t: "ul", a: { class: "cards" }, r: [261, y, 1060, 168], c: [0, 1, 2].map((at) => card(y, at)) }] });
+  const list: SavedNode = { t: "ul", a: { class: "sections" }, r: [253, 100, 1084, 380], c: [section(100), section(300)] };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 852], c: [{ t: "body", r: [0, 0, 1366, 852], c: [{ t: "main", r: [0, 64, 1354, 788], c: [list] }] }] };
+  const link_up = (node: SavedNode, up: SavedNode | null) => {
+    node.up = up;
+    for (const child of node.c ?? []) link_up(child, node);
+  };
+  link_up(root, null);
+  const found = find_items(saved_reader({ view: { w: 1366, h: 682, doc_h: 852 }, root }));
+  assert.deepEqual(found.items.map((item) => item.a?.class), Array(6).fill("card"));
+  assert.equal(found.sections?.length, 2);
+  assert.equal(found.regions?.length, 1);
+});
