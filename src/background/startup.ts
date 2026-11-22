@@ -7,7 +7,7 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import type { MergedConfig, SettingEdits, SettingOverrides, Settings } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { container_names, make_router_deps, show_toast_on_tab, snippet_deps } from "./browser_deps.ts";
+import { container_names, show_toast_on_tab } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
@@ -34,19 +34,15 @@ import { is_pass_shaped, site_rows_with_pass, site_rows_without_pass } from "../
 import { matches_pattern, site_row_columns, type SiteRuleRow } from "../shared/match_pattern.ts";
 import { apply_slot_plan, plan_slots, read_slot_map, release_slots, SLOT_COUNT, slot_table, store_slot_map } from "./slots.ts";
 import type { SlotPlan } from "./slots.ts";
-import { no_repeat_memory } from "./repeat_memory.ts";
-import { create_snippets } from "./snippets.ts";
-import { browser_native_deps, create_native_client, host_file_of, NativeHostError } from "./native_client.ts";
+import { create_services } from "./services.ts";
+import { host_file_of, NativeHostError } from "./native_client.ts";
 import type { ConfigFilesReply } from "./native_client.ts";
-import { create_host_update } from "./host_update.ts";
-import { browser_host_update_deps } from "./host_update_browser.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
 import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../shared/messages/page.ts";
-import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 import { css_limit_breaches } from "./css_limits.ts";
 import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
@@ -63,11 +59,9 @@ import type { HostStartChoice } from "../shared/messages/page.ts";
 
 declare const browser: MessagingBrowser;
 
-export const snippets = create_snippets(registry, snippet_deps, make_router_deps(get_config, no_repeat_memory));
-// The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.
-export const host_update = create_host_update(browser_host_update_deps(() => get_config(), (request) => native_host.self_update(request)));
-export const native_host = create_native_client(browser_native_deps(), host_update.watch);
-const autoconfig = create_autoconfig_mirror({ write_autoconfig: native_host.write_autoconfig, warn: console.warn });
+const services = create_services({ get_config });
+export const { snippets, host_update, native_host } = services;
+const { autoconfig } = services;
 
 // A change to the saved layer rewrites the file with the key edits, so the first one after an update clears the settings an older version mirrored there.
 async function mirror_key_edits(): Promise<void> {
