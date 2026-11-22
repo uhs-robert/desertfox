@@ -105,12 +105,20 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   const chrome = once((node: N) => in_chrome(reader, node));
   // Only groups that stack in three rows and whose items mostly hold a title link can be lists. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
   const groups = list_groups(reader, scope, rules).filter((group) => !chrome(group.parent));
-  const lists = merge_batches(reader, nest_batches(reader, groups)).filter((group) => stacked_items(reader, group.items) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+  const merged = merge_batches(reader, nest_batches(reader, groups));
+  const lists = merged.filter((group) => stacked_items(reader, group.items) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
   if (out_of_time()) return { ...none<N>(), timed_out_: true };
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
   // A list that sits inside an item of another is no top-level list. Several lists side by side (a feed and its rails) are all kept.
   const top_of = (pool: Group<N>[]) => pool.filter((group) => !pool.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
+  // With no long list, the largest list that starts in the first screen of the page's own main is its content, however short: two items in two rows are enough (a short inbox).
+  if (region !== reader.root_ && !gated.length) {
+    const first_screen = reader.box_(region)!.y + view.h;
+    const small = merged.filter((group) => group.boxes[0]!.y < first_screen && new Set(group.boxes.map((box) => Math.round(box.y / 8))).size > 1 && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+    const top = top_of(small)[0];
+    if (top) lists.push(top), gated.push(top);
+  }
   const tops = top_of(gated);
   // A short list that sits in no list at all (gated or short) is a top-level list too, placed after the gated ones.
   const short_tops = lists.filter((group) => !gated.includes(group) && !lists.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);

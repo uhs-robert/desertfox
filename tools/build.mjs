@@ -35,7 +35,7 @@ const MAX_BYTES = {
   // Handlers of commands that site rows bind to keys.
   "site_actions.js": 4 * 1024,
   // Item mode and the item finder behind `page.item`. Loads on the first j or k on a list page.
-  "item.js": 25 * 1024,
+  "item.js": 25.25 * 1024,
   // Item actions (Space, Enter) in item mode.
   "item_act.js": 3.5 * 1024,
   // page.tree and the fold keys. Loads on the first press.
