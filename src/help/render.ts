@@ -30,7 +30,6 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
   }
 }
 
-
 export function render_help(root: HTMLElement, full_model: HelpModel, route: Route, guide: Block[]): void {
   const model = visible_commands_model(full_model, route.advanced === true, route.command);
   const advanced_total = advanced_count(full_model);

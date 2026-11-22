@@ -31,9 +31,7 @@ function params_table(command: CommandRow): HTMLElement | string {
   return el("table", "desertfox-help-params", head, ...body);
 }
 
-
 export const command_anchor = (id: string): string => `command-${id}`;
-
 
 // The card color cycles over the groups, so a reader sees where one group ends. The stylesheet maps the number to a role color.
 const GROUP_ACCENTS = 5;
@@ -51,7 +49,6 @@ function command_card(command: CommandRow, group_index: number): HTMLElement {
   card.setAttribute("data-accent", String(group_index % GROUP_ACCENTS));
   return card;
 }
-
 
 // The toggle lives in the hash, so a reload, a link and the back button keep it. It shows the count, which the shown model no longer holds.
 function advanced_toggle(advanced: boolean, count: number): HTMLElement {
