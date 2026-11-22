@@ -33,7 +33,7 @@ export function create_files_session(deps: FilesDeps) {
     (deps.user_css_hold ?? NO_USER_CSS_HOLD).set(state.consent !== undefined);
     deps.on_change();
   };
-  const ask = (message: ConfigFilesRequest) => deps.send(message).catch((error: unknown): ConfigFilesAnswer => ({ ok: false, message: message_of(error) }));
+  const ask = (message: ConfigFilesRequest) => deps.send(message).then((answer) => answer, (error: unknown): ConfigFilesAnswer => ({ ok: false, message: message_of(error) }));
 
   // Rereads the stored files. A file that changed under an unedited draft is loaded into it, with its new base. An edited draft stays, and the base check refuses its save with the reopen message.
   async function load(): Promise<void> {
