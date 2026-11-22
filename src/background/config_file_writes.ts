@@ -14,10 +14,8 @@ import { files_before_unsynced, read_unsynced, replayed_on_folder, SETTINGS_FILE
 import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 import { theme_file_path } from "./theme_message.ts";
 import type { ConfigStore } from "./config_store.ts";
-import type { create_config_swap } from "./config_swap.ts";
+import type { ConfigSwap } from "./config_swap.ts";
 import type { Services } from "./services.ts";
-
-type ConfigSwap = ReturnType<typeof create_config_swap>;
 
 type HostWriteReply = { ok: true } | { ok: false; error: unknown };
 

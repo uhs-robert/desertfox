@@ -178,3 +178,4 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
   return { apply_files, import_config, preview_config_import, remove_snippet, save_config_file };
 }
 
+export type ConfigSwap = ReturnType<typeof create_config_swap>;

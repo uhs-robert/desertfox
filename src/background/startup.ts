@@ -25,7 +25,7 @@ import type { Services } from "./services.ts";
 
 declare const browser: MessagingBrowser;
 
-// The rest of the config code: setting and theme writes, the host write pipeline, the reload and the start sequence.
+// The reload and the start sequence, and the wiring of the swap and the write modules into one service.
 // The caller passes the store and the services, so a test builds its own instance and a production start shares the store with the commands.
 export function create_config_service(parts: { store: ConfigStore; services: Services }) {
   const { store, services } = parts;
@@ -252,7 +252,13 @@ export function create_config_service(parts: { store: ConfigStore; services: Ser
 
   return {
     ...swap,
-    ...setting_writes,
+    set_in_settings_file: setting_writes.set_in_settings_file,
+    toggle_in_settings_file: setting_writes.toggle_in_settings_file,
+    unset_in_settings_file: setting_writes.unset_in_settings_file,
+    change_site_rule_in_file: setting_writes.change_site_rule_in_file,
+    change_site_keys_in_file: setting_writes.change_site_keys_in_file,
+    set_theme_file: setting_writes.set_theme_file,
+    change_engine_file: setting_writes.change_engine_file,
     get_config: store.get_config,
     get_search_engine_names: store.get_search_engine_names,
     change_edits: store.change_edits,

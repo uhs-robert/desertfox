@@ -13,10 +13,10 @@ This folder and `src/commands/` import each other. `command_modules.ts` imports 
 - `history_clear.ts`: what the browser's history clearing does to the stores that hold page addresses (marks, command line history, saved icons).
 - `hold_on_arrival.ts`: holds the keys of a page that loads in a replay's tab before the keymap reply reaches it, so no key slips in before the replay's own hold.
 - `storage_keys.ts` and `config_load.ts` live in `shared/config/`, because the help, new tab and popup pages read them too.
-- `config_store.ts`: `get_config`, `publish` to `storage.local` and the one change queue every `set`, key edit, swap and republish uses. `publish` reads the edit layers, so a swap keeps them on top.
+- `config_store.ts`: `get_config`, `publish` and the one change queue for every `set`, key edit and swap. `publish` keeps the edit layers on top of a swap. Exports the production store and services.
 - `config_swap.ts`: `apply_files`, the one swap of a reload, import, editor save and setting write, with `import_config`, `remove_snippet` and `save_config_file`.
 - `config_file_writes.ts`: the host write pipeline: the per-path record, write loops, gate, replay of a refused write and `NAMING_PATHS` order.
-- `config_setting_writes.ts`: the setting, site, theme and engine writes (`set_in_settings_file`, `change_folder_files`, `change_engine_file`). Each plans a change and the pipeline sends it.
+- `config_setting_writes.ts`: the setting, site, theme and engine writes (`set_in_settings_file`, `commit_folder_files`, `change_engine_file`). Each plans a change and the pipeline sends it.
 - `startup.ts`: `create_config_service` wires the store, swap and write modules, and holds `reload_config` and the start read. Tests build their own state through `fresh_config_service`.
 - `services.ts`: `create_services` builds `snippets`, `host_update`, `native_host` and the autoconfig mirror. It takes `get_config` late, which breaks the import cycle with the config store.
 - `keymap_merge.ts`, `compile.ts` and `shared/config/config_load.ts`: the files config `config.reload` stored, default keymap under user keymap, and the args check per binding. `compile.ts` resolves the key edits with the config's aliases and engines (`config_entry_resolver`, which the site binds share) and merges them over the file keymap before the defaults, so an edit wins over both and drops a default it extends. The merge goes by key spelling (`spelling_of`), so a file's `<C-D>` gives way to an edit on `<C-d>`.

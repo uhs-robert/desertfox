@@ -24,10 +24,8 @@ import { theme_file_path } from "./theme_message.ts";
 import type { ThemeFileChange } from "./theme_message.ts";
 import { read_host_memory } from "./host_start.ts";
 import type { ConfigStore } from "./config_store.ts";
-import type { create_config_swap } from "./config_swap.ts";
+import type { ConfigSwap } from "./config_swap.ts";
 import type { ConfigFileWrites, PickMark } from "./config_file_writes.ts";
-
-type ConfigSwap = ReturnType<typeof create_config_swap>;
 
 declare const browser: MessagingBrowser;
 
@@ -258,7 +256,6 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   async function came_from_folder(source: FilesSource): Promise<boolean> {
     return !source.imported && (await read_host_memory()).applied !== undefined;
   }
-
 
   // Whether the files build knows the theme, so a settings.toml that names it builds.
   async function theme_in_files(value: string): Promise<boolean> {
