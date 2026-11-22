@@ -5,7 +5,7 @@ import type { Outcome, RunResponse } from "../../shared/messages/content.ts";
 import type { BundleHostApi, ExitDestination } from "../bundle_host.ts";
 import { find_char_hit, find_char_matches, is_screen_unit, move_once } from "./motion.ts";
 import type { CharFind, Direction, MotionUnit, ScreenMotion } from "./motion.ts";
-import { yank_text } from "./copy_text.ts";
+import { yank_text } from "../../shared/copy/copy_text.ts";
 import { create_find_mode, is_escape } from "./find_mode.ts";
 import { CHAR_FIND_NAMES, create_painter } from "./find_paint.ts";
 import type { FindColors } from "./find_paint.ts";

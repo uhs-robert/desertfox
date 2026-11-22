@@ -2,7 +2,7 @@
 // and for nativeMessaging the one-line command that installs the host. Firefox grants an optional permission only from a click on a page of the add-on,
 // which is why the request lives here and not in the command.
 
-import { copy_text } from "../content/caret/copy_text.ts";
+import { copy_text } from "../shared/copy/copy_text.ts";
 import { host_channel, install_hashes_of, main_install_command, release_install_command, type InstallHashes } from "../shared/native_host.ts";
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";

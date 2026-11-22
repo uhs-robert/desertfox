@@ -1,6 +1,6 @@
 // The DOM toolkit the help pages share. It imports no page, so the Settings pages can import it without a cycle through the page files.
 
-import { copy_text } from "../content/caret/copy_text.ts";
+import { copy_text } from "../shared/copy/copy_text.ts";
 import type { Block, Inline } from "./blocks.ts";
 import { key_caps } from "../shared/key_caps.ts";
 import { PAGES } from "../shared/page/help_route.ts";

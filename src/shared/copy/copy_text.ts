@@ -1,6 +1,6 @@
-import type { Outcome, RegisterYank } from "../../shared/messages/content.ts";
-import { BLACK_HOLE_REGISTER } from "../../shared/register_names.ts";
-import { ignore_refusal } from "../../shared/swallow.ts";
+import type { Outcome, RegisterYank } from "../messages/content.ts";
+import { BLACK_HOLE_REGISTER } from "../register_names.ts";
+import { ignore_refusal } from "../swallow.ts";
 
 declare const browser: MessagingBrowser;
 
