@@ -375,8 +375,8 @@ if (!page.desertfox_cmdline_ready) {
   const from_target = (args: Record<string, unknown>) => open?.target_?.frame_ === args.from_frame;
   // A key for no open line is refused, so the subframe keeps it.
   host.register_handler_("cmdline.token", (args): Outcome | void => (open && from_target(args) && typeof args.token === "string" ? take_token(open, args.token) : NOT_HERE));
-  host.register_handler_("cmdline.headings", (args) => void (open && from_target(args) && send(open.port_, { kind: "headings", items: args.items as HeadingItem[] })));
-  host.register_handler_("cmdline.find_status", (args) => void (open && from_target(args) && send(open.port_, { kind: "find_status", text: args.text as string })));
+  host.register_handler_("cmdline.headings", (args) => void (open && from_target(args) && send(open.port_, { kind: "headings", items: args.items })));
+  host.register_handler_("cmdline.find_status", (args) => void (open && from_target(args) && send(open.port_, { kind: "find_status", text: args.text })));
   const asked_of_this_line = (args: Record<string, unknown>) => remote?.id_ === args.remote_id;
   // The top frame hands the focus back. A frame that is hidden now, or that no longer holds this line, refuses, and the top frame keeps the focus.
   host.register_handler_("cmdline.focus", (args): Outcome => {
@@ -385,7 +385,7 @@ if (!page.desertfox_cmdline_ready) {
     window.focus();
     return { ok: true };
   });
-  host.register_handler_("cmdline.end", (args) => void (remote && asked_of_this_line(args) && end_remote(remote, Array.isArray(args.tokens) ? (args.tokens as string[]) : [])));
+  host.register_handler_("cmdline.end", (args) => void (remote && asked_of_this_line(args) && end_remote(remote, Array.isArray(args.tokens) ? args.tokens : [])));
   host.register_handler_("cmdline.find_text", (args): Outcome | Promise<Outcome> => {
     if (!asked_of_this_line(args)) return NOT_HERE;
     const report = (text: string) => void relay("top", "cmdline.find_status", { text });

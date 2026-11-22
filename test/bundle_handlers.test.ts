@@ -73,3 +73,16 @@ test("an internal id names a handler the bundle registers and is not a registry 
     }
   }
 });
+
+// The types in bundle_calls.ts are erased, so the map is read as text: each entry names the bundle that registers the id.
+const map_entries = [...text_of("src/content/bundle_calls.ts").matchAll(/^ {2}"?([\w.]+)"?: \{ bundle: "(\w+)";/gm)].map((match) => [match[1]!, match[2] as BundleName] as const);
+
+test("every entry of the bundle call map is a handler its bundle registers", () => {
+  assert.ok(map_entries.length > 25, "the map scan found too few entries");
+  for (const [id, name] of map_entries) assert.ok(registered_ids(name).includes(id), `bundle_calls.ts says ${name} registers ${id}, which it does not`);
+});
+
+test("every internal handler id has an entry in the bundle call map", () => {
+  const mapped = new Map(map_entries);
+  for (const name of BUNDLE_NAMES) for (const id of INTERNAL_IDS[name]) assert.equal(mapped.get(id), name, `${id} is internal to ${name} but has no matching entry in bundle_calls.ts`);
+});

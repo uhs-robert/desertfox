@@ -2,7 +2,6 @@
 
 import type { BundleHostApi, PageHostApi } from "../bundle_host.ts";
 import { show_mode_label } from "../mode_indicator.ts";
-import type { ToastKind } from "../../shared/messages/tab.ts";
 import { mode_label } from "./mode_label.ts";
 import type { BadgeState } from "./mode_label.ts";
 import { relay } from "../relay.ts";
@@ -17,7 +16,7 @@ if (!page.desertfox_ui_ready) {
   page.desertfox_ui_ready = true;
   // The top frame draws every toast, so one from a frame the user cannot see still reaches them. A top frame that does not answer leaves it here.
   page.desertfox_host.register_handler_("ui.toast", (args) => {
-    const draw = () => show_toast(args.message as string, args.duration_ms as number, args.kind as ToastKind | undefined);
+    const draw = () => show_toast(args.message, args.duration_ms, args.kind);
     if (window === window.top) return draw();
     void relay("top", "ui.toast", { message: args.message, duration_ms: args.duration_ms, kind: args.kind }).then((shown) => shown || draw());
   });
@@ -28,9 +27,9 @@ if (!page.desertfox_ui_ready) {
   });
   page.desertfox_host.register_handler_("ui.frame_watch", (args) => watch_focused_frame(args.on === true));
   // The size of the range of visual item mode, from the child frame that holds it. The top frame keeps it for the badge, apart from the other frames' counts.
-  page.desertfox_host.register_handler_("ui.badge_count", (args) => (page.desertfox_host as PageHostApi).visual_count_(args.count as number | undefined, args.from_frame as number));
+  page.desertfox_host.register_handler_("ui.badge_count", (args) => (page.desertfox_host as PageHostApi).visual_count_(args.count, args.from_frame));
   page.desertfox_host.register_handler_("ui.badge", (args) => {
-    const { mode, pass_next, setting, recording, site_label, count } = args as unknown as BadgeState;
+    const { mode, pass_next, setting, recording, site_label, count } = args as BadgeState;
     // Full screen shows the video alone. A video in a child frame leaves the top document in full screen too.
     if (mode === "media" && document.fullscreenElement) return show_mode_label(undefined);
     show_mode_label(mode_label(mode, pass_next, setting, recording, site_label, count), pass_next ? undefined : site_label === undefined ? mode : "site");

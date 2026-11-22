@@ -378,7 +378,7 @@ if (!page.desertfox_caret_ready) {
   page.desertfox_host.register_handler_("find.next", () => find_step(false));
   page.desertfox_host.register_handler_("find.prev", () => find_step(true));
   // Called by the command line while it is open, and not by any key.
-  page.desertfox_host.register_handler_("find.live", (args) => find.update(args.text as string, args.report as (status: string) => void));
+  page.desertfox_host.register_handler_("find.live", (args) => find.update(args.text, args.report));
   page.desertfox_host.register_handler_("find.end", async (args) => {
     const keep = args.keep === true;
     await find.end(keep);
