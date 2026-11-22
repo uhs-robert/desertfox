@@ -1,8 +1,8 @@
 // The page's end of the rank port (`shared/rank_port.ts`): it asks the background for the ranked rows of a word and keeps the last few answers.
 // One request is in flight at a time and the newest query waits behind it, so keys typed during a rank collapse into one rank. Pure: the page passes in the sending and the redraw.
 
-import { RANKED_ROWS } from "../../shared/rank_port.ts";
-import type { RankedReply, RankPush, RankRequest, RankSource } from "../../shared/rank_port.ts";
+import { RANKED_ROWS } from "../rank_port.ts";
+import type { RankedReply, RankPush, RankRequest, RankSource } from "../rank_port.ts";
 
 export type RankQuery = { source: RankSource; word: string; over_fetch: number };
 

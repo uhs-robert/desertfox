@@ -1,7 +1,7 @@
 // The list view: a window of at most ten rows over the ranked rows, with no scroll bar. It draws rows only.
 // Widths belong to the page's CSS: the description shrinks first, then the args collapse to "…".
 
-import type { Row, TabMarks } from "./completion/sources.ts";
+import type { Row, TabMarks } from "../shared/completion/sources.ts";
 import type { Ranked } from "../shared/score.ts";
 
 export const MAX_ROWS = 10;

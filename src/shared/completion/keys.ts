@@ -1,11 +1,11 @@
 // The keys column: for each command, the keys that run it bare, read once from the compiled keymap. The stored tree
 // is already the merge of the defaults and the user's keymap, and its tokens are the which-key notation.
 
-import type { CommandMeta } from "../../shared/command.ts";
-import type { KeymapMode } from "../../shared/keymap.ts";
-import { LIVE_KEY, token_label } from "../../shared/prefix_tree.ts";
-import type { CompiledKeymap, TreeNode } from "../../shared/prefix_tree.ts";
-import { default_of, flag_params } from "../../shared/registry/params.ts";
+import type { CommandMeta } from "../command.ts";
+import type { KeymapMode } from "../keymap.ts";
+import { LIVE_KEY, token_label } from "../prefix_tree.ts";
+import type { CompiledKeymap, TreeNode } from "../prefix_tree.ts";
+import { default_of, flag_params } from "../registry/params.ts";
 
 // Keys shown before the rest fold into `+N`.
 const SHOWN_KEYS = 2;

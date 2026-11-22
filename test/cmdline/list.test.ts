@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_list, MAX_ROWS, window_top } from "../../src/cmdline/list.ts";
-import type { Row } from "../../src/cmdline/completion/sources.ts";
+import type { Row } from "../../src/shared/completion/sources.ts";
 
 type Node = { tag: string; className: string; textContent: string; dataset: Record<string, string>; children: Node[]; hidden: boolean; offsetHeight: number; style: { minHeight: string; paddingLeft?: string; setProperty: (name: string, value: string) => void; vars: Record<string, string> }; append: (...nodes: Node[]) => void; replaceChildren: (...nodes: Node[]) => void };
 

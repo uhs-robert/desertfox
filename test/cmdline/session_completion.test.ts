@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_completer } from "../../src/cmdline/completion/sources.ts";
+import { create_completer } from "../../src/shared/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 import { COMMAND_ALIASES, COMMANDS, SOURCES, lookup } from "./completion/fixtures.ts";

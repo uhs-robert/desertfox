@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_ranked_client } from "../../../src/cmdline/completion/ranked_client.ts";
+import { create_ranked_client } from "../../../src/shared/completion/ranked_client.ts";
 import type { RankedReply, RankRequest } from "../../../src/shared/rank_port.ts";
 
 function make() {

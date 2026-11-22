@@ -1,5 +1,5 @@
 import type { CommandMeta } from "../../../src/shared/command.ts";
-import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
+import { create_word_lookup } from "../../../src/shared/completion/word_lookup.ts";
 
 export const COMMANDS: CommandMeta[] = [
   {

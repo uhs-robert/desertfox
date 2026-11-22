@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
+import { create_word_lookup } from "../../src/shared/completion/word_lookup.ts";
 
 const commands = [
   { id: "open.search", name: "search", label: "Search", intent: "" },

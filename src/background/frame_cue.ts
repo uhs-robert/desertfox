@@ -3,7 +3,7 @@
 import type { CommandMeta } from "../shared/command.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
-import { key_labels } from "../cmdline/completion/keys.ts";
+import { key_labels } from "../shared/completion/keys.ts";
 
 export type FrameCueDeps = {
   keymap: () => Promise<CompiledKeymap | undefined>;

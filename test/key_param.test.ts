@@ -11,7 +11,7 @@ import { create_mode_state } from "../src/content/mode_state.ts";
 import type { CommandMeta } from "../src/shared/command.ts";
 import { create_router } from "../src/background/router.ts";
 import { build_help_model } from "../src/help/model.ts";
-import { key_labels } from "../src/cmdline/completion/keys.ts";
+import { key_labels } from "../src/shared/completion/keys.ts";
 import { ANY_KEY, token_label } from "../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";
 import { create_matcher } from "../src/shared/keys/index.ts";

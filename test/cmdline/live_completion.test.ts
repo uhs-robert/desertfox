@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_live_source } from "../../src/cmdline/completion/live.ts";
-import { create_completer } from "../../src/cmdline/completion/sources.ts";
+import { create_live_source } from "../../src/shared/completion/live.ts";
+import { create_completer } from "../../src/shared/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { BookmarkItem, BookmarkRows, CompleteItemsAnswer, EngineItem, HeadingItem, HistoryItems, OpenItems, SessionItem, WindowItem, TabItem } from "../../src/shared/messages/content.ts";
 import type { SourceItems } from "../../src/background/completion_rank.ts";
-import { create_ranked_client } from "../../src/cmdline/completion/ranked_client.ts";
+import { create_ranked_client } from "../../src/shared/completion/ranked_client.ts";
 import { reply_for } from "../support/ranked_items.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
-import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
+import { create_word_lookup } from "../../src/shared/completion/word_lookup.ts";
 
 const COMMANDS: CommandMeta[] = [
   { id: "tab.attach", label: "Attach tab", intent: "Attach tab.", params: [{ name: "window", type: "string", rest: true, main: true, default: "", values: { from: "windows" } }] },

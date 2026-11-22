@@ -1,20 +1,20 @@
 // What the list offers at the caret: command rows, flag rows of the typed command and value rows. Each row carries
 // the text to put in the line, the three list columns and the usage the note row shows.
 
-import type { CommandMeta, Mode, ParamDef } from "../../shared/command.ts";
-import type { EnumSources } from "../../shared/registry/check_shape.ts";
-import { tokenize } from "../../shared/registry/command_line.ts";
-import type { CommandLookup } from "../../shared/registry/command_line.ts";
-import { first_sentence } from "../../shared/registry/summary.ts";
-import { flag_alternatives, usage_line } from "../../shared/registry/usage.ts";
-import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../shared/registry/params.ts";
-import { FOLDER_PATH_SEPARATOR, in_folder, pick_filter_folder, rows_in_folder } from "../../shared/folder_pick.ts";
-import { rank } from "../../shared/score.ts";
-import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../../shared/setting_completion.ts";
-import type { Ranked } from "../../shared/score.ts";
-import type { RankSource } from "../../shared/rank_port.ts";
-import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, SessionItem, TabContainer, TabItem, WindowItem } from "../../shared/messages/content.ts";
-import { RECENT_BOOKMARKS } from "../../shared/rank_port.ts";
+import type { CommandMeta, Mode, ParamDef } from "../command.ts";
+import type { EnumSources } from "../registry/check_shape.ts";
+import { tokenize } from "../registry/command_line.ts";
+import type { CommandLookup } from "../registry/command_line.ts";
+import { first_sentence } from "../registry/summary.ts";
+import { flag_alternatives, usage_line } from "../registry/usage.ts";
+import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../registry/params.ts";
+import { FOLDER_PATH_SEPARATOR, in_folder, pick_filter_folder, rows_in_folder } from "../folder_pick.ts";
+import { rank } from "../score.ts";
+import { completion_of, is_setting_name, SETTING_COMPLETION, type SettingCompletion } from "../setting_completion.ts";
+import type { Ranked } from "../score.ts";
+import type { RankSource } from "../rank_port.ts";
+import type { BookmarkItem, BookmarkRows, EngineItem, HeadingItem, SessionItem, TabContainer, TabItem, WindowItem } from "../messages/content.ts";
+import { RECENT_BOOKMARKS } from "../rank_port.ts";
 import type { LiveKind, LiveSource } from "./live.ts";
 import { anything_ranked, row_of_wire } from "./anything.ts";
 import type { RankedClient } from "./ranked_client.ts";

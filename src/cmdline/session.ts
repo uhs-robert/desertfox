@@ -6,8 +6,8 @@ import type { Invocation } from "../shared/invocation.ts";
 import type { ContainerStore, TabItem, TabRowsAction } from "../shared/messages/content.ts";
 import type { ParseResult } from "../shared/registry/index.ts";
 import { rank } from "../shared/score.ts";
-import { marks_of } from "./completion/sources.ts";
-import type { Completion, Row, TabMarks } from "./completion/sources.ts";
+import { marks_of } from "../shared/completion/sources.ts";
+import type { Completion, Row, TabMarks } from "../shared/completion/sources.ts";
 import { create_history_cursor } from "./history_cursor.ts";
 
 export type Effect =

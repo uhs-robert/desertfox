@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_completer } from "../../../src/cmdline/completion/sources.ts";
-import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
+import { create_completer } from "../../../src/shared/completion/sources.ts";
+import { create_word_lookup } from "../../../src/shared/completion/word_lookup.ts";
 import type { CommandMeta } from "../../../src/shared/command.ts";
 import { COMMAND_ALIASES, COMMANDS, SOURCES, lookup } from "./fixtures.ts";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_live_source } from "../../../src/cmdline/completion/live.ts";
-import type { LiveKind } from "../../../src/cmdline/completion/live.ts";
+import { create_live_source } from "../../../src/shared/completion/live.ts";
+import type { LiveKind } from "../../../src/shared/completion/live.ts";
 import type { CompleteItemsAnswer } from "../../../src/shared/messages/content.ts";
 
 const TABS = [{ number: 1, title: "One", url: "https://one.test/" }];

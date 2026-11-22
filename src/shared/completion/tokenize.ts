@@ -1,10 +1,10 @@
 // Finds the word under the caret and what kind of thing it should be: a command name, a flag, the value of a flag
 // or the subject. Pure: it reads the text and a lookup, never the DOM.
 
-import type { ParamDef } from "../../shared/command.ts";
-import { parse_line, read_flag, tokenize } from "../../shared/registry/command_line.ts";
-import type { CommandLookup } from "../../shared/registry/command_line.ts";
-import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
+import type { ParamDef } from "../command.ts";
+import { parse_line, read_flag, tokenize } from "../registry/command_line.ts";
+import type { CommandLookup } from "../registry/command_line.ts";
+import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../registry/params.ts";
 
 type Command = NonNullable<ReturnType<CommandLookup["find"]>>;
 

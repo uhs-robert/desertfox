@@ -2,7 +2,7 @@
 // An answer lands in a microtask, before a test's `setTimeout(0)` wait ends.
 import { ranking_of } from "../../src/background/completion_rank.ts";
 import type { SourceItems } from "../../src/background/completion_rank.ts";
-import { create_ranked_client } from "../../src/cmdline/completion/ranked_client.ts";
+import { create_ranked_client } from "../../src/shared/completion/ranked_client.ts";
 import { RANKED_ROWS } from "../../src/shared/rank_port.ts";
 import type { RankedReply, RankRequest, RankSource } from "../../src/shared/rank_port.ts";
 
