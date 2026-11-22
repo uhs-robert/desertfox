@@ -9,7 +9,7 @@ type FakeLink = { name: string; isConnected: boolean; shown: boolean };
 
 // A page whose items the test can hide, drop and bring back, and a finder that counts how often it is asked. `answer` is what the finder gives next unless `fails` says it runs out of time or throws, and `tail` is what follows the last item of the list.
 function setup(initial: Fake[]) {
-  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[]; others: Fake[][]; sections?: Fake[] } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [], others: [] };
+  const state: { url: string; clock: number; finds: number; answer: Fake[]; fails: "" | "timeout" | "throw"; tail: unknown[]; links: Map<Fake, FakeLink>; budgets: number[]; others: Fake[][]; sections?: Fake[]; focus: Fake | null } = { url: "https://a.test/", clock: 0, finds: 0, answer: initial, fails: "", tail: ["footer"], links: new Map(), budgets: [], others: [], focus: null };
   const link = { name: "link", isConnected: true, shown: true };
   const row = create_derived_row({
     find_: (budget_ms) => {
@@ -27,12 +27,13 @@ function setup(initial: Fake[]) {
     // A shown item is in view with the area it says, or 1. A covered one is shown and still counts for nothing (a fixed header over it, `pointer-events: none`).
     in_view_: (element) => ((element as unknown as Fake).shown && !(element as unknown as Fake).covered ? ((element as unknown as Fake).area ?? 1) : 0),
     tail_: () => state.tail,
+    focus_: () => state.focus as unknown as Element | null,
   });
   return { state, row, link };
 }
 
 const item = (name: string, shown = true): Fake => {
-  const entry: Fake = { name, isConnected: true, shown, contains: (node) => node === entry || ((node as FakeLink).isConnected && (node as FakeLink).name !== "stray") };
+  const entry: Fake = { name, isConnected: true, shown, contains: (node) => node === entry || (!!node && (node as FakeLink).isConnected && (node as FakeLink).name !== "stray") };
   return entry;
 };
 const names = (items: Element[]) => items.map((element) => (element as unknown as Fake).name);
@@ -614,7 +615,7 @@ test("a picked list stays active while the old list still shows, and the old lis
 
 // A page with a long list and a short one beside it, as the finder reports them: the short region comes last and carries `pick_only_`.
 function with_short_list(long_items: Fake[], short_items: Fake[]) {
-  const state = { clock: 0, finds: 0 };
+  const state: { clock: number; finds: number; focus: Fake | null } = { clock: 0, finds: 0, focus: null };
   const region_of = (entries: Fake[], short: boolean) => ({ kind: "list", items: entries, links: new Map(), ...(short ? { pick_only_: true } : {}) });
   const row = create_derived_row({
     find_: () => (state.finds++, { ...region_of(long_items, false), regions: [region_of(long_items, false), region_of(short_items, true)] } as unknown as Found<Element>),
@@ -623,6 +624,7 @@ function with_short_list(long_items: Fake[], short_items: Fake[]) {
     is_shown_: (element) => (element as unknown as Fake).shown,
     in_view_: (element) => ((element as unknown as Fake).shown ? 1 : 0),
     tail_: () => [],
+    focus_: () => state.focus as unknown as Element | null,
   });
   return { state, row };
 }
@@ -645,6 +647,34 @@ test("a picked short list stays active through a read of the page", () => {
   assert.deepEqual(names(row.items_()), ["s1", "s2"]);
   long_items.forEach((entry) => (entry.shown = false));
   assert.deepEqual(names(row.items_()), ["s1", "s2"]);
+});
+
+// An item that holds the focus only when the focus is the item itself, so a focus in one list says nothing about another.
+const own_focus_item = (name: string): Fake => {
+  const entry: Fake = { name, isConnected: true, shown: true, contains: (node) => node === entry };
+  return entry;
+};
+
+test("the list that holds the focus is the first choice, short or long, over the long list in view", () => {
+  const long_items = [own_focus_item("l1"), own_focus_item("l2")];
+  const short_items = [own_focus_item("s1"), own_focus_item("s2")];
+  const read_with = (focus: Fake | null) => {
+    const { state, row } = with_short_list(long_items, short_items);
+    state.focus = focus;
+    return names(row.items_());
+  };
+  assert.deepEqual(read_with(short_items[1]!), ["s1", "s2"], "focus in the short list gives it");
+  assert.deepEqual(read_with(long_items[0]!), ["l1", "l2"], "focus in the long list gives the long list");
+  assert.deepEqual(read_with(null), ["l1", "l2"], "no focus in any list keeps the pick of the list in view");
+});
+
+test("an end command keeps its list when the focus is in another", () => {
+  const long_items = [own_focus_item("l1"), own_focus_item("l2")];
+  const short_items = [own_focus_item("s1"), own_focus_item("s2")];
+  const { state, row } = with_short_list(long_items, short_items);
+  assert.deepEqual(names(row.items_()), ["l1", "l2"]);
+  state.focus = short_items[0]!;
+  assert.deepEqual(names(row.items_(true)), ["l1", "l2"]);
 });
 
 // The pin: a picked list that a site row's keys cannot walk stays active until the address changes, the list leaves, or `unpin_`.
@@ -745,6 +775,7 @@ function with_virtual_list() {
     is_shown_: (element) => (element as unknown as Fake).shown,
     in_view_: (element) => ((element as unknown as Fake).shown ? 1 : 0),
     tail_: () => [],
+    focus_: () => null,
   });
   return { state, row };
 }
@@ -775,7 +806,7 @@ test("the derived row says whether the active list keeps the focus, and gives th
   const widget = { name: "widget" };
   const rows = [item("a1"), item("a2")];
   const aria = { kind: "list", items: rows, links: new Map(), pick_only_: true, home_: widget, focus_none_: true, box_selector_: "[role=option]" };
-  const row = create_derived_row({ find_: () => ({ kind: "none", items: [], links: new Map(), regions: [aria] }) as unknown as Found<Element>, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [] });
+  const row = create_derived_row({ find_: () => ({ kind: "none", items: [], links: new Map(), regions: [aria] }) as unknown as Found<Element>, url_: () => "https://a.test/", now_: () => 0, is_shown_: () => true, in_view_: () => 1, tail_: () => [], focus_: () => null });
   assert.deepEqual(row.items_(), [], "a pick-only list is no answer before a pick");
   assert.equal(row.focus_none_(), false);
   row.pick_(row.lists_()[0]!);
