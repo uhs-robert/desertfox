@@ -7,7 +7,7 @@ import { host_channel, install_hashes_of, main_install_command, release_install_
 import { PERMISSIONS_OF, permission_of_grant_hash } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
-import type { ChangeSetting, ChangeSettingAnswer } from "../shared/messages/page.ts";
+import type { Ask, PageRequests } from "../shared/messages/map.ts";
 
 declare const browser: MessagingBrowser;
 
@@ -21,9 +21,9 @@ export const AUTO_UPDATE_BUTTON = "Install and keep the native host updated";
 
 // The consent button saves `host_auto_update` and installs nothing: Firefox cannot run the command, so the user runs it.
 // The page text is the disclosure of what the setting allows.
-export async function consent_to_auto_update(send: (message: ChangeSetting) => Promise<unknown>): Promise<string> {
+export async function consent_to_auto_update(send: Ask<Pick<PageRequests, "change_setting">>): Promise<string> {
   try {
-    const answer = (await send({ type: "change_setting", name: AUTO_UPDATE_SETTING, action: "set", value: true })) as ChangeSettingAnswer | undefined;
+    const answer = await send({ type: "change_setting", name: AUTO_UPDATE_SETTING, action: "set", value: true });
     if (answer?.ok === true) return "Saved. After you run the command, the native host updates itself to match the extension, and a message tells you so.";
     return `DesertFox could not save the setting: ${answer?.message ?? "no answer"}`;
   } catch (error) {

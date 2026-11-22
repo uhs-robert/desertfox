@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
 const COMMENTS_AND_STRINGS = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/g;
@@ -70,4 +70,27 @@ test("the scan catches a property ending in _, quoted or led by _ or $, and spar
     { path: "c.ts", text: 'const s = "count_: 1"; // note_: 2\nconst t = cond ? a_ : b;' },
   ];
   assert.deepEqual(suffixed_properties(planted), ["$dollar_", "_", "_lead_", "q_"].map((name) => `d.ts: ${name}`).concat(["a.ts: count_", "b.ts: sent_"]).sort());
+});
+
+// Without `declare const browser: MessagingBrowser;` a file still compiles, and its sends stay `any` with any `type` and any answer cast. snippets.ts builds the call inside a string that runs in a page, so its own `browser` is not the one typed.
+const SENDS_UNDECLARED = new Set(["src/background/snippets.ts"]);
+
+function files_sending_without_the_declaration(files: { path: string; text: string }[]): string[] {
+  return files
+    .filter(({ path, text }) => !SENDS_UNDECLARED.has(path) && /\bbrowser\.(?:runtime|tabs)\.sendMessage\(/.test(text) && !text.includes("declare const browser: MessagingBrowser;"))
+    .map(({ path }) => path)
+    .sort();
+}
+
+test("every src file that sends a message declares the typed browser", () => {
+  const files = (readdirSync("src", { recursive: true, encoding: "utf8" }) as string[]).filter((name) => name.endsWith(".ts") && !name.endsWith(".d.ts")).map((name) => ({ path: `src/${name}`, text: readFileSync(`src/${name}`, "utf8") }));
+  assert.deepEqual(files_sending_without_the_declaration(files), [], "add `declare const browser: MessagingBrowser;` after the imports, so the send is checked against the message map");
+});
+
+test("the sender scan catches a send without the declaration and spares a declared file", () => {
+  const planted = [
+    { path: "a.ts", text: "browser.runtime.sendMessage({});" },
+    { path: "b.ts", text: "declare const browser: MessagingBrowser;\nbrowser.tabs.sendMessage(1, {});" },
+  ];
+  assert.deepEqual(files_sending_without_the_declaration(planted), ["a.ts"]);
 });

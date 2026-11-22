@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { template_for } from "../src/help/file_templates.ts";
 import { create_user_css_gate } from "../src/help/user_css_gate.ts";
+import { stub_send } from "./support/stub_send.ts";
 import { create_files_session } from "../src/help/files_model.ts";
 
 function session_with(answer_of: (message: { op: string; path?: string; text?: string | null; accepted?: string }) => unknown, user_css_hold?: import("../src/help/user_css_gate.ts").UserCssHold) {
   const sent: { op: string; path?: string; text?: string | null; accepted?: string }[] = [];
   const session = create_files_session({
-    send: async (message) => {
+    send: stub_send<"config_files">(async (message) => {
       sent.push(message as never);
       return answer_of(message as never);
-    },
+    }),
     on_change: () => undefined,
     ...(user_css_hold && { user_css_hold }),
   });
