@@ -21,7 +21,6 @@ import { browser_macro_recorder } from "./macro_recorder.ts";
 import { reply_after_hold } from "./hold_on_arrival.ts";
 import { rule_for_report } from "./media_quality.ts";
 import { quality_reports } from "./quality_levels.ts";
-import { tab_media } from "../commands/media.ts";
 import { ext_of_request } from "./external_editor.ts";
 import { hand_back_parked_frame, is_cross_origin } from "./tab_modes.ts";
 import { accept_hint_timing } from "./timing_log.ts";
@@ -31,7 +30,7 @@ import type { LoadSender } from "./bundle_loader.ts";
 import type { create_tab_modes } from "./tab_modes.ts";
 import type { create_tab_insert } from "./tab_insert.ts";
 import type { create_tab_item } from "./tab_item.ts";
-import type { create_media_discovery } from "./tab_media.ts";
+import type { create_media_discovery, create_tab_media } from "./tab_media.ts";
 import type { start_bridge } from "./bridge_browser.ts";
 import type { create_macro_replay } from "./macro_replay.ts";
 import type { create_hint_frames } from "./hint_frames.ts";
@@ -63,6 +62,7 @@ export type ContentDeps = {
   tab_insert: ReturnType<typeof create_tab_insert>;
   tab_item: ReturnType<typeof create_tab_item>;
   media_discovery: ReturnType<typeof create_media_discovery>;
+  tab_media: ReturnType<typeof create_tab_media>;
   bridge: ReturnType<typeof start_bridge>;
   macro_replay: ReturnType<typeof create_macro_replay>;
   hint_frames: ReturnType<typeof create_hint_frames>;
@@ -90,7 +90,7 @@ const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
 
 // The messages content scripts, bundles and the command line page send, one entry per type. A handler that checks its own sender or request (`inspect_pick`, `find_scan`) is `any`: the other guards can only answer nothing.
 export const content_handlers = (deps: ContentDeps) => {
-  const { get_config, tab_modes, tab_insert, tab_item, media_discovery, bridge, macro_replay, hint_frames, external_editor, jump_step, jump_leave, cmdline, complete_items, inspect_relay, router, router_deps, repeat_memory } = deps;
+  const { get_config, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, external_editor, jump_step, jump_leave, cmdline, complete_items, inspect_relay, router, router_deps, repeat_memory } = deps;
   // The tab a sender names, in the shape the mark and jump stores read.
   const marked_tab = (sender: browser.runtime.MessageSender) => sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId };
   return {
