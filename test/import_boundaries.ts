@@ -25,7 +25,7 @@ export const EXCEPTIONS: Record<string, string> = {
   "commands/mode.ts -> content/handlers/mode.ts": "C1",
   "commands/native.ts -> help/route.ts": "C2",
   "commands/scroll.ts -> content/handlers/scroll.ts": "C1",
-  "content/hints/main.ts -> background/hint_frames.ts": "C1",
+  "content/hints/main.ts -> background/hint_frames.ts": "C7",
   "content/hints/main.ts -> background/storage_keys.ts": "C1",
   "content/next_page/main.ts -> background/storage_keys.ts": "C1",
   "help/config_view.ts -> background/config_load.ts": "C5",
