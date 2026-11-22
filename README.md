@@ -40,9 +40,9 @@ You can edit any text box in your own editor, such as Neovim: press `<C-o>` in i
 
 ## 🏆 Why DesertFox
 
-- **You learn it as you go.** A popup shows the keys that can follow a key that starts a sequence. A Quick Start page and a Practice page teach the rest. [Details](docs/design.md#which-key).
+- **You learn it as you go.** A popup shows the keys that can follow a key that starts a sequence. A Quick Start page and a Practice page teach the rest. [Details](docs/design/interfaces_pages.md#which-key).
 - **You drag and drop without the mouse.** Grab a slider, a card or a list item with a hint and move it with keys. [Details](#-how-it-compares).
-- **It checks what you give it.** A typo is an error with a message, never a silent no-op. [Details](docs/design.md#registry).
+- **It checks what you give it.** A typo is an error with a message, never a silent no-op. [Details](docs/design/registry.md#registry).
 - **It stays light on every page.** The script on each page is small, and the heavy parts load on first use. [Details](docs/design.md#content-script-size).
 - **It is always ready.** A page gets its keys within milliseconds of starting to load. [Details](docs/design.md#constraints-from-firefox).
 - **It grows with you.** The first day needs a few keys. Macros, per-site rules and your own commands wait until you want them. See [Features](#-features).

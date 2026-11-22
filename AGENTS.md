@@ -10,15 +10,16 @@ DesertFox is a keyboard-first Firefox extension built around one command registr
 
 Read the design for an area before you change it. Read a folder's README before you change or research code in that folder. The README is a code map. The behavior it points to is in the design.
 
-| Topic                                      | File                                                   |
-| ------------------------------------------ | ------------------------------------------------------ |
-| Architecture, config, scope, not yet built | [`docs/design.md`](docs/design.md)                     |
-| The default keys, generated                | [`docs/keymap.md`](docs/keymap.md)                     |
-| Measured Firefox behavior                  | [`docs/firefox-behavior.md`](docs/firefox-behavior.md) |
-| Code map, one line per source folder       | [`src/README.md`](src/README.md)                       |
-| Task checklists                            | [`docs/tasks.md`](docs/tasks.md)                       |
-| Privacy policy, what the add-on sends      | [`docs/privacy.md`](docs/privacy.md)                   |
-| The addons.mozilla.org listing             | [`amo/README.md`](amo/README.md)                       |
+| Topic                                                            | File                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------ |
+| Architecture, scope, not yet built, the map of design area files | [`docs/design.md`](docs/design.md)                     |
+| Design by area: config, keys, hints, host and the rest           | [`docs/design/`](docs/design.md#where-each-area-lives) |
+| The default keys, generated                                      | [`docs/keymap.md`](docs/keymap.md)                     |
+| Measured Firefox behavior                                        | [`docs/firefox-behavior.md`](docs/firefox-behavior.md) |
+| Code map, one line per source folder                             | [`src/README.md`](src/README.md)                       |
+| Task checklists                                                  | [`docs/tasks.md`](docs/tasks.md)                       |
+| Privacy policy, what the add-on sends                            | [`docs/privacy.md`](docs/privacy.md)                   |
+| The addons.mozilla.org listing                                   | [`amo/README.md`](amo/README.md)                       |
 
 If the behavior of the code and the design disagree, stop and ask the maintainer. Do not change the design to match the code without the maintainer's approval. Where only a number or a path is stale, fix it in the same PR.
 
@@ -76,7 +77,7 @@ A folder README is a code map. It does not hold behavior specs.
 - One line per file, at most 200 characters: what the file owns and when to open it.
 - Add the rules that span files: what the folder must not import, which file owns a thing, where to start.
 - Point to the design for the behavior. Do not copy behavior, size figures or history into a README.
-- A trap at one call site is a comment there. Other behavior goes in `docs/design.md`.
+- A trap at one call site is a comment there. Other behavior goes in the design area file for that folder, listed in `docs/design.md`.
 - Pattern folders (every file the same shape) get one line in the parent's map.
 
 ## Commands
