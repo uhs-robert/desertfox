@@ -113,8 +113,9 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
   // A list that sits inside an item of another is no top-level list. Several lists side by side (a feed and its rails) are all kept.
   const top_of = (pool: Group<N>[]) => pool.filter((group) => !pool.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
   // With no long list, the largest list that starts in the first screen of the page's own main is its content, however short: two items in two rows are enough (a short inbox).
-  if (region !== reader.root_ && !gated.length) {
-    const first_screen = reader.box_(region)!.y + view.h;
+  const main_box = reader.box_(region);
+  if (region !== reader.root_ && main_box && !gated.length) {
+    const first_screen = main_box.y + view.h;
     const small = merged.filter((group) => group.boxes[0]!.y < first_screen && new Set(group.boxes.map((box) => Math.round(box.y / 8))).size > 1 && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
     const top = top_of(small)[0];
     if (top) lists.push(top), gated.push(top);
