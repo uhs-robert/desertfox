@@ -4,7 +4,8 @@
 
 import { current_keymap } from "../shared/prefix_tree.ts";
 import { stored_keymap } from "./keymap_source.ts";
-import { site_columns_for, site_value } from "./page_keymap.ts";
+import { site_value } from "./page_keymap.ts";
+import { site_columns_for } from "../shared/site/site_columns.ts";
 import { SITE_ZOOM_PRIVATE_STORAGE_KEY, SITE_ZOOM_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { warn_and_go } from "../shared/swallow.ts";

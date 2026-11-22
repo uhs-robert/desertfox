@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { answer_site_keys_request, is_pass_shaped, key_column_refusal, pass_words, sample_address, site_is_off_for, site_rows_with_pass, site_rows_without_pass } from "../../src/background/site_keys.ts";
+import { answer_site_keys_request } from "../../src/background/site_keys.ts";
+import { is_pass_shaped, key_column_refusal, pass_words, sample_address, site_is_off_for, site_rows_with_pass, site_rows_without_pass } from "../../src/shared/site/site_keys.ts";
 import type { SiteRuleRow } from "../../src/shared/match_pattern.ts";
 
 const MAIL = "*://*.mail.test/*";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_open_help, help_name_choices, help_name_url, key_command_id, key_command_id_on_page, plan_help_tab } from "../../src/background/open_help.ts";
+import { create_open_help, help_name_choices, help_name_url, key_command_id, key_command_id_on_page } from "../../src/background/open_help.ts";
+import { plan_help_tab } from "../../src/shared/page/help_route.ts";
 import { compile_keymap } from "../../src/shared/keys/compiler.ts";
 
 // The line's frame in each opener tab.

@@ -17,6 +17,7 @@ const shared_files = [
   "src/content/handlers/{copy,focus,mode,stop,types}.ts",
   "src/shared/{command,index,key_test_build,load_commands,swallow}.ts",
   "src/shared/messages/*.ts",
+  "src/shared/site/site_columns.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
 
@@ -52,20 +53,21 @@ export const area_rules = [
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
-    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,history_cache,bookmark_title,completion_rank,rank_index,rank_service,rank_worker}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick,rank_port}.ts"],
+    globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,complete_items,history_cache,bookmark_title,completion_rank,rank_index,rank_service,rank_worker}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick,rank_port}.ts", "src/shared/completion/tab_rows.ts"],
     areas: ["cmdline"],
   },
   // Before the general help rule: `areas_of_file` takes the first match.
   { globs: ["src/background/{alias_message,quickmark_message}.ts", "src/help/pairs_*.ts"], areas: ["help", "config", "keys", "newtab"] },
   { globs: ["src/background/font_names.ts", "src/shared/font_candidates.ts"], areas: ["help", "cmdline"] },
   { globs: ["src/background/theme_message.ts", "src/help/themes_*.ts"], areas: ["help", "config"] },
-  { globs: ["src/background/site_keys.ts", "src/help/site_keys_*.ts"], areas: ["help", "config", "keys", "toolbar"] },
+  { globs: ["src/background/site_keys.ts", "src/shared/site/site_keys.ts", "src/help/site_keys_*.ts"], areas: ["help", "config", "keys", "toolbar"] },
   {
     globs: [
       "src/help/**",
       "src/shared/page/help_route.ts",
       "src/commands/{help,help_tab,issue,settings,native,firefox_page}.ts",
-      "src/background/{open_help,site_rules_view,issue_report,native_client,host_update,host_update_browser}.ts",
+      "src/shared/site/site_rules_view.ts",
+      "src/background/{open_help,issue_report,native_client,host_update,host_update_browser}.ts",
       "src/shared/{settings_docs,settings_plan,settings_schema,settings_table,setting_list,config_file_path,table_constants,native_host,host_version,permission_grant}.ts",
     ],
     areas: ["help"],
@@ -105,7 +107,7 @@ export const area_rules = [
   { globs: ["src/background/engine_keys_file.ts"], areas: ["config", "engines", "keys"] },
   { globs: ["src/background/{default_keymap,default_site_rows,item_hover,item_landings,item_select,keymap_merge,compile,edit_layers,keymap_message,repeat_memory,record_step}.ts", "src/shared/{keys/**,keymap,prefix_tree,layers,invocation}.ts"], areas: ["keys"] },
   { globs: ["src/background/omnibox.ts"], areas: ["omnibox"] },
-  { globs: ["src/popup/**", "src/background/toolbar.ts"], areas: ["toolbar"] },
+  { globs: ["src/popup/**", "src/background/toolbar.ts", "src/shared/site/site_state.ts"], areas: ["toolbar"] },
   { globs: ["src/content/{media,quality}/**", "src/content/player_box.ts", "src/commands/media.ts", "src/background/{media_actions,media_quality,quality_levels}.ts", "src/shared/{media,media_values,quality}.ts"], areas: ["media"] },
   { globs: ["src/content/{ui/**,toast,ui_proxy,surface,mode_indicator,badge_state,mode_report,badge_hosts}.ts"], areas: ["ui"] },
 ];

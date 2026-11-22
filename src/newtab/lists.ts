@@ -1,6 +1,6 @@
 // The rows of the lists under the clock. The readers are the ones behind the tab and bookmark completion, run on the page itself: no background message, so there is no ticket gate to pass. The page must keep private tabs out on its own.
 import { is_web_url, type NewTabLink, type Settings } from "../shared/config.ts";
-import { bookmark_items, type ClosedSession, flatten_bookmarks, listed_tabs, type BookmarkNode, type TabLike } from "../background/complete_items.ts";
+import { bookmark_items, type ClosedSession, flatten_bookmarks, listed_tabs, type BookmarkNode, type TabLike } from "../shared/completion/tab_rows.ts";
 import { refused_as } from "../shared/swallow.ts";
 import { icon_field, make_favicon_cache, site_host } from "../shared/page/icon_cache.ts";
 import { closed_rows, TOP_SITE_DAYS, top_site_rows, type Visit } from "./widgets.ts";

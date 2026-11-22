@@ -5,7 +5,7 @@ import { match_regex_source } from "../shared/match_pattern.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { BindingRow } from "../shared/messages/page.ts";
 import type { Ask, PageRequests } from "../shared/messages/map.ts";
-import { key_column_refusal, pass_row_for, pass_words, site_is_off_for } from "../background/site_keys.ts";
+import { key_column_refusal, pass_row_for, pass_words, site_is_off_for } from "../shared/site/site_keys.ts";
 import { site_rule_effects } from "./site_rule_effect.ts";
 
 export type SiteKeysDeps = {

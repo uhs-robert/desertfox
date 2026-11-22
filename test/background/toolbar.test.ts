@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { answer_toolbar_request, create_toolbar, OFF_KEYMAP, saved_popup_rows, site_is_off, site_pattern, site_rows_after, site_state, toolbar_look } from "../../src/background/toolbar.ts";
+import { answer_toolbar_request, create_toolbar, OFF_KEYMAP, toolbar_look } from "../../src/background/toolbar.ts";
+import { saved_popup_rows, site_is_off, site_pattern, site_rows_after, site_state } from "../../src/shared/site/site_state.ts";
 import type { ToolbarDeps } from "../../src/background/toolbar.ts";
 import { PER_SITE_SETTING_NAMES } from "../../src/shared/settings_schema.ts";
 import { SETTINGS_TABLE } from "../../src/shared/settings_table.ts";

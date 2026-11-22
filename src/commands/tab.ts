@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { ToastKind } from "../shared/messages/tab.ts";
-import type { ListedTab } from "../background/complete_items.ts";
+import type { ListedTab } from "../shared/completion/tab_rows.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_tab_action_deps, move_tabs, reopen_in_container, set_muted, set_pinned } from "../background/tab_actions.ts";
 import type { TabActionDeps } from "../background/tab_actions.ts";

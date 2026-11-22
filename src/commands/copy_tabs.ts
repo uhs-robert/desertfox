@@ -4,7 +4,7 @@ import { define } from "../shared/registry/builtin.ts";
 import { BLACK_HOLE_REGISTER } from "../shared/register_names.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
-import type { ListedTab } from "../background/complete_items.ts";
+import type { ListedTab } from "../shared/completion/tab_rows.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
 import type { RegisterStore } from "../background/register_store.ts";
 import { format_link_list, is_web_address, LIST_FORMATS } from "../content/link_list.ts";

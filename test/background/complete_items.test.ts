@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bookmark_items, bookmark_usage, bookmark_rows, bookmark_view, closed_tab_rows, create_complete_items, engine_items, flatten_bookmarks, folder_items, folder_nodes, listed_favicon, listed_tabs, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_usage, bookmark_rows, bookmark_view, create_complete_items, engine_items, folder_items, folder_nodes, listed_windows, read_container_identities, read_containers } from "../../src/background/complete_items.ts";
+import { bookmark_items, closed_tab_rows, flatten_bookmarks, listed_favicon, listed_tabs } from "../../src/shared/completion/tab_rows.ts";
 import { anything_items, history_items, history_list, OPEN_TAB_BOOST, open_items, reads_history, site_items, usage_boost, usage_by_url } from "../../src/background/completion_rank.ts";
 import type { HistoryNode, OpenSettings } from "../../src/background/completion_rank.ts";
 import type { RankSource } from "../../src/shared/rank_port.ts";
@@ -9,7 +10,8 @@ import { MAX_BOOST } from "../../src/shared/score.ts";
 import type { TabActionDeps } from "../../src/background/tab_actions.ts";
 import type { AnythingItems, SessionItem } from "../../src/shared/messages/content.ts";
 import type { DiscardDeps } from "../../src/background/tab_discard.ts";
-import type { BookmarkNode, ContainerMarks, FolderNode, LineScope, TabLike, WindowLike } from "../../src/background/complete_items.ts";
+import type { FolderNode, WindowLike } from "../../src/background/complete_items.ts";
+import type { BookmarkNode, ContainerMarks, LineScope, TabLike } from "../../src/shared/completion/tab_rows.ts";
 
 type TabActions = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove" | "open_tab">;
 const NO_ACTIONS: TabActions = { set_muted: async () => {}, set_pinned: async () => {}, remove: async () => {}, open_tab: async () => {} };

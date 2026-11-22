@@ -6,12 +6,8 @@ import type { AnythingRef } from "../shared/anything_ref.ts";
 import type { AnythingItems, BookmarkItem, Boosted, ClosedTabRow, HistoryItem, HistoryItems, OpenItems, OpenRow, SiteItem } from "../shared/messages/content.ts";
 import { MAX_SITE_ROWS, RECENT_BOOKMARKS, RECENT_CLOSED } from "../shared/rank_port.ts";
 import type { FinderExtras, WireRow } from "../shared/rank_port.ts";
+import { one_line, SKIPPED_SCHEMES } from "../shared/completion/tab_rows.ts";
 import { MAX_BOOST, rank_top, score_candidate } from "../shared/score.ts";
-
-export const one_line = (text: string) => text.replace(/\s+/g, " ").trim();
-
-// A visit to these is no page the user would open from the line.
-export const SKIPPED_SCHEMES = /^(about|moz-extension|data):/i;
 
 export type HistoryNode = { title?: string | undefined; url?: string | undefined; visit_count?: number | undefined; last_visit?: number | undefined };
 

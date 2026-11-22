@@ -6,7 +6,7 @@ import { format_link_list } from "../../src/content/link_list.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
-import type { ListedTab } from "../../src/background/complete_items.ts";
+import type { ListedTab } from "../../src/shared/completion/tab_rows.ts";
 
 const CTX: CommandContext = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal" };
 
