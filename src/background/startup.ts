@@ -54,7 +54,7 @@ import { drop_keymap } from "./keymap_source.ts";
 import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_FOLD_NOTES_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, THEME_EDITS_STORAGE_KEY } from "./storage_keys.ts";
 import { classify_host_start, clear_host_pending, compared_files, files_digest, has_config_files, read_host_memory, remember_applied, same_files, settle_host_start, store_host_pending } from "./host_start.ts";
 import { files_before_unsynced, held_in_settings_d, read_unsynced, replayed_on_folder, rows_in_settings_file, SETTINGS_FILE, settings_d_file_that_hides, settings_d_files_naming, settings_d_site_rules, settings_file_naming, settings_file_sets, store_unsynced, theme_named_in, default_engine_named_in, stored_unsynced, text_sha256, unsynced_of_stored, with_setting_in_files, with_unsynced_path, without_setting, without_setting_in_files, without_unsynced_path } from "./settings_file.ts";
-import type { CopyReplacedBy, FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
+import type { CopyReplacedBy, FileWriteOutcome, UnsetResult, UnsyncedFiles } from "./settings_file.ts";
 import type { TomlScalar, TomlValue } from "./toml_key_edit.ts";
 import { imports_moved_to_files, theme_file_path } from "./theme_message.ts";
 import type { ThemeFileChange } from "./theme_message.ts";
@@ -478,9 +478,6 @@ export async function toggle_in_settings_file(name: keyof Settings): Promise<{ v
   });
   return { value, outcome };
 }
-
-// What an unset did besides a file write: `edits_only` dropped the browser edits and left settings.toml as it was, `not_set` found nothing to drop.
-export type UnsetResult = FileWriteOutcome | { kind: "edits_only" } | { kind: "not_set" };
 
 // Removes `name` from settings.toml and drops its saved and temp edits, so the default applies.
 // A `settings.d` file that sets it would still win, so the file stays as it is then: the browser edits go, or, with none, the unset refuses and names that file.

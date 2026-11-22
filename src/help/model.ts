@@ -4,7 +4,7 @@ import { MODES } from "../shared/command.ts";
 import type { CommandMeta, ParamDef } from "../shared/command.ts";
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { SearchEngine } from "../shared/config.ts";
-import { search_engine_name } from "../commands/url_build.ts";
+import { search_engine_name } from "../shared/url_build.ts";
 import type { ConfigStatus } from "../background/config_load.ts";
 import { build_config_view } from "./config_view.ts";
 import { ROLES } from "../shared/theme/roles.ts";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { engine_search_url, incremented_url, openable_url, parent_url, root_url } from "../../src/commands/url_build.ts";
+import { engine_search_url, incremented_url, openable_url, parent_url, root_url } from "../../src/shared/url_build.ts";
 
 test("parent drops the last segment, the query and the fragment", () => {
   assert.equal(parent_url("https://a.com/x/y/z?q=1#h"), "https://a.com/x/y/");

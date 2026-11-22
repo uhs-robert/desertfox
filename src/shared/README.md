@@ -21,6 +21,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which. Also `MEDIA_PANEL_HANDLER`, the handler id the background sends to `whichkey`.
 - `help_route.ts` (in `page/`): the help page ids, the hash parser (`parse_route`) and the help URL builders. The popup, the background, the commands and the help page share it.
 - `icon_cache.ts` (in `page/`): the favicon cache in `storage.local` (`favicon_cache`), which the background saver fills and the new tab page reads. The storage is passed in, so the module needs no browser global.
+- `url_build.ts`: pure URL math. `parent_url` and `root_url`, `url_target` (text to a URL) and `config_url_target` (the same under a config's engines), the two engine fillers: `engine_search_url` for typed text and `engine_url`, which follows `fallback` when the page cannot fill the slots, and `own_pages`. The slot table and the template filler are in `engines/`.
 - `page_bundle_tag.ts`: the extension pages' side of a bundle load. `listen_for_bundle_requests` adds a bundle's `<script src>` tag when the background asks, joins repeat asks and answers after the script has run.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
@@ -59,6 +60,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `layers.ts`: the `z-index` of each surface the content script draws, bottom to top: hints, mode badge, toast, which-key panel, command line.
 - `config.ts`: the merged config file and the settings in force. `apply_edits` puts the saved and then the temp browser edits over the config's settings.
 - `settings_table.ts`: every setting as one row of data, its kind, values and default. The `Settings` type follows from it. Start here to add a setting.
+- `settings_plan.ts`: the pure planners of `set`, `toggle` and `unset`: the edits to keep and the toast that answers. The `settings` commands and the settings page message run them.
 - `settings_schema.ts`: what each setting accepts, derived from its table row. The build tool and `set` share it. The content script and the command line page must not import it.
 - `settings_docs.ts`: the long description of each setting for the settings file schema, and the plain label and one-line summary for the Settings page. A `{key:name}` in the prose names the key bound to an action in `bound_keys.ts`. `key_docs.ts` fills it in: the Settings page from the live keymap, the schema from the default keymap with "by default".
 - `bound_keys.ts`: which key runs a named action (`BINDINGS`, `bound_key`), read from the compiled keymap. Quick Start, the Settings docs and the new tab hint share it.

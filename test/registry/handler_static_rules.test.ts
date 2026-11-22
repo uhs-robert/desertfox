@@ -214,7 +214,7 @@ const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
   "src/shared/key_docs.ts": { count: 1, why: "a settings doc that names an action missing from the binding table: a typo in our own prose, caught by the doc scan test, not a command handler" },
   "src/shared/page_bundle_tag.ts": { count: 1, why: "a bundle tag that failed to load, turned into the could-not-load refusal by the bundle loader, not a command handler" },
   "src/content/run_content.ts": { count: 1, why: "a bundle command without a bundle: a registry bug, not a state of the page" },
-  "src/commands/settings.ts": { count: 1, why: "a saved edit of a setting other than a consent one: the schema keeps `:set` and `:toggle` from it, so only a `change_setting` message reaches it, turned into { ok: false } by `failure`" },
+  "src/shared/settings_plan.ts": { count: 1, why: "a saved edit of a setting other than a consent one: the schema keeps `:set` and `:toggle` from it, so only a `change_setting` message reaches it, turned into { ok: false } by `failure`" },
 };
 
 function source_files(folder: string): string[] {

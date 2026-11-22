@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { current_tab_url, open_in } from "./open_target.ts";
-import { incremented_url, parent_url, root_url } from "./url_build.ts";
+import { incremented_url, parent_url, root_url } from "../shared/url_build.ts";
 
 // A count fills `levels` instead of repeating: a repeat would read the tab URL again before the last navigation lands.
 define("url.parent", {

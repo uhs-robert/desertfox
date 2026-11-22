@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { compile_config } from "../src/background/compile.ts";
-import { plan_set_value } from "../src/commands/settings.ts";
+import { plan_set_value } from "../src/shared/settings_plan.ts";
 import { empty_config } from "../src/background/config_load.ts";
 import "../src/background/command_modules.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";

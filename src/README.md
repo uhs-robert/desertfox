@@ -5,7 +5,7 @@ The code map. Read a folder's README before you change or research code in it.
 - [`background/`](background/README.md): the background page. Loads the config, compiles the keymap, routes run requests, answers which-key.
 - [`cmdline/`](cmdline/README.md): the command line page, its completion list and its host bundle.
   - [`cmdline/completion/`](cmdline/completion/README.md): what the list offers: the tokenizer, the sources and the clients of the background's models.
-- [`commands/`](commands/README.md): the command definitions, made with `define` from the registry, plus helpers (`open_target.ts`, `url_build.ts`).
+- [`commands/`](commands/README.md): the command definitions, made with `define` from the registry, plus helpers (`open_target.ts`).
 - [`content/`](content/README.md): the content script. Captures keys, tracks the mode and loads the bundles.
   - [`content/caret/`](content/caret/README.md): caret and visual mode.
   - [`content/grab/`](content/grab/README.md): keyboard drag, `;gg` and `;Gg`.
@@ -28,7 +28,7 @@ The code map. Read a folder's README before you change or research code in it.
 - [`newtab/`](newtab/README.md): the new tab page.
 - [`popup/`](popup/README.md): the toolbar popup.
 - `icons/`: the extension icon. The build writes the grey off copy (`tools/grey_svg.mjs`).
-- [`shared/`](shared/README.md): what every folder shares: types and constants, settings, themes and search engines.
+- [`shared/`](shared/README.md): what every folder shares: types and constants, settings, themes, search engines and URL math (`url_build.ts`).
   - [`shared/keys/`](shared/keys/README.md): key notation, the prefix tree compiler and the matcher.
   - [`shared/config_build/`](shared/config_build/README.md): the pure config build from raw file text.
   - [`shared/theme/`](shared/theme/README.md): theme files, roles, derived tokens and applying a theme to a surface.

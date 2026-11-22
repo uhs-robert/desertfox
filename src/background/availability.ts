@@ -4,7 +4,7 @@
 import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { MergedConfig, SearchEngine } from "../shared/config.ts";
 import { parse_http_url, slot_of } from "../shared/engines/index.ts";
-import { engine_url, search_engine_name } from "../commands/url_build.ts";
+import { engine_url, search_engine_name } from "../shared/url_build.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
 import type { CheckedArgs } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";

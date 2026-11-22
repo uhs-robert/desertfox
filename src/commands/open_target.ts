@@ -3,11 +3,10 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
 import { get_config } from "../background/startup.ts";
-import { DEFAULT_SETTINGS } from "../shared/config.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
 import type { PageInfo } from "../shared/engines/slots.ts";
-import { openable_url, require_openable, url_target } from "./url_build.ts";
-import type { OwnPages } from "./url_build.ts";
+import { config_url_target, openable_url, own_pages, require_openable } from "../shared/url_build.ts";
+import type { OwnPages } from "../shared/url_build.ts";
 import { pick_by, pick_entry } from "../shared/folder_pick.ts";
 import type { Pickable } from "../shared/folder_pick.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
@@ -78,8 +77,6 @@ export async function current_page(ctx: CommandContext): Promise<PageInfo | unde
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
-// The extension's own pages may open from the user's config and stored data, and from typed text in a request no page sent. Text a page sent, such as a hinted link or the selection, may not open them, and neither may the clipboard or a register.
-export const own_pages: NonNullable<OwnPages> = () => browser.runtime.getURL("");
 export const own_pages_for = (ctx: CommandContext): OwnPages => (ctx.from_page ? undefined : own_pages);
 
 // The addresses `open_in` and `open_many` take come from typed text that `url_target` already checked against the request's sender, or from code, config and stored data. So the extension's own pages pass here.
@@ -87,8 +84,7 @@ export const is_openable = (url: string): boolean => openable_url(url, own_pages
 
 // For text a person typed or configured. URLs that code built need no such pass.
 export async function typed_url_target(text: string, may_open_own_pages: OwnPages): Promise<string> {
-  const { search_engines, settings } = await get_config();
-  return url_target(text, settings.default_engine ?? DEFAULT_SETTINGS.default_engine, search_engines, may_open_own_pages);
+  return config_url_target(text, await get_config(), may_open_own_pages);
 }
 
 export async function open_in(ctx: CommandContext, url: string, where: Where, container?: string): Promise<void> {

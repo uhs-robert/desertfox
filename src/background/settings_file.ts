@@ -8,6 +8,8 @@ import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
 import type { SettingEdits, Settings } from "../shared/config.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
+import type { Toast } from "../shared/settings_plan.ts";
 import { SETTINGS_TABLE } from "../shared/settings_table.ts";
 import { parsed, remove_top_level_key, same_value, set_top_level_key } from "./toml_key_edit.ts";
 import type { TomlValue } from "./toml_key_edit.ts";
@@ -202,4 +204,17 @@ export function outcome_note(outcome: FileWriteOutcome, path = SETTINGS_FILE): s
     case "browser_copy": return `, saved in the browser copy. It did not come from a config folder, so no ${path} is written`;
     case "replaced": return outcome.written ? `, saved to ${path}. ${replaced_by(outcome.by, path)} replaced the browser copy during the write` : `. ${replaced_by(outcome.by, path)} replaced the browser copy before the write, so ${path} was not written`;
   }
+}
+
+// A change that left settings.toml as it was, though the setting applies, warns: the file and the browser now differ.
+export const outcome_kind = (outcome: FileWriteOutcome): ToastKind =>
+  outcome.kind === "failed" || outcome.kind === "held" || outcome.kind === "conflict" || outcome.kind === "conflict_kept" || (outcome.kind === "replaced" && !outcome.written) ? "warning" : "success";
+
+// What an unset did besides a file write: `edits_only` dropped the browser edits and left settings.toml as it was, `not_set` found nothing to drop.
+export type UnsetResult = FileWriteOutcome | { kind: "edits_only" } | { kind: "not_set" };
+
+export function unset_toast(name: keyof Settings, result: UnsetResult): Toast {
+  if (result.kind === "not_set") return { kind: "info", message: `${name} is not set` };
+  if (result.kind === "edits_only") return { kind: "success", message: `Unset ${name}` };
+  return { kind: outcome_kind(result), message: `Unset ${name}${outcome_note(result)}` };
 }

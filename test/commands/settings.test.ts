@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { make_settings_handlers, plan_set, plan_set_value, plan_toggle, plan_unset } from "../../src/commands/settings.ts";
+import { make_settings_handlers } from "../../src/commands/settings.ts";
+import { plan_set, plan_set_value, plan_toggle, plan_unset } from "../../src/shared/settings_plan.ts";
 import { FILE_WRITTEN_SETTINGS, is_consent_setting, SETTING_NAMES, SETTING_SPECS } from "../../src/shared/settings_schema.ts";
 import type { SettingsDeps } from "../../src/commands/settings.ts";
 import type { FileWriteOutcome } from "../../src/background/settings_file.ts";
-import type { UnsetResult } from "../../src/background/startup.ts";
+import type { UnsetResult } from "../../src/background/settings_file.ts";
 import { empty_config } from "../../src/background/config_load.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 import { NO_EDITS } from "../../src/shared/config.ts";

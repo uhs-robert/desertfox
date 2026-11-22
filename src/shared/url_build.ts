@@ -1,9 +1,9 @@
-import { RuntimeRefusal } from "../shared/command.ts";
-import { BUILT_IN_PAGE, BUILT_IN_QUERY } from "../shared/config.ts";
-import type { SearchEngine } from "../shared/config.ts";
-import { fill_template } from "../shared/engines/fill.ts";
-import type { FillInput } from "../shared/engines/fill.ts";
-import { parse_http_url, path_segments } from "../shared/engines/slots.ts";
+import { RuntimeRefusal } from "./command.ts";
+import { BUILT_IN_PAGE, BUILT_IN_QUERY, DEFAULT_SETTINGS } from "./config.ts";
+import type { MergedConfig, SearchEngine } from "./config.ts";
+import { fill_template } from "./engines/fill.ts";
+import type { FillInput } from "./engines/fill.ts";
+import { parse_http_url, path_segments } from "./engines/slots.ts";
 
 // Pure URL math for the url and open commands. Each function returns
 // undefined when the page has no sensible answer, and the caller refuses.
@@ -120,6 +120,9 @@ function unopenable_reason(url: string, own_pages: OwnPages): string | undefined
   return `DesertFox does not open ${scheme} addresses`;
 }
 
+// The base of the extension's own pages. The extension's own pages may open from the user's config and stored data, and from typed text in a request no page sent. Text a page sent, such as a hinted link or the selection, may not open them, and neither may the clipboard or a register. A caller from a page passes undefined instead.
+export const own_pages: NonNullable<OwnPages> = () => browser.runtime.getURL("");
+
 export const openable_url = (url: string, own_pages: OwnPages): boolean => unopenable_reason(url, own_pages) === undefined;
 
 export function require_openable(url: string, own_pages: OwnPages): void {
@@ -173,6 +176,10 @@ export function url_target(
   if (!engine) throw new RuntimeRefusal(`The text is not a URL and the default_engine setting names no search engine: "${default_engine}"`);
   return engine_search_url(engine.url, trimmed);
 }
+
+// `url_target` for text a person typed or configured, under the default engine and engines of `config`.
+export const config_url_target = (text: string, config: MergedConfig, may_open_own_pages: OwnPages): string =>
+  url_target(text, config.settings.default_engine ?? DEFAULT_SETTINGS.default_engine, config.search_engines, may_open_own_pages);
 
 // An empty or missing engine means the user named none, so the default_engine setting decides.
 export const search_engine_name = (given: unknown, default_engine: string): string => (typeof given === "string" && given !== "" ? given : default_engine);
