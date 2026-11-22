@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BOX_CLASS, create_settings_boxes, SETTINGS_BOXES } from "../src/help/settings_boxes.ts";
+import { create_settings_boxes, SETTINGS_BOXES } from "../src/help/settings_boxes.ts";
+import { BOX_CLASS } from "../src/help/settings_view.ts";
 import type { BoxDeps, BoxHandle, SettingsBox } from "../src/help/settings_boxes.ts";
 import type { UserCssHold } from "../src/help/user_css_gate.ts";
 import type { HelpModel } from "../src/help/model.ts";

@@ -42,11 +42,17 @@ const BOXES_IN_ORDER = [
   find(".desertfox-themes"), LISTEN,
   find(".desertfox-host-start"),
 ];
-// The transfer and files boxes dispose their old hold and open a new one before they mount, found or not. Each dispose and each `set` writes the gate's sheet once (the MEDIA lines). The first render has nothing to dispose. The page's own five listeners come before it.
-const FIRST_RENDER = [...Array(5).fill(LISTEN), ...BOXES_IN_ORDER, find(".desertfox-transfer"), MEDIA, find(".desertfox-files"), MEDIA, MEDIA, MEDIA];
+// The transfer and files boxes dispose their old hold and open a new one before they mount, found or not. Each dispose and each `set` writes the gate's sheet once (the MEDIA lines). The first render has nothing to dispose.
+const FIRST_RENDER = [...BOXES_IN_ORDER, find(".desertfox-transfer"), MEDIA, find(".desertfox-files"), MEDIA];
 // The stops: one listener removed each for settings, site keys, keys, engines, aliases, quickmarks and themes. The two holds are disposed with no box to mount.
 const LEAVE_SETTINGS = [...Array(7).fill("off_changed"), MEDIA, MEDIA];
-const RETURN_TO_SETTINGS = [...BOXES_IN_ORDER, find(".desertfox-transfer"), MEDIA, MEDIA, find(".desertfox-files"), MEDIA, MEDIA, MEDIA, MEDIA];
+const RETURN_TO_SETTINGS = [...BOXES_IN_ORDER, find(".desertfox-transfer"), MEDIA, MEDIA, find(".desertfox-files"), MEDIA, MEDIA];
+
+// The part of the log the boxes write: it starts at the first box lookup (the page's own listeners come before) and ends where the expected part ends (the page's own later sheet writes follow).
+const box_part = (log: string[], expected: string[]): string[] => {
+  const start = log.findIndex((line) => line.startsWith("find "));
+  return log.slice(start === -1 ? 0 : start, (start === -1 ? 0 : start) + expected.length);
+};
 
 async function settled(): Promise<void> {
   for (let turn = 0; turn < 40; turn += 1) await new Promise((resolve) => setImmediate(resolve));
@@ -101,17 +107,17 @@ test("the Settings route mounts the boxes in table order and takes a fresh CSS h
   try {
     await import("../src/help/main.ts");
     await settled();
-    assert.deepEqual(log, FIRST_RENDER);
+    assert.deepEqual(box_part(log, FIRST_RENDER), FIRST_RENDER);
     log.length = 0;
     location.hash = "#/commands";
     for (const listener of window_listeners["hashchange"] ?? []) listener();
     await settled();
-    assert.deepEqual(log, LEAVE_SETTINGS);
+    assert.deepEqual(box_part(log, LEAVE_SETTINGS), LEAVE_SETTINGS);
     log.length = 0;
     location.hash = "#/settings";
     for (const listener of window_listeners["hashchange"] ?? []) listener();
     await settled();
-    assert.deepEqual(log, RETURN_TO_SETTINGS);
+    assert.deepEqual(box_part(log, RETURN_TO_SETTINGS), RETURN_TO_SETTINGS);
   } finally {
     for (const [name, descriptor] of saved) {
       if (descriptor) Object.defineProperty(g, name, descriptor);

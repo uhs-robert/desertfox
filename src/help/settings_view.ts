@@ -8,7 +8,20 @@ import type { Child } from "./dom.ts";
 import { ADVANCED_BACKUP_SECTION, ADVANCED_FILES_EDITOR_SECTION, ADVANCED_FILES_SECTION, ALIASES_SECTION, ENGINES_SECTION, KEYS_SECTION, QUICKMARKS_SECTION, SITE_RULES_SECTION, section_heading, section_hash, settings_section } from "./sections.ts";
 import type { Section } from "./sections.ts";
 import { ONLY_CHANGED_CLASS } from "./sidebar.ts";
-import { BOX_CLASS } from "./settings_boxes.ts";
+
+// The class of each box drawn empty here. `settings_boxes.ts` finds a box by the same class.
+export const BOX_CLASS = {
+  settings: "desertfox-settings",
+  site_keys: "desertfox-site-keys",
+  keys: "desertfox-keys",
+  engines: "desertfox-engines",
+  aliases: "desertfox-aliases",
+  quickmarks: "desertfox-quickmarks",
+  themes: "desertfox-themes",
+  host_start: "desertfox-host-start",
+  transfer: "desertfox-transfer",
+  files: "desertfox-files",
+} as const;
 
 // Opens the panel `:native.install` opens, by the same hash. The nonce makes a tab already on the panel show it again.
 function install_native_host_button(): HTMLElement {

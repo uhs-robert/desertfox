@@ -1,6 +1,7 @@
 // The Settings boxes that `settings_view.ts` draws empty and the form pages fill, in the order they mount. This order is not the page order: the site keys form mounts before Keys and the host banner after Themes. Keep it.
 
 import type { Ask } from "../shared/messages/map.ts";
+import { BOX_CLASS } from "./settings_view.ts";
 import type { Route } from "../shared/page/help_route.ts";
 import { effective_settings } from "../shared/config.ts";
 import { load_effective_config } from "../shared/config/config_load.ts";
@@ -10,32 +11,18 @@ import type { HelpModel } from "./model.ts";
 import { mount_settings } from "./settings_page.ts";
 import { mount_site_keys } from "./site_keys_page.ts";
 import { mount_keys } from "./keys_page.ts";
-import type { create_key_capture } from "./keys_page.ts";
+import type { KeyCapture } from "./keys_page.ts";
 import { mount_engines } from "./engines_page.ts";
 import { mount_pairs } from "./pairs_page.ts";
 import { ALIASES_KIND, QUICKMARKS_KIND } from "./pairs_model.ts";
 import { mount_themes } from "./themes_page.ts";
 import { mount_host_start } from "./host_start_page.ts";
-import type { create_host_start_session } from "./host_start_model.ts";
+import type { HostStartSession } from "./host_start_model.ts";
 import { mount_transfer } from "./transfer_page.ts";
 import { mount_files } from "./files_page.ts";
 import type { FilesSession } from "./files_model.ts";
 import { NO_USER_CSS_HOLD } from "./user_css_gate.ts";
 import type { UserCssHold } from "./user_css_gate.ts";
-
-// `settings_view.ts` draws each box with its class, and the table finds it by the same class.
-export const BOX_CLASS = {
-  settings: "desertfox-settings",
-  site_keys: "desertfox-site-keys",
-  keys: "desertfox-keys",
-  engines: "desertfox-engines",
-  aliases: "desertfox-aliases",
-  quickmarks: "desertfox-quickmarks",
-  themes: "desertfox-themes",
-  host_start: "desertfox-host-start",
-  transfer: "desertfox-transfer",
-  files: "desertfox-files",
-} as const;
 
 type OnChanged = Parameters<typeof mount_engines>[2];
 
@@ -43,10 +30,10 @@ type OnChanged = Parameters<typeof mount_engines>[2];
 export type BoxDeps = {
   send: Ask;
   on_changed: OnChanged;
-  key_capture: ReturnType<typeof create_key_capture>;
+  key_capture: KeyCapture;
   command_names: () => Promise<string[]>;
   files_session: FilesSession;
-  host_start_session: ReturnType<typeof create_host_start_session>;
+  host_start_session: HostStartSession;
   open_hold: () => UserCssHold;
 };
 
