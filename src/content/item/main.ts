@@ -2,7 +2,7 @@
 
 import type { PageHostApi } from "../bundle_host.ts";
 import { all_items, carry_row, current_item, follow_item, move_item, read_cursor, watch_lands } from "./pick.ts";
-import type { ItemArgs } from "./pick.ts";
+import type { ItemArgs } from "../lib/item_types.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { in_view_, live_derived_row } from "./derived.ts";
 import { args_for_pin, lists_with_row, pick_list } from "./lists.ts";

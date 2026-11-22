@@ -1,7 +1,7 @@
 // The lists of the picker (`item.lists`, asked by the hints bundle's `I`) and the pin a pick of another list sets.
 
 import type { DerivedRow } from "./derived.ts";
-import type { Region } from "./finder.ts";
+import type { Region } from "../lib/item_types.ts";
 import { forget_move } from "./pick.ts";
 import { is_shown } from "../shown.ts";
 

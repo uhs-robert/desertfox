@@ -1,8 +1,9 @@
 // The load-more step of `]]`, tried when the next pass finds no next page. Structure first: it finds the page's main list and takes the lone control right after its last item. The words only break ties. With no control, it scrolls to the end of the list, but only when that list reaches the end of the page.
 
-import { in_chrome as node_in_chrome, in_pinned as node_in_pinned, is_actionable as node_is_actionable, list_groups, main_list } from "../item/groups.ts";
-import { ancestors, descendants, in_carousel, is_item_size, normalize } from "./detect.ts";
-import type { NextPageAction, PageReader } from "./detect.ts";
+import { in_chrome as node_in_chrome, in_pinned as node_in_pinned, is_actionable as node_is_actionable, list_groups, main_list } from "../lib/groups.ts";
+import { ancestors, descendants, in_carousel, is_item_size, normalize } from "../lib/page_reader.ts";
+import type { NextPageAction } from "./detect.ts";
+import type { PageReader } from "../lib/page_reader.ts";
 
 const LOAD_WORDS = new Set([
   "more", "load more", "show more", "see more", "view more", "more results", "more stories", "more posts", "more articles", "more news", "more items", "more products", "older posts", "older entries", "older", "show older", "load older",

@@ -1,7 +1,7 @@
 // The repeated blocks of a page, for the load-more step of `]]` (`../next_page/load_more.ts`) and the item finder (`finder.ts`). Both build the groups with this code, and each decides its own items and picks its own main list.
 
-import { ancestors, in_carousel, signature, stacked_items } from "../next_page/detect.ts";
-import type { Box, PageReader } from "../next_page/detect.ts";
+import { ancestors, in_carousel, signature, stacked_items } from "./page_reader.ts";
+import type { Box, PageReader } from "./page_reader.ts";
 
 const CHROME_TAGS = new Set(["nav", "header", "footer", "aside", "dialog"]);
 const CHROME_ROLES = new Set(["navigation", "banner", "contentinfo", "menu", "menubar", "tablist", "dialog"]);

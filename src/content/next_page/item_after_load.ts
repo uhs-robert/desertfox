@@ -1,6 +1,6 @@
 // After `]]` loads more on a page with a `page.item` row, the box moves to the first item the load added.
 
-import type { ItemCursor } from "../item/pick.ts";
+import type { ItemCursor } from "../lib/item_types.ts";
 import { wait_for_new_content } from "./load_outcome.ts";
 import type { ContentWatch } from "./load_outcome.ts";
 import type { UserLeft } from "../user_left.ts";

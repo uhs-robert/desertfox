@@ -3,12 +3,8 @@ import { follow_end } from "./ends.ts";
 import { thumbnail } from "./hover.ts";
 import type { EndPage } from "./ends.ts";
 import type { Outcome } from "../../shared/messages/content.ts";
+import type { ItemArgs, ItemCursor, MoveDirection, SectionDirection } from "../lib/item_types.ts";
 
-export type MoveDirection = "down" | "up" | "left" | "right";
-export type SectionDirection = "next_section" | "prev_section";
-export type ItemDirection = MoveDirection | SectionDirection | "first" | "last" | "current" | "other_end";
-// With no selector (undefined, or the empty text the validator fills in) the items come from the derived row (`ItemPage.derived`).
-export type ItemArgs = { selector?: string; link?: string; section?: string; direction: ItemDirection; times?: number; hover?: boolean; extend?: boolean; extent?: string };
 export type Box = { top: number; bottom: number; left: number; right: number };
 
 // Where the move starts. `on_item` is false when no item holds the focus or was the last move, and `index` is then the first item not above the view, or the item count when all are above it.
@@ -123,9 +119,6 @@ export const follow_item = (item: Element) => last_move && (last_move.item_ = ne
 
 // The list changed under the move (a picker landed on another list), so its selector means nothing for the new one.
 export const forget_move = () => (last_move = undefined);
-
-// What `]]` reads of the last move, to carry the box onto the first item a load adds. `item_` is gone once the page dropped the item and nothing else holds it.
-export type ItemCursor = { item_: Element | undefined; selector_: string; shown_: boolean; land_: (item: Element) => void };
 
 export function read_cursor(page: ItemPage, shown_: boolean): ItemCursor | undefined {
   const args = last_move?.args_;

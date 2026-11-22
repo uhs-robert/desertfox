@@ -4,7 +4,7 @@ import { BUTTONS, collect, LINKS, name_candidates } from "../hints/candidates.ts
 import type { Found } from "../hints/candidates.ts";
 import { keep_present_found } from "../hints/headings.ts";
 import { has_usable_address } from "../hints/actions.ts";
-import { dom_reader, pointer_starts } from "../item/dom_reader.ts";
+import { dom_reader, pointer_starts } from "../lib/dom_reader.ts";
 import { detect_next_page } from "./detect.ts";
 import type { LoadStep, NextPageAction } from "./detect.ts";
 
