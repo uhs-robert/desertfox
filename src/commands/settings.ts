@@ -15,7 +15,7 @@ import type { TomlValue } from "../background/toml_key_edit.ts";
 export type SettingsDeps = {
   change_edits: (decide: (current: SettingEdits, config: MergedConfig) => SettingEdits | undefined) => Promise<void>;
   toast: (ctx: CommandContext, kind: ToastKind, message: string) => Promise<void>;
-  // The settings.toml writes of `startup.ts`, for the names in `FILE_WRITTEN_SETTINGS` without `--temp`.
+  // The settings.toml writes of `config_setting_writes.ts`, for the names in `FILE_WRITTEN_SETTINGS` without `--temp`.
   set_in_file: (name: keyof Settings, value: TomlValue) => Promise<FileWriteOutcome>;
   toggle_in_file: (name: keyof Settings) => Promise<{ value: boolean; outcome: FileWriteOutcome }>;
   unset_in_file: (name: keyof Settings) => Promise<UnsetResult>;
