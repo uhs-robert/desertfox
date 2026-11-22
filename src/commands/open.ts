@@ -7,7 +7,7 @@ import { CONTAINER_PARAM, current_page, open_in, own_pages_for, typed_url_target
 import type { Where } from "./open_target.ts";
 import { BUILT_IN_PAGE, DEFAULT_SETTINGS, NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { browser_register_store, is_private_context } from "../background/register_store.ts";
-import { engine_url, home_page_url, search_engine_name } from "./url_build.ts";
+import { engine_url, home_page_url, search_engine_name } from "../shared/url_build.ts";
 import { decode_ref } from "../shared/anything_ref.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 

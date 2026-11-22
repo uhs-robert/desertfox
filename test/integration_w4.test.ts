@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { make_browser_handlers } from "../src/commands/browser.ts";
-import { url_target, home_page_url } from "../src/commands/url_build.ts";
+import { url_target, home_page_url } from "../src/shared/url_build.ts";
 import { answer_park, focus_page_content, start_content_once } from "../src/content/handlers/focus.ts";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";

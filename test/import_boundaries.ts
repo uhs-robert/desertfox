@@ -1,7 +1,5 @@
 // Today's imports that break the folder rule in AGENTS.md ("Architecture rules"), one per importing file and target file. Paths are relative to src/. The value is the step B cluster of .plans/desertfox/import-boundaries.md that removes the edge. The list only shrinks: test/import_boundaries.test.ts fails on a new forbidden import and on an entry that no longer matches.
 export const EXCEPTIONS: Record<string, string> = {
-  "background/availability.ts -> commands/url_build.ts": "C4",
-  "background/bridge_browser.ts -> commands/open_target.ts": "C4",
   "background/bridge.ts -> content/ui/mode_label.ts": "C7",
   "background/frame_cue.ts -> cmdline/completion/keys.ts": "C9",
   "background/hint_frames.ts -> content/hints/labels.ts": "C7",
@@ -10,7 +8,6 @@ export const EXCEPTIONS: Record<string, string> = {
   "background/omnibox.ts -> cmdline/completion/live.ts": "C9",
   "background/omnibox.ts -> cmdline/completion/sources.ts": "C9",
   "background/omnibox.ts -> cmdline/word_lookup.ts": "C9",
-  "background/settings_message.ts -> commands/settings.ts": "C4",
   "commands/copy_tabs.ts -> content/link_list.ts": "C7",
   "commands/copy_tabs.ts -> content/strip_tracking.ts": "C7",
   "help/config_view.ts -> background/config_load.ts": "C5",
@@ -19,7 +16,6 @@ export const EXCEPTIONS: Record<string, string> = {
   "help/main.ts -> background/storage_keys.ts": "C5",
   "help/model.ts -> background/config_load.ts": "C5",
   "help/model.ts -> background/site_rules_view.ts": "C6",
-  "help/model.ts -> commands/url_build.ts": "C4",
   "help/render.ts -> background/site_rules_view.ts": "C6",
   "help/dom.ts -> content/caret/copy_text.ts": "C8",
   "help/site_keys_model.ts -> background/site_keys.ts": "C6",

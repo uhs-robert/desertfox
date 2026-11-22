@@ -1,10 +1,9 @@
 // The settings page's way to change a setting. It shares `:set`'s planners, check and `change_edits` queue, so a page edit and a `:set` publish the same way.
 
-import { plan_set_value, plan_unset, set_toast, unset_toast } from "../commands/settings.ts";
-import type { UnsetResult } from "./startup.ts";
+import { plan_set_value, plan_unset, set_toast } from "../shared/settings_plan.ts";
 import type { TomlValue } from "./toml_key_edit.ts";
-import { outcome_note, SETTINGS_FILE } from "./settings_file.ts";
-import type { FileWriteOutcome } from "./settings_file.ts";
+import { outcome_note, SETTINGS_FILE, unset_toast } from "./settings_file.ts";
+import type { FileWriteOutcome, UnsetResult } from "./settings_file.ts";
 import type { ConfigSource } from "./config_load.ts";
 import { build_config_status } from "./config_load.ts";
 import { build_setting_list } from "../shared/setting_list.ts";

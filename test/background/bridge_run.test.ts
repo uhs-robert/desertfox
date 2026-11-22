@@ -8,7 +8,7 @@ import type { TabInfo, WindowInfo } from "../../src/background/tab_switch.ts";
 import { create_router } from "../../src/background/router.ts";
 import { registry as built_in } from "../../src/shared/registry/builtin.ts";
 import type { Invocation } from "../../src/shared/invocation.ts";
-import { url_target } from "../../src/commands/url_build.ts";
+import { url_target } from "../../src/shared/url_build.ts";
 import { make_fake } from "./fakes.ts";
 
 const resolve_url = async (text: string) => url_target(text, "arch", { arch: { url: "https://arch.example/?q={query}" } }, () => "moz-extension://own-id/");

@@ -5,7 +5,7 @@ import { open_in, own_pages, require_tab_id, typed_url_target, WHERE_PARAM } fro
 import type { Where } from "./open_target.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { SEND_KEY_MAX_TIMES } from "../shared/send_key_limit.ts";
-import { home_page_url } from "./url_build.ts";
+import { home_page_url } from "../shared/url_build.ts";
 import { browser_reload_clear_deps, make_reload_clear } from "./reload_clear.ts";
 import type { ClearScope } from "./reload_clear.ts";
 
