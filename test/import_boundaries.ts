@@ -21,7 +21,7 @@ export const EXCEPTIONS: Record<string, string> = {
   "help/model.ts -> background/site_rules_view.ts": "C6",
   "help/model.ts -> commands/url_build.ts": "C4",
   "help/render.ts -> background/site_rules_view.ts": "C6",
-  "help/render.ts -> content/caret/copy_text.ts": "C8",
+  "help/dom.ts -> content/caret/copy_text.ts": "C8",
   "help/site_keys_model.ts -> background/site_keys.ts": "C6",
   "help/themes_page.ts -> background/storage_keys.ts": "C5",
   "newtab/lists.ts -> background/complete_items.ts": "C6",
