@@ -76,7 +76,7 @@ test("the rule line URL names the site rules anchor, which the settings page dra
   assert.equal(SITE_RULES_HASH, "#section=settings/site-rules");
   const route = parse_route(SITE_RULES_HASH);
   assert.deepEqual(route, { page: "settings", section: "site-rules" });
-  const { SITE_RULES_SLUG, section_anchor } = await import("../../src/help/render.ts");
+  const { SITE_RULES_SLUG, section_anchor } = await import("../../src/help/sections.ts");
   assert.equal(route.section, SITE_RULES_SLUG);
   assert.equal(section_anchor("settings", route.section!), "settings-site-rules");
 });
