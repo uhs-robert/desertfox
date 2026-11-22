@@ -12,4 +12,4 @@ Other code does not import the bundle. It calls `../ui_proxy.ts`:
 - `show_toast(message, duration_ms, kind?)`: shows a toast for `duration_ms`.
 - `show_mode_label(state?)`: shows the badge for a mode, pass-next flag, setting and recording name, and no state removes the badge. Only the top frame draws it.
 
-Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. `copy.ts` in `../handlers/` is an example of a caller. The mode wiring in `../main.ts` sets the badge.
+Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. `copy.ts` in `../page/` is an example of a caller. The mode wiring in `../main.ts` sets the badge.

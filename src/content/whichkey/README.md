@@ -9,7 +9,7 @@ The which-key panel: a floating list of the keys that can follow what the user h
 - `panel.ts`: draws the panel in a closed shadow root: the title chip in the top border, a row per key, a footer. The footer ends with a `.` line when the panel carries `repeat`.
 - `style.ts`: the panel's sheet (`STYLE`). Pure text with no imports, like `layout.ts`, so DesertBird can vendor both.
 - `layout.ts`: how many columns the rows need for the viewport height, and how the title chain joins and shortens (`fit_title`: whole groups drop from the start and "…" stands for them).
-- `gate.ts`: the `content.js` side. It decides which prefix changes reach the bundle, which holds the timer.
+- `../gate.ts`: the `content.js` side. It decides which prefix changes reach the bundle, which holds the timer.
 - `timer.ts`: starts the panel after a pause in a half-typed sequence. The next key, a reset or a mode change cancels it.
 
 `main.ts` fills `repeat` from a second message, `read_repeat_preview`, sent beside `list_keys`. The background answers with text built in `repeat_preview` (`src/background/repeat_memory.ts`), or nothing when the `which_key_repeat` setting is off.

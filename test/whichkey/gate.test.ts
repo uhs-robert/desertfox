@@ -12,7 +12,7 @@ const g: PendingPrefix = { mode: "normal", typed_: ["g"] };
 // The gate keeps one module flag per frame, so each page loads a fresh copy of the module.
 let copies = 0;
 async function make_page() {
-  const { follow_which_key } = (await import(`../../src/content/whichkey/gate.ts?copy=${copies++}`)) as typeof import("../../src/content/whichkey/gate.ts");
+  const { follow_which_key } = (await import(`../../src/content/gate.ts?copy=${copies++}`)) as typeof import("../../src/content/gate.ts");
   const host = create_bundle_host();
   let finish_load: (loaded: boolean) => void = () => {};
   let loads = 0;

@@ -6,7 +6,7 @@ import type { RegisterRead } from "../../shared/messages/content.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { write_into_field } from "./field_writer.ts";
 import { take_text_entry } from "./entry.ts";
-import { read_field_text } from "./field_text.ts";
+import { read_field_text } from "../lib/field_text.ts";
 import { create_text_recorder } from "./recorder.ts";
 import { is_secret_field } from "./secret_field.ts";
 
