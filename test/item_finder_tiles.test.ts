@@ -322,7 +322,7 @@ test("a short h2 link to another page is still a section name", () => {
 });
 
 // Three story cards in two rows (a lead card tall on one side, two stacked beside it): a top-stories block of a news front. Beside it sits nothing a list could be, so the block is the page's only list.
-function hero_block(left: number): SavedPage {
+function hero_block(left: number, view_w = 1366, in_main = false): SavedPage {
   const card = (x: number, y: number, h: number, index: number): SavedNode => ({
     t: "div",
     a: { class: "story" },
@@ -338,13 +338,27 @@ function hero_block(left: number): SavedPage {
     r: [left, 200, 640, 420],
     c: [card(left, 200, 420, 0), card(left + 340, 200, 200, 1), card(left + 340, 420, 200, 2)],
   };
-  const root: SavedNode = { t: "html", r: [0, 0, 1366, 900], c: [{ t: "body", r: [0, 0, 1366, 900], c: [block] }] };
+  // A left-anchored layout: the main column stays 1300 px wide however wide the window is.
+  // The main column holds a long feed at its left, so the short-list fallback does not pick the rail.
+  const feed: SavedNode = {
+    t: "div",
+    a: { class: "feed" },
+    r: [30, 100, 600, 1300],
+    c: Array.from({ length: 10 }, (_, index) => ({
+      t: "div",
+      a: { class: "post" },
+      r: [30, 100 + index * 130, 600, 120],
+      c: [{ t: "a", a: { href: `/post/${index}` }, r: [30, 100 + index * 130, 500, 24], s: `A feed post with the number ${index} in its title`, c: [] }],
+    })),
+  };
+  const holder: SavedNode = in_main ? { t: "main", r: [30, 100, 1300, 1300], c: [feed, block] } : block;
+  const root: SavedNode = { t: "html", r: [0, 0, view_w, in_main ? 1500 : 900], c: [{ t: "body", r: [0, 0, view_w, in_main ? 1500 : 900], c: [holder] }] };
   const link_up = (node: SavedNode, up: SavedNode | null) => {
     node.up = up;
     for (const child of node.c ?? []) link_up(child, node);
   };
   link_up(root, null);
-  return { view: { w: 1366, h: 682, doc_h: 900 }, root };
+  return { view: { w: view_w, h: 682, doc_h: in_main ? 1500 : 900 }, root };
 }
 
 test("a hero block of three cards in two rows at the left of the view is a list of three", () => {
@@ -354,4 +368,11 @@ test("a hero block of three cards in two rows at the left of the view is a list 
 
 test("the same block in the right half of the view, a side rail card, is no list", () => {
   assert.equal(find_items(saved_reader(hero_block(700))).items.length, 0);
+});
+
+test("a rail at a fixed x in the main column stays no list however wide the window is", () => {
+  for (const view_w of [1366, 1920, 2560]) {
+    const found = find_items(saved_reader(hero_block(851, view_w, true)));
+    assert.deepEqual(found.regions.map((region) => region.items.length), [10], `${view_w} px`);
+  }
 });

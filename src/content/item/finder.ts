@@ -103,18 +103,19 @@ export function find_items<N>(reader: PageReader<N>, clock?: FinderClock): Found
     stop: out_of_time,
   };
   const chrome = once((node: N) => in_chrome(reader, node));
+  const main_box = region === reader.root_ ? undefined : reader.box_(region);
+  const column_middle = main_box ? main_box.x + main_box.w / 2 : view.w / 2;
   const rows_of = (group: Group<N>) => new Set(group.boxes.map((box) => Math.round(box.y / 8))).size;
-  // Only groups of three or more items in two rows and whose items mostly hold a title link can be lists. Three items in two rows are a top-stories block only when it starts in the left half of the view: a card in a side rail is no list, so there it takes three rows. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
+  // Only groups of three or more items in two rows and whose items mostly hold a title link can be lists. Three items in two rows are a top-stories block only when it starts in the left half of the main column (the view with no main): a card in a side rail is no list, so there it takes three rows. A group of sections holds title links too, which the nesting step below sorts out. The style reads of `plain_block` come after the stacking test, which only reads the boxes already read.
   const groups = list_groups(reader, scope, rules).filter((group) => !chrome(group.parent));
   const merged = merge_batches(reader, nest_batches(reader, groups));
-  const lists = merged.filter((group) => group.items.length >= 3 && rows_of(group) > (group.boxes[0]!.x < view.w / 2 ? 1 : 2) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
+  const lists = merged.filter((group) => group.items.length >= 3 && rows_of(group) > (group.boxes[0]!.x < column_middle ? 1 : 2) && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
   if (out_of_time()) return { ...none<N>(), timed_out_: true };
   const spans_enough = (group: Group<N>) => Math.max(...group.boxes.map((box) => box.y + box.h)) - Math.min(...group.boxes.map((box) => box.y)) >= MIN_SPAN * view.h;
   const gated = lists.filter(spans_enough);
   // A list that sits inside an item of another is no top-level list. Several lists side by side (a feed and its rails) are all kept.
   const top_of = (pool: Group<N>[]) => pool.filter((group) => !pool.some((outer) => outer !== group && nests(reader, group, outer))).sort((a, b) => b.area - a.area);
   // With no long list, the largest list that starts in the first screen of the page's own main is its content, however short: two items in two rows are enough (a short inbox).
-  const main_box = reader.box_(region);
   if (region !== reader.root_ && main_box && !gated.length) {
     const first_screen = main_box.y + view.h;
     const small = merged.filter((group) => group.boxes[0]!.y < first_screen && rows_of(group) > 1 && plain_block(reader, group) && titled_share(group) >= MIN_TITLED);
