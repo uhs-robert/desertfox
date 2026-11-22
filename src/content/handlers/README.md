@@ -21,4 +21,4 @@ To add a handler:
 - Write the `ContentHandler` in the file of its group, or in a new file.
 - Add it to `handler_map.ts` under the command id.
 - Define the command in `src/commands`, with its count rule.
-- To report a success, call `show_toast` from `../ui_proxy.ts`. `page/copy.ts` takes it as a parameter. To report a failure, return it as an `Outcome`.
+- To report a success, call `show_toast` from `../ui_proxy.ts`. `../page/copy.ts` takes it as a parameter. To report a failure, return it as an `Outcome`.

@@ -1,8 +1,8 @@
 # Bundles and loading
 
 Area: bundles and loading.
-READMEs: `src/content/README.md`, `src/shared/README.md`, `src/content/item/README.md`, `src/content/item_act/README.md`, `src/content/next_page/README.md`, `src/content/page/README.md`, `src/content/tree/README.md`, `src/content/ui/README.md`.
-Source: `src/content`, `src/shared`, `src/content/item`, `src/content/item_act`, `src/content/next_page`, `src/content/page`, `src/content/tree`, `src/content/ui`.
+READMEs: `src/content/README.md`, `src/shared/README.md`, `src/content/item/README.md`, `src/content/lib/README.md`, `src/content/item_act/README.md`, `src/content/next_page/README.md`, `src/content/page/README.md`, `src/content/tree/README.md`, `src/content/ui/README.md`.
+Source: `src/content`, `src/shared`, `src/content/item`, `src/content/lib`, `src/content/item_act`, `src/content/next_page`, `src/content/page`, `src/content/tree`, `src/content/ui`.
 
 ## Bundles and loading
 

@@ -6,7 +6,7 @@ Rules that span files:
 
 - Lazy bundles import `surface.ts`, `content.js` never does.
 - A property name that ends in `_` is mangled by the build in every bundle. Add it only to a name that stays inside the extension scripts.
-- A bundle folder imports only itself, these root files, `lib/` and `src/shared`, never another bundle folder. `test/import_boundaries.ts` lists each edge left and the PR that removes it.
+- A bundle folder imports only itself, these root files, `lib/` and `src/shared`, never another bundle folder. `lib/` imports only the root files and `src/shared`. `test/import_boundaries.ts` lists each edge left and the PR that removes it.
 - Test hooks (`data-desertfox-*` attributes) exist only under `KEY_TEST_BUILD`, except `data-desertfox-layer`.
 
 Entries:

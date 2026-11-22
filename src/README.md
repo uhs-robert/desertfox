@@ -6,6 +6,7 @@ The code map. Read a folder's README before you change or research code in it.
 - [`cmdline/`](cmdline/README.md): the command line page, its completion list and its host bundle.
 - [`commands/`](commands/README.md): the command definitions, made with `define` from the registry, plus helpers (`open_target.ts`).
 - [`content/`](content/README.md): the content script. Captures keys, tracks the mode and loads the bundles.
+  - [`content/lib/`](content/lib/README.md): code that more than one bundle needs.
   - [`content/caret/`](content/caret/README.md): caret and visual mode.
   - [`content/grab/`](content/grab/README.md): keyboard drag, `;gg` and `;Gg`.
   - [`content/next_page/`](content/next_page/README.md): the `next_page` bundle: `page.follow`, the next page or more to load for `]]` and `[[`.
