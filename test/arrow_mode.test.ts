@@ -3,7 +3,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { page_keymap_for } from "../src/background/page_keymap.ts";
 import { arrow_queued, arrow_step } from "../src/content/site_actions/arrow.ts";

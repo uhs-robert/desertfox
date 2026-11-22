@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { parse_binding } from "../../src/shared/registry/parse_binding.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";

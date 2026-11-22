@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { edit_forwarded, run_token, run_token_without_keymap } from "../../src/cmdline/key_input.ts";
 import { create_session } from "../../src/cmdline/session.ts";
-import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch } from "../../src/shared/prefix_tree.ts";

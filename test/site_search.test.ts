@@ -8,7 +8,7 @@ import "../src/background/command_modules.ts";
 import { requirement_lookup, site_engine_for, with_site_engines } from "../src/background/availability.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { pick_config } from "../src/shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import { list_keys, without_unavailable } from "../src/background/list_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { TreeBranch, TreeLeaf } from "../src/shared/prefix_tree.ts";

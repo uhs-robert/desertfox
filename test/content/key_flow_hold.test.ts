@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_CHORDS, create_key_flow } from "../../src/content/key_flow.ts";
 import { create_mode_state } from "../../src/content/mode_state.ts";
-import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { parse_sequence } from "../../src/shared/keys/notation.ts";
 import { create_matcher } from "../../src/shared/keys/index.ts";
 import { is_chord } from "../../src/shared/keys/token.ts";

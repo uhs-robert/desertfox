@@ -7,7 +7,7 @@ import { page_keymap_for } from "../src/background/page_keymap.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import "../src/background/command_modules.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf } from "../src/shared/prefix_tree.ts";

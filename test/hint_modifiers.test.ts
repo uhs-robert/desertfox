@@ -3,7 +3,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
 import type { TreeBranch, TreeNode } from "../src/shared/prefix_tree.ts";
 import { registry } from "../src/shared/registry/builtin.ts";

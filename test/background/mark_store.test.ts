@@ -3,7 +3,7 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { list_keys } from "../../src/background/list_keys.ts";
 import { answer_mark_request, answer_mark_step, create_mark_store } from "../../src/background/mark_store.ts";
 import { wire_private_cleanup } from "../../src/background/store_turns.ts";

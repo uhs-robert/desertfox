@@ -6,7 +6,7 @@ import { check_args } from "../src/shared/registry/index.ts";
 import { compile_keymap } from "../src/shared/keys/index.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
 import type { TreeLeaf } from "../src/shared/prefix_tree.ts";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 
 const command = registry.get("page.tree")!;

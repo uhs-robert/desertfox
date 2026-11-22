@@ -8,7 +8,7 @@ import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import type { CompileInput } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
-import { DEFAULT_KEYMAP } from "../../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { build_config } from "../../tools/build-config/build_config.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { KeymapConfig, ModeBindings } from "../../src/shared/keymap.ts";

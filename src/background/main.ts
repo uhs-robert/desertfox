@@ -83,7 +83,7 @@ import { built_in_theme_names } from "../shared/theme/load.ts";
 import { create_theme_messages } from "./theme_message.ts";
 import { create_quickmark_messages } from "./quickmark_message.ts";
 import { ConfigRefusal } from "./config_reload.ts";
-import { DEFAULT_KEYMAP } from "./default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../shared/keys/default_keymap.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { create_tab_modes, shortcut_allowed } from "./tab_modes.ts";
