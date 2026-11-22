@@ -9,7 +9,8 @@ import { QUICKMARK_KEY } from "../shared/quickmark_names.ts";
 import type { QuickmarkTable } from "../shared/quickmark_names.ts";
 import type { ToastKind } from "../shared/messages/tab.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { current_tab_url, open_in, own_pages, typed_url_target, WHERE_PARAM } from "./open_target.ts";
+import { own_pages } from "../shared/url_build.ts";
+import { current_tab_url, open_in, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 
 export type QuickmarkDeps = {

@@ -1,11 +1,11 @@
 import { get_config } from "../background/startup.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
-import { open_in, own_pages, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
+import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { SEND_KEY_MAX_TIMES } from "../shared/send_key_limit.ts";
-import { home_page_url } from "../shared/url_build.ts";
+import { home_page_url, own_pages } from "../shared/url_build.ts";
 import { browser_reload_clear_deps, make_reload_clear } from "./reload_clear.ts";
 import type { ClearScope } from "./reload_clear.ts";
 

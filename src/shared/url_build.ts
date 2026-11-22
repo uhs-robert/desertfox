@@ -120,7 +120,7 @@ function unopenable_reason(url: string, own_pages: OwnPages): string | undefined
   return `DesertFox does not open ${scheme} addresses`;
 }
 
-// The base of the extension's own pages, for a request that may open them. A page may not, so a caller from a page passes undefined instead.
+// The base of the extension's own pages. The extension's own pages may open from the user's config and stored data, and from typed text in a request no page sent. Text a page sent, such as a hinted link or the selection, may not open them, and neither may the clipboard or a register. A caller from a page passes undefined instead.
 export const own_pages: NonNullable<OwnPages> = () => browser.runtime.getURL("");
 
 export const openable_url = (url: string, own_pages: OwnPages): boolean => unopenable_reason(url, own_pages) === undefined;

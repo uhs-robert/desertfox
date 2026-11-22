@@ -77,8 +77,6 @@ export async function current_page(ctx: CommandContext): Promise<PageInfo | unde
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
 }
 
-// The extension's own pages may open from the user's config and stored data, and from typed text in a request no page sent. Text a page sent, such as a hinted link or the selection, may not open them, and neither may the clipboard or a register.
-export { own_pages };
 export const own_pages_for = (ctx: CommandContext): OwnPages => (ctx.from_page ? undefined : own_pages);
 
 // The addresses `open_in` and `open_many` take come from typed text that `url_target` already checked against the request's sender, or from code, config and stored data. So the extension's own pages pass here.
