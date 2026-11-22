@@ -7,7 +7,7 @@ import { create_rank_service } from "../../src/background/rank_service.ts";
 import type { RankPort, RankServiceDeps, RankWorker } from "../../src/background/rank_service.ts";
 import type { HistoryNode, RankInputs } from "../../src/background/completion_rank.ts";
 import type { Asker } from "../../src/background/complete_items.ts";
-import { create_ranked_client } from "../../src/cmdline/completion/ranked_client.ts";
+import { create_ranked_client } from "../../src/shared/completion/ranked_client.ts";
 import { RANK_PORT_NAME } from "../../src/shared/rank_port.ts";
 import type { RankPush, RankRequest } from "../../src/shared/rank_port.ts";
 

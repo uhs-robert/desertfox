@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anything_ranked } from "../../src/cmdline/completion/anything.ts";
-import type { FinderInput } from "../../src/cmdline/completion/anything.ts";
+import { anything_ranked } from "../../src/shared/completion/anything.ts";
+import type { FinderInput } from "../../src/shared/completion/anything.ts";
 import { ranked_items, reply_for } from "../support/ranked_items.ts";
 import { ranking_of } from "../../src/background/completion_rank.ts";
 import { RANKED_ROWS } from "../../src/shared/rank_port.ts";
-import { create_model_client } from "../../src/cmdline/completion/model_client.ts";
-import { create_live_source } from "../../src/cmdline/completion/live.ts";
-import { create_completer } from "../../src/cmdline/completion/sources.ts";
+import { create_model_client } from "../../src/shared/completion/model_client.ts";
+import { create_live_source } from "../../src/shared/completion/live.ts";
+import { create_completer } from "../../src/shared/completion/sources.ts";
 import { create_session } from "../../src/cmdline/session.ts";
 import { decode_ref, FINDER_PARAM } from "../../src/shared/anything_ref.ts";
 import type { AnythingRef } from "../../src/shared/anything_ref.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { AnythingItems, CompleteItemsAnswer, EngineItem, TabItem } from "../../src/shared/messages/content.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
-import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
-import type { Row } from "../../src/cmdline/completion/sources.ts";
+import { create_word_lookup } from "../../src/shared/completion/word_lookup.ts";
+import type { Row } from "../../src/shared/completion/sources.ts";
 
 const COMMANDS: CommandMeta[] = [
   {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_model_client } from "../../../src/cmdline/completion/model_client.ts";
+import { create_model_client } from "../../../src/shared/completion/model_client.ts";
 import type { TabRow } from "../../../src/shared/messages/ports.ts";
 
 const row = (id: number, window_id: number, index: number, extra: Partial<TabRow> = {}): TabRow => ({

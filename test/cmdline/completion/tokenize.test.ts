@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cursor_context } from "../../../src/cmdline/completion/tokenize.ts";
-import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
+import { cursor_context } from "../../../src/shared/completion/tokenize.ts";
+import { create_word_lookup } from "../../../src/shared/completion/word_lookup.ts";
 import type { CommandMeta } from "../../../src/shared/command.ts";
 import { lookup } from "./fixtures.ts";
 

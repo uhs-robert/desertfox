@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_live_source } from "../../src/cmdline/completion/live.ts";
-import { create_completer } from "../../src/cmdline/completion/sources.ts";
+import { create_live_source } from "../../src/shared/completion/live.ts";
+import { create_completer } from "../../src/shared/completion/sources.ts";
 import type { CommandMeta } from "../../src/shared/command.ts";
 import type { SessionItem } from "../../src/shared/messages/content.ts";
-import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
+import { create_word_lookup } from "../../src/shared/completion/word_lookup.ts";
 
 const COMMANDS: CommandMeta[] = [
   { id: "tabgroup.add", name: "tabgroup.add", label: "Add tab to group", intent: "Add.", params: [{ name: "group", type: "string", rest: true, main: true, optional: true, values: { from: "groups" } }] },

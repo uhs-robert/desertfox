@@ -1,8 +1,8 @@
 // The tab rows of the live tab model, as the `tab` list shows them. Pure: the page feeds in the port's messages and sends the resync request.
 // The model sends a snapshot, then patches numbered one more each. A patch that skips a number means a missed one, so the client asks for a new snapshot and ignores patches until it lands.
 
-import { group_labels } from "../../shared/group_name.ts";
-import type { SessionItem, TabItem, GroupRow, TabModelMessage, TabRow } from "../../shared/messages/index.ts";
+import { group_labels } from "../group_name.ts";
+import type { SessionItem, TabItem, GroupRow, TabModelMessage, TabRow } from "../messages/index.ts";
 
 export type ModelClientDeps = {
   // The window of the line's tab: only it marks `%` and `#`, and it lists first.

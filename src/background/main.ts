@@ -35,7 +35,7 @@ import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
 import { browser_find_scan_deps, create_find_scan } from "./find_scan.ts";
 import { browser_hint_frames_deps, create_hint_frames } from "./hint_frames.ts";
-import { create_word_lookup } from "../cmdline/word_lookup.ts";
+import { create_word_lookup } from "../shared/completion/word_lookup.ts";
 import { build_completer, create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";

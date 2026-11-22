@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../../src/background/command_modules.ts";
-import { create_completer, is_listed } from "../../../src/cmdline/completion/sources.ts";
+import { create_completer, is_listed } from "../../../src/shared/completion/sources.ts";
 import { build_commands_file, create_registry, DefineError, parse_command_line } from "../../../src/shared/registry/index.ts";
 import { registry } from "../../../src/shared/registry/builtin.ts";
 import { MEDIA_ACTIONS } from "../../../src/shared/media.ts";
 import type { CommandInput } from "../../../src/shared/registry/index.ts";
-import { create_word_lookup } from "../../../src/cmdline/word_lookup.ts";
+import { create_word_lookup } from "../../../src/shared/completion/word_lookup.ts";
 
 const commands = build_commands_file(registry).commands;
 const lookup = create_word_lookup(commands);

@@ -1,8 +1,8 @@
 // Finds a command by name, alias or id the way the registry does, plus the configured `command_aliases`.
 // The page has no registry because the command modules reach into the content script.
 
-import type { CommandMeta } from "../shared/command.ts";
-import type { CommandLookup } from "../shared/registry/index.ts";
+import type { CommandMeta } from "../command.ts";
+import type { CommandLookup } from "../registry/index.ts";
 
 // A configured alias never takes a word a command already owns, as `tools/build-config` checks.
 export function create_word_lookup(commands: readonly CommandMeta[], command_aliases: Readonly<Record<string, string>> = {}): CommandLookup {

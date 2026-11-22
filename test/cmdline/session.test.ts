@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_session } from "../../src/cmdline/session.ts";
-import { create_word_lookup } from "../../src/cmdline/word_lookup.ts";
+import { create_word_lookup } from "../../src/shared/completion/word_lookup.ts";
 import { parse_command_line } from "../../src/shared/registry/index.ts";
 
 const lookup = create_word_lookup([

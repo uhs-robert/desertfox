@@ -2,13 +2,13 @@
 // The strongest hit leads whatever its group, with use (visits, an open tab) raising a score. An equal score keeps that group order.
 // The background ranks every group but the tabs (`background/completion_rank.ts`). The tabs come from the page's tab model, so they rank here and merge in by score. Pure.
 
-import { encode_ref } from "../../shared/anything_ref.ts";
-import type { AnythingRef } from "../../shared/anything_ref.ts";
-import type { AnythingItems, EngineItem } from "../../shared/messages/content.ts";
-import { MAX_SITE_ROWS, RANKED_ROWS, RECENT_CLOSED } from "../../shared/rank_port.ts";
-import type { FinderExtras, RankedReply, WireRow } from "../../shared/rank_port.ts";
-import { score_candidate } from "../../shared/score.ts";
-import type { Ranked } from "../../shared/score.ts";
+import { encode_ref } from "../anything_ref.ts";
+import type { AnythingRef } from "../anything_ref.ts";
+import type { AnythingItems, EngineItem } from "../messages/content.ts";
+import { MAX_SITE_ROWS, RANKED_ROWS, RECENT_CLOSED } from "../rank_port.ts";
+import type { FinderExtras, RankedReply, WireRow } from "../rank_port.ts";
+import { score_candidate } from "../score.ts";
+import type { Ranked } from "../score.ts";
 import type { Row } from "./sources.ts";
 import { quote_word } from "./tokenize.ts";
 
