@@ -19,7 +19,7 @@ import type { Found, HintFilter, SiteSelectors } from "./candidates.ts";
 import { clean_letters, item_first, make_labels, narrow } from "../../shared/hints/labels.ts";
 import { create_picker, is_text_key } from "./pick.ts";
 import type { KeyOutcome } from "./pick.ts";
-import { is_hint_char } from "./hint_keys.ts";
+import { is_hint_char } from "../lib/hint_keys.ts";
 import { insert_into_focused_field } from "./insert_text.ts";
 import { mark_text_entry } from "../text/entry.ts";
 import { create_view } from "./view.ts";

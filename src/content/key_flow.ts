@@ -5,7 +5,7 @@
 import type { Mode, TreeBranch, TreeLeaf } from "../shared/index.ts";
 import type { MatchResult } from "../shared/keys/index.ts";
 import type { BundleName } from "../shared/bundles.ts";
-import { is_hint_char } from "./hints/hint_keys.ts";
+import { is_hint_char } from "./lib/hint_keys.ts";
 import type { Sink } from "./bundle_host.ts";
 import { is_caret_mode } from "../shared/command.ts";
 import { is_chord } from "../shared/keys/token.ts";

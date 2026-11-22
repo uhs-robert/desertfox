@@ -2,10 +2,10 @@
 
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { AlignPosition } from "../align_target.ts";
-import { align_focus } from "../handlers/align.ts";
-import { focus_first_input } from "../handlers/focus_input.ts";
+import { align_focus } from "./align.ts";
+import { focus_first_input } from "./focus_input.ts";
 import { mark_text_entry } from "../text/entry.ts";
-import { copy_page_url } from "../handlers/copy.ts";
+import { copy_page_url } from "./copy.ts";
 import type { CopyFormat } from "../../shared/command.ts";
 import { selected_text } from "./selection.ts";
 import { arm_leave_watch, scroll_offset, type LeaveWatch } from "./leave_watch.ts";

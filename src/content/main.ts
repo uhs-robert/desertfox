@@ -16,7 +16,7 @@ import { scroll_by, set_scroll_selector } from "./handlers/scroll.ts";
 import { shadow_root_of } from "./shadow.ts";
 import { create_cancelled_keys, type HeldPress } from "./cancelled_keys.ts";
 import { create_key_flow, type PendingPrefix } from "./key_flow.ts";
-import { follow_which_key } from "./whichkey/gate.ts";
+import { follow_which_key } from "./gate.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "./replay_key.ts";
 import { badge_state } from "./badge_state.ts";
 import { DEFAULT_GRAB_STEP_PX } from "../shared/default_settings.ts";
@@ -29,7 +29,7 @@ import { run_content_steps, run_in_order } from "./run_content.ts";
 import { holds_keys_after, run_leaf } from "./run_leaf.ts";
 import { leaf_for_page } from "./leaf_for_page.ts";
 import { answer_park, focus_page_content, start_content_once } from "./handlers/focus.ts";
-import { read_field_text } from "./text/field_text.ts";
+import { read_field_text } from "./lib/field_text.ts";
 import { blur_focused_element, hand_focus_to_parent } from "./handlers/page.ts";
 
 declare const browser: MessagingBrowser;

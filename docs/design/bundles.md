@@ -1,8 +1,8 @@
 # Bundles and loading
 
 Area: bundles and loading.
-READMEs: `src/content/README.md`, `src/shared/README.md`, `src/content/item/README.md`, `src/content/item_act/README.md`, `src/content/next_page/README.md`, `src/content/page/README.md`, `src/content/tree/README.md`, `src/content/ui/README.md`.
-Source: `src/content`, `src/shared`, `src/content/item`, `src/content/item_act`, `src/content/next_page`, `src/content/page`, `src/content/tree`, `src/content/ui`.
+READMEs: `src/content/README.md`, `src/shared/README.md`, `src/content/item/README.md`, `src/content/lib/README.md`, `src/content/item_act/README.md`, `src/content/next_page/README.md`, `src/content/page/README.md`, `src/content/tree/README.md`, `src/content/ui/README.md`.
+Source: `src/content`, `src/shared`, `src/content/item`, `src/content/lib`, `src/content/item_act`, `src/content/next_page`, `src/content/page`, `src/content/tree`, `src/content/ui`.
 
 ## Bundles and loading
 
@@ -52,7 +52,7 @@ A property name that ends in `_` is internal, and the build (`tools/build.mjs`, 
 - `badge_hosts.ts`: marks every badge host so a cleanup never touches page elements. A reload of the extension leaves the old host behind, and this removes it.
 - `shadow.ts`: `shadow_root_of`, which reaches a closed shadow root through `openOrClosedShadowRoot`.
 - `relay.ts`: a bundle in a subframe asks the background to run one of its handlers in the top frame or in another frame of the tab. The allow list and the direction of each handler are in `src/shared/relay.ts`. The command line, which-key and the toasts use it, so they draw in the top frame for a subframe that holds the keys.
-- `hidden_frame.ts`: the size test for a hidden input frame, a child frame the user cannot see, which a page keeps to take typed text. In normal mode such a frame hands the focus to the document that holds it (`hand_focus_to_parent` in `handlers/page.ts`, called one tick after each mode report, and at once after Escape blurs the field), and `gi` in that document finds the frame's field (`handlers/focus_input.ts`). Pure.
+- `hidden_frame.ts`: the size test for a hidden input frame, a child frame the user cannot see, which a page keeps to take typed text. In normal mode such a frame hands the focus to the document that holds it (`hand_focus_to_parent` in `handlers/page.ts`, called one tick after each mode report, and at once after Escape blurs the field), and `gi` in that document finds the frame's field (`page/focus_input.ts`). Pure.
 - `invocation_args.ts`: applies a command's count rule. Pure.
 - `scroll_target.ts`, `editable.ts`: helpers for scroll choice and focus. `editable.ts` holds the frame's `editable_add`, `editable_remove` and `editable_remove_unsized` rules, which `main.ts` sets from the page keymap reply. `pick_scroll_target` takes the frame's `scroll_selector` match first (`handlers/scroll.ts` holds the selector). The scan of the whole page that finds the largest scrolling box does not run on every key: `scroll_target` keeps its pick per axis in a weak reference and reuses it while the box is connected and still scrolls on that axis. A `focusin`, a `pointerdown` or a 1 s pause between scroll keys drops it. A bundle asks the host's `is_editable_` instead of its own copy.
 - `smooth_behavior.ts`: `"smooth"`, or `"instant"` while the page asks for reduced motion. The page scroll keys and the grab bundle's snap swipe use it, and it checks the media query on every call.

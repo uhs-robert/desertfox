@@ -1,7 +1,7 @@
 // The content.js side of which-key: decides which prefix changes reach the `whichkey` bundle, which holds the timer.
 
-import type { BundleHost } from "../bundle_host.ts";
-import type { PendingPrefix } from "../key_flow.ts";
+import type { BundleHost } from "./bundle_host.ts";
+import type { PendingPrefix } from "./key_flow.ts";
 
 // True once content.js has asked, so a later hide reaches the bundle even while its load is pending.
 let asked = false;

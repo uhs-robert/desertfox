@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { format_page_link } from "../../src/content/handlers/copy.ts";
-import type { PageLinkFacts } from "../../src/content/handlers/copy.ts";
+import { format_page_link } from "../../src/content/page/copy.ts";
+import type { PageLinkFacts } from "../../src/content/page/copy.ts";
 
 const facts: PageLinkFacts = {
   url: "https://a.com/p?x=(1)",
@@ -36,7 +36,7 @@ test("copy.url answers done after the write and failed, without its own toast, w
     location: { href: "https://a.com/" },
     document: { title: "A", querySelector: () => null },
   });
-  const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
+  const { copy_page_url } = await import("../../src/content/page/copy.ts");
   Object.defineProperty(globalThis, "browser", { value: { runtime: { sendMessage: async () => ({ ok: true }) }, storage: { local: { get: async () => ({}) } } }, configurable: true });
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
   assert.deepEqual(await copy_page_url("plain", undefined, (message) => void toasts.push(message)), undefined);
@@ -48,7 +48,7 @@ test("copy.url answers done after the write and failed, without its own toast, w
 
 test("copy.url into the black hole shows no toast", async () => {
   const toasts: string[] = [];
-  const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
+  const { copy_page_url } = await import("../../src/content/page/copy.ts");
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: async () => {} } }, configurable: true });
   assert.deepEqual(await copy_page_url("plain", "_", (message) => void toasts.push(message)), undefined);
   assert.deepEqual(toasts, []);
@@ -61,7 +61,7 @@ test("copy.url drops the tracking parameters of the shipped list, and an empty l
     location: { href: "https://a.com/p?utm_source=x&id=5#frag" },
     document: { title: "A", querySelector: () => null },
   });
-  const { copy_page_url } = await import("../../src/content/handlers/copy.ts");
+  const { copy_page_url } = await import("../../src/content/page/copy.ts");
   const { CONFIG_STATUS_STORAGE_KEY } = await import("../../src/shared/config/storage_keys.ts");
   const { strip_patterns_for } = await import("../../src/background/strip_patterns.ts");
   // The background answers the ask: the page address goes in, the names to drop come out.
