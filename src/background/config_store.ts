@@ -28,7 +28,6 @@ import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { drop_keymap } from "./keymap_source.ts";
 import { SAVED_FOLD_NOTES_STORAGE_KEY } from "../shared/config/storage_keys.ts";
-import { create_services } from "./services.ts";
 import type { Services } from "./services.ts";
 
 declare const browser: MessagingBrowser;
@@ -339,9 +338,3 @@ export function create_config_store(deps: Pick<Services, "snippets" | "autoconfi
 }
 
 export type ConfigStore = ReturnType<typeof create_config_store>;
-
-// The production instances. The services need `get_config` and the store needs the services, so the reader is passed late.
-export const services = create_services({ get_config: () => config_store.get_config() });
-export const config_store = create_config_store(services);
-export const { snippets, host_update, native_host } = services;
-export const { get_config, get_search_engine_names, change_edits, change_layers, read_settings_layers, read_keymap_state, read_engine_state, read_stored_files, read_alias_state, republish, set_desktop_theme } = config_store;

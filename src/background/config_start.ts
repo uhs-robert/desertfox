@@ -1,4 +1,4 @@
-// The reload and start sequence of the config, with the wiring of the config modules. The config itself lives in `config_store.ts` and `config_swap.ts`, the writes in `config_file_writes.ts` and `config_setting_writes.ts`.
+// The reload and the start sequence of the config. The config itself lives in `config_store.ts` and `config_swap.ts`, the writes in `config_file_writes.ts` and `config_setting_writes.ts`, and `config_main.ts` wires them together.
 import { warn_and_go } from "../shared/swallow.ts";
 import { show_toast_on_tab } from "./browser_deps.ts";
 import { load_layers } from "./edit_layers.ts";
@@ -16,26 +16,20 @@ import { classify_host_start, clear_host_pending, compared_files, has_config_fil
 import { files_before_unsynced, read_unsynced, SETTINGS_FILE } from "./settings_file.ts";
 import { imports_moved_to_files } from "./theme_message.ts";
 import type { HostStartChoice } from "../shared/messages/page.ts";
-import { create_config_swap } from "./config_swap.ts";
-import { create_config_file_writes } from "./config_file_writes.ts";
-import { create_config_setting_writes } from "./config_setting_writes.ts";
-import { config_store, services } from "./config_store.ts";
 import type { ConfigStore } from "./config_store.ts";
 import type { Services } from "./services.ts";
+import type { ConfigSwap } from "./config_swap.ts";
+import type { ConfigFileWrites } from "./config_file_writes.ts";
+import type { ConfigSettingWrites } from "./config_setting_writes.ts";
 
 declare const browser: MessagingBrowser;
 
-// The reload and the start sequence, and the wiring of the swap and the write modules into one service.
-// The caller passes the store and the services, so a test builds its own instance and a production start shares the store with the commands.
-export function create_config_service(parts: { store: ConfigStore; services: Services }) {
-  const { store, services } = parts;
-  const { snippets, host_update, native_host, autoconfig } = services;
+// The reload and the start sequence over the modules `config_main.ts` built. A test builds its own modules, and a production start shares the store with the commands.
+export function create_config_start(parts: { store: ConfigStore; services: Services; swap: ConfigSwap; file_writes: ConfigFileWrites; setting_writes: ConfigSettingWrites }) {
+  const { store, services, swap, file_writes, setting_writes } = parts;
+  const { native_host, autoconfig } = services;
   const { get_config, publish, in_change_queue, commit_change, read_fold_notes, read_load_step, read_swap_count } = store;
-  // The swap takes `note_record_dropped` from the pipeline, and the pipeline calls `apply_files` of the swap, so the pipeline reads the swap late.
-  const file_writes = create_config_file_writes({ store, services, swap: () => swap });
-  const swap = create_config_swap(store, { snippets, note_record_dropped: file_writes.note_record_dropped });
   const { apply_files } = swap;
-  const setting_writes = create_config_setting_writes({ store, swap, file_writes });
   const { commit_folder_files, came_from_folder, where_engine_named } = setting_writes;
   const { already_in_queue, write_waiting_files, folder_build_problems } = file_writes;
   // Older versions mirrored the saved settings too, consent values included, and a profile that changes no saved setting or key edit after the update would keep them in the file.
@@ -250,37 +244,5 @@ export function create_config_service(parts: { store: ConfigStore; services: Ser
   // The host creates the folder itself when it writes autoconfig.toml, so a folder holding only that file is as good as missing.
   const empty_folder_message = (config_dir: string) => `${KEPT_CURRENT.reload} The native host found no config files in ${config_dir}. Put your config files there, or set DESERTFOX_CONFIG_DIR for the host.`;
 
-  return {
-    ...swap,
-    set_in_settings_file: setting_writes.set_in_settings_file,
-    toggle_in_settings_file: setting_writes.toggle_in_settings_file,
-    unset_in_settings_file: setting_writes.unset_in_settings_file,
-    change_site_rule_in_file: setting_writes.change_site_rule_in_file,
-    change_site_keys_in_file: setting_writes.change_site_keys_in_file,
-    set_theme_file: setting_writes.set_theme_file,
-    change_engine_file: setting_writes.change_engine_file,
-    get_config: store.get_config,
-    get_search_engine_names: store.get_search_engine_names,
-    change_edits: store.change_edits,
-    change_layers: store.change_layers,
-    read_settings_layers: store.read_settings_layers,
-    read_keymap_state: store.read_keymap_state,
-    read_engine_state: store.read_engine_state,
-    read_stored_files: store.read_stored_files,
-    read_alias_state: store.read_alias_state,
-    republish: store.republish,
-    set_desktop_theme: store.set_desktop_theme,
-    snippets,
-    host_update,
-    native_host,
-    reload_config,
-    reload_config_at_start,
-    choose_host_start,
-  };
+  return { reload_config, reload_config_at_start, choose_host_start };
 }
-
-export type ConfigService = ReturnType<typeof create_config_service>;
-
-const service = create_config_service({ store: config_store, services });
-export const { import_config, preview_config_import, remove_snippet, save_config_file, set_in_settings_file, toggle_in_settings_file, unset_in_settings_file, change_site_rule_in_file, change_site_keys_in_file, set_theme_file, change_engine_file, reload_config, reload_config_at_start, choose_host_start } = service;
-

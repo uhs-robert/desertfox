@@ -1,7 +1,7 @@
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { ConfigRefusal, KEPT_CURRENT } from "../background/config_reload.ts";
 import { mark_reload_pending } from "../background/reload.ts";
-import { reload_config } from "../background/startup.ts";
+import { reload_config } from "../background/config_main.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 

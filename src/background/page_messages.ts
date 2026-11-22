@@ -36,8 +36,8 @@ import type {
   reload_config,
   remove_snippet,
   save_config_file,
-} from "./startup.ts";
-import type { get_config, read_engine_state, read_keymap_state } from "./config_store.ts";
+} from "./config_main.ts";
+import type { get_config, read_engine_state, read_keymap_state } from "./config_main.ts";
 
 export type PageDeps = {
   get_config: typeof get_config;

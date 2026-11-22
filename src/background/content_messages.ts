@@ -48,7 +48,7 @@ import type { create_frame_cue } from "./frame_cue.ts";
 import type { create_router } from "./router.ts";
 import type { create_media_quality } from "./media_quality.ts";
 import type { make_router_deps } from "./browser_deps.ts";
-import type { get_config, get_search_engine_names, snippets } from "./config_store.ts";
+import type { get_config, get_search_engine_names, snippets } from "./config_main.ts";
 
 declare const browser: MessagingBrowser;
 

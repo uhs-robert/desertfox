@@ -1,6 +1,6 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
-import { get_config } from "../background/config_store.ts";
+import { get_config } from "../background/config_main.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { OPEN_REGISTER_PARAM } from "./register_param.ts";
 import { CONTAINER_PARAM, current_page, open_in, own_pages_for, typed_url_target, WHERE_PARAM } from "./open_target.ts";
