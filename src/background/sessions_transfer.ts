@@ -8,7 +8,10 @@ const message_of = (error: unknown) => (error instanceof Error ? error.message :
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-export async function answer_sessions_transfer(request: ExportSessions | ImportSessions, store: Pick<SessionStore, "export_json" | "import_json">): Promise<ExportSessionsAnswer | ConfigImportAnswer> {
+type Store = Pick<SessionStore, "export_json" | "import_json">;
+export function answer_sessions_transfer(request: ExportSessions, store: Store): Promise<ExportSessionsAnswer>;
+export function answer_sessions_transfer(request: ImportSessions, store: Store): Promise<ConfigImportAnswer>;
+export async function answer_sessions_transfer(request: ExportSessions | ImportSessions, store: Store): Promise<ExportSessionsAnswer | ConfigImportAnswer> {
   try {
     if (request.type === "export_sessions") return { ok: true, ...(await store.export_json()) };
     if (typeof request.text !== "string") return { ok: false, message: "Sessions not imported: the request has no file text." };

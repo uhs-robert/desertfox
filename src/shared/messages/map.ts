@@ -27,7 +27,7 @@ export type ContentRequests = Checked<{
   list_keys: Entry<content.ListKeys, content.WhichKeyPanel>;
   read_repeat_preview: Entry<content.ReadRepeatPreview, string | undefined>;
   issue_cmdline_ticket: Entry<content.IssueCmdlineTicket, string | undefined>;
-  relay: Entry<content.Relay, content.Outcome>;
+  relay: Entry<content.Relay, content.Outcome | undefined>;
   frame_cue: Entry<content.FrameCue, Void>;
   open_cmdline: Entry<content.OpenCmdline, content.CmdlineOpened | undefined>;
   record_cmdline: Entry<content.RecordCmdline, Void>;

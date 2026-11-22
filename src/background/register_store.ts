@@ -4,7 +4,7 @@
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext } from "../shared/command.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
-import type { RegisterItem, RegisterRequest } from "../shared/messages/content.ts";
+import type { Outcome, RegisterItem, RegisterRead, RegisterRequest, RegisterWrite, RegisterYank } from "../shared/messages/content.ts";
 import { BLACK_HOLE_REGISTER, CLIPBOARD_REGISTER, register_kind, SEARCH_DIRECTION_REGISTER, SEARCH_QUERY_REGISTER, storage_name, UNNAMED_REGISTER } from "../shared/register_names.ts";
 import { create_write_queue } from "./store_turns.ts";
 import { REGISTER_PRIVATE_STORAGE_PREFIX, REGISTER_STORAGE_PREFIX } from "./storage_keys.ts";
@@ -139,6 +139,8 @@ export const browser_register_store = create_register_store({
 export const is_private_context = async (ctx: CommandContext): Promise<boolean> => ctx.window_id !== undefined && (await browser.windows.get(ctx.window_id)).incognito;
 
 // A register message from a content script. The page's privacy is the sender tab's, never the message's. Only a tab sends these.
+export function answer_register_request(store: RegisterStore, request: RegisterRead, tab: { incognito: boolean } | undefined): Promise<RegisterValue | undefined>;
+export function answer_register_request(store: RegisterStore, request: RegisterWrite | RegisterYank, tab: { incognito: boolean } | undefined): Promise<Outcome | undefined>;
 export async function answer_register_request(store: RegisterStore, request: RegisterRequest, tab: { incognito: boolean } | undefined): Promise<RegisterValue | undefined | { ok: boolean; message?: string }> {
   if (!tab || typeof request.name !== "string") return undefined;
   if (request.type === "register_read") return store.read(request.name, tab.incognito).catch(warn_and_go("register_store.read"));

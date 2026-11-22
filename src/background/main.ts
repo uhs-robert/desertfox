@@ -1,15 +1,17 @@
 import "./command_modules.ts";
+import { dispatch } from "./message_table.ts";
+import type { Handlers } from "./message_table.ts";
+import { page_handlers } from "./page_messages.ts";
+import { content_handlers } from "./content_messages.ts";
 import { best_effort, ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
-import type { ContentToBackground, PageToBackground, DevtoolsHello, BackgroundToContent, FocusedFrameMode, FocusPage, MediaStep } from "../shared/messages/index.ts";
+import type { BackgroundToContent, DevtoolsHello, FocusedFrameMode, MediaStep, ToBackground } from "../shared/messages/index.ts";
 import type { BoundInvocation } from "../shared/invocation.ts";
 import { effective_settings } from "../shared/config.ts";
-import { bundle_loader, container_names, read_disabled, container_stores, image_deps, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
-import { run_image_action } from "./image_actions.ts";
+import { container_names, read_disabled, container_stores, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { HELP_PAGE_FILE } from "../help/route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
 import { create_cmdline_service } from "./cmdline_service.ts";
 import { create_frame_cue } from "./frame_cue.ts";
-import { relay_plan } from "../shared/relay.ts";
 import { stored_keymap } from "./keymap_source.ts";
 import { listed_by_search } from "./history_cache.ts";
 import { browser_rank_service_deps, start_rank_service } from "./rank_service.ts";
@@ -20,50 +22,44 @@ import { shared_previous_tabs } from "./previous_tab.ts";
 import { shared_last_used_tabs } from "./last_used_tab.ts";
 import { browser_discard_deps } from "./tab_discard.ts";
 import { browser_complete_items_deps, create_complete_items, fallback_history } from "./complete_items.ts";
-import type { Asker } from "./complete_items.ts";
 import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
-import { requirement_lookup, site_engine_for, with_site_engines } from "./availability.ts";
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
-import { list_keys } from "./list_keys.ts";
 import { start_bridge } from "./bridge_browser.ts";
-import { strip_patterns_for } from "./strip_patterns.ts";
-import { hint_selectors_reply, item_start_for, join_mode, media_quality_is_idle, media_quality_reply, rule_addresses_of, sender_at, read_keymap_reply } from "./page_keymap.ts";
+import { item_start_for, media_quality_is_idle } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
-import { create_external_editor, ext_of_request, make_editor_ext_for } from "./external_editor.ts";
+import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
 import { create_inspect_relay } from "./inspect_relay.ts";
 import { repair_tabs_after_reload } from "./reload.ts";
 import { browser_tab_model_deps, create_tab_model } from "./tab_model.ts";
-import { browser_find_scan_deps, create_find_scan, is_scan_request } from "./find_scan.ts";
+import { browser_find_scan_deps, create_find_scan } from "./find_scan.ts";
 import { browser_hint_frames_deps, create_hint_frames } from "./hint_frames.ts";
 import { create_word_lookup } from "../cmdline/word_lookup.ts";
 import { build_completer, create_omnibox, OMNIBOX_HINT } from "./omnibox.ts";
 import { create_router } from "./router.ts";
 import { wire_private_cleanup } from "./store_turns.ts";
-import { answer_mark_request, answer_mark_step, browser_mark_store } from "./mark_store.ts";
+import { browser_mark_store } from "./mark_store.ts";
 import { browser_quickmark_store } from "./quickmark_store.ts";
-import { answer_register_request, browser_register_store } from "./register_store.ts";
-import { answer_repeat_preview, create_repeat_memory } from "./repeat_memory.ts";
-import { create_step_recorder, page_outcome, page_steps } from "./record_step.ts";
+import { browser_register_store } from "./register_store.ts";
+import { create_repeat_memory } from "./repeat_memory.ts";
+import { create_step_recorder } from "./record_step.ts";
 import type { RecordStep } from "./record_step.ts";
 import { browser_macro_recorder } from "./macro_recorder.ts";
 import { browser_last_played } from "./macro_last_played.ts";
 import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
-import { reply_after_hold } from "./hold_on_arrival.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
 import { wire_before_own_load } from "../commands/open_target.ts";
-import { create_media_quality, rule_for_report } from "./media_quality.ts";
-import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_reports, quality_rows } from "./quality_levels.ts";
+import { create_media_quality } from "./media_quality.ts";
+import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_rows } from "./quality_levels.ts";
 import { tab_media } from "../commands/media.ts";
 import { create_media_discovery } from "./tab_media.ts";
 import { MEDIA_PANEL_HANDLER } from "../content/whichkey/media_panel.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
-import type { LoadSender } from "./bundle_loader.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "./storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -74,38 +70,24 @@ import { create_jump_step } from "./jump_step.ts";
 import { create_jump_leave } from "./jump_leave.ts";
 import { watch_page_ready } from "./page_ready.ts";
 import { native_host, choose_host_start, change_edits, change_engine_file, change_layers, get_config, get_search_engine_names, import_config, preview_config_import, host_update, reload_config_at_start, reload_config, read_alias_state, change_site_rule_in_file, change_site_keys_in_file, set_in_settings_file, set_theme_file, unset_in_settings_file, read_settings_layers, read_engine_state, read_keymap_state, read_stored_files, remove_snippet, republish, save_config_file, set_desktop_theme, snippets } from "./startup.ts";
-import { answer_config_import } from "./config_import.ts";
-import { answer_site_keys_request } from "./site_keys.ts";
-import { answer_toolbar_request, create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
-import { outcome_note } from "./settings_file.ts";
-import type { FileWriteOutcome } from "./settings_file.ts";
-import { load_edits, load_files_source } from "./config_load.ts";
-import { answer_config_transfer } from "./config_transfer.ts";
-import { answer_config_files } from "./config_files.ts";
-import { browser_timing_log } from "./timing_browser.ts";
-import { accept_hint_timing } from "./timing_log.ts";
-import { browser_session_storage, make_session_store } from "./session_store.ts";
-import { answer_sessions_transfer } from "./sessions_transfer.ts";
+import { create_toolbar, TOGGLE_COMMAND } from "./toolbar.ts";
 import { create_font_names } from "./font_names.ts";
 import { missing_host_as_undefined } from "./native_client.ts";
 import { canvas_measure } from "../shared/font_candidates.ts";
 import { create_settings_messages } from "./settings_message.ts";
 import { is_extension_page } from "./extension_page.ts";
-import { answer_host_start_choice } from "./host_start.ts";
-import { create_keymap_messages, exportable_key_edits } from "./keymap_message.ts";
+import { create_keymap_messages } from "./keymap_message.ts";
 import { create_engine_messages } from "./engine_message.ts";
 import { create_alias_messages } from "./alias_message.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import { create_theme_messages } from "./theme_message.ts";
 import { create_quickmark_messages } from "./quickmark_message.ts";
 import { ConfigRefusal } from "./config_reload.ts";
-import { dropped_warning } from "./engine_layer.ts";
 import { DEFAULT_KEYMAP } from "./default_keymap.ts";
 import { command_meta } from "../shared/registry/index.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { create_tab_modes, hand_back_parked_frame, is_cross_origin, shortcut_allowed } from "./tab_modes.ts";
+import { create_tab_modes, shortcut_allowed } from "./tab_modes.ts";
 import type { SlotTable } from "./slots.ts";
-import type { SnippetCall } from "../shared/messages/content.ts";
 
 declare const browser: MessagingBrowser;
 
@@ -285,10 +267,6 @@ browser.runtime.onConnect.addListener((port) => {
   });
 });
 
-const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
-  const { id, windowId, incognito } = sender.tab ?? {};
-  return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
-};
 const find_scan = create_find_scan(browser_find_scan_deps());
 const hint_frames = create_hint_frames({
   ...browser_hint_frames_deps(),
@@ -317,8 +295,6 @@ browser.permissions.onAdded.addListener(refresh_font_names);
 // The one host read of a start: it also reports the host's version, which the bridge does not when it is off. Without the permission the client sends nothing.
 void reload_config_at_start();
 refresh_font_names();
-// What became of settings.toml after a popup site change, as the end of its notice.
-const site_rule_note = (outcome: FileWriteOutcome | { kind: "unchanged" }): string => (outcome.kind === "unchanged" ? "" : outcome_note(outcome));
 const settings_messages = create_settings_messages({ change_edits, read_layers: read_settings_layers, read_theme_names: async () => Object.keys((await get_config()).local_themes ?? {}).sort(), set_in_file: set_in_settings_file, unset_in_file: unset_in_settings_file });
 // The build ships the sample as `starter_engines.toml`. A missing file means a broken build, and the message says which file.
 async function read_starter_engines(): Promise<string> {
@@ -336,206 +312,6 @@ const alias_messages = create_alias_messages({ read_alias_state, change_layers }
 const theme_messages = create_theme_messages({ read_files: read_stored_files, set_theme_file });
 const quickmark_messages = create_quickmark_messages({ store: browser_quickmark_store, configured: async () => (await get_config()).quickmarks });
 const keymap_messages = create_keymap_messages({ default_keymap: DEFAULT_KEYMAP, registry, read_keymap_state, change_layers });
-
-// Listeners register in the first turn, so no event is missed while the config loads.
-browser.runtime.onMessage.addListener((message: unknown, sender) => {
-  const request = message as ContentToBackground;
-  const page_request = message as PageToBackground | undefined;
-  if (page_request?.type === "change_setting" || page_request?.type === "list_settings") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change settings" });
-    return get_config().then((): Promise<unknown> => (page_request.type === "list_settings" ? settings_messages.list() : settings_messages.change(page_request)));
-  }
-  if (page_request?.type === "site_keys") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change site rules" });
-    return answer_site_keys_request(page_request, { change_site_keys: async (pattern, keys) => { const outcome = await change_site_keys_in_file(pattern, keys); return outcome.kind === "unchanged" ? { unchanged: true } : { note: outcome_note(outcome) }; } });
-  }
-  if (page_request?.type === "list_font_names") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve([]);
-    // The cache answers at once. The refresh (it may wait on the host) lands for the next open.
-    const cached = refused_as(font_names.read(), []);
-    void refused_as(font_names.refresh(), undefined);
-    return cached;
-  }
-  if (page_request?.type === "list_bindings" || page_request?.type === "check_binding" || page_request?.type === "change_keymap") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change keys" });
-    if (page_request.type === "list_bindings") return keymap_messages.list();
-    return page_request.type === "check_binding" ? keymap_messages.check(page_request) : keymap_messages.change(page_request);
-  }
-  if (page_request?.type === "list_engines" || page_request?.type === "change_engines") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change engines" });
-    return page_request.type === "list_engines" ? engine_messages.list() : engine_messages.change(page_request);
-  }
-  if (page_request?.type === "list_aliases" || page_request?.type === "change_aliases") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change aliases" });
-    return page_request.type === "list_aliases" ? alias_messages.list() : alias_messages.change(page_request);
-  }
-  if (page_request?.type === "list_imported_themes" || page_request?.type === "change_imported_themes") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change imported themes" });
-    return page_request.type === "list_imported_themes" ? theme_messages.list() : theme_messages.change(page_request);
-  }
-  if (page_request?.type === "list_quickmarks" || page_request?.type === "change_quickmarks") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may change quickmarks" });
-    return page_request.type === "list_quickmarks" ? quickmark_messages.list() : quickmark_messages.change(page_request);
-  }
-  if (page_request?.type === "preview_config_import" || page_request?.type === "commit_config_import") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may import a config" });
-    return answer_config_import(page_request, { preview: preview_config_import, commit: import_config });
-  }
-  if (page_request?.type === "export_config" || page_request?.type === "list_snippets" || page_request?.type === "remove_snippet") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or change snippets" });
-    return answer_config_transfer(page_request, { read_files: async () => (await load_files_source()).files, read_saved: async () => (await load_edits()).saved, read_keymap_edits: async () => exportable_key_edits(await read_keymap_state()), read_engine_edits: async () => { const state = await read_engine_state(); return { edits: state.kept, aliases: state.kept_aliases, skipped: state.dropped.map(dropped_warning) }; }, read_quickmarks: () => browser_quickmark_store.saved(false), remove: remove_snippet });
-  }
-  if (page_request?.type === "config_files") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may edit the config files" });
-    return answer_config_files(page_request, { read_files: async () => (await load_files_source()).files, save: save_config_file });
-  }
-  if (page_request?.type === "host_start_choice") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may answer the config folder question" });
-    return answer_host_start_choice(page_request, choose_host_start);
-  }
-  if (page_request?.type === "export_sessions" || page_request?.type === "import_sessions") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may export or import sessions" });
-    return answer_sessions_transfer(page_request, make_session_store(browser_session_storage));
-  }
-  if (page_request?.type === "toolbar_set_disabled" || page_request?.type === "toolbar_site" || page_request?.type === "toolbar_reload_config") {
-    if (!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""))) return Promise.resolve({ ok: false, message: "only the extension's own pages may use the toolbar" });
-    return answer_toolbar_request(page_request, { toolbar, change_site_rule: async (url, action) => site_rule_note(await change_site_rule_in_file(url, action)), reload_config });
-  }
-  if (request?.type === "mode_changed" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
-    const tab = sender.tab;
-    const tab_id = sender.tab.id;
-    // The top frame leaving insert by any route ends the hold.
-    if (sender.frameId === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(warn_and_go("tab_insert.top_frame_left_insert"));
-    void media_discovery.reported(tab_id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.reported"));
-    const report = { frame_id: sender.frameId, mode: request.mode, focus: request.focus === true, activated: request.activated, in_field: request.in_field, cross_origin: is_cross_origin(sender.url, tab.url) };
-    const { documentId: document_id } = sender as LoadSender;
-    void tab_media.reported(tab_id, sender.frameId, request.mode, report.focus, request.step === true, document_id).catch(warn_and_go("tab_media.reported"));
-    void tab_item.reported(tab_id, sender.frameId, request.mode, request.step === true, document_id).catch(warn_and_go("tab_item.reported"));
-    // The top frame may still be loading and miss the message. Its own start report brings a fresh one.
-    return tab_modes.report(tab_id, report).then(({ child_mode, child_frame, tell_top, park, parked }) => {
-      // The frame that takes the focus on load is handed back through the path of `gF`. Gecko may give the focus back to the frame, and the park then ends in frame mode, as it was before parking.
-      if (park) {
-        const park_message = { type: "focus_page", park: true } satisfies FocusPage;
-        void hand_back_parked_frame(async () => (await browser.tabs.sendMessage(tab_id, park_message, { frameId: sender.frameId })) === true, () => best_effort(browser.tabs.sendMessage(tab_id, park_message, { frameId: 0 })));
-      }
-      // The bridge shows the tab's mode, which a focused child frame or ignore mode in the top frame decides. Every top frame report publishes, as a new page's first one must, and a child frame's report does when it changed what the tab shows.
-      if (sender.frameId === 0 || tell_top) void tab_modes.recall(tab_id).then((mode) => bridge.mode_changed(tab, mode));
-      if (tell_top) void best_effort(browser.tabs.sendMessage(tab_id, { type: "frame_mode", ...(child_mode === undefined ? {} : { mode: child_mode, frame_id: child_frame }), ...(parked && { parked: true as const }) } satisfies FocusedFrameMode, { frameId: 0 }));
-    });
-  }
-  if (request?.type === "quality_report") {
-    quality_reports.receive(sender.tab?.id, sender.frameId, request);
-    return rule_for_report(request, { is_disabled: read_disabled, value_for_frame: () => media_quality_reply(browser.storage.local, sender_at(sender, request.url).url) });
-  }
-  if (request?.type === "quality_probe") return media_quality.probe_reported(sender.tab?.id, sender.frameId, request.address);
-  if (request?.type === "record_timing") return void accept_hint_timing(browser_timing_log, request);
-  if (request?.type === "media_pin" && sender.tab?.id !== undefined && sender.frameId !== undefined) return tab_media.pin(sender.tab.id, sender.frameId);
-  if (request?.type === "replay_end") return macro_replay.ended();
-  if (request?.type === "replay_stop") return void macro_replay.stop();
-  if (request?.type === "leave_tab_insert" && sender.tab?.id !== undefined) return tab_insert.leave(sender.tab.id);
-  if (request?.type === "load_bundle") return bundle_loader.answer(sender, request.name);
-  if (typeof request?.type === "string" && request.type.startsWith("hint_frames_") && sender.tab?.id !== undefined && sender.frameId !== undefined) {
-    const [tab_id, frame_id] = [sender.tab.id, sender.frameId];
-    if (request.type === "hint_frames_start") return hint_frames.start(tab_id, frame_id, request);
-    if (request.type === "hint_frames_report") return hint_frames.report(tab_id, frame_id, request.session_id, request.count, request.texts);
-    if (request.type === "hint_frames_typed") return hint_frames.typed(tab_id, frame_id, request.session_id, request.typed, request.matches && { matches: request.matches, active: request.active });
-    if (request.type === "hint_frames_pick") return hint_frames.pick(tab_id, frame_id, request.session_id, request.label, request.keys);
-    if (request.type === "hint_frames_end") return hint_frames.end(tab_id, frame_id, request.session_id);
-    if (request.type === "hint_frames_unhover") return hint_frames.unhover(tab_id, request.session_id);
-  }
-  if (request?.type === "find_scan" && is_scan_request(request)) return find_scan.answer(request, `${sender.tab?.id}:${sender.frameId}`);
-  if (request?.type === "register_read" || request?.type === "register_write" || request?.type === "register_yank") return answer_register_request(browser_register_store, request, sender.tab);
-  if (request?.type === "mark_set" || request?.type === "mark_jump") return answer_mark_request(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, global_mark_jump);
-  if (request?.type === "mark_step") return answer_mark_step(browser_mark_store, request, sender.tab && { incognito: sender.tab.incognito });
-  if (request?.type === "editor_open" && sender.tab?.id !== undefined && sender.frameId !== undefined) {
-    const tab_id = sender.tab.id;
-    const frame_id = sender.frameId;
-    const stamp = external_editor.navigation_stamp(tab_id);
-    return get_config().then(async () => external_editor.open(tab_id, frame_id, request, await ext_of_request(request.ext, () => editor_ext_for(rule_addresses_of(sender_at(sender, request.url)))), sender.tab?.incognito === true, stamp));
-  }
-  if (request?.type === "jump_push" || request?.type === "jump_step") return jump_step(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId });
-  if (request?.type === "jump_leave") return jump_leave.leave(request, sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId }, sender.url ?? "").catch(warn_and_go("jump_leave.leave"));
-  if (request?.type === "issue_cmdline_ticket") return cmdline.issue_ticket(sender.tab?.id, Number.isInteger(request.target_frame) ? request.target_frame : undefined);
-  if (request?.type === "relay") {
-    const plan = relay_plan(request, sender.frameId);
-    return plan && sender.tab?.id !== undefined ? send_to_tab(sender.tab.id, { type: "run_in_content", invocations: [plan.invocation] }, plan.frame_id) : Promise.resolve({ ok: false, message: "relay refused" });
-  }
-  if (request?.type === "frame_cue" && sender.tab?.id !== undefined) {
-    const tab_id = sender.tab.id;
-    // A frame that asks names itself. The top page cannot name the frame of another site that it focuses, so its mark covers the next first focus of any frame.
-    return tab_modes.expect_entry(tab_id, sender.frameId === 0 ? undefined : sender.frameId).then(() => (request.toast ? frame_cue(tab_id) : undefined));
-  }
-  if (request?.type === "open_cmdline") return get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true));
-  if (request?.type === "complete_items") return complete_items.answer(request.kind, asker_of(sender));
-  if (request?.type === "tab_rows_action") return complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id);
-  if (request?.type === "image_action") return run_image_action(image_deps, request, { incognito: sender.tab?.incognito === true, cookie_store_id: sender.tab?.cookieStoreId });
-  if (request?.type === "inspect_pick") return sender.tab?.id === undefined ? Promise.resolve({ ok: false, message: "No tab to inspect" }) : inspect_relay.pick(sender.tab.id);
-  if (request?.type === "read_hint_selectors") return hint_selectors_reply(browser.storage.local, sender_at(sender, request.url).url);
-  if (request?.type === "read_strip_patterns") return strip_patterns_for(browser.storage.local, request.address);
-  if (request?.type === "read_keymap") {
-    const reply = () => browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")).then((recording) => read_keymap_reply(browser.storage.local, rule_addresses_of(sender_at(sender, request.url)), recording, sender.tab?.id === undefined || sender.frameId === undefined ? undefined : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!, (sender as LoadSender).documentId), () => tab_item.join(sender.tab!.id!, sender.frameId!, (sender as LoadSender).documentId))));
-    return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
-  }
-  if (request?.type === "open_help") return open_help.open(request.command_id, sender.tab?.id, sender.frameId);
-  if (request?.type === "record_cmdline") return cmdline.record(request.text, sender.tab?.incognito === true);
-  if (request?.type === "record_step") {
-    // The turn is entered before the first await, so records land in arrival order and a `.` that arrives next waits for this write.
-    const origin = { is_private: sender.tab?.incognito === true, ...(request.pick === true && { from_pick: true }) };
-    const checked = repeat_memory.in_turn(async (unqueued) => {
-      await get_config();
-      const steps = page_steps(request, (id) => registry.get(id), { search_engines: await get_search_engine_names(), containers: await container_names() });
-      if (steps) await create_step_recorder({ get_command: (id) => registry.get(id), repeat_memory: unqueued })(steps, page_outcome(request), origin);
-      return steps;
-    });
-    return Promise.all([checked, browser_macro_recorder.record_page(checked, page_outcome(request), origin)]).then(() => undefined);
-  }
-  if (request?.type === "read_repeat_preview") {
-    return get_config().then((config) => answer_repeat_preview({ is_private: sender.tab?.incognito === true, enabled: effective_settings(config.settings).which_key_repeat }, repeat_memory, (id) => registry.get(id)));
-  }
-  if (request?.type === "list_keys") {
-    const tab = sender.tab;
-    const page = tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;
-    const located = sender_at(sender, request.url);
-    return get_config().then((config) => list_keys(browser.storage.local, (id) => registry.get(id), request, {
-      availability: {
-        page,
-        requirement_of: requirement_lookup(config),
-        site_engine_label_of: (invocation) => config.search_engines[site_engine_for(config.search_engines, invocation.site_search?.engines ?? [], page) ?? ""]?.label,
-      },
-      addresses: rule_addresses_of(located),
-      registers: () => browser_register_store.items(tab?.incognito === true),
-      marks: () => browser_mark_store.items(sender.url ?? "", tab?.incognito === true),
-      quickmarks: () => browser_quickmark_store.table(config.quickmarks, tab?.incognito === true),
-      macros: () => browser_register_store.macro_items(tab?.incognito === true),
-    }));
-  }
-  if ((message as SnippetCall)?.type === "snippet_run") {
-    return get_config().then(() => snippets.handle_call(message as SnippetCall, { tab_id: sender.tab?.id, frame_id: sender.frameId }));
-  }
-  if (request?.type !== "run") return undefined;
-  if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.key_ran"));
-  return get_config().then(async (config) => {
-    await macro_replay.wait_unless_from(sender.tab?.id);
-    // A line drawn in the top frame for a subframe's keys runs its command in that subframe, if that frame is still there.
-    const frame_id = (request.from_line === true ? await cmdline.target_of(sender.tab?.id) : undefined) ?? sender.frameId;
-    const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
-    const settled = with_site_engines(request.invocations, config.search_engines, page);
-    if ("unfit_letter" in settled) {
-      const refusal = { id: "open.search", message: `No ${settled.unfit_letter} search for this site` };
-      await router_deps.show_refusal(sender.tab?.id, refusal, sender.frameId);
-      return { ok: false, refusal };
-    }
-    return router.run({
-      invocations: settled.invocations,
-      mode: request.mode,
-      may_prompt: true,
-      ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
-      ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
-      ...(frame_id === undefined ? {} : { frame_id }),
-      ...(!is_extension_page(sender, browser.runtime.id, browser.runtime.getURL("")) && { from_page: true }),
-    });
-  });
-});
 
 // No setting turns this off: a first install has no config yet, so none could apply.
 browser.runtime.onInstalled.addListener(({ reason }) => {
@@ -623,6 +399,14 @@ media_quality_settings_changed();
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && COMPILED_KEYMAP_STORAGE_KEY in changes) media_quality_settings_changed();
 });
+
+// Listeners register in the first turn, so no event is missed while the config loads. The table sits here, below the last service it names.
+const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
+const handlers = {
+  ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality }),
+} satisfies Handlers<keyof ToBackground>;
+browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
 
 const start_item_mode = async (tab_id: number, address: string | undefined) => {
   const resume = await tab_item.take_resume(tab_id);
