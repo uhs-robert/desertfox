@@ -30,6 +30,7 @@ export type BundleHostApi = {
   register_handler_: <Id extends string>(command_id: Id, handler: (args: ArgsOf<Id>) => HandlerResult) => void;
   // Any mode, the same path as a key that changes mode. A bundle uses it to enter its own mode.
   set_mode_: (mode: Mode) => void;
+  // No `_` suffix: the key test reads `desertfox_host.get_mode()` through the debugger.
   get_mode: () => Mode;
   // Leaves hint or command line mode for the mode it was opened from, and any other mode for normal.
   escape_: () => void;

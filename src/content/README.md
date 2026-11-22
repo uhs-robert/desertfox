@@ -1,6 +1,6 @@
 # content
 
-The content script, injected at `document_start` in every frame. Start in `main.ts`. Behavior is in `docs/design/bundles.md` ("Content script root files"), `docs/design/keys.md` and `docs/design/interfaces_pages.md`.
+The content script, injected at `document_start` in every frame. Start in `main.ts`. Behavior: `docs/design/bundles.md` ("Content script root files"), `keys.md`, `interfaces_pages.md`.
 
 Rules that span files:
 
