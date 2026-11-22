@@ -14,7 +14,8 @@ const shared_files = [
   "src/background/{availability,browser_deps,content_messages,keymap_source,main,message_table,page_keymap,page_messages,refusal,router,services,slots,startup}.ts",
   "src/commands/{command,copy,mode}.ts",
   "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,shown,site_mode,site_rule}.ts",
-  "src/content/handlers/{copy,focus,mode,stop,types}.ts",
+  "src/content/handlers/{focus,mode,stop,types}.ts",
+  "src/content/page/copy.ts",
   "src/shared/{command,index,key_test_build,load_commands,swallow}.ts",
   "src/shared/messages/*.ts",
   "src/shared/copy/link_escape.ts",
@@ -37,16 +38,18 @@ export const area_rules = [
   { globs: ["src/content/strip_setting.ts", "src/shared/copy/{link_list,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
   // The user-left watch serves the next_page load wait and the end follow of page.item.
   { globs: ["src/content/user_left.ts", "src/content/pointer_events.ts"], areas: ["hints", "engines", "bundles", "keys"] },
-  { globs: ["src/content/hints/**", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/{page,focus_input}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/hints/**", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts", "src/content/page/focus_input.ts", "src/content/lib/hint_keys.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
+  // Ahead of page/**: first match wins, and scroll.align belongs to the scroll area.
+  { globs: ["src/content/page/align.ts"], areas: ["scroll"] },
   { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/content/item/**", "src/content/item_act/**", "src/content/tree/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles", "keys"] },
-  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules,extension_page}.ts", "src/content/{bundle_calls,bundle_host,bundles}.ts", "src/content/text/**", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
+  { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules,extension_page}.ts", "src/content/{bundle_calls,bundle_host,bundles}.ts", "src/content/text/**", "src/content/lib/field_text.ts", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/shared/page_bundle_tag.ts"], areas: ["bundles", "help", "newtab"] },
   { globs: ["src/shared/{icons,key_caps,page_base}.*"], areas: ["help", "newtab"] },
   { globs: ["src/content/caret/find_*.ts", "src/commands/find.ts", "src/background/{find_scan,find_worker,regex_scan}.ts"], areas: ["find"] },
   { globs: ["src/content/caret/**", "src/shared/copy/copy_text.ts", "src/commands/{caret,visual}.ts"], areas: ["caret"] },
   { globs: ["src/content/leaf_for_page.ts"], areas: ["keys", "whichkey"] },
-  { globs: ["src/content/whichkey/**", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
+  { globs: ["src/content/whichkey/**", "src/content/gate.ts", "src/background/list_keys.ts", "src/content/which_key_timer.ts"], areas: ["whichkey"] },
   // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
   { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
@@ -92,7 +95,7 @@ export const area_rules = [
   { globs: ["src/background/macro_replay.ts", "src/background/hold_on_arrival.ts"], areas: ["keys", "hints", "tabs"] },
   // The grab bundle's snap swipe uses smooth_behavior too.
   { globs: ["src/content/smooth_behavior.ts"], areas: ["scroll", "hints"] },
-  { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/{scroll,align}.ts", "src/commands/{scroll,zoom}.ts", "src/background/site_zoom.ts"], areas: ["scroll"] },
+  { globs: ["src/content/{scroll_*,align_target}.ts", "src/content/handlers/scroll.ts", "src/commands/{scroll,zoom}.ts", "src/background/site_zoom.ts"], areas: ["scroll"] },
   {
     globs: [
       "src/background/{config_*,import_reach,css_limits,autoconfig_mirror,host_start,snippets,first_install,load_log,settings_message,settings_file,saved_fold,toml_key_edit,toml_table_edit,edit_layers,keymap_message,reload}.ts",
