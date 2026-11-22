@@ -39,7 +39,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   const { get_config, publish, built_in_commands, layered_build, in_change_queue, commit_change, mirror_key_edits, read_load_step } = store;
   const { apply_files } = swap;
   const { writes_of, write_waiting_file, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
-  // One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then the host writes of the files, the engine file first.
+  // One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then the host writes of the files, in the plan's order unless `path_to_write_first` sends one first (a remove can send the keys file first).
   // `plan` runs in the change queue and gets a build of any files and layer over the aliases in force, so it refuses what a change breaks before anything is stored.
   // The answer has no `file` or `keys` for a file that stayed as it was.
   async function change_engine_file<R>(plan: (turn: EngineTurn) => EnginePlan | { done: R }): Promise<{ done: R } | EngineFileOutcomes> {
@@ -223,6 +223,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   // Saves the theme file `themes/<name>.toml` with `text`, or removes it with `text` null, in the browser copy and then through the host, as `set_in_settings_file` writes settings.toml.
   // A save over an existing file needs `replace`. A remove also takes `theme` out of settings.toml and drops the saved and temp edits when they name the theme, so nothing names a theme the files no longer have.
   // A `settings.d` file that sets `theme` to it refuses the remove, as the files build would refuse the config without the theme.
+  // A file that shadows a built-in theme (or `desktop`) is only removed: the settings cleanup and the `settings.d` check are skipped, since the name still resolves.
   async function set_theme_file(name: string, text: string | null, replace: boolean): Promise<ThemeFileChange> {
     const path = theme_file_path(name);
     let replaced = false;
