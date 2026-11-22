@@ -910,8 +910,6 @@ export function create_config_service(parts: { store: ConfigStore; services: Ser
   // The host creates the folder itself when it writes autoconfig.toml, so a folder holding only that file is as good as missing.
   const empty_folder_message = (config_dir: string) => `${KEPT_CURRENT.reload} The native host found no config files in ${config_dir}. Put your config files there, or set DESERTFOX_CONFIG_DIR for the host.`;
 
-  // What an import would change, for the consent screen. It stores nothing and runs no snippet.
-
   return {
     ...swap,
     get_config: store.get_config,

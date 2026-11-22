@@ -116,6 +116,7 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
     return stored_unsynced(Object.fromEntries(Object.entries(unsynced).filter(([path]) => stored[path] === source.files[path]))) ?? undefined;
   }
 
+  // What an import would change, for the consent screen. It stores nothing and runs no snippet.
   async function preview_config_import(source: unknown): Promise<ConfigImportPreview> {
     const incoming = await read_import_source(source);
     await get_config();

@@ -55,7 +55,7 @@ export async function notify(refusal: Refusal): Promise<void> {
 }
 
 // What the page slots read. `current_page` in commands/open_target.ts reads the same, but importing it here loops
-// through startup.ts.
+// through config_store.ts.
 export async function page_of(tab_id: number | undefined): Promise<PageInfo | undefined> {
   const tab = tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(tab_id));
   return tab?.url ? { url: tab.url, ...(tab.title ? { title: tab.title } : {}) } : undefined;

@@ -323,7 +323,6 @@ export function create_config_store(deps: Pick<Services, "snippets" | "autoconfi
     set_desktop_theme,
     mirror_key_edits,
     read_fold_notes,
-    tell_tabs_tree_changed,
     read_load_step: () => load_step as Promise<LoadStep>,
     set_load_step: (next: Promise<LoadStep>) => {
       load_step = next;
