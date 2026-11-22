@@ -3,7 +3,8 @@
 import type { BundleHostApi } from "../bundle_host.ts";
 import type { PendingPrefix } from "../key_flow.ts";
 import type { ListKeys, ReadRepeatPreview, WhichKeyPanel } from "../../shared/messages/content.ts";
-import { MEDIA_PANEL_HANDLER, media_panel_admitted } from "./media_panel.ts";
+import { MEDIA_PANEL_HANDLER } from "../../shared/bundles.ts";
+import { media_panel_admitted } from "./media_panel.ts";
 import { create_relayed_panel } from "./relayed_panel.ts";
 import { hide_panel, show_panel } from "./panel.ts";
 import { rows_for_page } from "./guarded_rows.ts";

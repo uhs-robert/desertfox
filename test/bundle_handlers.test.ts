@@ -39,7 +39,8 @@ const text_of = (path: string) => readFileSync(new URL(path, root), "utf8");
 
 function registered_ids(name: BundleName): string[] {
   const texts = files_of(name).map(text_of);
-  const constants = new Map(texts.flatMap((text) => [...text.matchAll(/const ([A-Z_]+) = "([^"]+)";/g)].map((match) => [match[1]!, match[2]!] as const)));
+  // Handler ids shared with the background live in shared/bundles.ts.
+  const constants = new Map([...texts, text_of("src/shared/bundles.ts")].flatMap((text) => [...text.matchAll(/const ([A-Z_]+) = "([^"]+)";/g)].map((match) => [match[1]!, match[2]!] as const)));
   return texts.flatMap((text) =>
     [...text.matchAll(/register_handler_\(\s*(?:"([^"]+)"|([A-Z_]+))/g)].map((match) => {
       const id = match[1] ?? constants.get(match[2]!);

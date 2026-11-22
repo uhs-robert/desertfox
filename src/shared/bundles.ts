@@ -8,4 +8,7 @@ export type BundleName = (typeof BUNDLE_NAMES)[number];
 // The modes whose keys go to a sink, and the bundle that registers it.
 export const BUNDLE_FOR_MODE: Partial<Record<Mode, BundleName>> = { hint: "hints", caret: "caret", visual: "caret", visual_line: "caret", cmdline: "cmdline", grab: "grab" };
 
+// A handler of the `whichkey` bundle, not a command. Only the background sends it, so it takes no argument.
+export const MEDIA_PANEL_HANDLER = "whichkey.media_panel";
+
 export const is_bundle_name = (value: unknown): value is BundleName => (BUNDLE_NAMES as readonly unknown[]).includes(value);

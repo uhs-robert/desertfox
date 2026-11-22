@@ -1,4 +1,4 @@
-import { SCROLL_TO_DEFAULT_AXIS } from "../content/handlers/scroll.ts";
+import { SCROLL_TO_DEFAULT_AXIS } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 
 define("scroll.lines", {

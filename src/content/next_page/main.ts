@@ -1,7 +1,7 @@
 // The `next_page` bundle: the `page.follow` handler (`]]`, `[[`). Loaded on the first press, so neither content.js nor hints.js carries the detector.
 
 import type { Outcome } from "../../shared/messages/content.ts";
-import { CONFIG_STATUS_STORAGE_KEY } from "../../background/storage_keys.ts";
+import { CONFIG_STATUS_STORAGE_KEY } from "../../shared/storage_watch.ts";
 import { DEFAULT_NEXT_PATTERNS, DEFAULT_PREV_PATTERNS } from "../../shared/default_settings.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 import { follow_like_a_hint } from "../hints/actions.ts";

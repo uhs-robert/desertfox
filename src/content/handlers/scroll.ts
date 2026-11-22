@@ -5,8 +5,6 @@ import { candidate_of } from "../scroll_box.ts";
 import { deepest_focused_element } from "../editable.ts";
 import type { ContentHandler } from "./types.ts";
 
-export const SCROLL_TO_DEFAULT_AXIS = "y";
-
 // The page scrolls whatever its overflow says, so the overflow test is fed a value that passes.
 function page_candidate(): ScrollCandidate<Element> | undefined {
   const root = document.scrollingElement;

@@ -2,7 +2,7 @@
 
 Types and constants that fix the hand-off formats between the background page, the content script and `tools/build-config`. Besides types and constants it holds small helpers and the config, key and registry logic (`registry/`, `keys/`, `theme/`, `config_build/`, `match_pattern.ts`, `score.ts`, `site_key.ts`). Most of it is pure. Some files touch the browser or the DOM, for example `storage_watch.ts`, `icons.ts` and `theme/apply.ts`. Every other source folder may import from it, and it imports from none of them. The one exception is `config_build/schemas.ts`, which only the build tool and tests load and which reads `background/default_keymap.ts`.
 
-- `command.ts`: a command definition, and the `commands.json` entry cut from it.
+- `command.ts`: a command definition, and the `commands.json` entry cut from it. Also the value lists that a command and its content handler share (`SETTABLE_MODES`, `COPY_FORMATS`, `SCROLL_TO_DEFAULT_AXIS`).
 - `invocation.ts`: the `Invocation` every caller produces, and a key binding.
 - `keymap.ts`: keymap data as written by the user.
 - `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script. Its `format_version` is bumped when the shape changes, and `current_keymap` hides an older one until the background recompiles at its next start. A `SiteRule` holds its `bind` as normalized key to tokens and leaf.
@@ -18,7 +18,7 @@ Types and constants that fix the hand-off formats between the background page, t
 - `mark_text.ts`: the text of a mark or quickmark in a list (address without scheme, scroll offset), which the which-key rows and the command line list share.
 - `quickmark_names.ts`: the quickmark key rule (one letter or digit), the address cap and the `QuickmarkTable` type.
 - `media.ts`: the messages between the background and the `media` bundle, the media actions and the step rules of speed, volume and seek.
-- `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which.
+- `bundles.ts`: the names of the scripts loaded on first use, and which mode loads which. Also `MEDIA_PANEL_HANDLER`, the handler id the background sends to `whichkey`.
 - `page_bundle_tag.ts`: the extension pages' side of a bundle load. `listen_for_bundle_requests` adds a bundle's `<script src>` tag when the background asks, joins repeat asks and answers after the script has run.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
