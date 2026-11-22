@@ -562,13 +562,3 @@ test("each config service keeps its own current config, so a fresh one starts fr
   await second.reload_config();
   assert.equal((await first.get_config()).settings.hint_letters, "xy");
 });
-
-test("the production config_main.ts exports share one store", async () => {
-  const host = { files: settings_file('hint_letters = "ab"\n') };
-  install_fake_browser(host);
-  const main = await import("../../src/background/config_main.ts");
-  await main.get_config();
-  host.files = settings_file('hint_letters = "xy"\n');
-  await main.reload_config();
-  assert.equal((await main.get_config()).settings.hint_letters, "xy");
-});

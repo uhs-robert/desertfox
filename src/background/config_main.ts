@@ -48,8 +48,8 @@ export function create_config_service(parts: { store: ConfigStore; services: Ser
 export type ConfigService = ReturnType<typeof create_config_service>;
 
 // The production instances. The services need `get_config` and the store needs the services, so the reader is passed late.
-export const services = create_services({ get_config: () => config_store.get_config() });
-export const config_store = create_config_store(services);
+const services = create_services({ get_config: () => config_store.get_config() });
+const config_store = create_config_store(services);
 const service = create_config_service({ store: config_store, services });
 export const { snippets, host_update, native_host, get_config, get_search_engine_names, change_edits, change_layers, read_settings_layers, read_keymap_state, read_engine_state, read_stored_files, read_alias_state, republish, set_desktop_theme } = service;
 export const { import_config, preview_config_import, remove_snippet, save_config_file, set_in_settings_file, toggle_in_settings_file, unset_in_settings_file, change_site_rule_in_file, change_site_keys_in_file, set_theme_file, change_engine_file, reload_config, reload_config_at_start, choose_host_start } = service;
