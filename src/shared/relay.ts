@@ -5,7 +5,7 @@ import type { Invocation } from "./invocation.ts";
 import type { Relay } from "./messages/content.ts";
 
 // `top` handlers draw in the top frame or take what the focused frame sends it. `frame` handlers act on one frame, named by its id.
-const RELAYED: Record<string, { bundle: BundleName; to: "top" | "frame" }> = {
+const RELAYED = {
   "ui.toast": { bundle: "ui", to: "top" },
   "ui.badge_count": { bundle: "ui", to: "top" },
   "whichkey.draw": { bundle: "whichkey", to: "top" },
@@ -19,13 +19,17 @@ const RELAYED: Record<string, { bundle: BundleName; to: "top" | "frame" }> = {
   "cmdline.headings_ask": { bundle: "cmdline", to: "frame" },
   "cmdline.find_text": { bundle: "cmdline", to: "frame" },
   "cmdline.find_end": { bundle: "cmdline", to: "frame" },
-};
+} as const satisfies Record<string, { bundle: BundleName; to: "top" | "frame" }>;
+
+// The ids a frame may relay. `content/relay.ts` checks each against the bundle call map.
+export type RelayedId = keyof typeof RELAYED;
+export type RelayedBundle<Id extends RelayedId> = (typeof RELAYED)[Id]["bundle"];
 
 const TOP_FRAME = 0;
 
 // The frame to send to and what it runs, or undefined for a request no frame may make. `from_frame` is set last, so no frame can name another as its sender.
 export function relay_plan(request: Relay, sender_frame_id: number | undefined): { frame_id: number; invocation: Invocation } | undefined {
-  const entry = Object.hasOwn(RELAYED, request.id) ? RELAYED[request.id] : undefined;
+  const entry: { bundle: BundleName; to: "top" | "frame" } | undefined = Object.hasOwn(RELAYED, request.id) ? RELAYED[request.id as RelayedId] : undefined;
   const args = request.args;
   if (!entry || sender_frame_id === undefined || typeof args !== "object" || args === null || Array.isArray(args)) return undefined;
   const frame_id = entry.to === "top" ? (request.to === "top" ? TOP_FRAME : undefined) : Number.isInteger(request.to) && (request.to as number) >= 0 ? (request.to as number) : undefined;

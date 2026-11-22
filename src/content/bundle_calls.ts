@@ -52,7 +52,7 @@ type BundleCalls = {
   "cmdline.headings": { bundle: "cmdline"; args: FromFrame & { items: HeadingItem[] } };
   "cmdline.find_status": { bundle: "cmdline"; args: FromFrame & { text: string } };
   "cmdline.focus": { bundle: "cmdline"; args: OfLine };
-  "cmdline.end": { bundle: "cmdline"; args: OfLine & { tokens?: string[] } };
+  "cmdline.end": { bundle: "cmdline"; args: OfLine & { tokens?: readonly string[] } };
   "cmdline.find_text": { bundle: "cmdline"; args: OfLine & { text: string } };
   "cmdline.find_end": { bundle: "cmdline"; args: OfLine & { keep?: boolean } };
   "cmdline.headings_ask": { bundle: "cmdline"; args: OfLine & { clear?: boolean } };
