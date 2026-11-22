@@ -1,7 +1,7 @@
 // Draws the export and import section of the settings page from a transfer session (`transfer_model.ts`).
 // The consent screen shows each snippet's full code, `matches` and `requires`. A snippet is stored only when its box is ticked and Import is pressed.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { NO_USER_CSS_HOLD, USER_CSS_PAUSED_NOTE, type UserCssHold } from "./user_css_gate.ts";
 import { create_transfer_session, can_commit, read_folder_files, read_zip_file, reach_block, SNIPPET_GLOSS, SNIPPET_WARNING } from "./transfer_model.ts";
 import type { ExportFile, PickedFile, ReachSegment, Review, TransferSession } from "./transfer_model.ts";

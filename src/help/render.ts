@@ -1,7 +1,6 @@
 // Draws the help model with DOM calls only. Command text never goes through innerHTML.
 
-import { copy_text } from "../content/caret/copy_text.ts";
-import type { Block, Inline } from "./blocks.ts";
+import type { Block } from "./blocks.ts";
 import type { RuleColumn, KeyChange, SiteRuleRowView } from "../background/site_rules_view.ts";
 import type { CommandRow, EngineRow, HelpModel, KeyRow } from "./model.ts";
 import { advanced_count, group_title, STYLE_CLASSES, STYLE_VARIABLES, visible_commands_model } from "./model.ts";
@@ -12,15 +11,8 @@ import { GROUPS } from "./settings_model.ts";
 import { practice_page } from "./practice_page.ts";
 import { ADVANCED_SUFFIX, PAGES } from "../shared/page/help_route.ts";
 import type { PageId, Route } from "../shared/page/help_route.ts";
-
-export type Child = Node | string;
-
-export function el(tag: string, class_name: string | undefined, ...children: Child[]): HTMLElement {
-  const node = document.createElement(tag);
-  if (class_name) node.className = class_name;
-  node.append(...children);
-  return node;
-}
+import { code_block_node, el, inline_node, new_tab_link, table_of } from "./dom.ts";
+import type { Child } from "./dom.ts";
 
 function key_list(rows: KeyRow[]): HTMLElement {
   const cell = el("div", "desertfox-help-keys");
@@ -106,46 +98,6 @@ function engine_table(engines: EngineRow[]): HTMLElement {
   const table = el("table", "desertfox-help-engines", head, ...engines.map((engine) => engine_row(engine, !one_file)));
   if (!one_file) return table;
   return el("div", undefined, el("p", "desertfox-help-muted", `Set by the file ${first_file}`), table);
-}
-
-export function inline_node(inline: Inline): Child {
-  switch (inline.kind) {
-    case "text": return inline.text;
-    case "code": return el("code", "desertfox-help-inline-code", inline.text);
-    case "keys": return key_caps(inline.text);
-    case "link": {
-      const link = el("a", undefined, inline.text);
-      link.setAttribute("href", inline.href);
-      return link;
-    }
-  }
-}
-
-const COPIED_LABEL_MS = 1500;
-
-// The pending "Copy" restore per button, so a second click restarts the 1.5 s instead of being cut short.
-const pending_restore = new WeakMap<object, unknown>();
-
-// A real button, so Tab and hints reach it. The label shows the result only after the clipboard took the text.
-export async function copy_code_and_confirm(
-  clipboard: Parameters<typeof copy_text>[0],
-  text: string,
-  button: { textContent: string | null },
-  later: (restore: () => void, ms: number) => unknown = setTimeout,
-  cancel: (handle: never) => void = clearTimeout,
-): Promise<void> {
-  if (!(await copy_text(clipboard, text))) return;
-  button.textContent = "Copied";
-  if (pending_restore.has(button)) cancel(pending_restore.get(button) as never);
-  pending_restore.set(button, later(() => { button.textContent = "Copy"; }, COPIED_LABEL_MS));
-}
-
-function code_block_node(text: string, language: string | undefined): HTMLElement {
-  const button = el("button", "desertfox-help-code-copy", "Copy");
-  button.setAttribute("type", "button");
-  button.addEventListener("click", () => void copy_code_and_confirm(navigator.clipboard, text, button));
-  const head = el("div", "desertfox-help-code-head", ...(language ? [el("span", "desertfox-help-code-lang", language)] : []), button);
-  return el("div", "desertfox-help-code", head, el("pre", "desertfox-help-code-body", text));
 }
 
 function block_node(block: Block): HTMLElement {
@@ -366,10 +318,6 @@ function settings_page(model: HelpModel): HTMLElement[] {
   ];
 }
 
-const SHADOWED_CLASS = "desertfox-help-shadowed";
-const table_of = (class_name: string, heads: string[], rows: (HTMLElement | string)[][], shadowed: boolean[]): HTMLElement =>
-  el("table", `desertfox-help-site-rules ${class_name}`, el("tr", undefined, ...heads.map((name) => el("th", undefined, name))), ...rows.map((cells, index) => el("tr", shadowed[index] ? SHADOWED_CLASS : undefined, ...cells.map((cell) => el("td", undefined, cell)))));
-
 // Columns are name and value pairs, so a per-site setting added later shows with no code here.
 const columns_table = (columns: RuleColumn[]): HTMLElement => table_of("desertfox-help-columns", ["option", "value", ""], columns.map(({ name, value, shadowed }) => [name, value, shadowed ? "an earlier rule decides this" : ""]), columns.map(({ shadowed }) => shadowed));
 const changes_table = (changes: KeyChange[]): HTMLElement =>
@@ -401,15 +349,6 @@ function page_body(route: Route, model: HelpModel, guide: Block[], advanced_tota
     case "styling": return styling_page();
     case "site-rules": return site_rules_page(model, route.address);
   }
-}
-
-// An external link that opens in a new tab.
-export function new_tab_link(title: string, url: string, class_name?: string): HTMLElement {
-  const link = el("a", class_name, title);
-  link.setAttribute("href", url);
-  link.setAttribute("target", "_blank");
-  link.setAttribute("rel", "noopener noreferrer");
-  return link;
 }
 
 function support_card(): HTMLElement {

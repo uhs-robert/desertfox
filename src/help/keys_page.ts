@@ -1,6 +1,6 @@
 // Draws the Keys section of the settings page from a keys session (`keys_model.ts`), and holds the key capture that lets the capture box take keys the content script would otherwise run.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { button } from "./transfer_page.ts";
 import { actions_of, create_keys_session, is_read_only, matches_filter, READ_ONLY_ROW_NOTE, RESERVED_CHORDS_NOTE, freed_keys } from "./keys_model.ts";
 import type { CheckView, Editor, KeysDeps, KeysSession } from "./keys_model.ts";

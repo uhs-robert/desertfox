@@ -1,7 +1,8 @@
 // The Practice page: a sequence of short lessons, each with a goal, the keys, a target to try them on and check lines that turn to "Done" when the page sees the step.
 // The element ids are fixed, because the key test and the demo script address the targets and the check lines by id.
 
-import { el, inline_node, new_tab_link, section_anchor, section_hash, section_heading } from "./render.ts";
+import { el, inline_node, new_tab_link } from "./dom.ts";
+import { section_anchor, section_hash, section_heading } from "./render.ts";
 import { parse_route } from "../shared/page/help_route.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import { practice_check_id, PRACTICE_VIDEO_URL } from "./practice_lessons.ts";

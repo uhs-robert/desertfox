@@ -1,6 +1,6 @@
 // Draws the "Let this site keep some keys" form from a site keys session (`site_keys_model.ts`). It sits in the Your site rules section and takes keys by capture or from a list.
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { button } from "./transfer_page.ts";
 import { create_site_keys_session } from "./site_keys_model.ts";
 import type { SiteKeysDeps, SiteKeysSession } from "./site_keys_model.ts";

@@ -1,6 +1,6 @@
 // Draws a name-to-value section of the settings page (Aliases, Quickmarks) from a pairs session (`pairs_model.ts`).
 
-import { el } from "./render.ts";
+import { el } from "./dom.ts";
 import { button } from "./transfer_page.ts";
 import { can_save, create_pairs_session, form_problems } from "./pairs_model.ts";
 import type { PairsDeps, PairsForm, PairsKind, PairsSession } from "./pairs_model.ts";

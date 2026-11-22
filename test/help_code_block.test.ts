@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { copy_code_and_confirm, render_help } from "../src/help/render.ts";
+import { copy_code_and_confirm } from "../src/help/dom.ts";
+import { render_help } from "../src/help/render.ts";
 import type { Block } from "../src/help/blocks.ts";
 
 // Just enough DOM for render_help: elements with a class, children, text and listeners.
