@@ -8,10 +8,9 @@ import { outcome_note, replayed_on_folder } from "../../src/background/settings_
 import { load_theme } from "../../src/shared/theme/load.ts";
 import { files_digest } from "../../src/background/host_start.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?settings_file_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const MINE = '# My settings\n\nhint_letters = "abc" # home row\n\n# Rules\n[[site_rules]]\nsite = "*://x.test/*"\noff = true\n';
 const with_theme = (theme: string) => MINE.replace('hint_letters = "abc" # home row\n', `hint_letters = "abc" # home row\ntheme = "${theme}"\n`);
@@ -26,7 +25,7 @@ const stored_settings = (local: Record<string, unknown>) => (local[FILES_SOURCE_
 // A profile that read the folder once through the host, as after `,r`.
 async function reloaded(host: { files: Files; granted?: boolean; old_host?: boolean }) {
   const fake = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   return { ...fake, startup };
@@ -51,14 +50,14 @@ test("after a written pick a restart asks nothing, and a hand edit after it appl
   const { local, startup } = await reloaded(host);
   await startup.set_in_settings_file("theme", "oasis_night");
 
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal((await restarted.get_config()).settings.theme, "oasis_night");
 
   // The applied digest moved with the write, so the copy still counts as unedited and a later folder edit applies at once.
   host.files = { "settings.toml": with_theme("nord") };
-  const third = await fresh_startup();
+  const third = fresh_config_service();
   await third.reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal((await third.get_config()).settings.theme, "nord");
@@ -96,7 +95,7 @@ test("without the native host the browser copy changes, nothing throws, and the 
   assert.deepEqual(sent, []);
 
   host.granted = true;
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
@@ -111,13 +110,13 @@ test("an older host without the verb keeps the pick, asks nothing at start, and 
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "waiting", host_outdated: true });
   assert.equal(host.files["settings.toml"], MINE);
 
-  const still_old = await fresh_startup();
+  const still_old = fresh_config_service();
   await still_old.reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal((await still_old.get_config()).settings.theme, "oasis_night");
 
   host.old_host = false;
-  const updated = await fresh_startup();
+  const updated = fresh_config_service();
   await updated.reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
@@ -130,7 +129,7 @@ test("a waiting pick meets a hand edit of another key at start: the start writes
 
   host.old_host = false;
   host.files = { "settings.toml": HAND };
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
   assert.equal(stored_settings(local), hand_with_theme("oasis_night"));
@@ -140,7 +139,7 @@ test("a waiting pick meets a hand edit of another key at start: the start writes
   assert.deepEqual([settings.theme, settings.hint_letters], ["oasis_night", "hand"]);
 
   // The applied digest followed both, so the copy still counts as unedited.
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
@@ -164,7 +163,7 @@ test("a waiting pick meets a hand edit of the same key at start: nothing is writ
 
   host.old_host = false;
   host.files = { "settings.toml": with_theme("nord") };
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("nord"));
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
@@ -196,7 +195,7 @@ test("two quick picks while the host is old: the later write starts from the fol
   await Promise.all([startup.set_in_settings_file("theme", "nord"), startup.set_in_settings_file("theme", "oasis_night")]);
   assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
   host.old_host = false;
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
 });
 
@@ -314,7 +313,7 @@ test("a written pick keeps the copies-differ question while the folder still dif
   const { local, startup } = await reloaded(host);
   await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
   host.files = { ...host.files, "keymap.toml": '[normal]\n"zx" = "tab.next"\n' };
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 
@@ -383,7 +382,7 @@ test("a host that never answers a write blocks no other change, at start or afte
   host.old_host = false;
   const held = hold_writes(fake);
 
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.get_config();
   void restarted.reload_config_at_start();
   // The held write goes out inside this test, so it never reaches the host of a later one.
@@ -411,7 +410,7 @@ test("a pick during a write lands after it, from the text the first one left", a
   assert.equal(host.files["settings.toml"], with_theme("oasis_night"));
   assert.equal(unsynced_of(local), undefined);
 
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
@@ -466,7 +465,7 @@ test("an editor save of another key during a write keeps both: the picks are put
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal(unsynced_of(local), undefined);
 
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
@@ -476,7 +475,7 @@ test("a refused write keeps the record of a pick made after Use the folder, and 
   // A browser change and a folder change, so the start stores the copies-differ question.
   await before_restart.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
   host.files = { ...host.files, "keymap.toml": '[normal]\n"zx" = "tab.next"\n' };
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.reload_config_at_start();
 
   const send = fake.runtime.sendNativeMessage;
@@ -558,7 +557,7 @@ test("a refused write whose folder also changed keymap.toml takes that file too,
   assert.deepEqual(await pick, { kind: "written" });
   assert.equal(host.files["settings.toml"], hand_with_theme("oasis_night"));
   assert.equal((local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["keymap.toml"], keys);
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 

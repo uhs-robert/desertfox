@@ -9,9 +9,9 @@ import type { ConfigImportPreview, ImportSource } from "../../src/shared/message
 import { write_zip } from "../../src/shared/zip.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?import_${tag}`)) as Startup;
+type Startup = ConfigService;
 
 const snippet_file = (id: string, extra = "") => `// id: ${id}\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\n${extra}globalThis.ran_${id.replace(/\W/g, "_")} = true;\n`;
 const zip_of = (files: Files): ImportSource => ({ kind: "zip", bytes: write_zip(files) });
@@ -32,7 +32,7 @@ const refusal_of = (promise: Promise<unknown>) =>
 async function started(tag: string, host_files: Files = { "settings.toml": 'hint_letters = "ab"\n', "snippets/home.js": snippet_file(`${tag}.mine`) }) {
   const host = { files: host_files };
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup(tag);
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   return { host, startup, ...browser };
@@ -117,7 +117,7 @@ test("a config import replaces the config files, keeps the installed snippets an
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_delay_ms: 7 });
 
   // A restart runs on the import, with no host call.
-  const after = await fresh_startup("replace_restart");
+  const after = fresh_config_service();
   assert.deepEqual((await after.get_config()).settings, { which_key_delay_ms: 7 });
 });
 
@@ -240,7 +240,7 @@ test("autoconfig.toml alone is not a config import, and an import never stores i
 });
 
 test("an import drops the consent settings, says so in the review, and keeps the other settings", async () => {
-  const { startup, local } = await started("consent");
+  const { startup, local } = await started("consent_settings");
   const source = zip_of({ "settings.toml": 'hint_letters = "xy"\nbridge = true\nbridge_share_tabs = true\nhost_auto_update = true\n', "settings.d/50-more.toml": "bridge = true\n", "settings.d/60-table.toml": "[host_auto_update]\nx = 1\n" });
   const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
   assert.deepEqual(preview.warnings, [

@@ -12,16 +12,16 @@ import { answer_host_start_choice } from "../../src/background/host_start.ts";
 import { write_zip } from "../../src/shared/zip.ts";
 import { dropped_warning } from "../../src/background/engine_layer.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?alias_quickmark_${tag}`)) as Startup;
+type Startup = ConfigService;
 
 const snippet_file = (id: string) => `// id: ${id}\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\nreturn 1;\n`;
 
 async function started(tag: string, files: Files = { "settings.toml": "" }) {
   const host = { files };
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup(tag);
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   const aliases = create_alias_messages({ read_alias_state: startup.read_alias_state, change_layers: startup.change_layers });
@@ -63,7 +63,7 @@ test("an added alias is in the config and survives a reload, an import, a files 
   await startup.save_config_file("command_aliases.toml", 'saved = "tab.close"\n', 'imported = "tab.next"\n');
   assert.equal((await startup.get_config()).command_aliases.up, "tab.prev");
 
-  const restarted = await fresh_startup("alias_survives_restart");
+  const restarted = fresh_config_service();
   assert.equal((await restarted.get_config()).command_aliases.up, "tab.prev");
   assert.deepEqual((await load_layers()).aliases, { up: "tab.prev" });
   assert.deepEqual(local[ALIAS_EDITS_STORAGE_KEY], { up: "tab.prev" });
@@ -73,7 +73,7 @@ test("a start that applies the folder, and the answer use_folder, keep the alias
   const { host, aliases, local } = await started("alias_host_start", { "command_aliases.toml": 'file_one = "tab.next"\n' });
   await aliases.change(up);
   host.files = { "command_aliases.toml": 'file_two = "tab.next"\nup = "tab.close"\n' };
-  const restarted = await fresh_startup("alias_host_start_restarted");
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   const config = await restarted.get_config();
   assert.equal(config.command_aliases.up, "tab.prev");
@@ -82,7 +82,7 @@ test("a start that applies the folder, and the answer use_folder, keep the alias
   // A browser copy with an editor save asks, and using the folder keeps the alias too.
   await restarted.save_config_file("command_aliases.toml", 'typed = "tab.next"\n', 'file_two = "tab.next"\nup = "tab.close"\n');
   host.files = { "command_aliases.toml": 'file_three = "tab.next"\n' };
-  const asked = await fresh_startup("alias_host_start_asked");
+  const asked = fresh_config_service();
   await asked.reload_config_at_start();
   const pending = local[HOST_START_PENDING_STORAGE_KEY] as HostStartPending;
   assert.ok(pending);
@@ -161,7 +161,7 @@ test("quickmarks of the form are the M store's: listed with their source, replac
   // The store survives a reload and a restart, and a file edit that changes the table.
   host.files = { "quickmarks.toml": 'f = "https://file2.test/"\n' };
   await startup.reload_config();
-  const restarted = await fresh_startup("quickmarks_restart");
+  const restarted = fresh_config_service();
   assert.equal((await browser_quickmark_store.table((await restarted.get_config()).quickmarks, false)).m, "https://mail.test/");
 
   const exported = (await export_all()).config_files;

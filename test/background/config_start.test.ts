@@ -6,14 +6,14 @@ import { AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, FILES_
 import { answer_host_start_choice, CHOICE_SETTLED, CHOICE_STALE } from "../../src/background/host_start.ts";
 import type { HostStartChoice, HostStartPending } from "../../src/shared/messages/page.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?start_${tag}`)) as Startup;
+type Startup = ConfigService;
 const settings_file = (body: string): Files => ({ "settings.toml": body });
 
 // The stored build a previous run left behind: a reload on the given files, then the modules are dropped.
 async function stored_run(tag: string): Promise<void> {
-  const startup = await fresh_startup(`${tag}_seed`);
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
 }
@@ -39,14 +39,14 @@ function answer(startup: Startup, choice: HostStartChoice["choice"], seen: HostS
 test("a start applies a changed folder at once while the browser copy holds no browser change, and then moves a saved edit into the folder", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local, fake } = install_fake_browser(host);
-  const first = await fresh_startup("changed_first");
+  const first = fresh_config_service();
   await first.get_config();
   await first.reload_config();
   await first.change_edits((current) => ({ ...current, saved: { ...current.saved, which_key_delay_ms: 5 } }));
 
   host.files = settings_file('hint_letters = "xy"\n');
   const toasts = watch_toasts(fake);
-  const restarted = await fresh_startup("changed_second");
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "xy", which_key_delay_ms: 5 });
   assert.equal(pending_of(local), undefined);
@@ -56,7 +56,7 @@ test("a start applies a changed folder at once while the browser copy holds no b
 
   // The start that applied it remembers it too, so the next folder edit applies as well.
   host.files = settings_file('hint_letters = "zx"\n');
-  const third = await fresh_startup("changed_third");
+  const third = fresh_config_service();
   await third.reload_config_at_start();
   assert.equal((await third.get_config()).settings.hint_letters, "zx");
   assert.equal(pending_of(local), undefined);
@@ -65,7 +65,7 @@ test("a start applies a changed folder at once while the browser copy holds no b
 test("a start with a changed folder asks when an editor save changed the browser copy, and using the folder keeps a saved edit on top", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { local, fake } = install_fake_browser(host);
-  const first = await fresh_startup("edited_first");
+  const first = fresh_config_service();
   await first.get_config();
   await first.reload_config();
   await first.change_edits((current) => ({ ...current, saved: { ...current.saved, which_key_delay_ms: 5 } }));
@@ -73,7 +73,7 @@ test("a start with a changed folder asks when an editor save changed the browser
 
   host.files = settings_file('hint_letters = "xy"\n');
   const toasts = watch_toasts(fake);
-  const restarted = await fresh_startup("edited_second");
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.deepEqual((await restarted.get_config()).settings, { hint_letters: "typed", which_key_delay_ms: 5 });
   assert.deepEqual(pending_of(local)?.changes, [{ path: "settings.toml", kind: "replaced" }]);
@@ -87,7 +87,7 @@ test("a start with a changed folder asks when an editor save changed the browser
 
   // Using the folder counts as a read from the host: the next folder edit applies at once.
   host.files = settings_file('hint_letters = "zx"\n');
-  const third = await fresh_startup("edited_third");
+  const third = fresh_config_service();
   await third.reload_config_at_start();
   assert.equal((await third.get_config()).settings.hint_letters, "zx");
   assert.equal(pending_of(local), undefined);
@@ -99,18 +99,18 @@ test("a profile from before the applied digest asks once, and a start that finds
   await stored_run("upgrade");
   delete local[HOST_START_APPLIED_STORAGE_KEY];
   host.files = settings_file('hint_letters = "xy"\n');
-  const asked = await fresh_startup("upgrade_asked");
+  const asked = fresh_config_service();
   await asked.reload_config_at_start();
   assert.equal((await asked.get_config()).settings.hint_letters, "ab");
   assert.notEqual(pending_of(local), undefined);
 
   delete local[HOST_START_PENDING_STORAGE_KEY];
   host.files = settings_file('hint_letters = "ab"\n');
-  const seeded = await fresh_startup("upgrade_seeded");
+  const seeded = fresh_config_service();
   await seeded.reload_config_at_start();
   assert.equal(typeof local[HOST_START_APPLIED_STORAGE_KEY], "string");
   host.files = settings_file('hint_letters = "xy"\n');
-  const followed = await fresh_startup("upgrade_followed");
+  const followed = fresh_config_service();
   await followed.reload_config_at_start();
   assert.equal((await followed.get_config()).settings.hint_letters, "xy");
   assert.equal(pending_of(local), undefined);
@@ -125,7 +125,7 @@ test("a start with the same files builds and publishes nothing, whatever autocon
   host.files = { ...settings_file('hint_letters = "ab"\n'), "autoconfig.toml": "# new mirror\n" };
   // An earlier start already rewrote autoconfig.toml with the key edits alone, so this one writes nothing.
   local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] = true;
-  const restarted = await fresh_startup("same_restart");
+  const restarted = fresh_config_service();
   // The start's own publish has run. Only a rebuild from the host files would write again.
   await restarted.get_config();
   const stored_before = structuredClone(local);
@@ -145,7 +145,7 @@ test("a start with the same files builds and publishes nothing, whatever autocon
 test("a first start with no stored files and a filled config folder takes the files", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   install_fake_browser(host);
-  const startup = await fresh_startup("first");
+  const startup = fresh_config_service();
   await startup.reload_config_at_start();
   assert.equal((await startup.get_config()).settings.hint_letters, "ab");
 });
@@ -172,7 +172,7 @@ test("an older start reply never overwrites a reload that committed while the ho
   const host: { files: Files; reply?: () => Promise<unknown> } = { files: settings_file('hint_letters = "old"\n') };
   const { local } = install_fake_browser(host);
   await stored_run("stale");
-  const startup = await fresh_startup("stale_restart");
+  const startup = fresh_config_service();
   await startup.get_config();
   const gate = gate_host_reads(host, settings_file('hint_letters = "stale"\n'));
   gate.arm();
@@ -190,7 +190,7 @@ test("an older start reply never overwrites a reload that committed while the ho
 test("a :set issued while the start adopts the folder waits for the swap and stays on top of it", async () => {
   const host = { files: settings_file('hint_letters = "ab"\n') };
   const { fake } = install_fake_browser(host);
-  const startup = await fresh_startup("race_restart");
+  const startup = fresh_config_service();
   await startup.get_config();
   let swap_started!: () => void;
   const swap_is_writing = new Promise<void>((resolve) => (swap_started = resolve));
@@ -215,7 +215,7 @@ test("a :set issued while the start adopts the folder waits for the swap and sta
 // The browser copy a previous run left: `files` imported over a folder that held `host.files`.
 async function imported_run(tag: string, local: Record<string, unknown>, files: Files): Promise<void> {
   await stored_run(tag);
-  const seeded = await fresh_startup(`${tag}_import`);
+  const seeded = fresh_config_service();
   await seeded.import_config({ kind: "folder", entries: Object.entries(files).map(([path, text]) => ({ path, text })) }, {});
   assert.equal((local[FILES_SOURCE_STORAGE_KEY] as { dir_label: string }).dir_label, IMPORT_DIR_LABEL);
 }
@@ -224,7 +224,7 @@ test("a folder that differs from an imported config replaces nothing at start an
   const host = { files: { ...settings_file('hint_letters = "disk"\n'), "quickmarks.toml": "" } };
   const { local } = install_fake_browser(host);
   await imported_run("import", local, { ...settings_file('hint_letters = "imported"\n'), "command_aliases.toml": "" });
-  const restarted = await fresh_startup("import_restart");
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal((await restarted.get_config()).settings.hint_letters, "imported");
   assert.deepEqual(pending_of(local)?.changes, [
@@ -239,7 +239,7 @@ test("keeping the browser copy stays quiet at the next start, and a later change
   const host = { files: settings_file('hint_letters = "disk"\n') };
   const { local, fake } = install_fake_browser(host);
   await imported_run("keep", local, settings_file('hint_letters = "mine"\n'));
-  const first = await fresh_startup("keep_first");
+  const first = fresh_config_service();
   await first.reload_config_at_start();
   const answered = await answer(first, "keep_browser", pending_of(local));
   assert.equal(answered.ok, true, answered.message);
@@ -247,14 +247,14 @@ test("keeping the browser copy stays quiet at the next start, and a later change
   assert.equal(typeof local[HOST_START_KEPT_STORAGE_KEY], "string");
 
   const toasts = watch_toasts(fake);
-  const second = await fresh_startup("keep_second");
+  const second = fresh_config_service();
   await second.reload_config_at_start();
   assert.equal(pending_of(local), undefined);
   assert.deepEqual(toasts, []);
   assert.equal((await second.get_config()).settings.hint_letters, "mine");
 
   host.files = settings_file('hint_letters = "disk2"\n');
-  const third = await fresh_startup("keep_third");
+  const third = fresh_config_service();
   await third.reload_config_at_start();
   assert.notEqual(pending_of(local), undefined);
   assert.equal(toasts.length, 1);
@@ -267,7 +267,7 @@ test("after the folder changed, keeping is refused and asked again, and using th
   const host = { files: settings_file('hint_letters = "disk"\n') };
   const { local } = install_fake_browser(host);
   await imported_run("folder_moved", local, settings_file('hint_letters = "mine"\n'));
-  const startup = await fresh_startup("folder_moved_start");
+  const startup = fresh_config_service();
   await startup.reload_config_at_start();
   const seen = pending_of(local);
   // The user unpacked the export into the folder after the banner showed.
@@ -287,7 +287,7 @@ test("an editor save, an import or a reload while the question is pending clears
     const host = { files: settings_file('hint_letters = "disk"\n') };
     const { local } = install_fake_browser(host);
     await imported_run(`pending_${change}`, local, settings_file('hint_letters = "mine"\n'));
-    const startup = await fresh_startup(`pending_${change}_start`);
+    const startup = fresh_config_service();
     await startup.reload_config_at_start();
     const seen = pending_of(local);
     assert.ok(seen);
@@ -307,10 +307,10 @@ test("a restart before the answer asks again with the same digests, and the old 
   const host = { files: settings_file('hint_letters = "disk"\n') };
   const { local } = install_fake_browser(host);
   await imported_run("restart_pending", local, settings_file('hint_letters = "mine"\n'));
-  const first = await fresh_startup("restart_pending_first");
+  const first = fresh_config_service();
   await first.reload_config_at_start();
   const seen = pending_of(local);
-  const restarted = await fresh_startup("restart_pending_second");
+  const restarted = fresh_config_service();
   // The stored question shows before the host answers.
   assert.deepEqual(pending_of(local), seen);
   await restarted.reload_config_at_start();
@@ -324,7 +324,7 @@ test("two pages answering at once: the first answer wins and the second is told 
     const host = { files: settings_file('hint_letters = "disk"\n') };
     const { local } = install_fake_browser(host);
     await imported_run(`two_${first_choice}_${second_choice}`, local, settings_file('hint_letters = "mine"\n'));
-    const startup = await fresh_startup(`two_${first_choice}_${second_choice}_start`);
+    const startup = fresh_config_service();
     await startup.reload_config_at_start();
     const seen = pending_of(local);
     const [first, second] = await Promise.all([answer(startup, first_choice, seen), answer(startup, second_choice, seen)]);
@@ -340,7 +340,7 @@ test("using a folder that does not build keeps the browser copy and the question
   const { local } = install_fake_browser(host);
   await imported_run("broken_choice", local, settings_file('hint_letters = "mine"\n'));
   host.files = settings_file("hint_letters = \n");
-  const startup = await fresh_startup("broken_choice_start");
+  const startup = fresh_config_service();
   await startup.reload_config_at_start();
   const seen = pending_of(local);
   const answered = await answer(startup, "use_folder", seen);
@@ -352,7 +352,7 @@ test("using a folder that does not build keeps the browser copy and the question
 
 test("a choice the page did not send in full is refused before anything runs", async () => {
   install_fake_browser({ files: {} });
-  const startup = await fresh_startup("bad_choice");
+  const startup = fresh_config_service();
   const answered = await answer_host_start_choice({ type: "host_start_choice", choice: "delete" as never, host_digest: "a", browser_digest: "b" }, startup.choose_host_start);
   assert.equal(answered.ok, false);
 });
@@ -366,7 +366,7 @@ test("an empty folder, or one holding only autoconfig.toml, never replaces the b
       const files_before = structuredClone(local[FILES_SOURCE_STORAGE_KEY]);
       host.files = folder;
       const toasts = watch_toasts(fake);
-      const restarted = await fresh_startup(`empty_${Object.keys(folder).length}_${browser_filled}`);
+      const restarted = fresh_config_service();
       await restarted.reload_config_at_start();
       assert.equal((await restarted.get_config()).settings.hint_letters, browser_filled ? "mine" : undefined);
       assert.deepEqual(local[FILES_SOURCE_STORAGE_KEY], files_before);
@@ -383,12 +383,12 @@ test("a host that connects after the start asks nothing then, and the next start
   const { local } = install_fake_browser(host);
   await imported_run("late", local, settings_file('hint_letters = "mine"\n'));
   host.reply = async () => Promise.reject(new Error("No such native application org.desertfox.host"));
-  const early = await fresh_startup("late_early");
+  const early = fresh_config_service();
   await early.reload_config_at_start();
   assert.equal(pending_of(local), undefined);
   assert.equal((await early.get_config()).settings.hint_letters, "mine");
   delete host.reply;
-  const later = await fresh_startup("late_later");
+  const later = fresh_config_service();
   await later.reload_config_at_start();
   assert.notEqual(pending_of(local), undefined);
   assert.equal((await later.get_config()).settings.hint_letters, "mine");
@@ -406,7 +406,7 @@ test("no host or no permission keeps the stored config and stays silent", async 
     sent.length = 0;
     // A question from an earlier start cannot be answered without the host.
     local[HOST_START_PENDING_STORAGE_KEY] = { config_dir: "/c", host_digest: "h", browser_digest: "b", changes: [] };
-    const restarted = await fresh_startup(`${failure}_restart`);
+    const restarted = fresh_config_service();
     await restarted.reload_config_at_start();
     assert.equal(sent.length, failure === "no_host" ? 1 : 0);
     assert.equal(pending_of(local), undefined);
@@ -421,7 +421,7 @@ test("a missing config folder keeps the stored config and stays silent", async (
   await stored_run("no_dir");
   host.reply = async () => ({ ok: true, config_dir: "/home/u/.config/desertfox", config_dir_exists: false, files: {} });
   const toasts = watch_toasts(fake);
-  const restarted = await fresh_startup("no_dir_restart");
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal((await restarted.get_config()).settings.hint_letters, "ab");
   assert.deepEqual(toasts, []);
@@ -433,7 +433,7 @@ test("a broken settings.toml adopted into an empty browser copy keeps the stored
   const stored_before = structuredClone(local[FILES_CONFIG_STORAGE_KEY]);
   for (const round of ["one", "two"]) {
     const toasts = watch_toasts(fake);
-    const restarted = await fresh_startup(`broken_${round}`);
+    const restarted = fresh_config_service();
     await restarted.reload_config_at_start();
     assert.equal((await restarted.get_config()).settings.hint_letters, undefined);
     assert.deepEqual(local[FILES_CONFIG_STORAGE_KEY], stored_before);
@@ -450,24 +450,24 @@ test("the first start that finds the folder rewrites autoconfig.toml with the ke
   await stored_run("old_mirror");
   // A profile whose saved layer holds only a consent setting: no fold and no edit rewrites the file it mirrored before.
   local[SAVED_SETTINGS_STORAGE_KEY] = { bridge: true };
-  await (await fresh_startup("old_mirror_failed")).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   await until(() => mirror_writes(sent).length === 1, "the first rewrite");
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY], undefined, "a refused write leaves no mark");
 
   host.autoconfig_fails = false;
-  await (await fresh_startup("old_mirror_written")).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   await until(() => local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] === true, "the mark after the written rewrite");
   assert.deepEqual(mirror_writes(sent), [...Array(2)].map(() => "# The key edits made in the browser, as keymap.d mode tables. Settings live in settings.toml.\n"));
 
-  await (await fresh_startup("old_mirror_done")).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(mirror_writes(sent).length, 2, "a later start writes nothing");
 });
 
 test("a start with no config folder never writes autoconfig.toml, which would create the folder", async () => {
   const { local, sent } = install_fake_browser({ files: {}, no_folder: true });
-  await (await fresh_startup("old_mirror_no_folder")).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(mirror_writes(sent), []);
   assert.equal(local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY], undefined);
@@ -476,7 +476,7 @@ test("a start with no config folder never writes autoconfig.toml, which would cr
 test("a start whose saved layer is empty writes no autoconfig.toml, and sets the mark so later starts skip the check", async () => {
   const { local, sent } = install_fake_browser({ files: settings_file('hint_letters = "ab"\n') });
   await stored_run("no_old_mirror");
-  await (await fresh_startup("no_old_mirror_start")).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   await until(() => local[AUTOCONFIG_KEY_EDITS_ONLY_STORAGE_KEY] === true, "the mark without a write");
   assert.deepEqual(mirror_writes(sent), []);
 });

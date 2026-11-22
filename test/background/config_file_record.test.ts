@@ -5,12 +5,11 @@ import { test } from "node:test";
 import { FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { files_before_unsynced, unsynced_of_stored } from "../../src/background/settings_file.ts";
 import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
 // The record of files the folder lags, by path, with more than settings.toml in it.
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?config_file_record_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const MINE = '# My settings\n\nhint_letters = "abc" # home row\n';
 const with_theme = (theme: string) => `${MINE}theme = "${theme}"\n`;
@@ -30,7 +29,7 @@ type Host = { files: Files; old_host?: boolean; refuse?: string[] };
 async function lagging(folder: Files, copy: Files, record: Record<string, string | null>, host_after: Files, options: Omit<Host, "files"> = {}) {
   const host: Host = { files: folder };
   const fake = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   fake.local[FILES_SOURCE_STORAGE_KEY] = { ...(fake.local[FILES_SOURCE_STORAGE_KEY] as object), files: copy };
@@ -45,7 +44,7 @@ const writes_sent = <T extends { cmd: string }>(sent: T[]) => sent.filter((messa
 test("two waiting files, the first refused as changed on disk: the other is written and the refused one goes to the question", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const { local, host } = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { [THEME]: FRAPPE, "settings.toml": MINE }, { ...folder, [THEME]: HAND_THEME });
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("nord"));
   assert.equal(host.files[THEME], HAND_THEME);
   assert.equal(unsynced_of(local), undefined);
@@ -55,7 +54,7 @@ test("two waiting files, the first refused as changed on disk: the other is writ
 test("a theme write the host fails keeps its path waiting, and a pick meanwhile is written and leaves that path alone", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const { local, host, sent } = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { [THEME]: FRAPPE, "settings.toml": MINE }, folder, { refuse: [THEME] });
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.equal(host.files["settings.toml"], with_theme("nord"));
   assert.equal(host.files[THEME], FRAPPE);
@@ -68,7 +67,7 @@ test("a theme write the host fails keeps its path waiting, and a pick meanwhile 
   assert.equal(copy_of(local)[THEME], EDITED);
 
   host.refuse = [];
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(host.files[THEME], EDITED);
   assert.equal(unsynced_of(local), undefined);
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
@@ -78,13 +77,13 @@ test("a record of the old `{ base }` shape is written as settings.toml's base, a
   const folder = { "settings.toml": MINE };
   const written = await lagging(folder, { "settings.toml": with_theme("nord") }, {}, folder);
   written.local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] = { base: MINE };
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(written.host.files["settings.toml"], with_theme("nord"));
   assert.equal(unsynced_of(written.local), undefined);
 
   const waiting = await lagging(folder, { "settings.toml": with_theme("nord") }, {}, folder, { old_host: true });
   waiting.local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] = { base: MINE };
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
   assert.deepEqual(await restarted.set_in_settings_file("theme", "dracula"), { kind: "waiting", host_outdated: true });
   assert.deepEqual(unsynced_of(waiting.local), { "settings.toml": MINE });
@@ -104,14 +103,14 @@ test("the stored record keeps only paths the host can write, and a file the copy
 test("a file the copy no longer has is deleted only while the folder still holds its base", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const deleted = await lagging(folder, { "settings.toml": MINE }, { [THEME]: FRAPPE }, folder);
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.deepEqual(deleted.host.files, { "settings.toml": MINE });
   assert.deepEqual(writes_sent(deleted.sent), [{ cmd: "write_config_file", kind: "theme", name: "frappe", text: null, base_sha256: writes_sent(deleted.sent)[0]!.base_sha256 }]);
   assert.equal(unsynced_of(deleted.local), undefined);
   assert.equal(deleted.local[HOST_START_PENDING_STORAGE_KEY], undefined);
 
   const kept = await lagging(folder, { "settings.toml": MINE }, { [THEME]: FRAPPE }, { ...folder, [THEME]: HAND_THEME });
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(kept.host.files[THEME], HAND_THEME);
   assert.equal(unsynced_of(kept.local), undefined);
   assert.notEqual(kept.local[HOST_START_PENDING_STORAGE_KEY], undefined);
@@ -120,7 +119,7 @@ test("a file the copy no longer has is deleted only while the folder still holds
 test("a refused settings.toml write is put onto the folder's text and keeps the theme file that still waits", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const { local, host } = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { "settings.toml": MINE, [THEME]: FRAPPE }, { ...folder, "settings.toml": HAND }, { refuse: [THEME] });
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.equal(host.files["settings.toml"], `${HAND}theme = "nord"\n`);
   assert.equal(host.files[THEME], FRAPPE);
   assert.deepEqual(copy_of(local), { "settings.toml": `${HAND}theme = "nord"\n`, [THEME]: EDITED });
@@ -131,7 +130,7 @@ test("a refused settings.toml write is put onto the folder's text and keeps the 
 test("a refused settings.toml write is not put onto a folder whose waiting theme file was also edited by hand: both go to the question", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const { local, host } = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { "settings.toml": MINE, [THEME]: FRAPPE }, { "settings.toml": HAND, [THEME]: HAND_THEME });
-  await (await fresh_startup()).reload_config_at_start();
+  await (fresh_config_service()).reload_config_at_start();
   assert.deepEqual(host.files, { "settings.toml": HAND, [THEME]: HAND_THEME });
   assert.deepEqual(copy_of(local), { "settings.toml": with_theme("nord"), [THEME]: EDITED });
   assert.equal(unsynced_of(local), undefined);
@@ -153,7 +152,7 @@ test("an editor save of a file whose write is out drops only that path: the othe
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const lag = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { [THEME]: FRAPPE, "settings.toml": MINE }, folder);
   const held = hold_writes(lag.fake);
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.get_config();
   const start = restarted.reload_config_at_start();
   await until(() => held.length === 1, "the theme write did not go out");
@@ -172,7 +171,7 @@ test("a pick while another file's write is out goes out at once and gets its own
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const lag = await lagging(folder, { "settings.toml": MINE, [THEME]: EDITED }, { [THEME]: FRAPPE }, { ...folder, [THEME]: HAND_THEME });
   const held = hold_writes(lag.fake);
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.get_config();
   const start = restarted.reload_config_at_start();
   await until(() => held.length === 1, "the theme write did not go out");
@@ -201,7 +200,7 @@ test("a settings.toml refusal whose folder read predates a theme write that land
     const answer = send(name, message);
     return new Promise((resolve) => held_reads.push(() => resolve(answer)));
   };
-  const restarted = await fresh_startup();
+  const restarted = fresh_config_service();
   await restarted.get_config();
   const start = restarted.reload_config_at_start();
   await until(() => held.length === 1, "the theme write did not go out");

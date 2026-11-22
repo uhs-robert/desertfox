@@ -6,9 +6,9 @@ import { answer_config_files } from "../../src/background/config_files.ts";
 import { ConfigRefusal } from "../../src/background/config_reload.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?files_${tag}`)) as Startup;
+type Startup = ConfigService;
 
 const snippet_code = "// id: files.mine\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\nglobalThis.ran = true;\n";
 const slot_of = (local: Record<string, unknown>) => ({ files: (local[FILES_SOURCE_STORAGE_KEY] as { files: Files } | undefined)?.files, config: local[FILES_CONFIG_STORAGE_KEY] });
@@ -17,7 +17,7 @@ const slot_of = (local: Record<string, unknown>) => ({ files: (local[FILES_SOURC
 async function started(tag: string, host_files: Files = {}) {
   const host = { files: host_files, granted: false };
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup(tag);
+  const startup = fresh_config_service();
   await startup.get_config();
   const answer = (request: Parameters<typeof answer_config_files>[0]) =>
     answer_config_files(request, { read_files: async () => slot_of(browser.local).files ?? {}, save: startup.save_config_file });

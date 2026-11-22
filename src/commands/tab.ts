@@ -8,7 +8,7 @@ import type { TabActionDeps } from "../background/tab_actions.ts";
 import { browser_discard_deps, describe_result, set_unloaded } from "../background/tab_discard.ts";
 import type { DiscardDeps, SetUnloadedResult } from "../background/tab_discard.ts";
 import { browser_complete_items_deps, read_tabs } from "../background/complete_items.ts";
-import { get_config } from "../background/startup.ts";
+import { get_config } from "../background/config_store.ts";
 import { shared_last_used_tabs } from "../background/last_used_tab.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import { best_match } from "../shared/score.ts";

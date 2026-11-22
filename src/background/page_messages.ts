@@ -31,15 +31,13 @@ import type {
   change_site_keys_in_file,
   change_site_rule_in_file,
   choose_host_start,
-  get_config,
   import_config,
   preview_config_import,
-  read_engine_state,
-  read_keymap_state,
   reload_config,
   remove_snippet,
   save_config_file,
 } from "./startup.ts";
+import type { get_config, read_engine_state, read_keymap_state } from "./config_store.ts";
 
 export type PageDeps = {
   get_config: typeof get_config;

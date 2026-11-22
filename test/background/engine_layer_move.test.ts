@@ -10,10 +10,9 @@ import { create_engine_messages } from "../../src/background/engine_message.ts";
 import { ENGINE_EDITS_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
-type Startup = typeof import("../../src/background/startup.ts");
-let fresh_count = 0;
-const fresh_startup = async () => (await import(`../../src/background/startup.ts?engine_layer_move_${fresh_count++}`)) as Startup;
+type Startup = ConfigService;
 
 const FILE = "search_engines.d/zz-desertfox.toml";
 const KEYS = "keymap.d/zz-desertfox.toml";
@@ -27,7 +26,7 @@ const LAYER = { engines: { wiki: WIKI, docs: { url: "https://d.test/?q={query}" 
 // A profile of an older version: it read the folder once through the host, and its engines layer and saved edits sit in storage. The next start is the first one of this version.
 async function old_profile(layer: unknown, files: Files = { "settings.toml": "" }, saved: Record<string, unknown> = {}, host: Host = { files }) {
   const browser = install_fake_browser(host);
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.get_config();
   await startup.reload_config();
   browser.local[ENGINE_EDITS_STORAGE_KEY] = layer;
@@ -38,7 +37,7 @@ async function old_profile(layer: unknown, files: Files = { "settings.toml": "" 
 const messages_of = (startup: Startup) => create_engine_messages({ read_engine_state: startup.read_engine_state, change_engine_file: startup.change_engine_file, read_starter: async () => "" });
 
 async function first_start() {
-  const startup = await fresh_startup();
+  const startup = fresh_config_service();
   await startup.reload_config_at_start();
   return startup;
 }
@@ -269,7 +268,7 @@ test("a piece the config refuses stays in the layer, the start says so each time
   assert.match(warnings.toasts()[0]!, /The engine wiki saved in the browser stays there, as the config refuses it: .*keyword/);
 
   host.files = { ...host.files, "search_engines.toml": 'taken = { url = "https://t.test/?q={query}" }\n' };
-  startup = await fresh_startup();
+  startup = fresh_config_service();
   await startup.reload_config();
   await startup.reload_config_at_start();
   warnings.restore();

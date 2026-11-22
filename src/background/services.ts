@@ -12,6 +12,8 @@ import { create_autoconfig_mirror } from "./autoconfig_mirror.ts";
 
 // The caller owns `get_config` and imports this file, so it passes the reader in. A direct import of `get_config` here would be a cycle.
 // Creation order matters: the client takes the updater's `watch`, and the mirror takes the client's `write_autoconfig`.
+export type Services = ReturnType<typeof create_services>;
+
 export function create_services(deps: { get_config: () => Promise<MergedConfig> }) {
   const snippets = create_snippets(registry, snippet_deps, make_router_deps(deps.get_config, no_repeat_memory));
   // The updater needs the client to send `self_update`, and the client reports each reply to the updater, so the updater reads `native_host` late.

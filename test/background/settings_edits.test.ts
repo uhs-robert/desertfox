@@ -8,6 +8,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
 import { load_theme } from "../../src/shared/theme/load.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DESKTOP_THEME_STORAGE_KEY, FILES_CONFIG_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
 test("an edit wins over the config, a temp edit wins over a saved one, and the rest of the config stays", () => {
   const settings = apply_edits({ which_key_delay_ms: 100, hint_letters: "ab" }, { saved: { which_key_delay_ms: 500, light_intensity: 2 }, temp: { which_key_delay_ms: 900 } });
@@ -71,7 +72,7 @@ function install_fake_browser(config_file: { value: unknown }) {
 const files_config = (settings: Record<string, unknown>) => ({ format_version: CONFIG_FORMAT_VERSION, settings });
 const stored_status = (local: Record<string, unknown>) => local[CONFIG_STATUS_STORAGE_KEY] as ReturnType<typeof build_config_status>;
 
-type Startup = typeof import("../../src/background/startup.ts");
+type Startup = ConfigService;
 
 // Most cases need one layer, so this runs `decide` on the temp edits and keeps the saved ones.
 const change_temp = (startup: Startup, decide: (temp: SettingOverrides) => SettingOverrides | undefined) =>
@@ -81,12 +82,11 @@ const change_temp = (startup: Startup, decide: (temp: SettingOverrides) => Setti
   });
 
 // One process holds one background, so a "reload" is a second copy of the startup module over the same storage.
-const fresh_startup = async (tag: string) => (await import(`../../src/background/startup.ts?${tag}`)) as typeof import("../../src/background/startup.ts");
 
 test("get_config follows each :set and :unset, and storage.local follows it", async () => {
   const file = { value: files_config({ hint_letters: "ab" }) };
   const { local } = install_fake_browser(file);
-  const startup = await fresh_startup("memo");
+  const startup = fresh_config_service();
   assert.equal((await startup.get_config()).settings.hint_letters, "ab");
 
   await change_temp(startup, (current) => ({ ...current, hint_letters: "xy", newtab_date: false }));
@@ -108,7 +108,7 @@ test("get_config follows each :set and :unset, and storage.local follows it", as
 test("a decision that returns nothing writes and publishes nothing", async () => {
   const file = { value: files_config({}) };
   const { sets, local } = install_fake_browser(file);
-  const startup = await fresh_startup("noop");
+  const startup = fresh_config_service();
   await startup.get_config();
   const keymap_before = local[COMPILED_KEYMAP_STORAGE_KEY];
   await change_temp(startup, () => undefined);
@@ -119,7 +119,7 @@ test("a decision that returns nothing writes and publishes nothing", async () =>
 test("two changes started together both land: each reads what the other wrote", async () => {
   const file = { value: files_config({}) };
   const { session } = install_fake_browser(file);
-  const startup = await fresh_startup("queue");
+  const startup = fresh_config_service();
   await Promise.all([
     change_temp(startup, (current) => ({ ...current, hint_letters: "xy" })),
     change_temp(startup, (current) => ({ ...current, newtab_date: false })),
@@ -132,7 +132,7 @@ test("two changes started together both land: each reads what the other wrote", 
 test("a change that throws leaves the edits and the later changes alone", async () => {
   const file = { value: files_config({}) };
   const { session } = install_fake_browser(file);
-  const startup = await fresh_startup("throws");
+  const startup = fresh_config_service();
   const refused = change_temp(startup, () => {
     throw new Error("refused");
   });
@@ -146,12 +146,12 @@ test("a change that throws leaves the edits and the later changes alone", async 
 test("a background restart that keeps session storage re-reads the file and the temp edit still wins", async () => {
   const file = { value: files_config({ hint_letters: "ab", which_key_delay_ms: 100 }) };
   const { local } = install_fake_browser(file);
-  const before = await fresh_startup("reload_before");
+  const before = fresh_config_service();
   await change_temp(before, (current) => ({ ...current, hint_letters: "xy" }));
 
   // settings.toml changes on disk, then the reload starts a new background over the same session storage.
   file.value = files_config({ hint_letters: "cd", which_key_delay_ms: 200 });
-  const after = await fresh_startup("reload_after");
+  const after = fresh_config_service();
   const settings = (await after.get_config()).settings;
   assert.equal(settings.hint_letters, "xy");
   assert.equal(settings.which_key_delay_ms, 200);
@@ -164,10 +164,10 @@ test("a background restart that keeps session storage re-reads the file and the 
 test("a :set that is still writing when the reload starts leaves one consistent value", async () => {
   const file = { value: files_config({ hint_letters: "ab" }) };
   const { session } = install_fake_browser(file);
-  const old_background = await fresh_startup("race_before");
+  const old_background = fresh_config_service();
   await old_background.get_config();
   // Imported first: the new load must then run on microtasks alone, before the old write's timer fires.
-  const new_background = await fresh_startup("race_after");
+  const new_background = fresh_config_service();
   const pending = change_temp(old_background, (current) => ({ ...current, hint_letters: "xy" }));
   file.value = files_config({ hint_letters: "cd" });
   const first_read = (await new_background.get_config()).settings.hint_letters;
@@ -175,7 +175,7 @@ test("a :set that is still writing when the reload starts leaves one consistent 
   // The new load started before the write landed, so it shows the file value. The stored value and a later load show the edit.
   assert.equal(first_read, "cd");
   assert.deepEqual(session[TEMP_SETTINGS_STORAGE_KEY], { hint_letters: "xy" });
-  const later = await fresh_startup("race_later");
+  const later = fresh_config_service();
   assert.equal((await later.get_config()).settings.hint_letters, "xy");
 });
 
@@ -183,14 +183,14 @@ test("a stored edit that no longer passes is ignored at load", async () => {
   const file = { value: files_config({}) };
   const { session } = install_fake_browser(file);
   session[TEMP_SETTINGS_STORAGE_KEY] = { light_intensity: 9, newtab_date: false };
-  const startup = await fresh_startup("stale");
+  const startup = fresh_config_service();
   assert.deepEqual((await startup.get_config()).settings, { newtab_date: false });
 });
 
 test("a failed publish puts the stored edits back", async () => {
   const file = { value: files_config({}) };
   const { session, local } = install_fake_browser(file);
-  const startup = await fresh_startup("rollback");
+  const startup = fresh_config_service();
   await change_temp(startup, () => ({ newtab_date: false }));
   const browser_stub = (globalThis as unknown as { browser: { tabs: { query: () => Promise<never> } } }).browser;
   const working = browser_stub.tabs.query;
@@ -208,7 +208,7 @@ test("a failed publish puts the stored edits back", async () => {
 test("a saved edit lands in storage.local, survives a restart that clears session storage, and loses to a temp edit", async () => {
   const file = { value: files_config({ hint_letters: "ab" }) };
   const { local, session } = install_fake_browser(file);
-  const before = await fresh_startup("saved_before");
+  const before = fresh_config_service();
   await before.change_edits((current) => ({ ...current, saved: { hint_letters: "xy" } }));
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { hint_letters: "xy" });
   await change_temp(before, () => ({ hint_letters: "qw" }));
@@ -217,7 +217,7 @@ test("a saved edit lands in storage.local, survives a restart that clears sessio
 
   // A browser restart clears storage.session and keeps storage.local.
   for (const key of Object.keys(session)) delete session[key];
-  const after = await fresh_startup("saved_after");
+  const after = fresh_config_service();
   assert.equal((await after.get_config()).settings.hint_letters, "xy");
   assert.deepEqual(stored_status(local).temp, []);
 });
@@ -225,7 +225,7 @@ test("a saved edit lands in storage.local, survives a restart that clears sessio
 test("a bad setting in the config file is dropped with a warning, so the default applies", async () => {
   const file = { value: files_config({ newtab_recent_tabs_max: null, light_intensity: 9, nope: 1, hint_letters: "ab" }) };
   const { local } = install_fake_browser(file);
-  const startup = await fresh_startup("bad_file_setting");
+  const startup = fresh_config_service();
   assert.deepEqual((await startup.get_config()).settings, { hint_letters: "ab" });
   const warnings = local[WARNINGS_STORAGE_KEY] as string[];
   assert.ok(warnings.some((warning) => /setting newtab_recent_tabs_max skipped, expected/.test(warning)), warnings.join("\n"));
@@ -236,7 +236,7 @@ test("a bad setting in the config file is dropped with a warning, so the default
 test("a failed write of one layer puts both layers back", async () => {
   const file = { value: files_config({}) };
   const { local, session } = install_fake_browser(file);
-  const startup = await fresh_startup("half_write");
+  const startup = fresh_config_service();
   await change_temp(startup, () => ({ newtab_date: false }));
   const local_area = (globalThis as unknown as { browser: { storage: { local: { set: (values: Record<string, unknown>) => Promise<void> } } } }).browser.storage.local;
   const working = local_area.set;
@@ -261,7 +261,7 @@ const dark_of = (name: string) => load_theme(name, 3)!.dark;
 
 test("a pushed theme is stored always and republishes only while theme is desktop", async () => {
   const { local } = install_fake_browser({ value: files_config({}) });
-  const startup = await fresh_startup("push_follow");
+  const startup = fresh_config_service();
   await startup.get_config();
   const before = local[THEME_STORAGE_KEY];
   await startup.set_desktop_theme("oasis_dune");
@@ -279,14 +279,14 @@ test("a pushed theme is stored always and republishes only while theme is deskto
 
 test("theme desktop with nothing pushed shows oasis_moonlight", async () => {
   const { local } = install_fake_browser({ value: files_config({ theme: "desktop" }) });
-  const startup = await fresh_startup("push_none");
+  const startup = fresh_config_service();
   await startup.get_config();
   assert.deepEqual((local[THEME_STORAGE_KEY] as { dark: unknown }).dark, dark_of("oasis_moonlight"));
 });
 
 test("a repeat of the stored name republishes, so a retry after a failed publish applies the theme", async () => {
   const { local } = install_fake_browser({ value: files_config({ theme: "desktop" }) });
-  const startup = await fresh_startup("push_retry");
+  const startup = fresh_config_service();
   await startup.get_config();
   const storage = (globalThis as unknown as { browser: { storage: { local: { set: (values: Record<string, unknown>) => Promise<void> } } } }).browser.storage.local;
   const real_set = storage.set;

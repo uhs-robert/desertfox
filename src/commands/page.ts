@@ -1,4 +1,4 @@
-import { get_config } from "../background/startup.ts";
+import { get_config } from "../background/config_store.ts";
 import { NEW_TAB_PAGE_FILE } from "../shared/config.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { open_in, require_tab_id, typed_url_target, WHERE_PARAM } from "./open_target.ts";

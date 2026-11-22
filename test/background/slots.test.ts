@@ -4,6 +4,7 @@ import { apply_slot_plan, plan_slots, release_slots, SLOT_MAP_STORAGE_KEY, slot_
 import "../../src/background/command_modules.ts";
 import { install_fake_browser, type Files } from "./config_fake_browser.ts";
 import type { TreeBranch, TreeNode } from "../../src/shared/prefix_tree.ts";
+import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
 function leaf(id: string): TreeNode {
   return { kind: "leaf", steps: [{ invocation: { id }, runs_in: "background", count_rule: "ignore" }] };
@@ -113,10 +114,10 @@ test("a damaged map keeps only its sound entries", () => {
   assert.deepEqual(plan_slots(chords(["<A-a>"]), 10, "junk" as never).map, { "<A-a>": "slot_1" });
 });
 
-type Startup = typeof import("../../src/background/startup.ts");
+type Startup = ConfigService;
 async function started(tag: string, files: Files = { "settings.toml": "" }) {
   const browser = install_fake_browser({ files });
-  const startup = (await import(`../../src/background/startup.ts?slots_${tag}`)) as Startup;
+  const startup = fresh_config_service();
   await startup.get_config();
   return { startup, ...browser };
 }
@@ -159,7 +160,7 @@ test("a failed reload puts the stored map back before the rollback publish", asy
   // Slots the keymap order would not give: the rollback plan alone cannot rebuild them.
   const stored = { "<A-k>": "slot_1", "<A-j>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4" };
   local[SLOT_MAP_STORAGE_KEY] = structuredClone(stored);
-  const startup = (await import(`../../src/background/startup.ts?slots_${"reload"}`)) as Startup;
+  const startup = fresh_config_service();
   await startup.get_config();
   assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], stored);
   // The new keymap unbinds both default chords, so the failed publish stores a map without them.

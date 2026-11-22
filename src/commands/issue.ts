@@ -1,7 +1,7 @@
 import { BLANK_ISSUE_URL, issue_report, issue_url } from "../background/issue_report.ts";
 import type { IssueFacts } from "../background/issue_report.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
-import { get_config } from "../background/startup.ts";
+import { get_config } from "../background/config_store.ts";
 import { FILES_SOURCE_STORAGE_KEY, WARNINGS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import type { CommandContext } from "../shared/command.ts";
 import { host_channel } from "../shared/native_host.ts";

@@ -2,7 +2,7 @@
 
 import { RuntimeRefusal } from "../shared/command.ts";
 import { DEFAULT_CONTAINER_NAME, DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
-import { get_config } from "../background/startup.ts";
+import { get_config } from "../background/config_store.ts";
 import type { CommandContext, ParamDef } from "../shared/index.ts";
 import type { PageInfo } from "../shared/engines/slots.ts";
 import { config_url_target, openable_url, own_pages, require_openable } from "../shared/url_build.ts";
