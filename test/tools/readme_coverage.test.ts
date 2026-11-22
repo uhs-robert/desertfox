@@ -30,7 +30,7 @@ test("every source file has an entry in its folder README", () => {
   assert.equal(problems.length, 0, `\n${problems.length} source file(s) have no README entry:\n${problems.sort().join("\n")}\n`);
 });
 
-// A README is a code map. A "cut" README has no line over LINE_CAP characters (headings, prose, list items and indented lines alike). A README not yet cut sits in UNCUT_FILE with a byte ceiling at its size then, plus UNCUT_SLACK so a map-line edit in a parallel change does not fail on a few bytes. The ceiling stops it growing. The list shrinks: a listed README that is gone or is now cut must be removed from it, so a cut README cannot regrow unnoticed.
+// A README is a code map. A "cut" README has no line over LINE_CAP characters (headings, prose, list items and indented lines alike). A README not yet cut sits in UNCUT_FILE with a byte ceiling: its size when listed plus a fixed 512 bytes (UNCUT_SLACK, the same number for every README and never moved per edit). The slack is there so map-line edits in parallel changes do not fail on a few bytes. The ceiling stops an uncut README growing. The list shrinks: a listed README that is gone or is now cut must be removed from it, so a cut README cannot regrow unnoticed. Only READMEs under src are checked. READMEs elsewhere (host, tools, docs) are out of scope on purpose.
 const LINE_CAP = 200;
 const UNCUT_SLACK = 512;
 const UNCUT_FILE = "test/tools/readme_uncut.json";
@@ -65,7 +65,14 @@ const PATH_NAME = /^[\w./-]+(\.(ts|css|html|md|json|py|sh|mjs)|\/)$/;
 const BARE_NAME = /^[\w-]+$/;
 
 // A path with a folder in it may be written from src, like `content/main.ts`.
-function exists_for(folder: string, name: string): boolean {
+const src_paths = readdirSync("src", { recursive: true }).map((path) => `/${String(path)}`);
+
+// A colon-free entry is a note that may point at a file in another folder ("`a.ts` lives in `shared/config/`"), so any file or folder under src satisfies it.
+function exists_for(folder: string, name: string, has_colon: boolean): boolean {
+  if (!has_colon) {
+    const tail = `/${name.replace(/^(\.\.?\/)+/, "").replace(/\/$/, "")}`;
+    return src_paths.some((path) => path.endsWith(tail) || path.endsWith(`${tail}.ts`));
+  }
   if (PATH_NAME.test(name)) return existsSync(join(folder, name)) || (name.includes("/") && existsSync(join("src", name)));
   return [name, `${name}.ts`, `${name}.css`, `${name}.html`].some((candidate) => existsSync(join(folder, candidate)));
 }
@@ -75,7 +82,7 @@ test("no README entry names a file or folder that is gone", () => {
   for (const readme of all_readmes()) {
     for (const entry of entry_names(readme)) {
       for (const name of entry.names.filter((candidate) => PATH_NAME.test(candidate) || (entry.has_colon && BARE_NAME.test(candidate)))) {
-        if (!exists_for(dirname(readme), name)) problems.push(`${readme}: entry ${entry.head} names ${name}, which does not exist`);
+        if (!exists_for(dirname(readme), name, entry.has_colon)) problems.push(`${readme}: entry ${entry.head} names ${name}, which does not exist`);
       }
     }
   }
