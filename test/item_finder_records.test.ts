@@ -5,9 +5,9 @@ import { saved_reader } from "./support/snapshot_page.ts";
 import type { SavedNode, SavedPage } from "./support/snapshot_page.ts";
 
 // A stand-in for a notification inbox, written by hand: ten records in a list. Each record is a row of two blocks of one class: the title link on the left, and on the right the date with the avatars of the people in the thread. A record with one avatar has a lone link in its right block, which made the two blocks of such records a list of their own.
-function inbox({ side_height = 20, lone_avatar = [4, 8] } = {}): SavedPage {
+function inbox({ side_height = 20, lone_avatar = [4, 8], count = 10, in_main = true, top = 188 } = {}): SavedPage {
   const record = (index: number): SavedNode => {
-    const y = 188 + index * 56;
+    const y = top + index * 56;
     const avatars = lone_avatar.includes(index) ? 1 : 2;
     return {
       t: "li",
@@ -34,8 +34,8 @@ function inbox({ side_height = 20, lone_avatar = [4, 8] } = {}): SavedPage {
       ],
     };
   };
-  const list: SavedNode = { t: "ul", a: { class: "records" }, r: [253, 188, 1084, 560], c: Array.from({ length: 10 }, (_, index) => record(index)) };
-  const root: SavedNode = { t: "html", r: [0, 0, 1366, 852], c: [{ t: "body", r: [0, 0, 1366, 852], c: [{ t: "main", r: [0, 64, 1354, 788], c: [list] }] }] };
+  const list: SavedNode = { t: "ul", a: { class: "records" }, r: [253, top, 1084, count * 56], c: Array.from({ length: count }, (_, index) => record(index)) };
+  const root: SavedNode = { t: "html", r: [0, 0, 1366, 852], c: [{ t: "body", r: [0, 0, 1366, 852], c: [in_main ? { t: "main", r: [0, 64, 1354, 788], c: [list] } : list] }] };
   const link_up = (node: SavedNode, up: SavedNode | null) => {
     node.up = up;
     for (const child of node.c ?? []) link_up(child, node);
@@ -50,5 +50,30 @@ for (const [what, options] of [["short", { side_height: 20 }], ["tall", { side_h
     assert.equal(found.kind, "list");
     assert.deepEqual(found.items.map((item) => item.t), Array(10).fill("li"));
     assert.ok(found.items.every((item) => found.links.get(item)?.a?.class === "title"));
+  });
+}
+
+for (const count of [2, 3, 5]) {
+  test(`a short inbox of ${count} records in main is the answer, not a pick-only list`, () => {
+    const found = find_items(saved_reader(inbox({ count })));
+    assert.equal(found.kind, "list");
+    assert.equal(found.pick_only_, undefined);
+    assert.deepEqual(found.items.map((item) => item.t), Array(count).fill("li"));
+    assert.equal(found.regions?.[0]?.items.length, count);
+  });
+}
+
+test("two records with one avatar each walk the records, not the halves", () => {
+  const found = find_items(saved_reader(inbox({ count: 2, lone_avatar: [0, 1] })));
+  assert.deepEqual(found.items.map((item) => item.t), ["li", "li"]);
+});
+
+test("one record is no list", () => {
+  assert.equal(find_items(saved_reader(inbox({ count: 1 }))).kind, "none");
+});
+
+for (const [what, options] of [["with no main", { in_main: false }], ["below the first screen of main", { top: 900 }]] as const) {
+  test(`two records ${what} are no list`, () => {
+    assert.equal(find_items(saved_reader(inbox({ count: 2, ...options }))).kind, "none");
   });
 }
