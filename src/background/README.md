@@ -11,7 +11,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - Area `registry.md`: request routing, the message tables, the router, availability, snippets, the bundle loader.
 - Area `config.md`: the keymap compile, edit layers, default site rows, engines, aliases, themes, CSS limits.
 - Area `config_delivery.md`: the config store, swap, write pipeline, start read, import, export, settings file edits, timing log.
-- Area `keys.md`: tab modes, the stored keymap and `read_keymap`, the toolbar switch. `interfaces_media.md`: media and item mode steps and quality.
+- Area `keys.md`: tab modes, item mode, the stored keymap and `read_keymap`, the toolbar switch. `interfaces_media.md`: media mode steps and quality.
 - Area `interfaces_cmdline.md`: the command line service, omnibox, completion, ranking, fonts. `interfaces_pages.md`: which-key, help, external editor.
 - Area `interfaces_tabs.md`: sessions, tab actions, discard, the live model. `interfaces_caret_search_marks.md`: registers, marks, jumps, macros, find.
 - Area `interfaces_hints.md`: hint frames, inspect, images. `host.md`: the native client, host updates, the bridge.
@@ -53,7 +53,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `tab_modes.ts`: the mode of each tab, in `storage.local`: the mode of the child frame whose document holds the focus, else the top frame's.
 - `tab_insert.ts`: insert mode for a whole tab, started by `i`. The background owns the hold and sends one message to every frame.
 - `router.ts`: the one entry for run requests: count limit, content steps, prefill and jump record. Every request ends in `record_step`. Pieces: `count.ts`, `refusal.ts`.
-- `count.ts`, `refusal.ts`: the count prefix check and the refusal channels (toast, tab message) of `router.ts`.
+- `count.ts`, `refusal.ts`: the count prefix check, and the refusal answer: a toast sent by tab message, with a notification as the fallback.
 - `availability.ts`: the one check for "can this page fill what a thing needs?", shared by engines, snippets and which-key.
 - `macro_last_played.ts`: the register `@@` plays, in `storage.session` (a private key for private windows, cleared with the last private window).
 - `macro_replay.ts`: plays a macro for `macro.play`, one router request per step, with Escape (`replay_stop`). In memory only. `main.ts` wires it in.
@@ -91,7 +91,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `jump_store.ts`: the jump list, one list and cursor per window id, in `storage.session` (`JUMP_STORAGE_KEY`, and `JUMP_PRIVATE_STORAGE_KEY` for private windows, cleared as for marks).
 - `jump_leave.ts`: records the place a page leaves when its tab goes to another page.
 - `jump_step.ts`: answers `jump_push` and `jump_step`.
-- `address_arrival.ts`: lets a jump step navigate a tab and push `page.jump` into its top frame once the page is ready.
+- `address_arrival.ts`: takes the user to an address (switch to the tab that has it, else navigate). The caller picks the push: `mark.jump` from `global_mark_jump.ts`, `page.jump` from `jump_step.ts`.
 - `page_ready.ts`: `watch_page_ready(deps, tab_id)` waits for a tab to complete and its content script to answer, in at most 10 s. Start it before the step that navigates.
 - `register_store.ts`: the registers. The background owns them and every tab reaches them by message. Names come from `src/shared/register_names.ts`.
 - `sessions_transfer.ts`: answers the page messages `export_sessions` and `import_sessions` from the session store.
@@ -106,7 +106,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `native_client.ts`: the client for the native host.
 - `host_update.ts`, `host_update_browser.ts`: the host updater.
 - `bridge.ts`, `bridge_browser.ts`, `bridge_run.ts`: publish the mode to the bridge host over one `connectNative` port and answer its `run`, `list` and `theme` requests.
-- `tab_switch.ts`: the tab verbs the bridge host asks for (`tabs`, `activate`, `close`, `capture`, `favicon`).
+- `tab_switch.ts`: the tab verbs the bridge host asks for (`tabs`, `activate`, `clear_preface`, `close`, `capture`, `favicon`).
 - `bridge_events.ts`: the tab events the host streams to subscribers, gated by `bridge_share_tabs`.
 - `reload.ts`: the marker and the tab repair behind `debug.restart`.
 - `config_reload.ts`: the pure build behind every swap: raw files to the slot to store and the config to run, and every refusal as a `ConfigRefusal` whose message names the cause and the fix.
