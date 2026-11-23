@@ -8,7 +8,6 @@ import { define } from "../shared/registry/builtin.ts";
 import { grant_hash, GRANTABLE_PERMISSIONS } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
 import { FIREFOX_PAGES, make_open_firefox_page_handler } from "./firefox_page.ts";
-import type { FirefoxPage } from "./firefox_page.ts";
 import { open_help_url } from "./help_tab.ts";
 
 async function open_grant_panel(ctx: Parameters<typeof open_help_url>[0], permission: GrantablePermission): Promise<void> {
@@ -53,7 +52,7 @@ define("permissions.grant", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => open_grant_panel(ctx, args.permission as GrantablePermission),
+  run: (ctx, args) => open_grant_panel(ctx, args.permission),
 });
 
 const open_firefox_page = make_open_firefox_page_handler({
@@ -72,5 +71,5 @@ define("browser.open_firefox_page", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => open_firefox_page(ctx, { page: args.page as FirefoxPage }),
+  run: (ctx, args) => open_firefox_page(ctx, { page: args.page }),
 });

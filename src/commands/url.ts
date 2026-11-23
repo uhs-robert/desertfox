@@ -12,7 +12,7 @@ define("url.parent", {
   runs_in: "background",
   count: { param: "levels" },
   run: async (ctx, args) => {
-    const parent = parent_url(await current_tab_url(ctx), args.levels as number);
+    const parent = parent_url(await current_tab_url(ctx), args.levels);
     if (parent === undefined) throw new RuntimeRefusal("This address has no parent");
     await open_in(ctx, parent, "here");
   },
@@ -42,7 +42,7 @@ define("url.increment", {
   runs_in: "background",
   count: { param: "amount" },
   run: async (ctx, args) => {
-    const next = incremented_url(await current_tab_url(ctx), args.direction as "up" | "down", args.amount as number);
+    const next = incremented_url(await current_tab_url(ctx), args.direction, args.amount);
     await open_in(ctx, next, "here");
   },
 });

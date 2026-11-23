@@ -116,9 +116,9 @@ export class RuntimeRefusal extends Error {
 // Args reach `run` after the one validator has checked them and filled defaults.
 export type CheckedArgs = Record<string, unknown>;
 
-// The args a handler sees for a param list, after the validator ran. A param with `when` or a `bool` without a default can be absent, so its key is optional. An enum with a literal `values` list is the union of those values, plus "" when `optional`. A `bool` whose default is a list of arms with no plain value last can also be absent. Anything else of type `string` or `key` is `string`. A list with a param typed as plain `ParamDef` (its `name` is `string`) gives `CheckedArgs`.
+// The args a handler sees for a param list, after the validator ran. A param with `when` or a `bool` without a default can be absent, so its key is optional. An enum with a literal `values` list is the union of those values, plus "" when `optional`. A `bool` whose default is a list of arms with no plain value last can also be absent. A strict `string` with a literal `values` list is the union of those values too. Anything else of type `string` or `key` is `string`. A list with a param typed as plain `ParamDef` (its `name` is `string`) gives `CheckedArgs`.
 type EnumValue<P> = P extends { values: readonly (infer V)[] } ? V : string;
-type ParamValueType<P extends ParamDef> = P["type"] extends "int" | "float" ? number : P["type"] extends "bool" ? boolean : P extends { type: "enum"; optional: true } ? EnumValue<P> | "" : P extends { type: "enum" } ? EnumValue<P> : string;
+type ParamValueType<P extends ParamDef> = P["type"] extends "int" | "float" ? number : P["type"] extends "bool" ? boolean : P extends { type: "string"; strict: true; values: readonly string[] } ? EnumValue<P> : P extends { type: "enum"; optional: true } ? EnumValue<P> | "" : P extends { type: "enum" } ? EnumValue<P> : string;
 // A default list of arms only, with no plain value last, leaves a bool absent when no arm holds. Any other param with such a list is required by the validator.
 type ArmsOnly<D> = D extends readonly unknown[] ? (D[number] extends object ? true : false) : false;
 type MaybeAbsent<P extends ParamDef> = P extends { when: object } ? true : P extends { type: "bool" } ? (P extends { default: infer D } ? ArmsOnly<D> : true) : false;

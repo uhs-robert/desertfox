@@ -29,7 +29,7 @@ define("help.open", {
   repeatable: false,
   modes: ["normal", "item"],
   run: async (ctx, args) => {
-    const name = args.name as string;
+    const name = args.name;
     const help_page_url = browser.runtime.getURL(HELP_PAGE_FILE);
     // The help page holds no web address, so asking from it leaves the Site Rules page without one.
     const tab = ctx.tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(ctx.tab_id));
@@ -48,7 +48,7 @@ define("help.key", {
   runs_in: "background",
   repeatable: false,
   run: async (ctx, args) => {
-    const keys = args.keys as string;
+    const keys = args.keys;
     const stored = await browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY);
     // A tab the command has no hold of (none, or gone) gets the global tree.
     const tab = ctx.tab_id === undefined ? undefined : await ignore_refusal(browser.tabs.get(ctx.tab_id));

@@ -10,7 +10,7 @@ define("engine.show", {
   runs_in: "background",
   repeatable: false,
   run: async (_ctx, args) => {
-    const url = `${browser.runtime.getURL(HELP_PAGE_FILE)}#engine=${encodeURIComponent(args.engine as string)}`;
+    const url = `${browser.runtime.getURL(HELP_PAGE_FILE)}#engine=${encodeURIComponent(args.engine)}`;
     await browser.tabs.create({ url });
   },
 });

@@ -1,6 +1,6 @@
 import { create_registry } from "./define.ts";
 import type { CommandInput } from "./define.ts";
-import type { ArgsOf, BackgroundCommandDef, CommandContext, CommandDef, ParamDef } from "../command.ts";
+import type { ArgsOf, BackgroundCommandDef, CommandContext, CommandDef, ContentCommandDef, ParamDef } from "../command.ts";
 import type { Outcome } from "../messages/content.ts";
 
 // The registry the extension uses. Command modules call `define` on import. Only the background page and Node tools import this file, because the call runs at import and keeps define.ts and the setting rules in the bundle.
@@ -18,9 +18,11 @@ type TypedBackgroundInput<P extends readonly ParamDef[]> = Omit<BackgroundComman
 type Define = {
   // A background command whose `run` takes the args its params describe.
   <const P extends readonly ParamDef[]>(id: string, input: TypedBackgroundInput<P>): CommandDef;
-  // Wide fallback: a command whose `run` still takes `CheckedArgs`, and every content command.
-  (id: string, input: CommandInput & { bridge: boolean }): CommandDef;
+  // A content command: its code lives in the page and gets its args as `CheckedArgs` on the message path.
+  (id: string, input: ContentCommandInput & { bridge: boolean }): CommandDef;
 };
+
+type ContentCommandInput = Omit<ContentCommandDef, "id">;
 
 // Every built-in command states `bridge` on purpose, because the bridge runs nothing by default and a forgotten field should not pass silently.
 export const define: Define = (id: string, input: CommandInput & { bridge: boolean }): CommandDef => registry.define(id, input);

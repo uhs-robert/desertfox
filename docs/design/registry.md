@@ -19,7 +19,7 @@ define("tab.close", {
   ],
   runs_in: "background",
   count: "repeat",
-  run: async (ctx, { focus }) => { /* ... */ },
+  run: async (ctx, { side }) => { /* side: "none" | "all_before" | "all_after" | "focus_previous" */ },
 });
 
 define("open.search", {
@@ -35,9 +35,11 @@ define("open.search", {
       when: { where: ["tab", "background", "window"] } },
   ],
   runs_in: "background",
-  run: async (ctx, { engine, query, where, container }) => { /* ... */ },
+  run: async (ctx, { engine, query, where, container }) => { /* where is a union of WHERE, container is string | undefined */ },
 });
 ```
+
+The handler of a background command gets its args typed from `params` (`ArgsOf` in `src/shared/command.ts`). A static `enum`, or a `strict` `string` with a literal `values` list, is the union of its values. Other `string` and `key` params are `string`, `int` and `float` are `number`, and a param with `when` is an optional key. A content command has no handler in the definition, so its handler in the page reads `CheckedArgs`.
 
 The fields follow the Oasis action library (`home/hypr/.config/hypr/lib/act/init.lua`) so the two lists have one shape:
 
