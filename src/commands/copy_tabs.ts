@@ -94,5 +94,5 @@ define("copy.tabs", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handler(ctx, args as Parameters<typeof handler>[1]),
+  run: (ctx, args) => handler(ctx, args),
 });

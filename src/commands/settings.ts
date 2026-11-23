@@ -71,6 +71,9 @@ const handlers = make_settings_handlers({
 const SETTABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable);
 const TOGGLEABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle);
 
+// The one narrowing: `SETTABLE` is filtered at run time, so its names type as `string`. The param is strict, so the validator has already refused any name outside the list.
+const setting_named = <N extends string, A extends { name: string }>(args: A) => args as A & { name: N };
+
 const TEMP_PARAM = { name: "temp", type: "bool", default: false, short: "t", description: "Keep the change only until the browser restarts." } as const;
 
 define("settings.set", {
@@ -85,7 +88,7 @@ define("settings.set", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.set(ctx, args as { name: keyof Settings; value: string; temp?: boolean }),
+  run: (ctx, args) => handlers.set(ctx, setting_named(args)),
 });
 
 define("settings.toggle", {
@@ -96,7 +99,7 @@ define("settings.toggle", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.toggle(ctx, args as { name: keyof Settings; temp?: boolean }),
+  run: (ctx, args) => handlers.toggle(ctx, setting_named(args)),
 });
 
 define("settings.unset", {
@@ -107,5 +110,5 @@ define("settings.unset", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.unset(ctx, args as { name: keyof Settings | "all"; temp?: boolean }),
+  run: (ctx, args) => handlers.unset(ctx, setting_named(args)),
 });
