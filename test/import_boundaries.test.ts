@@ -103,8 +103,8 @@ test("every listed content exception is still a cross-bundle import", () => {
   assert.deepEqual(stale, [], `These content exceptions no longer match an import. Remove them from test/import_boundaries.ts:\n${stale.join("\n")}`);
 });
 
-test("every content exception names the PR that removes it or is permanent", () => {
-  const unnamed = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => !/^(PR [4-7]|permanent)$/.test(owner));
+test("every content exception is permanent", () => {
+  const unnamed = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => !/^permanent$/.test(owner));
   assert.deepEqual(unnamed, []);
   const permanent = Object.entries(CONTENT_EXCEPTIONS).filter(([, owner]) => owner === "permanent");
   assert.ok(permanent.every(([edge]) => edge.startsWith("content/media/") && edge.includes("-> content/quality/")), "only media to quality is permanent");

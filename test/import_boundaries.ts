@@ -2,7 +2,7 @@
 export const EXCEPTIONS: Record<string, string> = {
 };
 
-// Imports that break the content rule in AGENTS.md ("Architecture rules"): a bundle folder under src/content imports only itself, the content root, src/content/lib and src/shared, and the root imports no bundle folder (handlers/ is core, not a bundle). Paths are relative to src/. The value is the PR of .plans/desertfox/bundle-contracts.md that removes the edge, or "permanent" for the edge that stays. The list only shrinks: test/import_boundaries.test.ts fails on a new cross-bundle import and on an entry that no longer matches. src/cmdline/host.ts is the one other importer and sits outside this list, because it imports only the content root.
+// Imports that break the content rule in AGENTS.md ("Architecture rules"): a bundle folder under src/content imports only itself, the content root, src/content/lib and src/shared, and the root imports no bundle folder (handlers/ is core, not a bundle). Paths are relative to src/. Every entry is "permanent": the edge stays by design. The list only shrinks: test/import_boundaries.test.ts fails on a new cross-bundle import and on an entry that no longer matches. src/cmdline/host.ts is the one other importer and sits outside this list, because it imports only the content root.
 export const CONTENT_EXCEPTIONS: Record<string, string> = {
   "content/media/frame_media.ts -> content/quality/youtube.ts": "permanent",
   "content/media/main.ts -> content/quality/youtube.ts": "permanent",
