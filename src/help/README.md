@@ -23,7 +23,6 @@ The detail of the long entries is in "Help files for the help page" in `docs/des
 - `pairs_page.ts`: draws the Aliases and Quickmarks sections.
 - `themes_model.ts`: no DOM: the state of the "Import a theme" box. Parses the scheme as you type, suggests a name, sends a save or a remove.
 - `themes_page.ts`: draws the "Import a theme" box with its live preview and the list of theme files.
-- `settings_page.ts` draws `newtab_links` as a list of rows (label, address, group) in the New tab group (`link_list` control), saved as a whole list.
 - `transfer_model.ts`: no DOM: the state of the "Advanced: back up and restore" section: the picked import, the preview, the ticked snippets and the export zips.
 - `transfer_page.ts`: draws that section: export buttons, the pickers, the consent screen and the installed snippets with Remove.
 - `host_start_model.ts`: no DOM: the state of the banner for a pending host start. Sends the user's answer with the digests it showed.
@@ -39,7 +38,6 @@ The detail of the long entries is in "Help files for the help page" in `docs/des
 - One renderer per page, drawn with DOM calls only. Command text never goes through `innerHTML`.
 - `home_view.ts`: Home and the keycap above its title.
 - `quick_start_view.ts`: the Quick Start blocks, with ids on the level-2 headings.
-- `practice_page.ts`: Practice.
 - `commands_view.ts`: the Commands page: a card per command, the params table, the advanced toggle and `command_anchor`.
 - `search_engines_view.ts`: the Search Engines page: the guide headings and "Your engines" (the engine table and `engine_anchor`).
 - `styling_view.ts`: the Styling page, from `STYLE_VARIABLES` and `STYLE_CLASSES`.
