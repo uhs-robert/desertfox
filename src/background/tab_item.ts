@@ -111,12 +111,16 @@ export function create_tab_item(deps: TabItemDeps) {
     },
     // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode. The frame goes into the hold in the same turn as the read, so an end after the read sends it the step off.
     // A new document of a frame of the hold joins too. The steps still waiting for the frame were for its old document, and so was a stale off.
+    // The top document of a load that carries the mode (a kept resume mark) starts the hold here, at its first keymap read, so keys pressed before the load completes already run in item mode. The hold is written before the step on goes out, so a frame that started earlier finds it when its step report comes. The mark stays for the completed load, whose start leaves the mode on a page with no list.
     join: (tab_id: number, frame_id: number, document_id?: string): Promise<boolean> =>
       in_turn(async () => {
-        const hold = await read(tab_id);
+        const live_hold = await read(tab_id);
+        const carried_mode = !live_hold && frame_id === 0 && (await read_resume(tab_id))?.kept === true;
+        const hold = live_hold ?? (carried_mode ? { frames: [] } : undefined);
         if (!hold) return false;
         drop_steps_to(tab_id, frame_id);
         await deps.storage.set({ [key_of(tab_id)]: { ...without_stale_off(with_frame(hold, frame_id, document_id), frame_id), rejoined: [...new Set([...(hold.rejoined ?? []), frame_id])] } satisfies ItemHold });
+        if (carried_mode) step(tab_id, true, undefined, frame_id);
         return true;
       }),
     // A child frame of the hold that reloads or navigates keeps the tab in the mode. The commit comes before the new document's first report, which says normal before the keymap read rejoins it. The top frame's load ends the hold instead (`navigated`), and its commit decides whether the new page takes the mode back. The steps still waiting for the frame were for its old document.

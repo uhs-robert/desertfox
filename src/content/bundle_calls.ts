@@ -64,7 +64,7 @@ type BundleCalls = {
   "text.input": { bundle: "text"; args: { field_: Element; before_: string; type_?: string | undefined; autocomplete_?: string | undefined } };
   "text.flush": { bundle: "text"; args: { after_?: string | undefined } };
 
-  "item.start": { bundle: "item"; args: { selectors?: string[] | undefined } };
+  "item.start": { bundle: "item"; args: { selectors?: string[] | undefined; resume?: boolean | undefined } };
   "item.mark": { bundle: "item"; args: { element: Element } };
   "item.lists": { bundle: "item"; args: ItemListsArgs };
   "item.current": { bundle: "item"; args: { take: (item: Element | undefined, link: Element | undefined) => void } };

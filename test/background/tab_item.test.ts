@@ -470,3 +470,80 @@ test("a commit that arrives before its load start resumes nothing, and leaves no
   assert.equal(await tab_item.take_resume(4), false);
   assert.deepEqual(data, {});
 });
+
+// The new top document's first keymap read joins a hold that its kept mark starts, so keys pressed during the load run in item mode.
+test("the new top document joins item mode at its first keymap read when the commit kept the mark, and the step on reaches the frames that started first", async () => {
+  const { tab_item, steps, data } = await load_in_hold(commit_as("link"));
+  steps.length = 0;
+  assert.equal(await tab_item.join(4, 0, "next"), true);
+  assert.deepEqual(data["desertfox_tab_item_4"], { frames: [0], documents: { 0: "next" }, rejoined: [0] });
+  assert.deepEqual(steps, ["4:on:all:from 0"]);
+  await tab_item.reported(4, 7, "item", true);
+  assert.deepEqual(data["desertfox_tab_item_4"], { frames: [0, 7], documents: { 0: "next" }, rejoined: [0] });
+  assert.equal(await tab_item.take_resume(4), true, "the mark stays for the completed load, which drops the mode on a page with no list");
+});
+
+test("the join writes the hold before a step report from a child frame that comes right behind it", async () => {
+  const { tab_item, steps, data } = await load_in_hold(commit_as("link"));
+  steps.length = 0;
+  const [joined] = await Promise.all([tab_item.join(4, 0, "next"), tab_item.reported(4, 7, "item", true)]);
+  assert.equal(joined, true);
+  assert.deepEqual(steps, ["4:on:all:from 0"], "the report found the hold, so no step off went to the child frame");
+  assert.deepEqual((data["desertfox_tab_item_4"] as { frames: number[] }).frames, [0, 7]);
+});
+
+test("the joined top frame's first report of normal keeps the hold, and its later normal (Escape) ends it", async () => {
+  const { tab_item, steps, data } = await load_in_hold(commit_as("link"));
+  await tab_item.join(4, 0, "next");
+  await tab_item.reported(4, 7, "item", true);
+  steps.length = 0;
+  await tab_item.reported(4, 0, "normal", false, "next");
+  assert.ok(data["desertfox_tab_item_4"]);
+  await tab_item.reported(4, 0, "item", true, "next");
+  await tab_item.reported(4, 0, "normal", false, "next");
+  assert.deepEqual(steps, ["4:off:7"]);
+  assert.equal(data["desertfox_tab_item_4"], undefined);
+});
+
+test("a keymap read that comes before the top frame's commit joins nothing, and the completed load still resumes", async () => {
+  const { tab_item, steps } = make();
+  await tab_item.reported(4, 0, "item");
+  await tab_item.navigated(4, { status: "loading" }, FROM);
+  steps.length = 0;
+  assert.equal(await tab_item.join(4, 0, "next"), false);
+  await tab_item.committed(4, 0, commit_as("link"));
+  assert.deepEqual(steps, []);
+  assert.equal(await tab_item.take_resume(4), true);
+});
+
+test("only the top frame joins from a kept mark", async () => {
+  const { tab_item } = await load_in_hold(commit_as("link"));
+  assert.equal(await tab_item.join(4, 7, "child"), false);
+  assert.equal(await tab_item.join(4, 0, "next"), true);
+});
+
+test("a reload, back or forward, a typed address and another host join nothing", async () => {
+  for (const transition of [commit_as("reload"), commit_as("link", ["forward_back"]), commit_as("typed"), commit_as("link", [], "https://b.test/next")]) {
+    const { tab_item, data } = await load_in_hold(transition);
+    assert.equal(await tab_item.join(4, 0, "next"), false, `${transition.transitionType} ${transition.url}`);
+    assert.equal(data["desertfox_tab_item_4"], undefined);
+  }
+});
+
+test("a page that redirects after the join ends the joined hold, and its target joins only when its own commit carries the mode", async () => {
+  for (const [target, joins] of [["https://a.test/landed", true], ["https://b.test/landed", false]] as const) {
+    const { tab_item, steps } = await load_in_hold(commit_as("link"));
+    await tab_item.join(4, 0, "next");
+    await tab_item.reported(4, 0, "item", true, "next");
+    steps.length = 0;
+    await tab_item.navigated(4, { status: "loading" }, "https://a.test/next");
+    await tab_item.committed(4, 0, commit_as("link", ["client_redirect"], target));
+    assert.equal(await tab_item.join(4, 0, "landed"), joins, target);
+  }
+});
+
+test("a mark the completed load spent joins nothing", async () => {
+  const { tab_item } = await load_in_hold(commit_as("link"));
+  assert.equal(await tab_item.take_resume(4), true);
+  assert.equal(await tab_item.join(4, 0, "next"), false);
+});

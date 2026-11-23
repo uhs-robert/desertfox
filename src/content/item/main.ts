@@ -65,12 +65,13 @@ if (!item_window.desertfox_item_ready && host) {
     in_field_: () => host.is_editable_(host.focused_()),
     has_list_: (selectors) => (selectors[0] ? selectors.some((selector) => Array.from(document.querySelectorAll(selector)).some(is_shown)) : !!page.derived.items_()[0]),
     enter_: () => (page.derived.unpin_(), host.set_mode_("item")),
+    leave_: () => host.set_mode_("normal"),
     when_idle_: (run) => requestIdleCallback(run, { timeout: 1000 }),
     later_: (run, ms) => setTimeout(run, ms),
     now_: () => performance.now(),
     on_unload_: (run, on) => (on ? addEventListener : removeEventListener)("beforeunload", run),
   });
-  host.register_handler_("item.start", (args) => start(args.selectors));
+  host.register_handler_("item.start", (args) => start(args.selectors, args.resume));
   // The shared focus mark, asked for by the hints bundle after a focus move. The focus can have left by the time this bundle loads, and then there is nothing to mark.
   host.register_handler_("item.mark", (args) => {
     const element = args.element;
