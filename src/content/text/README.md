@@ -1,15 +1,18 @@
 # text
 
-The `text` bundle (`text.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). It records the text typed in one insert session and types it back for `.`. The background injects it into a frame on the first input event in a text field.
+The `text` bundle (`text.js`): records the text typed in one insert session and types it back for `.`. The background injects it on the first input event in a text field.
 
-- `content/main.ts` keeps two hooks that must not wait for the bundle: a window `beforeinput` listener (insert mode only) and one flush call before each leaf runs and on each focusout. Each forwards through `run_command_`, which runs a bundle's calls in the order they were made, even a call made after the bundle registered its handlers but before its load answered. So the first characters after `gi` are not lost and a flush runs after the input before it.
-- The flush reads the field's text when it is asked for, at the blur or the key, and sends it along, so a page script that edits the field while the bundle loads does not change what is recorded.
-- Keys that can bind are held while the flush waits on the load, so a `.` right after Escape replays this session and not the step before it. A key typed in a field is never held, so a chord typed in a field (for example `A-k`) during the first text load in a page can still reach the background before the text is recorded. `.` then repeats the text and not the chord. This needs a load slower than the typing, and it is left open.
-- `recorder.ts`: the session. The first `beforeinput` in a field takes the field's text. A flush takes it again and records what the edit put in (`inserted_text`: the common prefix and suffix of the two texts are cut away). So word delete, forward delete, a replaced selection, a paste, IME and autocorrect all follow the field. One contiguous edit is the model: text between two edits far apart in the field comes along with the second. A flush also comes from the bundle on `focusout` (Escape blurs the field, so it needs no hook of its own) and `pagehide`, and a second flush records nothing. A session records `text.insert` through the same `record_step` message as a content leaf, led by the entry command when one focused the field. Pure, unit tested.
-- `entry.ts`: the entry (decision D1 of the dot-repeat plan). `page.focus_input`, `page.focus_field` and a hint pick that ended in insert mode mark the field they focused on `window`, and the first session in that field takes the mark. A field focused by a click has none, so its replay types into the field the last Escape left.
-- `host_editable.ts`: `is_editable_in_frame`, the field check of this bundle. It asks the frame's host, because a bundle's own `editable.ts` holds no per-site rules.
-- `secret_field.ts`: `is_secret_field`, the one test for a field whose text is never recorded: a password input, or an `autocomplete` of `current-password`, `new-password` or `one-time-code`. A field seen as secret stays secret, so a show-password toggle does not expose it. Register writes and the macro recorder call it too.
-- `field_writer.ts`: `write_into_field`, the one writer of text into a field, through `execCommand("insertText")` so React and Vue fields see a real input event. It refuses with `RuntimeRefusal` when no field is focused and none was left. Hint keys and `<C-r>` paste use it through `type_at_caret`, and so does the `editor` bundle for a contenteditable result.
-- `main.ts`: registers `text.input`, `text.flush`, `text.insert` and `register.paste` (`<C-r><reg>`, which reads the register from the background and types it). A replay runs under `while_replaying`, so its own input events do not record themselves. A paste does not, so its text joins the insert session. Pasting into a password field works, because only reading a field into a register is blocked.
+Behavior is in `docs/design/interfaces_caret_search_marks.md`, section "Text files for the text bundle".
 
-The text goes to `storage.session` only (the `.` slot, which a private window has its own copy of), never `storage.local`. Rich editors that ignore `execCommand` are not recorded.
+- `main.ts`: registers `text.input`, `text.flush`, `text.insert` and `register.paste`.
+- `recorder.ts`: the session: takes the field's text, and records what an edit put in. Pure.
+- `entry.ts`: the entry command mark that a focused field carries to its first session.
+- `host_editable.ts`: `is_editable_in_frame`, the field check of this bundle.
+- `secret_field.ts`: `is_secret_field`, the one test for a field whose text is never recorded.
+- `field_writer.ts`: `write_into_field`, the one writer of text into a field.
+
+Rules across files:
+
+- `src/content/main.ts` keeps two hooks that must not wait for this bundle: the `beforeinput` listener and the flush.
+- `main.ts` and the `editor` bundle call `is_secret_field`. The `editor` bundle writes through `type_at_caret` in `field_writer.ts`.
+- The text goes to `storage.session` only, never `storage.local`.
