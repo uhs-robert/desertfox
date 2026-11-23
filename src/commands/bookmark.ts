@@ -159,7 +159,7 @@ define("bookmark.add", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.add(ctx, args as { url: string; folder: string }),
+  run: (ctx, args) => handlers.add(ctx, args),
 });
 
 define("bookmark.open", {
@@ -173,7 +173,7 @@ define("bookmark.open", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.open(ctx, args as { bookmark: string; folder: string; where: Where }),
+  run: (ctx, args) => handlers.open(ctx, args),
 });
 
 define("bookmark.remove", {
@@ -185,7 +185,7 @@ define("bookmark.remove", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.remove(ctx, args as { bookmark: string; folder: string }),
+  run: (ctx, args) => handlers.remove(ctx, args),
 });
 
 define("bookmark.rename", {
@@ -197,7 +197,7 @@ define("bookmark.rename", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.rename(ctx, args as { bookmark: string; title: string }),
+  run: (ctx, args) => handlers.rename(ctx, args),
 });
 
 define("bookmark.edit_url", {
@@ -209,7 +209,7 @@ define("bookmark.edit_url", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.edit_url(ctx, args as { bookmark: string; url: string }),
+  run: (ctx, args) => handlers.edit_url(ctx, args),
 });
 
 define("bookmark.move", {
@@ -221,18 +221,18 @@ define("bookmark.move", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.move(ctx, args as { folder: string; bookmark: string }),
+  run: (ctx, args) => handlers.move(ctx, args),
 });
 
 // `here` is left out, since a folder is many pages. There is no default: no one value fits, and the shared -t -b -w letters stay.
-const OPEN_FOLDER_WHERE_PARAM: ParamDef = {
+const OPEN_FOLDER_WHERE_PARAM = {
   name: "where",
   type: "enum",
   values: ["tab", "background", "window"],
   short: WHERE_SHORT,
   value_labels: { tab: "in new tabs", background: "in background tabs", window: "in new window" },
   description: { tab: "Open in new tabs, the first one active.", background: "Open all in background tabs.", window: "Open all in a new window." },
-};
+} as const satisfies ParamDef;
 
 define("bookmark.open_folder", {
   label: "Open bookmark folder",
@@ -243,5 +243,5 @@ define("bookmark.open_folder", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.open_folder(ctx, args as { folder: string; where: Exclude<Where, "here"> }),
+  run: (ctx, args) => handlers.open_folder(ctx, args),
 });

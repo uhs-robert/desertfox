@@ -113,7 +113,7 @@ define("open.anything", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => anything_handlers.run(ctx, args as { query: string; where: Where }),
+  run: (ctx, args) => anything_handlers.run(ctx, args),
   jumps: (args) => args.where === "here",
 });
 
