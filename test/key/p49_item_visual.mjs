@@ -343,6 +343,30 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("c3");
   });
 
+  // The hashes of the tabs on a page, here included. The test page's cards link to #c<n> on the same address.
+  const background_hashes = (page_id) => in_background(`(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes(${JSON.stringify(`id=${page_id}`)}) && tab.url.includes("#")).sort((a, b) => a.index - b.index).map((tab) => tab.url.slice(tab.url.indexOf("#"))).join(","))()`);
+  const here_hash = () => in_active_tab("location.hash");
+
+  await run_case("Enter opens the first selected item here and the rest in background tabs, and ends the selection", async () => {
+    await start("iv_open_range_list");
+    await press_keys("jj");
+    await expect_range(3);
+    await press_keys("-k", "Return");
+    await poll_until("the first item opened here", async () => (await here_hash()) === "#c0");
+    await poll_until("the rest in background tabs", async () => (await background_hashes("iv_open_range_list")).split(",").sort().join(",") === "#c0,#c1,#c2");
+    await expect_badge("ITEM");
+  });
+
+  await run_case("Ctrl+Enter opens every selected item in background tabs and ends the selection", async () => {
+    await start("iv_open_bg_list");
+    await press_keys("j");
+    await expect_range(2);
+    await press_keys("-M", "ctrl", "-k", "Return", "-m", "ctrl");
+    await poll_until("both items in background tabs", async () => (await background_hashes("iv_open_bg_list")).split(",").sort().join(",") === "#c0,#c1");
+    expect((await here_hash()) === "", "the current tab moved");
+    await expect_badge("ITEM");
+  });
+
   // Last, since it rebinds f for the rest of the piece. The page reads the keymap again after the reload, and the background resolves the new item key into visual item mode.
   await run_case("after a config reload rebinds f in item mode, f in visual item mode ends the selection and runs the new binding", async () => {
     const dir = row_config();

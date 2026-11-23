@@ -164,3 +164,91 @@ test("Enter clicks the Tab-focused child of the current item, and the link when 
   await handlers.get("page.item_action")!({ action: "open" });
   assert.deepEqual(clicked, ["button", "other link"], "Enter opens the link of the current item");
 });
+
+// Drives the real handler with a fake host. A row is a fake item. The host answers each row's link by the row's own rule (`addresses`), as the item bundle does, while the first a[href] of the row (`first_links`, a vote link) is a different address.
+async function run_open(action: string, mode: "item" | "item_visual", range: { addresses: (string | undefined)[]; from: number; to: number; first_links?: string[] }) {
+  const sent: { url: string; where: string }[] = [];
+  const events: string[] = [];
+  const row = (address: string | undefined, index: number) => ({ link: address === undefined ? undefined : { href: address }, matches: () => false, querySelector: () => ({ href: range.first_links?.[index] ?? "https://first-link/" }) });
+  const rows = range.addresses.map(row);
+  const link_of = (item: (typeof rows)[number]) => item.link;
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+  const host = {
+    register_handler_: (id: string, handler: (args: Record<string, unknown>) => Promise<unknown>) => handlers.set(id, handler),
+    run_command_: (id: string, _bundle: string, args: { take: (...taken: unknown[]) => void }) => {
+      if (id === "item.range" && mode === "item_visual") args.take(rows, rows.map((_, index) => `i${index}`), range.from, range.to, range.from, link_of);
+      if (id === "item.current") args.take(rows[range.from], link_of(rows[range.from]!));
+      return Promise.resolve({ ok: true });
+    },
+    set_mode_: (next: string) => events.push(`mode ${next}`),
+    show_toast_: () => {},
+  };
+  const globals = globalThis as Record<string, unknown>;
+  globals.window = { desertfox_host: host };
+  globals.browser = {
+    runtime: {
+      sendMessage: (message: { invocations: { args: { url: string; where: string } }[] }) => {
+        sent.push(message.invocations[0]!.args);
+        events.push(`open ${message.invocations[0]!.args.url}`);
+        return Promise.resolve({ ok: true });
+      },
+    },
+  };
+  await import(`${new URL("../src/content/item_act/main.ts", import.meta.url).href}?open_${Math.random()}`);
+  const outcome = await handlers.get("page.item_action")!({ action }).then(() => "ok", (error: Error) => error.message);
+  return { sent, events, outcome };
+}
+
+test("open_range opens the first item here, the rest in background tabs in order, then ends the selection", async () => {
+  const { sent, events } = await run_open("open_range", "item_visual", { addresses: ["https://a/", "https://b/", "https://c/", "https://d/"], from: 0, to: 2 });
+  assert.deepEqual(sent.map((one) => one.url).sort(), ["https://a/", "https://b/", "https://c/"]);
+  assert.deepEqual(sent.filter((one) => one.where === "here").map((one) => one.url), ["https://a/"]);
+  assert.deepEqual(events, ["open https://b/", "open https://c/", "open https://a/", "mode item"]);
+});
+
+test("open_range skips an item with no link and takes the first link as the one opened here", async () => {
+  const { sent } = await run_open("open_range", "item_visual", { addresses: [undefined, "https://b/", "https://c/"], from: 0, to: 2 });
+  assert.deepEqual(sent, [{ url: "https://c/", where: "background" }, { url: "https://b/", where: "here" }]);
+});
+
+test("open_background opens every selected item in background tabs and ends the selection", async () => {
+  const { sent, events } = await run_open("open_background", "item_visual", { addresses: ["https://a/", "https://b/"], from: 0, to: 1 });
+  assert.deepEqual(sent, [{ url: "https://b/", where: "background" }, { url: "https://a/", where: "background" }]);
+  assert.equal(events.at(-1), "mode item");
+});
+
+test("open_background in item mode opens the current item in a background tab and leaves the mode", async () => {
+  const { sent, events } = await run_open("open_background", "item", { addresses: ["https://a/", "https://b/"], from: 1, to: 1 });
+  assert.deepEqual(sent, [{ url: "https://b/", where: "background" }]);
+  assert.deepEqual(events, ["open https://b/"]);
+});
+
+test("a range with no link refuses and keeps the selection", async () => {
+  const { sent, events, outcome } = await run_open("open_range", "item_visual", { addresses: [undefined], from: 0, to: 0 });
+  assert.equal(outcome, "No link to open");
+  assert.deepEqual([sent, events], [[], []]);
+});
+
+test("the link of each item is the row's link, not the first a[href] of the item", async () => {
+  const { sent } = await run_open("open_range", "item_visual", { addresses: ["https://story-a/", "https://story-b/"], first_links: ["https://vote-a/", "https://vote-b/"], from: 0, to: 1 });
+  assert.deepEqual(sent, [{ url: "https://story-b/", where: "background" }, { url: "https://story-a/", where: "here" }]);
+  const single = await run_open("open_background", "item", { addresses: ["https://story-a/"], first_links: ["https://vote-a/"], from: 0, to: 0 });
+  assert.deepEqual(single.sent, [{ url: "https://story-a/", where: "background" }]);
+});
+
+test("an item whose row link finds nothing refuses, though it holds other links", async () => {
+  const visual = await run_open("open_range", "item_visual", { addresses: [undefined, undefined], first_links: ["https://vote-a/", "https://vote-b/"], from: 0, to: 1 });
+  assert.equal(visual.outcome, "No link to open");
+  assert.deepEqual(visual.sent, []);
+  const single = await run_open("open_background", "item", { addresses: [undefined], first_links: ["https://vote-a/"], from: 0, to: 0 });
+  assert.equal(single.outcome, "No link to open");
+  assert.deepEqual(single.sent, []);
+});
+
+test("a row link with no href (a role=button element) counts as no link", async () => {
+  const buttons = await run_open("open_range", "item_visual", { addresses: ["", ""], from: 0, to: 1 });
+  assert.equal(buttons.outcome, "No link to open");
+  assert.deepEqual(buttons.sent, []);
+  const mixed = await run_open("open_background", "item_visual", { addresses: ["", "https://b/"], from: 0, to: 1 });
+  assert.deepEqual(mixed.sent, [{ url: "https://b/", where: "background" }]);
+});

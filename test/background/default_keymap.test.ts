@@ -119,7 +119,7 @@ test("visual item mode takes the other item keys, each after a step back to item
   const leave = { invocation: { id: "mode.set", args: { mode: "item" } }, runs_in: "content", count_rule: "ignore", leave: true };
   const leaf_at = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), visual) as TreeLeaf;
   const item_leaf = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), resolved.item) as TreeLeaf;
-  for (const keys of [["f"], ["<Enter>"], ["J"], [":"], ["g", "t"], [";", "y", "l"], ["I"]]) {
+  for (const keys of [["f"], ["<Tab>"], ["J"], [":"], ["g", "t"], [";", "y", "l"], ["I"]]) {
     const leaf = leaf_at(keys);
     assert.deepEqual(leaf.steps[0], leave, keys.join(""));
     assert.deepEqual(leaf.steps.slice(1), item_leaf(keys).steps, keys.join(""));
