@@ -4,7 +4,7 @@ The toolbar popup (`default_popup`). It is a page of its own, so a click on the 
 
 Behavior is in `docs/design/interfaces_pages.md`, section "Popup files for the toolbar popup".
 
-- `model.ts`: the rows and the small models (release link, theme list, host dot, notice timer), from plain inputs. No DOM.
+- `model.ts`: the rows and the small models (release link, theme list, host dot, notice timer), from plain inputs.
 - `main.ts`: reads storage and the active tab, draws the popup and sends the writes to the background. It writes nothing itself.
 - `popup.html`: the page and its styles.
 

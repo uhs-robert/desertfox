@@ -19,7 +19,7 @@ Behavior is in `docs/design/config.md`, section "Config build files for the conf
 Rules across files:
 
 - The extension and `tools/build-config` both run it. `tools/build-config/README.md` lists what stays in the tool.
-- Only the background runs it. Two files import one module from it, and no others do:
+- In the extension, only the background runs it. Two files import one module from it, and no others do:
   - The help page file `src/help/keys_page.ts` takes `KEYMAP_MODES` from `merge.ts`.
   - The shared file `src/shared/config_file_path.ts` takes `DATA_KINDS` from `source_files.ts`.
 - No file here imports a `node:` module. A test fails when one does.

@@ -6,7 +6,7 @@ Behavior is in `docs/design/config.md`, section "Engine files for the config".
 
 - `slots.ts`: the slot table: the input slot `query` and the page slots, each with a pure `read(page)`.
 - `fill.ts`: parses and fills a template.
-- `resolve.ts`: turns the TOML tree into a flat map keyed by the dotted name. `tools/build-config` only.
+- `resolve.ts`: turns the TOML tree into a flat map keyed by the dotted name. `config_build/merge.ts` runs it.
 - `reverse.ts`: the inverse of `fill.ts`: reads a query out of a results page address, and picks the engine of a page.
 - `index.ts`: the exports.
 
