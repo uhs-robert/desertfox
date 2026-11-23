@@ -1,8 +1,8 @@
 // The way into editors that show only part of their text (CodeMirror, Ace, Monaco): their own select-all and copy read the whole document, and select-all and paste write it back. The clipboard is the only channel, so its text is saved first and put back after each use.
 
-import { exec_clipboard_command } from "../site_actions/clipboard.ts";
-import type { ClipboardCommandDocument } from "../site_actions/clipboard.ts";
-import { queued_in_page } from "../site_actions/send_key.ts";
+import { exec_clipboard_command } from "../lib/clipboard.ts";
+import type { ClipboardCommandDocument } from "../lib/clipboard.ts";
+import { queued_in_page } from "../lib/send_key.ts";
 import { copy_text } from "../../shared/copy/copy_text.ts";
 import { deepest_focused_element } from "../editable.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";

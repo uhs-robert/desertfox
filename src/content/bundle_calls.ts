@@ -6,11 +6,11 @@ import type { Mode } from "../shared/command.ts";
 import type { HeadingItem } from "../shared/messages/content.ts";
 import type { ToastKind } from "../shared/messages/tab.ts";
 import type { BundleName } from "../shared/bundles.ts";
-import type { ModeAction } from "./hints/actions.ts";
+import type { ModeAction } from "./lib/actions.ts";
 import type { ItemArgs, ItemCursor, Region } from "./lib/item_types.ts";
 import type { PendingPrefix } from "./key_flow.ts";
-import type { ClipboardArgs } from "./site_actions/clipboard.ts";
-import type { SendKeyArgs } from "./site_actions/send_key.ts";
+import type { ClipboardArgs } from "./lib/clipboard.ts";
+import type { SendKeyArgs } from "./lib/send_key.ts";
 import type { BadgeState } from "../shared/ui/mode_label.ts";
 
 export type ListRegion = Region<Element>;

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { player_box } from "../../src/content/player_box.ts";
-import { word_range_at, element_address, has_usable_address, is_inside_link, is_media, perform, takes_typing } from "../../src/content/hints/actions.ts";
-import type { HintAction } from "../../src/content/hints/actions.ts";
+import { word_range_at, element_address, has_usable_address, is_inside_link, is_media, perform, takes_typing } from "../../src/content/lib/actions.ts";
+import type { HintAction } from "../../src/content/lib/actions.ts";
 
 // Node has no DOM events. The fakes only need the type and the position.
 class FakeMouseEvent {
@@ -311,7 +311,7 @@ const ENTER = ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointe
 const LEAVE = ["pointerout", "pointerleave", "mouseout", "mouseleave"];
 
 test("hover sends the enter events in order, with no click and no focus", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const page = fixture("div");
   page.run("hover");
@@ -320,7 +320,7 @@ test("hover sends the enter events in order, with no click and no focus", async 
 });
 
 test("hover events bubble except enter and leave, and come from the middle", async () => {
-  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const { hover, unhover } = await import("../../src/content/lib/hover.ts");
   const sent: { type: string; bubbles: boolean; clientX: number; clientY: number }[] = [];
   hover({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => ({ left: 10, top: 20, width: 100, height: 40 }) } as never);
   unhover();
@@ -329,7 +329,7 @@ test("hover events bubble except enter and leave, and come from the middle", asy
 });
 
 test("a second hover clears the first exactly once, before its own enter events", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   const first = fixture("div");
   const second = fixture("div");
   first.run("hover");
@@ -342,7 +342,7 @@ test("a second hover clears the first exactly once, before its own enter events"
 });
 
 test("unhover with nothing hovered sends nothing, and a removed element is dropped without events", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const page = fixture("div", { isConnected: true });
   const element = fixture("div", { isConnected: false });
@@ -366,7 +366,7 @@ function tree() {
 const OUT_ONLY = ["pointerout", "mouseout"];
 
 test("hovering an item inside the hovered menu leaves the menu entered", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -379,7 +379,7 @@ test("hovering an item inside the hovered menu leaves the menu entered", async (
 });
 
 test("hovering an item inside the menu enters the item and not the menu again", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -389,7 +389,7 @@ test("hovering an item inside the menu enters the item and not the menu again", 
 });
 
 test("a click pick inside the hovered menu leaves the menu entered, then clicks", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -400,7 +400,7 @@ test("a click pick inside the hovered menu leaves the menu entered, then clicks"
 });
 
 test("after a pick inside the hovered menu, Escape still closes the menu", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -411,7 +411,7 @@ test("after a pick inside the hovered menu, Escape still closes the menu", async
 });
 
 test("a click pick outside the hovered element leaves it fully, before the click", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, outside } = tree();
   menu.run("hover");
@@ -422,7 +422,7 @@ test("a click pick outside the hovered element leaves it fully, before the click
 });
 
 test("the leave events name the element the pointer goes to", async () => {
-  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const { hover, unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const sent: { type: string; relatedTarget: unknown }[] = [];
   const make = () => ({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event) });
@@ -436,7 +436,7 @@ test("the leave events name the element the pointer goes to", async () => {
 });
 
 test("the tab listener goes on once and a hidden tab clears the hover", async () => {
-  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const { hover, unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const listeners: (() => void)[] = [];
   const fake_document = { hidden: false, addEventListener: (_type: string, listener: () => void) => void listeners.push(listener) };
@@ -457,7 +457,7 @@ test("the tab listener goes on once and a hidden tab clears the hover", async ()
 });
 
 test("a move from a shadow host to an item inside its shadow root keeps the host entered", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const host = fixture("div");
   const inner = fixture("div");
@@ -471,7 +471,7 @@ test("a move from a shadow host to an item inside its shadow root keeps the host
 });
 
 test("every event of one move shares the point, whatever box its element has", async () => {
-  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const { hover, unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const sent: { type: string; clientX: number; clientY: number }[] = [];
   const make = (box: { left: number; top: number; width: number; height: number }, parent?: unknown) => ({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, parentElement: parent ?? null, dispatchEvent: (event: never) => sent.push(event), getBoundingClientRect: () => box });
@@ -490,7 +490,7 @@ test("every event of one move shares the point, whatever box its element has", a
 });
 
 test("hovering the element that is already hovered sends nothing", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const page = fixture("div");
   page.run("hover");
@@ -501,7 +501,7 @@ test("hovering the element that is already hovered sends nothing", async () => {
 });
 
 test("enter and leave events stay inside their shadow tree, the others cross it", async () => {
-  const { hover, unhover } = await import("../../src/content/hints/hover.ts");
+  const { hover, unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const sent: { type: string; composed: boolean }[] = [];
   hover({ localName: "div", click: () => {}, focus: () => {}, remove: () => {}, dispatchEvent: (event: never) => sent.push(event) } as never);
@@ -761,7 +761,7 @@ test("is_inside_link is true for a link and for its children", () => {
 });
 
 test("a click pick in a shadow root enters the host and the target", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const host = fixture("div");
   const inner = fixture("button");
@@ -772,7 +772,7 @@ test("a click pick in a shadow root enters the host and the target", async () =>
 });
 
 test("hovering an item after a copy pick inside the hovered menu still enters it", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -787,7 +787,7 @@ test("hovering an item after a copy pick inside the hovered menu still enters it
 const count = (calls: string[], type: string) => calls.filter((call) => call === type).length;
 
 test("two click picks on siblings inside one menu enter the menu once", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   const sibling = fixture("a", { href: "https://example.com/2", parentElement: menu.element });
@@ -800,7 +800,7 @@ test("two click picks on siblings inside one menu enter the menu once", async ()
 });
 
 test("a click pick on an item a copy pick recorded sends the item's missing enter events", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -814,7 +814,7 @@ test("a click pick on an item a copy pick recorded sends the item's missing ente
 });
 
 test("a click pick on an item inside a hovered menu enters the item and not the menu again", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, item } = tree();
   menu.run("hover");
@@ -825,7 +825,7 @@ test("a click pick on an item inside a hovered menu enters the item and not the 
 });
 
 test("a double-click pick enters its target and names where the pointer came from", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const { menu, outside } = tree();
   const related: unknown[] = [];
@@ -838,7 +838,7 @@ test("a double-click pick enters its target and names where the pointer came fro
 });
 
 test("after a click pick, Escape and the next pick each leave the clicked target once", async () => {
-  const { unhover } = await import("../../src/content/hints/hover.ts");
+  const { unhover } = await import("../../src/content/lib/hover.ts");
   unhover();
   const escaped = fixture("button");
   escaped.run("here");

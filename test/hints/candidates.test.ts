@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Found } from "../../src/content/hints/candidates.ts";
-import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_swipeable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, list_targets, with_site_selectors } from "../../src/content/hints/candidates.ts";
+import type { Found } from "../../src/content/lib/candidates.ts";
+import { text_of, keep_text_matches, collect, drop_off_screen, drop_redundant_weak, keep_visible_deduplicated, has_click_sign, is_rect_off_screen, has_own_text, is_draggable, is_swipeable, is_every_target, KEEPS_ONE_CHILD, NO_OWN_TEXT, has_text, is_image, is_pickable_frame, make_weak_test, query_for, list_targets, with_site_selectors } from "../../src/content/lib/candidates.ts";
 
 type Fake = { name: string; local: string; shadow?: Fake[]; frame?: Fake[] | "cross_origin"; href?: boolean; side?: number };
 

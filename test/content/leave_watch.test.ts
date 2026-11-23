@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { arm_leave_watch, LEAVE_QUIET_MS, type NavigateEvent } from "../../src/content/page/leave_watch.ts";
+import { arm_leave_watch, LEAVE_QUIET_MS, type NavigateEvent } from "../../src/content/lib/leave_watch.ts";
 import type { BundleHostApi } from "../../src/content/bundle_host.ts";
 
 const HERE = "https://app.test/inbox";

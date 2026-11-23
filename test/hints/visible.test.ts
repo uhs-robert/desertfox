@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchor_box, box_owners, scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/hints/visible.ts";
-import type { PageProbe, Rect } from "../../src/content/hints/visible.ts";
+import { anchor_box, box_owners, scroll_clips_of, boxes_with_fallback, clip_to, clipping_boxes, contains_composed, keep_visible, points_to_probe, viewport_size, uncovered_through_frames, visible_point } from "../../src/content/lib/visible.ts";
+import type { PageProbe, Rect } from "../../src/content/lib/visible.ts";
 
 type Box = { name: string; rect: Rect; rects?: Rect[]; reachable_at?: (x: number, y: number) => boolean; intersecting?: boolean; hidden?: boolean; covered_by?: string; clips?: Rect[] };
 

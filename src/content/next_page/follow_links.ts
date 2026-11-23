@@ -1,9 +1,9 @@
 // The live page for the detector in `detect.ts`: the `rel` links, the links and buttons, and a `PageReader` over real elements.
 
-import { BUTTONS, collect, LINKS, name_candidates } from "../hints/candidates.ts";
-import type { Found } from "../hints/candidates.ts";
-import { keep_present_found } from "../hints/headings.ts";
-import { has_usable_address } from "../hints/actions.ts";
+import { BUTTONS, collect, LINKS, name_candidates } from "../lib/candidates.ts";
+import type { Found } from "../lib/candidates.ts";
+import { keep_present_found } from "../lib/headings.ts";
+import { has_usable_address } from "../lib/actions.ts";
 import { dom_reader, pointer_starts } from "../lib/dom_reader.ts";
 import { detect_next_page } from "./detect.ts";
 import type { LoadStep, NextPageAction } from "./detect.ts";

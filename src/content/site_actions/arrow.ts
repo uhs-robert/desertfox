@@ -1,4 +1,4 @@
-import { queued_in_page, refused_times, send_key, wait_for_gap } from "./send_key.ts";
+import { queued_in_page, refused_times, send_key, wait_for_gap } from "../lib/send_key.ts";
 
 export type ArrowDirection = "left" | "down" | "up" | "right";
 export type ArrowArgs = { direction: ArrowDirection; times?: number };

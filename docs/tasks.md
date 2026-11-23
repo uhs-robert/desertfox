@@ -31,7 +31,7 @@ Example: `toast_ms`, commit `2ad2c9ed`.
 
 Example: the `prompt` action, commit `f51dcc82`.
 
-1. Add the action in `src/content/hints/actions.ts`. A larger action gets its own file in `src/content/hints/`, as `prompt_line.ts` does. Wire the pick in `src/content/hints/main.ts`.
+1. Add the action in `src/content/lib/actions.ts`. A larger action gets its own file in `src/content/hints/`, as `prompt_line.ts` does. Wire the pick in `src/content/hints/main.ts`.
 2. In `src/commands/hint.ts`, add the action to `values`, `value_when` (the condition that allows it), `short`, `value_labels` and `description` of the action param, and to the intent text. Add a case to `test/registry/value_when.test.ts`.
 3. Bind a key in `src/shared/keys/default_keymap.ts`, then run `just docs-gen`.
 4. Add unit tests in `test/hints/`, and a case in `test/key/p6_hints.mjs`. Add one in `test/key/p6_frames.mjs` when the action behaves differently in a frame.

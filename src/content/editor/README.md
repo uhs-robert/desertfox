@@ -8,4 +8,4 @@ The `editor` bundle (`editor.js`): edits a focused field in the external editor.
 Rules across files:
 
 - The content script asks the background for the bundle on the first `text.edit_external`, and the background injects it.
-- `clipboard_fallback.ts` copies through `exec_clipboard_command` in `src/content/site_actions/clipboard.ts`.
+- `clipboard_fallback.ts` copies through `exec_clipboard_command` in `src/content/lib/clipboard.ts`.

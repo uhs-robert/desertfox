@@ -1,7 +1,7 @@
 # Caret, search, registers, macros and marks
 
 Area: caret, search, registers, macros, marks and finder.
-READMEs: `src/content/caret/README.md`, `src/content/text/README.md`, `src/background/README.md`.
+READMEs: `src/content/caret/README.md`, `src/content/text/README.md`, `src/content/lib/README.md`, `src/background/README.md`.
 Source: `src/content/caret`, `src/content/text`, `src/background`.
 
 ### Caret and visual
@@ -77,7 +77,7 @@ Caret mode puts a text cursor in the page, so the user can move through text wit
 - So a refused command, a bad argument and `5j` (not flagged) record nothing, and `50%G` does. The read ends before the command starts, so the command cannot move the view first, and a page that gives no answer within 1 s runs the command and records nothing. A command typed in a child frame records nothing, because an entry holds no frame.
 - A global mark jump records apart from the router, in `global_mark_jump.ts`, because only the background knows where it lands: the top frame's place goes into the list of the window the jump lands in, so after a jump to a tab in another window `<C-o>` there comes back. That holds for a jump a child frame asks for too.
 - The second source is the page changing in a tab, from any cause that loads a new document (a click, a typed address, a script): the `page` bundle reports its offset as the page hides, and the background records that place once the tab shows another page.
-- Each event (the report, the address change, the end of the load) judges against the tab as it is then, so their order does not matter: another page records, the same page loaded to the end is a reload and records nothing, and a hash change neither records nor ends the wait. An address change inside the same document (a single-page app's `pushState`, and back or forward between its entries) hides no page, so the leave watch (`src/content/page/leave_watch.ts`) records it.
+- Each event (the report, the address change, the end of the load) judges against the tab as it is then, so their order does not matter: another page records, the same page loaded to the end is a reload and records nothing, and a hash change neither records nor ends the wait. An address change inside the same document (a single-page app's `pushState`, and back or forward between its entries) hides no page, so the leave watch (`src/content/lib/leave_watch.ts`) records it.
 - It reads the address left and the offset on `navigate`, before the app scrolls, and records when the change commits (`currententrychange`). So a change the page cancels records nothing, a link the app intercepts records, and one that loads another document is left to the page hiding.
 - It records only in the top frame of a visible tab and not within 1 s of its last record or of a jump or step that scrolled the page (the router's offset read counts as one), so a burst records once and a page that changes its address as it scrolls does not record the list's own moves. A hint pick ends that window, so a follow right after a jump records.
 - The same commit ends hint mode in the frame that holds the session (not a `replaceState`, and not a change the session's own pick makes, such as a table-of-contents anchor in rapid mode), as a page hiding does. These changes record through the Navigation API, which every supported Firefox has. `replaceState` and a hash change record nothing. The background drops such a push while a step is arriving in the tab and refuses one for another site.

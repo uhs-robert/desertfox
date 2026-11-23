@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drop_targets_of, keeps_narrowing, MARKERS } from "../../src/content/hints/drop_targets.ts";
-import { query_for } from "../../src/content/hints/candidates.ts";
+import { drop_targets_of, keeps_narrowing, MARKERS } from "../../src/content/lib/drop_targets.ts";
+import { query_for } from "../../src/content/lib/candidates.ts";
 
 type Spec = { name: string; tag?: string; classes?: string[]; attrs?: Record<string, string>; marked?: string; shadow?: boolean; slider?: boolean; hidden?: boolean; children?: Spec[] };
 type Node = { name: string; localName: string; parentElement: Node | null; parentNode: unknown; children: Node[]; classList: { contains: (name: string) => boolean; [Symbol.iterator]: () => Iterator<string> }; spec: Spec };

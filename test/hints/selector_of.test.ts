@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { selector_of } from "../../src/content/hints/selector_of.ts";
+import { selector_of } from "../../src/content/lib/selector_of.ts";
 
 type Fake = { localName: string; id: string; classList: string[]; parentElement: Fake | null; parentNode: { children: Fake[] } | null; children: Fake[] };
 

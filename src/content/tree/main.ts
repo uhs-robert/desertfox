@@ -4,7 +4,7 @@ import type { ArgsOf, BundleOf } from "../bundle_calls.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import { refused_as } from "../../shared/swallow.ts";
 import type { PageHostApi } from "../bundle_host.ts";
-import { click_like_a_hint } from "../hints/actions.ts";
+import { click_like_a_hint } from "../lib/actions.ts";
 import { is_shown } from "../shown.ts";
 import { child_of, parent_of, sibling_of } from "./walk.ts";
 import type { TreeRow } from "./walk.ts";

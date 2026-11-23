@@ -1,8 +1,8 @@
 // The `prompt` action: the command line opens holding a command and the address of the picked element, for the user to edit.
 
-import { element_address, NO_WEB_ADDRESS } from "./actions.ts";
+import { element_address, NO_WEB_ADDRESS } from "../lib/actions.ts";
 import { single_quote } from "../../shared/registry/single_quote.ts";
-import type { Refusal } from "./actions.ts";
+import type { Refusal } from "../lib/actions.ts";
 
 // The line splits words on whitespace and reads quotes and backslashes. A leading dash would read as a flag and a leading @ as a context source.
 const NEEDS_QUOTES = /[\s'"\\]|^[-@]/;

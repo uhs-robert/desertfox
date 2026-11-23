@@ -20,8 +20,8 @@ globals.HTMLInputElement = FakeHTMLInputElement;
 globals.HTMLTextAreaElement = FakeHTMLTextAreaElement;
 const { is_editable_element } = await import("../../src/content/editable.ts");
 globals.window = { desertfox_host: { is_editable_: is_editable_element } };
-const { write_into_field } = await import("../../src/content/text/field_writer.ts");
-const { is_secret_field } = await import("../../src/content/text/secret_field.ts");
+const { write_into_field } = await import("../../src/content/lib/field_writer.ts");
+const { is_secret_field } = await import("../../src/content/lib/secret_field.ts");
 
 const field = (type = "text") => Object.assign(new FakeHTMLInputElement(), { type });
 

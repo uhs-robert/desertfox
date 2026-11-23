@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { follow_windows } from "../../src/content/hints/follow.ts";
+import { follow_windows } from "../../src/content/lib/follow.ts";
 
 function fake_window() {
   const listeners = new Set<string>();

@@ -7,5 +7,5 @@ The `grab` bundle (`grab.js`): keyboard drag, move and swipe of a hinted element
 
 Rules across files:
 
-- The hints bundle picks the element and leaves it in `desertfox_pick_target`. The target pick runs again through `hint.run` (`src/content/hints/drop_targets.ts`).
+- The hints bundle picks the element and leaves it in `desertfox_pick_target`. The target pick runs again through `hint.run` (`src/content/lib/drop_targets.ts`).
 - The events are not trusted, so a page that checks `isTrusted` ignores the drag.

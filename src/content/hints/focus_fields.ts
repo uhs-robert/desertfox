@@ -1,11 +1,11 @@
 // The form control or link that `page.focus_field` (`]i`, `[i`) and `page.focus_link` (`]l`, `[l`) move to. The pick is pure and the page reads sit apart, so tests run on plain lists.
 
 import { deepest_focused_element } from "../editable.ts";
-import { focus_and_mark } from "./actions.ts";
-import type { MarkFocus } from "./actions.ts";
-import { collect, scrollport_top_of, window_of } from "./candidates.ts";
-import type { Found } from "./candidates.ts";
-import { keep_present_found } from "./headings.ts";
+import { focus_and_mark } from "../lib/actions.ts";
+import type { MarkFocus } from "../lib/actions.ts";
+import { collect, scrollport_top_of, window_of } from "../lib/candidates.ts";
+import type { Found } from "../lib/candidates.ts";
+import { keep_present_found } from "../lib/headings.ts";
 
 export type FieldDirection = "next" | "prev";
 export type FieldKind = "control" | "link";

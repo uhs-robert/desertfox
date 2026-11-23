@@ -2,8 +2,8 @@
 
 import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
-import type { Found } from "./candidates.ts";
-import { anchor_box } from "./visible.ts";
+import type { Found } from "../lib/candidates.ts";
+import { anchor_box } from "../lib/visible.ts";
 import { overlap_groups, rotate } from "../../shared/hints/labels.ts";
 
 const MESSAGE_MS = 1500;

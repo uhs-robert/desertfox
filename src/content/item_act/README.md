@@ -11,4 +11,4 @@ Behavior is in `docs/design/bundles.md`, section "Item action files for the item
 Rules across files:
 
 - The content script loads the bundle on the first Space, Enter or Tab of item mode.
-- `main.ts` asks the item bundle for the current item and range (`item.current`, `item.range`). It clicks with `click_like_a_hint` (`src/content/hints/actions.ts`).
+- `main.ts` asks the item bundle for the current item and range (`item.current`, `item.range`). It clicks with `click_like_a_hint` (`src/content/lib/actions.ts`).
