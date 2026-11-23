@@ -1,7 +1,7 @@
 # Hints
 
 Area: hints, grab and actions.
-READMEs: `src/content/hints/README.md`, `src/content/grab/README.md`, `src/content/site_actions/README.md`, `src/devtools/README.md`, `src/background/README.md`.
+READMEs: `src/content/hints/README.md`, `src/content/grab/README.md`, `src/content/site_actions/README.md`, `src/content/lib/README.md`, `src/devtools/README.md`, `src/background/README.md`.
 Source: `src/content/hints`, `src/content/grab`, `src/content/site_actions`, `src/devtools`, `src/background`.
 
 ### Hints
