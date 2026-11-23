@@ -97,7 +97,7 @@ export function make_tab_handlers(deps: TabDeps) {
   }
 
   // The subject is the tab named by `tab`, else the line's own tab. A side acts on the neighbors and leaves the subject, except `site`, which acts on the subject too. A count adds neighbors after the subject. Neighbors skip pinned tabs, the subject never does.
-  async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }, unloaded: boolean): Promise<void> {
+  async function change_loaded(ctx: CommandContext, args: { tab: string; side: UnloadSide; count?: number }, unloaded: boolean): Promise<void> {
     const named = args.tab.trim() === "" ? undefined : pick_tab(await deps.listed_tabs(ctx), args.tab, ctx.window_id);
     const window_id = named?.window_id ?? ctx.window_id;
     if (window_id === undefined) throw new RuntimeRefusal("No window");
@@ -110,7 +110,7 @@ export function make_tab_handlers(deps: TabDeps) {
     const site_pool = line_window_id === window_id ? tabs : await deps.tabs_in_window(line_window_id);
     const ids = (
       args.side === "none"
-        ? [subject, ...unpinned.filter((tab) => tab.index > subject.index && tab.index < subject.index + args.count)]
+        ? [subject, ...unpinned.filter((tab) => tab.index > subject.index && tab.index < subject.index + (args.count ?? 1))]
         : args.side === "site"
           ? [subject, ...site_tabs(site_pool, subject).filter((tab) => tab.id !== subject.id)]
           : unpinned.filter((tab) => (args.side === "all_before" ? tab.index < subject.index : tab.index > subject.index))
@@ -226,8 +226,8 @@ export function make_tab_handlers(deps: TabDeps) {
       await deps.activate(picked.id);
       if (picked.window_id !== ctx.window_id) await deps.focus_window(picked.window_id);
     },
-    unload: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }) => change_loaded(ctx, args, true),
-    load: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count: number }) => change_loaded(ctx, args, false),
+    unload: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count?: number }) => change_loaded(ctx, args, true),
+    load: (ctx: CommandContext, args: { tab: string; side: UnloadSide; count?: number }) => change_loaded(ctx, args, false),
     reopen_in_container: async (ctx: CommandContext, args: { container: string }) => {
       const { current } = await position_of(ctx);
       if (current.url === undefined || ctx.window_id === undefined) throw new RuntimeRefusal("this tab has no address to reopen");
@@ -422,7 +422,7 @@ define("tab.move", {
   bridge: false,
   runs_in: "background",
   count: "repeat",
-  run: (ctx, args) => handlers.move(ctx, args as { tab: string; offset: number }),
+  run: (ctx, args) => handlers.move(ctx, args),
 });
 
 define("tab.duplicate", {
@@ -449,7 +449,7 @@ define("tab.goto", {
   runs_in: "background",
   count: { param: "index" },
   modes: ["normal", "item"],
-  run: (ctx, args) => handlers.goto(ctx, args as { index: number }),
+  run: (ctx, args) => handlers.goto(ctx, args),
 });
 
 define("tab.alternate", {
@@ -516,7 +516,7 @@ define("tab.close", {
   runs_in: "background",
   count: "repeat",
   repeat_limit: 20,
-  run: (ctx, args) => handlers.close(ctx, args as { side: CloseSide }),
+  run: (ctx, args) => handlers.close(ctx, args),
 });
 
 define("tab.reopen_in_container", {
@@ -525,7 +525,7 @@ define("tab.reopen_in_container", {
   params: [{ name: "container", type: "string", rest: true, main: true, values: { from: "containers" } }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.reopen_in_container(ctx, args as { container: string }),
+  run: (ctx, args) => handlers.reopen_in_container(ctx, args),
 });
 
 define("tab.switch", {
@@ -535,7 +535,7 @@ define("tab.switch", {
   params: [{ name: "tab", type: "string", rest: true, main: true, values: { from: "tabs" } }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.switch(ctx, args as { tab: string }),
+  run: (ctx, args) => handlers.switch(ctx, args),
 });
 
 define("tab.unload", {
@@ -546,7 +546,7 @@ define("tab.unload", {
   runs_in: "background",
   count: { param: "count" },
   repeat_limit: 20,
-  run: (ctx, args) => handlers.unload(ctx, args as { tab: string; side: UnloadSide; count: number }),
+  run: (ctx, args) => handlers.unload(ctx, args),
 });
 
 define("tab.load", {
@@ -556,5 +556,5 @@ define("tab.load", {
   bridge: false,
   runs_in: "background",
   count: { param: "count" },
-  run: (ctx, args) => handlers.load(ctx, args as { tab: string; side: UnloadSide; count: number }),
+  run: (ctx, args) => handlers.load(ctx, args),
 });
