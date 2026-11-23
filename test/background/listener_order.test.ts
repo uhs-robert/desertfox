@@ -63,16 +63,12 @@ const listeners_of = (log: string[]) => log.filter((entry) => entry.startsWith("
 test("every listener of the background page registers in the first turn, in a fixed order, each from its module", async () => {
   const { browser, log, late } = recording_browser();
   Object.assign(globalThis, { browser });
-  // The page starts timers that outlive the test, so each one lets the process end.
+  // The page retries its rank Worker on a timer chain, and node cannot start that Worker. A timer set after the test body ends (a retry fires from a timer callback) would keep the process alive, so the patch stays for the whole process. Each test file runs in its own process.
   const real_set_timeout = globalThis.setTimeout;
   globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => real_set_timeout(...args).unref()) as typeof setTimeout;
-  try {
-    await import("../../src/background/main.ts");
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
-  } finally {
-    globalThis.setTimeout = real_set_timeout;
-  }
+  await import("../../src/background/main.ts");
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(late, [], "a listener registered after an await");
   const first_read = log.indexOf("storage read resolved");
   assert.ok(first_read > 0, "main.ts reads storage while it loads");
