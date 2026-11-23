@@ -8,7 +8,7 @@ const ticks = async () => {
   for (let tick = 0; tick < 5; tick++) await Promise.resolve();
 };
 
-function make() {
+function make(takes_carried_mode?: (tab_id: number) => Promise<boolean>) {
   const data: Record<string, unknown> = {};
   const clock = { ms: 0 };
   const steps: string[] = [];
@@ -31,6 +31,7 @@ function make() {
     storage: storage as never,
     send_step: async (tab_id, on, frame_id, from) => void steps.push(`${tab_id}:${on ? "on" : "off"}:${frame_id ?? "all"}${from === undefined ? "" : `:from ${from}`}`),
     now: () => clock.ms,
+    ...(takes_carried_mode && { takes_carried_mode }),
   });
   return { tab_item, steps, data, clock };
 }
@@ -320,8 +321,8 @@ const FROM = "https://a.test/list";
 const commit_as = (transitionType: string, transitionQualifiers: string[] = [], url = "https://a.test/next") => ({ transitionType, transitionQualifiers, url });
 
 // The hold is on and the top frame starts a load: the tab item mode resumes on the new page only when the commit says link or form_submit.
-async function load_in_hold(transition: ReturnType<typeof commit_as>) {
-  const made = make();
+async function load_in_hold(transition: ReturnType<typeof commit_as>, takes_carried_mode?: (tab_id: number) => Promise<boolean>) {
+  const made = make(takes_carried_mode);
   await made.tab_item.reported(4, 0, "item");
   await made.tab_item.navigated(4, { status: "loading" }, FROM);
   await made.tab_item.committed(4, 0, transition);
@@ -546,4 +547,25 @@ test("a mark the completed load spent joins nothing", async () => {
   const { tab_item } = await load_in_hold(commit_as("link"));
   assert.equal(await tab_item.take_resume(4), true);
   assert.equal(await tab_item.join(4, 0, "next"), false);
+});
+
+test("a page whose site row refuses item mode or claims j or k joins nothing from a kept mark, and steps no frame in", async () => {
+  const asked: number[] = [];
+  const { tab_item, steps, data } = await load_in_hold(commit_as("link"), async (tab_id) => (asked.push(tab_id), false));
+  steps.length = 0;
+  assert.equal(await tab_item.join(4, 0, "next"), false);
+  assert.deepEqual(asked, [4]);
+  assert.deepEqual(steps, []);
+  assert.equal(data["desertfox_tab_item_4"], undefined);
+});
+
+test("Escape during the load spends the mark, so a same-host redirect of the page does not bring item mode back", async () => {
+  const { tab_item } = await load_in_hold(commit_as("link"));
+  await tab_item.join(4, 0, "next");
+  await tab_item.reported(4, 0, "item", true, "next");
+  await tab_item.reported(4, 0, "normal", false, "next");
+  await tab_item.navigated(4, { status: "loading" }, "https://a.test/next");
+  await tab_item.committed(4, 0, commit_as("link", ["client_redirect"], "https://a.test/landed"));
+  assert.equal(await tab_item.join(4, 0, "landed"), false);
+  assert.equal(await tab_item.take_resume(4), false);
 });

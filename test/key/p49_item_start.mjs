@@ -6,13 +6,15 @@ import { ROW_ITEMS_WAIT_MS } from "../../src/content/item/start.ts";
 
 export const areas = ["keys", "config", "bundles"];
 
+const IS_OFF_ROW = '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_off*"\nitem_navigator = false\n';
+
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, on_teardown, open_page, press_keys, run_line, in_active_tab, poll_until, expect, sleep, in_background, events, wait_event, url_of, settle_focus }) {
   await setup("load a config with item_navigator on and a row that turns it off for the is_off pages", async () => {
     const dir = config_copy();
     const file = join(dir, "settings.toml");
     // A top-level setting goes above the first table.
     writeFileSync(file, `item_navigator = true\n${readFileSync(file, "utf8")}`);
-    appendFileSync(file, '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_off*"\nitem_navigator = false\n');
+    appendFileSync(file, IS_OFF_ROW);
     // A row that names its items, as the shipped rows do, for the pages that draw them late.
     appendFileSync(file, '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_late*"\nitem_navigator = "shipped"\nkeymap.item.j = { id = "page.item", args = { selector = "div.late", direction = "down" } }\n');
     await load_config_dir(dir);
@@ -116,7 +118,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await setup("load the config with item_navigator at its default, which starts no test page", async () => {
     // The reload key is a normal mode key, and the last page may sit in item mode.
     await open_page("page", "is_sticky_setup", { new_tab: true });
-    await load_config_dir(config_copy());
+    // The row that turns item mode off for the is_off pages stays, so a link followed in the mode can land on one.
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), IS_OFF_ROW);
+    await load_config_dir(dir);
   });
 
   await run_case("Enter on an item whose link opens a list page in the same tab lands in item mode, and a reload or Back does not", async () => {
@@ -252,6 +257,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await expect_item_while_loading();
     await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
     await expect_badge("NORMAL");
+  });
+
+  await run_case("a next page from ]] in item mode whose site row sets item_navigator to false stays in normal mode while it loads", async () => {
+    await jump_to_slow_page("is_sticky_refused", url_of("item_list", "is_off_sticky_slow"), "is_off_sticky_slow");
+    await poll_until("the badge to show", async () => (await badge()) !== null);
+    expect((await badge()) === "NORMAL", `the page joined item mode during its load, the badge is ${await badge()}`);
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
+    await sleep(1500);
+    expect((await badge()) === "NORMAL", `the badge is ${await badge()}`);
   });
 
   await run_case("Enter on an item that links to another host ends item mode", async () => {

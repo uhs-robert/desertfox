@@ -18,6 +18,8 @@ export type TabItemDeps = {
   send_step: SendStep;
   // The queue the media mode's steps go through too (`tab_steps.ts`).
   steps: StepQueue;
+  // Whether the tab's top page takes item mode carried from a link (`item_start_for` with `resume`), so a carried join leaves out a page whose site row refuses the mode or claims j or k.
+  takes_carried_mode?: (tab_id: number) => Promise<boolean>;
   now?: () => number;
 };
 
@@ -106,16 +108,18 @@ export function create_tab_item(deps: TabItemDeps) {
           await deps.storage.set({ [key_of(tab_id)]: without_stale_off(hold, frame_id) });
           return step(tab_id, true, frame_id, undefined, document_id);
         }
+        // The user left the mode, so a mark this page joined from carries nothing to a redirect of it.
+        await deps.storage.remove(resume_key_of(tab_id));
         await end(tab_id, hold, frame_id);
       });
     },
     // A frame that starts while the hold is on joins it: the reply to its first keymap read carries the mode. The frame goes into the hold in the same turn as the read, so an end after the read sends it the step off.
     // A new document of a frame of the hold joins too. The steps still waiting for the frame were for its old document, and so was a stale off.
-    // The top document of a load that carries the mode (a kept resume mark) starts the hold here, at its first keymap read, so keys pressed before the load completes already run in item mode. The hold is written before the step on goes out, so a frame that started earlier finds it when its step report comes. The mark stays for the completed load, whose start leaves the mode on a page with no list.
+    // The top document of a load that carries the mode (a kept resume mark, on a page that takes it) starts the hold here, at its first keymap read, so keys pressed before the load completes already run in item mode. The hold is written before the step on goes out, so a frame that started earlier finds it when its step report comes. The mark stays for the completed load, whose start leaves the mode on a page with no list.
     join: (tab_id: number, frame_id: number, document_id?: string): Promise<boolean> =>
       in_turn(async () => {
         const live_hold = await read(tab_id);
-        const carried_mode = !live_hold && frame_id === 0 && (await read_resume(tab_id))?.kept === true;
+        const carried_mode = !live_hold && frame_id === 0 && (await read_resume(tab_id))?.kept === true && (await (deps.takes_carried_mode?.(tab_id) ?? true));
         const hold = live_hold ?? (carried_mode ? { frames: [] } : undefined);
         if (!hold) return false;
         drop_steps_to(tab_id, frame_id);

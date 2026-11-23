@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_item_start, ROW_ITEMS_WAIT_MS, UNLOAD_SETTLE_MS } from "../../src/content/item/start.ts";
+import { NONE_RECHECK_MS } from "../../src/content/item/derived.ts";
 
 function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) {
   const idle: (() => void)[] = [];
@@ -261,7 +262,10 @@ test("a resumed page in item mode with no list drops to normal mode, and an item
   Object.assign(resumed.state, { mode: "item", active: true, list: false });
   resumed.start([], true);
   resumed.idle[0]!();
+  assert.equal(resumed.left(), 0, "the drop waits for the finder's kept none to expire");
+  resumed.pass(NONE_RECHECK_MS);
   assert.equal(resumed.left(), 1);
+  assert.equal(resumed.timers.length, 0, "it looks once more, not again and again");
   const asked = make();
   Object.assign(asked.state, { mode: "item", list: false });
   asked.start();
@@ -284,7 +288,7 @@ test("a resumed page with a row's selectors drops to normal only when the wait f
   Object.assign(none.state, { mode: "item", list: false });
   none.start(["div.file"], true);
   none.idle[0]!();
-  none.pass(ROW_ITEMS_WAIT_MS + 1000);
+  none.pass(ROW_ITEMS_WAIT_MS + NONE_RECHECK_MS);
   assert.equal(none.left(), 1);
   assert.equal(none.timers.length, 0);
 });
@@ -304,4 +308,14 @@ test("a resumed page whose keymap read came before the commit, so it did not joi
   start([], true);
   idle[0]!();
   assert.equal(entered(), 1);
+});
+
+test("a resumed page whose list a key read too early keeps item mode once the finder's kept none expires", () => {
+  const { start, state, idle, pass, entered, left } = make();
+  Object.assign(state, { mode: "item", active: true, list: false });
+  start([], true);
+  idle[0]!();
+  state.list = true;
+  pass(NONE_RECHECK_MS);
+  assert.deepEqual([entered(), left()], [0, 0]);
 });

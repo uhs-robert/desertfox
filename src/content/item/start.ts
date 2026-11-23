@@ -1,5 +1,7 @@
 // The start of item mode on a list page, which the `item_navigator` setting asks for when a load completes. A resumed page (a link followed in item mode) joined the mode during its load, so for it the start only checks for a list.
 
+import { NONE_RECHECK_MS } from "./derived.ts";
+
 export type StartDeps = {
   mode_: () => string;
   // The user has pressed a key or clicked in the page since it loaded.
@@ -39,6 +41,7 @@ export function create_item_start(deps: StartDeps): (selectors?: readonly string
     let parked = false;
     // Only the latest leave's timer clears the flag, so an earlier timer does not cut a later leave short.
     let leaves = 0;
+    let rechecked = false;
     const settle = (leave: number) => {
       if (leave !== leaves) return;
       unloading = false;
@@ -64,7 +67,11 @@ export function create_item_start(deps: StartDeps): (selectors?: readonly string
         if (deps.has_list_(selectors)) {
           if (!joined_at_load) deps.enter_();
         } else if (selectors[0] && deps.now_() <= deadline) return deps.later_(look, ROW_ITEMS_LOOK_EVERY_MS);
-        else if (joined_at_load) deps.leave_();
+        else if (joined_at_load) {
+          // A key pressed in the mode before the list was parsed left the finder's `none` standing for a while, so the page looks once more after it expires.
+          if (!rechecked) return (rechecked = true), deps.later_(look, NONE_RECHECK_MS);
+          deps.leave_();
+        }
       }
       deps.on_unload_(unload, false);
     }
