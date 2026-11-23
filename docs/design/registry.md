@@ -10,7 +10,7 @@ The registry lives in the background page. A command is plain data plus a handle
 
 ```ts
 define("tab.close", {
-  bridge: true,
+  bridge: false,
   label: "Close tab",
   intent: "Close the current tab and focus the next one, or close the tabs around it.",
   params: [
