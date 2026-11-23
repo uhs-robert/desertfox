@@ -78,3 +78,27 @@ The `media` bundle (`media.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`
 - `main.ts`: one `runtime.onMessage` listener for `media_scan` (the frame's media) and `media_apply`, added once per frame however often the file runs. The listener stays until the frame navigates, so a later key finds it without an injection. The message types live in `src/shared/media.ts`.
 - `fullscreen.ts`: `F` enters fullscreen through the site's own button when the player box holds one, else on the player box. It leaves every nested level.
 - `frame_media.ts`: finds the `video` and `audio` elements, through closed shadow roots (`shadow_root_of`), measures each video's visible area, describes the frame for the background's choice and changes the chosen elements (play, speed, volume, seek, picture-in-picture, fullscreen, from `fullscreen.ts`, mute and loop, and `info`, which only reports). A request of the target `pinned` acts on the video that `;M` pinned in this frame (a weak reference on `window`, found among the frame's players), and the scan says whether the frame has one. The apply finds the elements again, so a page change between scan and apply cannot leave it holding a removed element. It reads the page through a small `FrameView`, so the tests pass plain objects.
+
+### Quality files for the quality bundle
+
+Behavior of the `src/content/quality` files, moved here from `src/content/quality/README.md`.
+
+The `quality` bundle (`quality.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). Like `media.js`, the content script never loads it: the background injects it into every frame for each `media quality` and `media skip` command (`src/background/quality_levels.ts`) and, for the `media_quality` rule (`src/background/media_quality.ts`), into the frames whose probe found a video.
+
+The probe (`quality_probe.js`, its limit is also in `MAX_BYTES`) is what the rule injects into every frame at each navigation, unless the global value is `off` or `auto` and no site row asks for a quality:
+
+- `probe_main.ts`: the entry. It leaves one probe on the window and sends `quality_probe` once per address, and sends it again when the background refuses it (the rule is off). It also leaves what it found in `desertfox_quality_video` for the bundle.
+- `probe.ts`: the probe in one frame, with its deps injected for tests. It looks at once, looks again every 2 s for 10 s, and wakes on a media event. A run at a new address in a document that already reported reports again, so the loaded bundle starts the rule for the new page, and a report asked for while another is out runs when that one settles. A report counts only when the background answers that it injected the bundle.
+- `find_video.ts`: the known site player handles (`#movie_player` with the YouTube calls, `html5player.hlsobj`), a `video` query, then the open shadow roots of custom elements (hyphenated names) only. A `:not` selector over the plain element names hands back just the other elements, so a page of plain elements makes no per-element wrappers.
+
+The bundle: each frame it loads in reports whether it has a site player and a video, and the background sends the request to one chosen frame. The answer to a report from a frame with a video is the rule for the frame's address.
+
+- `main.ts`: probes the page for a driver, reports it and hands the answer to the rule, listens for media events on the document (capture phase) and for `tree_updated`, and answers `quality_apply`, one `runtime.onMessage` listener per frame however often the file runs. A new address in the frame marks the run as a navigation. It reads the page through `window.wrappedJSObject`. It has no search inside shadow roots: the probe's finding stands in for it.
+- `apply.ts`: one request against one driver: list, set, skip and captions.
+- `choose_level.ts`: the policy, which level a value (`max`, `min`, a height, `up`, `down`) picks. Pure.
+- `driver.ts`: what a driver offers, and `copy_of`, which copies a page array by index because a content-script function passed into a page call is refused.
+- `youtube.ts`: the `#movie_player` element's unofficial calls.
+- `hls.ts`: `html5player.hlsobj`, the hls.js instance that some sites expose. A driver matches by the handle it finds, never by host, and reads the page again at each call so a replaced player is found.
+- `rule.ts`: the `media_quality` rule in one frame. A run reports, and the answer decides: nothing (the frame has no video) ends the run, and the rule starts the look-again check, a video check every 2 s for 10 s with no message until it hits, plus a wake on the first media event (`wake`). A rule value starts the poll for a driver, which takes it to the level. The newest report decides, so a stale answer starts nothing. A settings change (`refresh`, from `tree_updated`) reports again in a frame with a video, and a changed value reaches the running poll or starts a new one. A newer start or a manual choice (`media quality` that took) ends an earlier poll. A start that is not a navigation leaves a manual choice standing, and in a frame that already has a rule it only reports, so a media command that injects the bundle again cannot restart the rule. A navigation that finds no video ends a manual choice and frees the frame for the next video's wake.
+
+The message types are in `src/shared/quality.ts`.

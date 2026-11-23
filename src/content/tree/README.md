@@ -1,8 +1,13 @@
 # tree
 
-The `tree` bundle (`tree.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). The content script loads it on the first press of a tree key in item mode, so the walk stays out of `content.js` and `item.js`.
+The `tree` bundle (`tree.js`): moves and folds through nested items such as comments. The content script loads it on the first tree key in item mode.
 
-- `main.ts`: registers `page.tree`. It asks the item bundle for the current item (`item.current`, through `run_command_`), reads the shown items of the row's `selector` with their depth (`depth`, from the item, an element inside it or the closest ancestor), and runs the action. A move lands through `page.item` with the `current` direction, after it scrolls the target into view and focuses it, so focus, the box and the last move match j. A fold clicks the row's `fold` control with `click_like_a_hint` (imported from `../hints/actions.ts`) and lands on the item again, because the click moves the focus onto the control. It refuses when the control is hidden, and it does not check that the click took. A run holds the keys behind it until it lands (`hold_keys_until_`), so a key typed during the first load starts from the item it leaves. A failed call to the item bundle refuses with its message. With `preset = "aria"` the items are the `[role=treeitem]` of the tree that holds the current item (depth `aria-level`, folded `aria-expanded=false` on the item itself), the parent is the closest treeitem around the item, and a fold sends ArrowLeft or ArrowRight through `page.send_key` (`fold_by = "keys"`, with the key code, which some trees read) after it focuses the item. `l` on a folded item only opens it. A tree with `aria-activedescendant` refuses. Not unit tested, it needs a DOM.
-- `walk.ts`: the pure moves on a list of `{ item, depth }`: `parent_of`, `child_of` and `sibling_of`. Hidden items are not in the list, so a folded item has no child and the walk skips its replies.
+Behavior is in `docs/design/bundles.md`, section "Tree files for the tree bundle".
 
-Tests: `test/tree_walk.test.ts` (the walk), `test/page_tree.test.ts` (the schema and the Hacker News row), `test/key/p50_comment_trees.mjs` (the keys on a stand-in thread) and `test/key/p52_aria_trees.mjs` (an ARIA tree).
+- `main.ts`: registers `page.tree`: reads the shown items with their depth and runs the move or fold.
+- `walk.ts`: the pure moves on a list of `{ item, depth }`: `parent_of`, `child_of` and `sibling_of`.
+
+Rules across files:
+
+- `main.ts` asks the item bundle for the current item and lands a move through `page.item`.
+- Tests: `test/tree_walk.test.ts`, `test/page_tree.test.ts`, `test/key/p50_comment_trees.mjs` and `test/key/p52_aria_trees.mjs`.

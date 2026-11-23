@@ -33,7 +33,7 @@ Source: `src/content`, `src/shared`, `src/content/item`, `src/content/lib`, `src
 
 ### Content script root files
 
-Behavior of the files in `src/content` itself, moved here from its README. The README keeps one line per file. The key, mode and badge files are under "Key flow and mode reports in the content script" in `keys.md`, the which-key files under "Which-key content files" in `interfaces_pages.md`.
+Behavior of the files in `src/content` itself, moved here from its README. The README keeps one line per file. The key, mode and badge files are under "Key flow and mode reports in the content script" in `keys.md`, the which-key files under "Which-key files for the which-key panel" in `interfaces_pages.md`.
 
 The content script. It runs at `document_start` in every frame. A subframe starts on its first focus (`start_content_once` in `handlers/focus.ts`). Until then its loaded flag `desertfox_content_loaded` holds the start, so `hint --all-frames` can start the frame from the hints bundle. This costs content.js 28 bytes, under admission clause C. Every frame asks the background for its keymap, already trimmed for the page's site rule, so the content script holds no rule logic.
 
@@ -89,3 +89,45 @@ The `item_act` bundle (`item_act.js`, its limit is in `MAX_BYTES` in `tools/buil
 - `checkbox.ts`: `checkbox_in(item, target)` finds the checkbox: the shown match of the `target` selector a site row names, else the first shown native checkbox, else the first shown element with role=checkbox. A box that a site hides behind its own drawing needs a `target`. With a `target` that matches no shown element, `checkbox_in` returns nothing and does not fall back to a native or role checkbox. There is no check that the click took.
 
 Tests: `test/item_act.test.ts` (the checkbox search and the focus ring on fakes) and `test/key/p49_item_actions.mjs` (Space and Enter in a real window).
+
+### Page files for the page bundle
+
+Behavior of the `src/content/page` files, moved here from `src/content/page/README.md`.
+
+The `page` bundle (`page.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). The background injects it into a frame on the first run of `scroll.align`, `copy.url`, `page.focus_input`, `mark.add`, `mark.jump`, `mark.step` or `page.jump`. These commands are rare, so their code stays out of `content.js`. The bundle also answers the background's `get_selection` and `get_jump_offset` messages (the router asks for the offset before a command with the `jumps` flag, which loads this bundle on the first such command in a page), arms the leave watch, and the background injects it when a frame gives no answer (`src/background/selection_ask.ts`).
+
+- `leave_watch.ts`: the jump list's watch of the page being left, armed once per document by the `page` or `hints` bundle, whichever loads first (`desertfox_leave_watch` on the window). In the top frame it reports the offset as the page hides (`jump_leave`), and sends `jump_push` with the address left when a single-page app pushes a new address or goes back or forward within the document. It reads the place on `navigate` and sends it once the change commits (`currententrychange`). It skips a hidden tab and the 1 s after its last record or after a jump or step scrolled the page (`quiet_(true)`). A hint pick and `page.click` end that window (`quiet_(false)`). `listen_` hands each push or traverse committed within the document, in any frame, to other code: hint mode ends on it, unless its own pick made the change.
+- `selection.ts`: the selected text of the frame, read from the focused text field first and from the page selection otherwise.
+- `align.ts`: the code of `scroll.align`.
+- `copy.ts`: the code of `copy.url`.
+- `focus_input.ts`: the code of `page.focus_input`.
+- `main.ts`: registers the seven handlers with the host and the `get_selection` listener. `mark.add`, `mark.jump`, `mark.step` and `page.jump` (a step of the jump list) read the scroll box through the host (`scroll_box_`, which ends a smooth scroll in flight, because that state lives in `content.js`) and talk to the background mark store, and a jump scrolls with `behavior: "instant"`, unless the answer carries no offset: then the background moves to the tab of a global mark and the arrival jump scrolls. `page.focus_input` also marks the field it focused as the entry of typed text (`src/content/text/entry.ts`). `scroll.align` aligns the heading that `]h`, `[h` or `sh` last reached before the focus or the selection, and reads it from a window slot that the hints bundle writes (`src/content/align_target.ts`). The last blurred field and the toast come from the host (`last_blurred_`, `show_toast_`), because this bundle has no copy of the content script's state.
+
+### Tree files for the tree bundle
+
+Behavior of the `src/content/tree` files, moved here from `src/content/tree/README.md`.
+
+The `tree` bundle (`tree.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). The content script loads it on the first press of a tree key in item mode, so the walk stays out of `content.js` and `item.js`.
+
+- `main.ts`: registers `page.tree`. It asks the item bundle for the current item (`item.current`, through `run_command_`), reads the shown items of the row's `selector` with their depth (`depth`, from the item, an element inside it or the closest ancestor), and runs the action. A move lands through `page.item` with the `current` direction, after it scrolls the target into view and focuses it, so focus, the box and the last move match j. A fold clicks the row's `fold` control with `click_like_a_hint` (imported from `src/content/hints/actions.ts`) and lands on the item again, because the click moves the focus onto the control. It refuses when the control is hidden, and it does not check that the click took. A run holds the keys behind it until it lands (`hold_keys_until_`), so a key typed during the first load starts from the item it leaves. A failed call to the item bundle refuses with its message. With `preset = "aria"` the items are the `[role=treeitem]` of the tree that holds the current item (depth `aria-level`, folded `aria-expanded=false` on the item itself), the parent is the closest treeitem around the item, and a fold sends ArrowLeft or ArrowRight through `page.send_key` (`fold_by = "keys"`, with the key code, which some trees read) after it focuses the item. `l` on a folded item only opens it. A tree with `aria-activedescendant` refuses. Not unit tested, it needs a DOM.
+- `walk.ts`: the pure moves on a list of `{ item, depth }`: `parent_of`, `child_of` and `sibling_of`. Hidden items are not in the list, so a folded item has no child and the walk skips its replies.
+
+Tests: `test/tree_walk.test.ts` (the walk), `test/page_tree.test.ts` (the schema and the Hacker News row), `test/key/p50_comment_trees.mjs` (the keys on a stand-in thread) and `test/key/p52_aria_trees.mjs` (an ARIA tree).
+
+### UI files for the ui bundle
+
+Behavior of the `src/content/ui` files, moved here from `src/content/ui/README.md`.
+
+The `ui` bundle (`ui.js`), which the content script loads on first use. It draws the mode badge and the toast (a short message that disappears after `toast_ms`, or after `toast_error_ms` for an error: 3 and 6 seconds by default).
+
+- `main.ts`: the bundle entry. It registers four handlers with the host: `ui.toast` (shows `args.message`, styled by the optional `args.kind`: error, warning, info or success, error when unset, and hidden after `args.duration_ms`, which the content script picks by kind from the compiled keymap), `ui.badge` (takes a `BadgeState`: `mode`, `pass_next`, `setting`, `recording`, `site_label` and `count`, and hides the badge when the args are empty or the media mode is in full screen), `ui.frame_watch` (turns the frame hide watch on or off) and `ui.badge_count` (the size of the visual item range from a child frame). A second run does not register again.
+- `frame_hide_watch.ts`: the top frame watches the child frame that holds the keys and takes the focus back when that frame hides.
+
+The drawing code is in `src/content/toast.ts` and `src/content/mode_indicator.ts`. Both draw in a closed shadow root made by `src/content/surface.ts`. Only this bundle runs them.
+
+Other code does not import the bundle. It calls `src/content/ui_proxy.ts`:
+
+- `show_toast(message, kind?)`: shows a toast. The duration comes from `toast_ms` or `toast_error_ms`.
+- `show_mode_label(state?)`: shows the badge for a mode, pass-next flag, setting and recording name, and no state removes the badge. Only the top frame draws it.
+
+Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. Only `src/content/main.ts` imports the proxy. It sets the badge from the mode wiring.
