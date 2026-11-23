@@ -116,6 +116,13 @@ export class RuntimeRefusal extends Error {
 // Args reach `run` after the one validator has checked them and filled defaults.
 export type CheckedArgs = Record<string, unknown>;
 
+// The args a handler sees for a param list, after the validator ran. A param with `when` or a `bool` without a default can be absent, so its key is optional. An enum with a literal `values` list is the union of those values. Anything else of type `string` or `key` is `string`. A list typed as plain `ParamDef[]` gives `CheckedArgs`.
+type ParamValueType<P extends ParamDef> = P["type"] extends "int" | "float" ? number : P["type"] extends "bool" ? boolean : P extends { type: "enum"; values: readonly (infer V)[] } ? V : string;
+type MaybeAbsent<P extends ParamDef> = P extends { when: object } ? true : P extends { type: "bool" } ? (P extends { default: unknown } ? false : true) : false;
+export type ArgsOf<Ps extends readonly ParamDef[]> = readonly ParamDef[] extends Ps
+  ? CheckedArgs
+  : { [P in Ps[number] as MaybeAbsent<P> extends true ? never : P["name"]]: ParamValueType<P> } & { [P in Ps[number] as MaybeAbsent<P> extends true ? P["name"] : never]?: ParamValueType<P> };
+
 // A content command may answer with an Outcome, or a promise of one that stays pending while it waits on the user. A background command returns nothing.
 export type CommandRun = (ctx: CommandContext, args: CheckedArgs) => Promise<void | Outcome> | void | Outcome;
 
