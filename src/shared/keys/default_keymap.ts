@@ -475,18 +475,13 @@ const BASE_SECTIONS: KeymapConfig = {
   },
 };
 
-// The media mode keeps the hint and command line keys of normal mode, so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach.
-// `;fF` and `;fe` sit in the `;` group but serve normal mode, so the media mode leaves them out.
-const NORMAL_ONLY_HINT_GROUP_KEYS = new Set([";fF", ";fe"]);
-const keys_kept_in_media: ModeBindings = Object.fromEntries(
-  Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (sequence === "f" || sequence === ":" || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence)),
-);
 
 const media_action = (action: string, value?: string, label?: string) => ({ id: "media.act", args: { action, ...(value === undefined ? {} : { value }) }, ...(label === undefined ? {} : { label }) });
 
-// The keys of the media mode. A digit is a count (`5l`), except `0`, which is the start unless a count is under way.
+// The keys of the media mode. It takes the normal keys whose commands run in media mode (`MODE_PARENTS`), so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach. A taken key can make a free letter a prefix (`t` for `tM`), and then that letter no longer reaches the page. A digit is a count (`5l`), except `0`, which is the start unless a count is under way.
 const MEDIA_KEYS: ModeBindings = {
-  ...keys_kept_in_media,
+  // Media mode is already on, so the normal key that starts it stays out.
+  aa: null,
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
@@ -515,19 +510,20 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys, `gi`, the media keys, the keys that start insert, caret and ignore mode, the find repeat keys and `<C-v>`, and any other key goes to the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. It takes the normal keys whose commands run in item mode (`MODE_PARENTS`), and any other key goes to the page. A taken key can make a free letter a prefix (`t` for `tn`), and then that letter no longer reaches the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
-const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L", "am", "aa", "ap", "as", "aS", "ar", "av", "aV", "al", "ah", "aP", "af", "A", "i", "gV", "n", "N", "*", "#", "<S-Escape>", "<S-Insert>", "<AC-Escape>", "<AC-`>", ",i", "<C-v>"];
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
-const keys_copied_to_item = Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence));
 // `body` focus never matches, unlike `when_focus`, so a page that shows a tree keeps the plain item keys until the focus is in the tree. A tree that moves its focus by aria-activedescendant holds the focus itself and so matches.
 const TREE_HAS_FOCUS = "[role=tree]:focus-within";
 // A key of item mode that walks a tree while the focus is in a treeitem, and runs `fallback` otherwise (a page with no tree, or a focus outside one).
 const aria_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", label: string, fallback?: BoundInvocation): BoundInvocation => ({ id: "page.tree", args: { action, preset: "aria" }, label, when_present: TREE_HAS_FOCUS, ...(fallback && { fallback }) });
 const ENTER_ITEM_VISUAL = [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }];
 const ITEM_KEYS: ModeBindings = {
-  ...Object.fromEntries(keys_copied_to_item),
+  // These serve normal mode, though their commands run in item mode too.
+  ";fF": null,
+  ";fe": null,
+  gF: null,
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
@@ -593,6 +589,6 @@ const GRAB_KEYS: ModeBindings = {
 };
 
 // Each child mode takes the keys of its parent that it does not bind itself (`src/shared/keys/mode_parents.ts`).
-const MODE_PARENTS: KeymapConfig["mode_parents"] = { item_visual: { parent: "item", leave: true } };
+const MODE_PARENTS: KeymapConfig["mode_parents"] = { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true } };
 
 export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS, mode_parents: MODE_PARENTS };

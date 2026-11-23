@@ -18,11 +18,12 @@ import { COMPILED_KEYMAP_STORAGE_KEY } from "../src/shared/prefix_tree.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
 import { mode_label } from "../src/shared/ui/mode_label.ts";
+import { with_resolved_modes } from "../src/shared/keys/mode_parents.ts";
 
 const compiled_with = (settings: Record<string, unknown> = {}) => {
   const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: settings as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
   assert.deepEqual(warnings, []);
-  return compiled;
+  return with_resolved_modes(compiled);
 };
 
 test("the item step takes a frame in normal or media mode into item mode and only item mode out, and media mode keeps its own step", () => {
@@ -157,15 +158,16 @@ test("a step that ended the mode while a line was open sends the line back to no
   assert.equal(state.get_mode_(), "normal");
 });
 
-test("the item section holds the item keys and, of normal mode, only the tab, page scroll, command line, help, hint, find, follow, jump, gi, media, insert, caret, visual, find repeat, ignore and pass-next keys", () => {
+test("item mode holds the item keys and, of normal mode, the tab, page scroll, command line, help, hint, find, follow, jump, gi, media, insert, caret, visual, find repeat, ignore and pass-next keys", () => {
   const item = compiled_with().modes.item!;
   for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>", "H", "L", "i", "v", "V", "n", "N", "*", "#", "A", "<S-Escape>", "<C-v>", ","]) assert.ok(item.children[key], key);
-  assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["?", "T", "V", "g", "i", "t"], "the g group holds gg, gt, gT, g?, gi and gV");
-  for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children), [group], `${group}${group} alone`);
+  assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["$", "0", "?", "T", "V", "g", "i", "t"], "the g group holds gg, gt, gT, g0, g$, g?, gi and gV, and item mode unbinds gF");
+  for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children).sort(), [group, "T", "j", "t", "v"].sort(), `${group}${group} and the tab, jump and video keys`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
   assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").filter((key) => key !== ";fF" && key !== ";fe").sort(), "the ; family but the normal-only keys");
   assert.deepEqual(Object.keys((item.children["a"] as { children: object }).children).sort(), ["P", "S", "V", "a", "f", "h", "l", "m", "p", "r", "s", "v"], "the a media group");
-  for (const key of ["o", "t", "x", "d"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
+  // `t` is a prefix here now (`tn`, `tp` and the rest come from normal mode), so it no longer goes to the page.
+  for (const key of ["o", "x", "d", "y", "p", "u", "q", "m"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
 });
 
 const step_ids = (node: unknown): string[] => (node as { steps: { invocation: { id: string } }[] }).steps.map((step) => step.invocation.id);
@@ -186,7 +188,7 @@ test("Tab and Shift-Tab of item mode step the focus inside the item, and normal 
   assert.equal(compiled_with().modes.normal!.children["<Tab>"], undefined);
 });
 
-// The item section copies the hint keys as they are: the hints rank the item at run time, by mode.
+// Item mode takes the hint keys of normal mode as they are: the hints rank the item at run time, by mode.
 test("hint keys of item mode are the normal-mode steps, and ;fF and ;fe stay out of it", () => {
   const compiled = compiled_with();
   const leaves = (node: { kind: string; children?: Record<string, unknown> }, prefix: string): [string, { steps: { invocation: { id: string; args?: Record<string, unknown> } }[] }][] =>
@@ -255,7 +257,7 @@ test("a row with an item selector gets I and zt, zz and zb for its own items, a 
 
 test("every item key runs a command that allows item mode, and compiling the default keymap warns of nothing", () => {
   for (const [key, binding] of Object.entries(DEFAULT_KEYMAP.item ?? {})) {
-    for (const step of [binding].flat() as { id: string }[]) assert.ok((registry.get(step.id)?.modes ?? ["normal"]).includes("item"), `${key} -> ${step.id}`);
+    for (const step of (binding === null ? [] : [binding].flat()) as { id: string }[]) assert.ok((registry.get(step.id)?.modes ?? ["normal"]).includes("item"), `${key} -> ${step.id}`);
   }
   assert.ok(compiled_with().modes.item);
 });

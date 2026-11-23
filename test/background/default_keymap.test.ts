@@ -16,7 +16,7 @@ const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([na
 
 const ids_in = (keymap: KeymapConfig) =>
   bindings_of(keymap).flatMap(([, section]) => [section]).flatMap((section) =>
-    Object.values(section as Record<string, unknown>).flatMap((binding) => [binding].flat() as { id: string }[]),
+    Object.values(section as Record<string, unknown>).flatMap((binding) => (binding === null ? [] : ([binding].flat() as { id: string }[]))),
   ).map((invocation) => invocation.id);
 
 const used_ids = [...new Set(ids_in(DEFAULT_KEYMAP))];
@@ -40,15 +40,15 @@ test("the default keymap compiles against the full registry with no warnings", (
 
 test("the default bindings of commands that exist compile with no warnings", () => {
   const present = (section: Record<string, unknown>) =>
-    Object.fromEntries(Object.entries(section).filter(([, binding]) => [binding].flat().every((step) => registry.get((step as { id: string }).id))));
-  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names], ["site_keys", DEFAULT_KEYMAP.site_keys], ["modifiers", DEFAULT_KEYMAP.modifiers]]) as KeymapConfig;
+    Object.fromEntries(Object.entries(section).filter(([, binding]) => binding === null || [binding].flat().every((step) => registry.get((step as { id: string }).id))));
+  const partial = Object.fromEntries([...bindings_of(DEFAULT_KEYMAP).map(([mode, section]) => [mode, present(section)]), ["group_names", DEFAULT_KEYMAP.group_names], ["site_keys", DEFAULT_KEYMAP.site_keys], ["modifiers", DEFAULT_KEYMAP.modifiers], ["mode_parents", DEFAULT_KEYMAP.mode_parents]]) as KeymapConfig;
   assert.deepEqual(compile(partial).warnings, []);
 });
 
 test("every prompting default names a real param", () => {
   for (const [, section] of bindings_of(DEFAULT_KEYMAP)) {
     for (const binding of Object.values(section as Record<string, unknown>)) {
-      for (const step of [binding].flat() as { id: string; prompt?: { param: string } }[]) {
+      for (const step of (binding === null ? [] : [binding].flat()) as { id: string; prompt?: { param: string } }[]) {
         const command = registry.get(step.id);
         if (step.prompt && command) assert.ok(command.params?.some((param) => param.name === step.prompt!.param), step.id);
       }
@@ -107,17 +107,18 @@ test("visual item mode: v enters it from item mode and v or Escape leaves it", (
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.V, DEFAULT_KEYMAP.item_visual?.v, "V ends the selection as v does");
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Escape>"], { id: "mode.escape" });
-  assert.deepEqual(DEFAULT_KEYMAP.mode_parents, { item_visual: { parent: "item", leave: true } });
+  assert.deepEqual(DEFAULT_KEYMAP.mode_parents, { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true } });
 });
 
 test("visual item mode takes the other item keys, each after a step back to item mode", () => {
   const { compiled, warnings } = compile(DEFAULT_KEYMAP);
   assert.deepEqual(warnings, []);
   assert.equal(compiled.modes.item_visual?.children["f"], undefined, "the stored tree holds the own keys only");
-  const visual = resolve_mode_parents(compiled.modes, compiled.mode_parents).item_visual!;
+  const resolved = resolve_mode_parents(compiled.modes, compiled.mode_parents);
+  const visual = resolved.item_visual!;
   const leave = { invocation: { id: "mode.set", args: { mode: "item" } }, runs_in: "content", count_rule: "ignore", leave: true };
   const leaf_at = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), visual) as TreeLeaf;
-  const item_leaf = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), compiled.modes.item) as TreeLeaf;
+  const item_leaf = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), resolved.item) as TreeLeaf;
   for (const keys of [["f"], ["<Enter>"], ["J"], [":"], ["g", "t"], [";", "y", "l"], ["I"]]) {
     const leaf = leaf_at(keys);
     assert.deepEqual(leaf.steps[0], leave, keys.join(""));

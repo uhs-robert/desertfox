@@ -106,6 +106,8 @@ export type FrameCue = {
 export type OpenCmdline = {
   type: "open_cmdline";
   ticket: string;
+  // The mode the line opened from, which picks the keys column.
+  mode?: string;
 };
 
 // A container by name and cookie store id. The page lists the names and sends the id, because names can repeat.
@@ -133,6 +135,8 @@ export type CmdlineOpened = {
   all_windows: boolean;
   // The `statusbar_widgets` setting, in display order.
   statusbar_widgets: Settings["statusbar_widgets"];
+  // The keys column: command id to the keys that run it bare in the mode the line opened from (`key_labels`).
+  keys: Record<string, string>;
   // What the widgets show, taken when the line opens. `tab_index` is zero-based and `tab_count` covers the line's window.
   status: { url: string; tab_index: number; tab_count: number };
 };

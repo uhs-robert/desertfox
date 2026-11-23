@@ -1,10 +1,10 @@
-// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a reload of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the copied hint keys and gi work in it.
-import { appendFileSync, readFileSync } from "node:fs";
+// Item mode, entered with I and left with Escape: the badge, the walk through a list, the same current item on the way back in, and the setting file left alone. The tab holds the mode: a frame that is open, one that loads later and one that reloads take it, Escape in any frame ends it for all, a reload of the page ends it, a pushState keeps it, a field that takes the focus ends it, the command line opens and closes inside it, and the hint keys, gi and ]t, which it takes from normal mode, work in it. f follows a config reload that rebinds f in normal mode.
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["keys", "tabs", "bundles"];
 
-export async function run_cases({ events, wait_event, run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ events, wait_event, run_line, config_dir, config_copy, load_config_dir, setup, open_cmdline, close_cmdline, run_case, open_page, press_keys, in_active_tab, in_background, wait_active_tab, hint_label_count, poll_until, expect, sleep }) {
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
@@ -79,6 +79,16 @@ export async function run_cases({ events, wait_event, run_line, config_dir, conf
     await press_keys("x");
     await poll_until("the page to see x", async () => (await in_active_tab("window.__keys")).includes("x"));
     await expect_badge("ITEM");
+  });
+
+  await run_case("]t, a key item mode takes from normal mode, goes to the next tab, and the list tab stays in item mode", async () => {
+    await open_list("im_next_tab");
+    await run_line("mode item");
+    await expect_badge("ITEM");
+    await press_keys("]t");
+    await wait_active_tab((page_id) => page_id !== "im_next_tab", "another tab to be active");
+    const mode_there = await in_background(`(async () => { const [tab] = (await browser.tabs.query({})).filter((tab) => tab.url.includes("id=im_next_tab")); return (await browser.tabs.executeScript(tab.id, { code: 'document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null' }))[0]; })()`);
+    expect(mode_there === "ITEM", `the list tab is in ${mode_there}, not item mode`);
   });
 
   await run_case("i in item mode reaches insert mode and V reaches visual item mode", async () => {
@@ -338,5 +348,25 @@ export async function run_cases({ events, wait_event, run_line, config_dir, conf
     await press_keys("zz");
     await expect_focus("c6");
     await poll_until("the item centered", async () => (await in_active_tab(`(() => { const box = document.activeElement.getBoundingClientRect(); return Math.abs((box.top + box.bottom) / 2 - innerHeight / 2) < 80; })()`)) === true);
+  });
+
+  // Last, since it rebinds f for the rest of the piece. Item mode takes f from normal mode, so the page's next keymap read brings the new binding.
+  await run_case("after a config reload rebinds f in normal mode, f in item mode runs the new binding", async () => {
+    const dir = config_copy();
+    // A file of its own, since keymap.toml already has a [normal] table.
+    writeFileSync(join(dir, "keymap.d", "90-item-reload.toml"), ["[normal]", 'f = "page.item --direction=down"', ""].join("\n"));
+    // The reload key is a normal mode key, and the case before ends in item mode.
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    await load_config_dir(dir);
+    await open_list("im_reload_f");
+    await press_keys("I");
+    await expect_badge("ITEM");
+    await expect_focus("c0");
+    await press_keys("f");
+    await expect_focus("c1");
+    expect((await hint_label_count()) === 0, "f still shows hints");
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
   });
 }

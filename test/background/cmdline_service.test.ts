@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { add_to_history, create_cmdline_service, HISTORY_LIMIT } from "../../src/background/cmdline_service.ts";
+import { add_to_history, create_cmdline_service, HISTORY_LIMIT, line_key_text } from "../../src/background/cmdline_service.ts";
+import "../../src/background/command_modules.ts";
+import { compile_config } from "../../src/background/compile.ts";
+import { empty_config } from "../../src/shared/config/config_load.ts";
+import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
+import { command_meta } from "../../src/shared/registry/index.ts";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 // The frame id of the line's own iframe.
@@ -34,6 +40,7 @@ function make({ slow_set = false, stuck_ticket = "" } = {}) {
     sources: async () => ({ search_engines: ["arch"], containers: [] }),
     container_stores: async () => [{ name: "default", cookie_store_id: "firefox-default" }],
     page_config: async () => ({ commands: [{ id: "my.snippet", label: "Mine", intent: "page" }], help_ids: ["tab.next"], command_aliases: { g: "open.search" }, theme_names: [], font_names: ["Fira Code"], prompt: ">> ", all_windows: false, statusbar_widgets: ["url", "tabs"] }),
+    key_text: async (mode) => ({ "tab.next": `keys of ${mode}` }),
     tab_count: async (window_id) => (window_id === 10 ? 4 : 0),
     frame_exists: async (_tab_id, frame_id) => !gone_frames.has(frame_id),
   });
@@ -47,6 +54,14 @@ test("the status is the tab's address and place in its window, and the widgets c
   const opened = await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10, { url: "https://example.org/a", index: 2 });
   assert.deepEqual(opened?.status, { url: "https://example.org/a", tab_index: 2, tab_count: 4 });
   assert.deepEqual(opened?.statusbar_widgets, ["url", "tabs"]);
+});
+
+test("the keys column is the one for the mode the line opened from, and a mode no keymap has reads as normal", async () => {
+  const { service } = make();
+  const open_from = async (mode: unknown) => (await service.open(await service.issue_ticket(7), 7, LINE_FRAME, 10, {}, false, mode))?.keys;
+  assert.deepEqual(await open_from("item"), { "tab.next": "keys of item" });
+  assert.deepEqual(await open_from("__proto__"), { "tab.next": "keys of normal" });
+  assert.deepEqual(await open_from(undefined), { "tab.next": "keys of normal" });
 });
 
 test("history keeps order, oldest first", async () => {
@@ -237,4 +252,14 @@ test("a target frame that is gone, navigated or in a closed tab is forgotten, so
   await service.issue_ticket(7, 5);
   await service.forget_opener(7);
   assert.equal(await service.target_of(7), undefined);
+});
+
+test("the keys column of a line from item or media mode lists the keys those modes take from normal mode", () => {
+  const { compiled } = compile_config({ config: empty_config(), default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
+  const commands = registry.list().map(command_meta);
+  const item = line_key_text(compiled, commands, "item");
+  assert.ok(item["tab.next"]?.split(" ").includes("J"), String(item["tab.next"]));
+  assert.equal(item["tab.close"], undefined, "tab.close runs in normal mode only");
+  assert.ok(line_key_text(compiled, commands, "media")["cmdline.open"]?.split(" ").includes(":"));
+  assert.deepEqual(line_key_text(undefined, commands, "item"), {});
 });

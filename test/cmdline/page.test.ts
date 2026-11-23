@@ -29,6 +29,7 @@ const OPENED = {
   all_windows: false,
   statusbar_widgets: ["url", "scroll", "tabs"],
   status: { url: "https://example.org/docs/page?q=1#top", tab_index: 1, tab_count: 4 },
+  keys: { "my.jira": "gj" },
 };
 
 const USER_CSS = ".desertfox-cmdline { --desertfox-bg-core: red; }";
@@ -404,6 +405,15 @@ test("the list shows every command when the line opens, and the host hears the h
   assert.equal(list.hidden, false);
   const resizes = host.received.filter((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "resize");
   assert.deepEqual(resizes, [{ desertfox_cmdline: { kind: "resize", height: 140 } }]);
+});
+
+test("the line asks for the keys of the mode it opened from and shows the keys the background sent", async (t) => {
+  const { list, sent, post_start } = await load_page(t, "keys_column");
+  const host = post_start(TICKET, "", [], { mode: "item" });
+  await host.opened();
+  assert.equal((sent.find((message) => message.type === "open_cmdline") as { mode?: string }).mode, "item");
+  const keys_cell = (row: unknown) => (row as { children: { className: string; textContent: string }[] }).children.find((child) => child.className === "desertfox-cmdline-keys")?.textContent;
+  assert.deepEqual(list.children.map(keys_cell).filter(Boolean), ["gj"]);
 });
 
 test("Tab previews a command in the line and Enter submits what the line shows", async (t) => {

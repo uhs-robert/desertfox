@@ -44,8 +44,10 @@ test("user overrides and unbinds in item mode reach visual item mode", async () 
   const unbound = compile({ item: { f: null, ";": null } });
   const visual = await page_tree(unbound.compiled, "item_visual");
   assert.equal(at(visual, "f"), undefined);
-  // `";" = ""` in item unbinds no key there, since `;` itself is no key, so the group stays in both modes.
-  assert.ok(at(visual, ";"));
+  // `";" = ""` in item blocks the `;` group item takes from normal mode, so visual item mode loses it too.
+  assert.equal(at(visual, ";"), undefined);
+  assert.equal(at(await page_tree(unbound.compiled, "item"), ";"), undefined);
+  assert.ok(at(await page_tree(unbound.compiled, "normal"), ";yl"), "normal mode keeps the group");
 });
 
 test("an unbind in visual item mode blocks the taken key, and an unbound prefix its whole group, while item mode keeps them", async () => {
@@ -109,7 +111,7 @@ test("which-key and the page reply read the same resolved visual tree", async ()
   const row_for = (keys: string) => panel.rows.find((row) => row.keys === keys);
   assert.equal(row_for("x")?.command, "Row next");
   // The label is the item key's own, not the leave step's.
-  assert.equal(row_for("J")?.command, (at(compiled.modes.item, "J") as TreeLeaf).label);
+  assert.equal(row_for("J")?.command, (at(compiled.modes.normal, "J") as TreeLeaf).label);
   assert.equal(row_for(";")?.more, true);
   assert.equal(row_for("V")?.command, "End the selection");
 });
@@ -128,18 +130,16 @@ test("the arrows rewrite runs on the resolved trees, so visual item mode takes t
 });
 
 test("graft, then the key rule, then resolve: a child of normal takes the page's normal tree", () => {
-  // PR A links only visual item mode to item mode. A link to normal mode shows the order on the normal tree, where pass and only act.
-  const keymap: KeymapConfig = { ...DEFAULT_KEYMAP, mode_parents: { ...DEFAULT_KEYMAP.mode_parents, media: { parent: "normal" } } };
-  const row = { site: "https://rows.test/*", pass: "aa", bind: { "<A-x>": { id: "hint.run" } } };
-  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: [row] } as never }, default_keymap: keymap, get_command: (id) => registry.get(id), enum_sources: {} });
+  const row = { site: "https://rows.test/*", pass: "as", bind: { "<A-x>": { id: "hint.run" } } };
+  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: [row] } as never }, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.deepEqual(warnings, []);
   const address = "https://rows.test/";
   const trees = page_mode_trees_for(compiled, site_columns_for(compiled, [address]), address);
-  assert.equal(at(trees.media, "aa"), undefined, "a key the row passes in normal mode passes in the child too");
+  assert.equal(at(trees.media, "as"), undefined, "a key the row passes in normal mode passes in the child too");
   assert.deepEqual(ids(trees.media?.children["<A-x>"]), ["hint.run"], "a row's normal bind reaches the child, with no leave step");
   assert.ok(at(trees.media, "j"), "the child's own keys stay");
   const elsewhere = page_mode_trees_for(compiled, site_columns_for(compiled, ["https://other.test/"]), "https://other.test/");
-  assert.deepEqual(ids(at(elsewhere.media, "aa")), ids(at(compiled.modes.normal, "aa")));
+  assert.deepEqual(ids(at(elsewhere.media, "as")), ids(at(compiled.modes.normal, "as")));
   assert.equal(elsewhere.media?.children["<A-x>"], undefined);
 });
 
@@ -177,5 +177,85 @@ test("help lists a taken key under the item command, not under mode.set", () => 
 test("the site table view reads what a visual item bind replaces from the resolved tree", () => {
   const compiled = row_compile({ site: "https://rows.test/*", keymap: { item_visual: { J: { id: "page.item", args: { direction: "other_end", extend: true } } } } });
   const change = site_rules_view(compiled, "https://rows.test/").rows[0]!.changes.find((entry) => entry.keymap_mode === "item_visual" && entry.keys === "J");
-  assert.equal(change?.replaces, (at(compiled.modes.item, "J") as TreeLeaf).label);
+  assert.equal(change?.replaces, (at(compiled.modes.normal, "J") as TreeLeaf).label);
+});
+
+const page_trees = (compiled: CompiledKeymap, address = "https://example.test/") => page_mode_trees_for(compiled, site_columns_for(compiled, [address]), address);
+
+test("a user key in normal mode reaches item, media and visual item mode when its command runs there", async () => {
+  const { compiled, warnings } = compile({ normal: { f: { id: "cmdline.open", args: { text: "open " } }, J: { id: "tab.prev" } } });
+  assert.deepEqual(warnings, []);
+  const trees = page_trees(compiled);
+  assert.deepEqual(ids(at(trees.item, "f")), ["cmdline.open"]);
+  assert.deepEqual(ids(at(trees.media, "f")), ["cmdline.open"]);
+  assert.deepEqual(ids(at(trees.item_visual, "f")), ["mode.set", "cmdline.open"]);
+  assert.deepEqual(ids(at(trees.item, "J")), ["tab.prev"]);
+  assert.equal(at(trees.media, "J"), undefined, "tab.prev runs in no media mode");
+});
+
+test("a user key in normal mode whose command runs only there stays out of item and media mode", () => {
+  const { compiled } = compile({ normal: { f: { id: "tab.close" }, "<A-x>": { id: "tab.close" } } });
+  const trees = page_trees(compiled);
+  for (const mode of ["item", "media", "item_visual"] as const) {
+    assert.equal(at(trees[mode], "f"), undefined, `${mode}: f goes to the page`);
+    assert.equal(trees[mode]?.children["<A-x>"], undefined, mode);
+  }
+});
+
+test("a normal unbind removes the key from item, media and visual item mode, and a child unbind only from the child", () => {
+  const { compiled } = compile({ normal: { f: null } });
+  assert.equal(at(compiled.modes.normal, "f"), undefined);
+  const normal_unbind = page_trees(compiled);
+  for (const mode of ["item", "media", "item_visual"] as const) assert.equal(at(normal_unbind[mode], "f"), undefined, mode);
+  const media_unbind = page_trees(compile({ media: { ";": null, f: null } }).compiled);
+  assert.equal(at(media_unbind.media, ";"), undefined);
+  assert.equal(at(media_unbind.media, "f"), undefined);
+  assert.ok(at(media_unbind.item, ";yl"), "item mode keeps the group");
+  assert.ok(at(media_unbind.item, "f"));
+  const own = page_trees(compile({ item: { f: { id: "page.item", args: { direction: "first" } } } }).compiled);
+  assert.deepEqual(ids(at(own.item, "f")), ["page.item"], "an item key wins over the normal one");
+  assert.deepEqual(ids(at(own.media, "f")), ["hint.run"]);
+});
+
+test("a row's normal bind reaches item mode when its command runs there, and a row's pass and only reach item and media mode", () => {
+  const address = "https://rows.test/";
+  const binds = row_compile({ site: "https://rows.test/*", bind: { "<C-j>": { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 } }, "<C-x>": { id: "tab.close" } } });
+  const bound = page_trees(binds, address);
+  assert.deepEqual(ids(bound.item?.children["<C-j>"]), ["page.send_key"]);
+  assert.equal(bound.item?.children["<C-x>"], undefined, "tab.close runs in normal mode only");
+  assert.equal(page_trees(binds).item?.children["<C-j>"], undefined, "another page gets none of the row's keys");
+
+  const passed = page_trees(row_compile({ site: "https://rows.test/*", pass: "f <C-v>" }), address);
+  for (const mode of ["item", "media", "item_visual"] as const) assert.equal(at(passed[mode], "f"), undefined, `${mode}: a passed f goes to the page`);
+  assert.equal(passed.item?.children["<C-v>"], undefined);
+  assert.ok(at(passed.item, "J"));
+
+  const only = page_trees(row_compile({ site: "https://rows.test/*", only: "J" }), address);
+  assert.deepEqual(ids(at(only.item, "J")), ["tab.next"]);
+  assert.equal(at(only.item, "f"), undefined, "only leaves the item mode no other normal key");
+  assert.equal(at(only.media, ";"), undefined);
+  assert.deepEqual(ids(at(only.item, "j")), ["page.item"], "the own item keys stay");
+  assert.ok(only.media?.children["<Space>"], "the own media keys stay");
+});
+
+test("the macro stop key goes on normal mode only, so item mode never takes it", async () => {
+  const { compiled } = compile();
+  const reply = (await page_keymap_for(storage_of(compiled), ["https://example.test/"], "a"))!;
+  assert.deepEqual(ids(at(reply.keymap.modes.normal, "q")), ["macro.stop"]);
+  assert.equal(at(reply.keymap.modes.item, "q"), undefined);
+  assert.equal(at(reply.keymap.modes.media, "q")?.kind, "leaf");
+  assert.notDeepEqual(ids(at(reply.keymap.modes.media, "q")), ["macro.stop"]);
+});
+
+test("a config reload: a rebound normal key reaches item and media mode on the next read", async () => {
+  let stored = compile().compiled;
+  const listeners: ((changes: Record<string, unknown>, area: string) => void)[] = [];
+  const source = create_keymap_source({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: stored }) } as never, { addListener: (listener: never) => void listeners.push(listener) } as never);
+  const f_in = async (mode: "item" | "media" | "item_visual") => ids(at(page_trees((await source.read())!)[mode], "f"));
+  assert.deepEqual(await f_in("item"), ["hint.run"]);
+  stored = compile({ normal: { f: { id: "cmdline.open", args: { text: "open " } } } }).compiled;
+  for (const listener of listeners) listener({ [COMPILED_KEYMAP_STORAGE_KEY]: {} }, "local");
+  assert.deepEqual(await f_in("item"), ["cmdline.open"]);
+  assert.deepEqual(await f_in("media"), ["cmdline.open"]);
+  assert.deepEqual(await f_in("item_visual"), ["mode.set", "cmdline.open"]);
 });

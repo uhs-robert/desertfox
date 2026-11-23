@@ -20,7 +20,6 @@ import { edit_forwarded, run_steps, run_token, run_token_without_keymap } from "
 import type { KeyOutcome, TokenMatcher, Waits } from "./key_input.ts";
 import type { HostToPage, PageToHost } from "./protocol.ts";
 import { unwrap, wrap } from "./protocol.ts";
-import { key_labels } from "../shared/completion/keys.ts";
 import { create_list } from "./list.ts";
 import { wheel_rows } from "./wheel.ts";
 import type { Wheel_state } from "./wheel.ts";
@@ -85,9 +84,10 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const note = document.querySelector<HTMLElement>("#note")!;
   const panel = document.querySelector<HTMLElement>(".desertfox-cmdline")!;
 
+  const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
-    ask_background<CmdlineOpened | undefined>({ type: "open_cmdline", ticket: start.ticket }),
+    ask_background<CmdlineOpened | undefined>({ type: "open_cmdline", ticket: start.ticket, mode: opened_from }),
   ]);
   if (!opened || host_port) return;
   host_port = port;
@@ -98,11 +98,9 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   const prompt = document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!;
   const line_prompt = prompt.textContent;
   const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
-  const opened_from = typeof start.mode === "string" ? start.mode : "normal";
-  const key_text = key_labels(keymap, opened.commands, opened_from);
   const help_ids = new Set(opened.help_ids);
   const has_help = (id: string) => help_ids.has(id);
-  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => key_text.get(id) ?? "", has_help);
+  const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => opened.keys[id] ?? "", has_help);
   const matcher: TokenMatcher | undefined = keymap?.modes.cmdline ? create_matcher(keymap) : undefined;
   // The headings are in the page, so the host script reads them and answers over the port.
   let headings_reply: ((items: HeadingItem[]) => void) | undefined;

@@ -18,6 +18,7 @@ import { mode_label } from "../src/shared/ui/mode_label.ts";
 import { media_panel_admitted } from "../src/content/whichkey/media_panel.ts";
 import { badge_state } from "../src/content/badge_state.ts";
 import { check_args } from "../src/shared/registry/index.ts";
+import { with_resolved_modes } from "../src/shared/keys/mode_parents.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 
 test("fullscreen_step: only normal and item mode enter the media mode, only the media mode leaves with the fullscreen", () => {
@@ -68,22 +69,24 @@ test("hint and command line mode return to the mode they began in", () => {
 function compiled() {
   const { compiled, warnings } = compile_config({ config: empty_config(), default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: { search_engines: ["site"], containers: [] } });
   assert.deepEqual(warnings, []);
-  return compiled;
+  return with_resolved_modes(compiled);
 }
 
-test("the media section holds the media keys and, of normal mode, only f, : and the hint group minus its normal-only keys", () => {
+test("media mode holds the media keys and, of normal mode, f, : and the hint group minus its normal-only keys", () => {
   const media = compiled().modes.media!;
   for (const key of ["F", "h", "l", "0", "$", "%", "H", "L", "j", "k", "<", ">", "=", "m", "<Space>", "p", "q", "r", "i", "<Escape>", "f", ":", ";", "?"]) assert.ok(media.children[key], key);
   const normal = compiled().modes.normal!;
   const shared = Object.keys(media.children).filter((key) => normal.children[key] && JSON.stringify(normal.children[key]) === JSON.stringify(media.children[key]));
-  assert.deepEqual(shared.sort(), [":", "<A-?>", "<C-[>", "<Escape>", "f"].sort());
-  // `;fF` and `;fe` serve normal mode, so the media copy of the `;` group lacks them and the rest matches.
+  assert.deepEqual(shared.sort(), [":", "<A-?>", "<C-[>", "<Escape>", "A", "f"].sort());
+  // `;fF` and `;fe` serve normal mode, so media mode unbinds them and the rest of the `;` group matches.
   const group = (mode: typeof media) => (mode.children[";"] as { children: Record<string, unknown> }).children;
   const without_normal_only = (children: Record<string, unknown>) => Object.keys(children).filter((key) => key !== "f");
   assert.deepEqual(without_normal_only(group(media)), without_normal_only(group(normal)));
   const focus_keys = (mode: typeof media) => Object.keys((group(mode).f as { children: Record<string, unknown> }).children);
   assert.deepEqual(focus_keys(normal).filter((key) => !focus_keys(media).includes(key)).sort(), ["F", "e"]);
-  for (const key of ["g", "d", "x", "/", "o", "t", "<C-v>", "G", "n"]) assert.equal(media.children[key], undefined, key);
+  // `t` is a prefix here now (`tM` comes from normal mode), so it no longer goes to the page.
+  for (const key of ["g", "d", "x", "/", "o", "<C-v>", "G", "n"]) assert.equal(media.children[key], undefined, key);
+  assert.deepEqual(Object.keys((media.children["t"] as { children: object }).children), ["M"], "of the t group only tM, which opens the line");
 });
 
 test("the media mode keeps the hint group with its modifiers, and starts at ;M", () => {
@@ -97,7 +100,7 @@ test("the media mode keeps the hint group with its modifiers, and starts at ;M",
 
 test("every media key runs a command that allows the media mode", () => {
   for (const [key, binding] of Object.entries(DEFAULT_KEYMAP.media ?? {})) {
-    for (const step of [binding].flat() as { id: string; args?: Record<string, unknown> }[]) {
+    for (const step of (binding === null ? [] : [binding].flat()) as { id: string; args?: Record<string, unknown> }[]) {
       const command = registry.get(step.id)!;
       assert.ok(command, key);
       assert.ok((command.modes ?? ["normal"]).includes("media"), `${key} -> ${step.id}`);
