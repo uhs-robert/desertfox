@@ -1,8 +1,8 @@
 # Hints
 
 Area: hints, grab and actions.
-READMEs: `src/content/hints/README.md`, `src/content/grab/README.md`, `src/content/site_actions/README.md`, `src/devtools/README.md`.
-Source: `src/content/hints`, `src/content/grab`, `src/content/site_actions`, `src/devtools`.
+READMEs: `src/content/hints/README.md`, `src/content/grab/README.md`, `src/content/site_actions/README.md`, `src/devtools/README.md`, `src/background/README.md`.
+Source: `src/content/hints`, `src/content/grab`, `src/content/site_actions`, `src/devtools`, `src/background`.
 
 ### Hints
 
@@ -69,3 +69,11 @@ Source: `src/content/hints`, `src/content/grab`, `src/content/site_actions`, `sr
 - A copy or a `prompt` does not run in the frame of the pick: that frame answers with the text (the copy text, or the whole line for `prompt`, tracking parameters already stripped there), and the keyboard frame runs its usual copy or opens the line. So a rapid `copy` or `copy_text` keeps one list in the keyboard frame that joins the picks of every frame, the register applies, and the toast draws in the top frame.
 - Text mode (`/`) ranks the hints of every frame: each frame sends the text of its candidates with its count, the background holds them in memory during the wait and returns them with the labels, and the typed relay carries the matching labels and the active one so the other frames hide the rest. With `--all-frames` the texts are a snapshot taken when the hints start, so a later page change does not show in text mode.
 - A frame that ends the session before the start answer arrives is noticed by session id, so the run ends and does not enter hint mode. Known limits: keys typed during the round trip of a pick in another frame (a few milliseconds, and the same gap before a cross-frame `prompt` opens its line) run in the keyboard frame as normal keys. `copylinks` (`yL`) does not follow the flag.
+
+### Background files for hints
+
+Behavior of the `src/background` files for this area, moved here from `src/background/README.md`.
+
+- `hint_frames.ts`: one label set across the frames of a tab, for `hint --all-frames`. The keyboard frame starts a session (`hint_frames_start`), the background injects the hints bundle into every frame that takes scripts, waits `HINT_FRAMES_WAIT_MS` (500 ms) for each frame's candidate count, and `assign_labels` hands out one prefix-free set, the top frame first. A frame that reports late gets no labels and no redraw. The keyboard frame sends its typed prefix and its pick here, and this relays them to the frames that own the labels. The session sits in `storage.session` (`HINT_FRAMES_STORAGE_PREFIX`), the wait only in memory, and nothing on the wait awaits a browser call, because a navigating frame can leave one unanswered. Browser calls come in through `HintFramesDeps`.
+- `inspect_relay.ts`: hands a hint pick (`inspect_pick` from the `hints` bundle) to the devtools page of the picked tab. The ports sit in a map by tab id, rebuilt when the devtools pages reconnect. With no port the tab id and the pick time wait in `storage.session` (`INSPECT_PENDING_STORAGE_KEY`), and the answer is `{ ok: true, waiting: true }`. The hints bundle then shows the "press F12" notice and answers ok, so a key sequence goes on. The pick goes out when the page connects. It is dropped after 60 s, on navigation (`tabs.onUpdated` loading) and when the tab closes. Only a port named `devtools_inspect` from the extension's own `devtools.html` registers.
+- `image_actions.ts`: answers `image_action` from the `hints` bundle. A copy fetches the address (cookies only for a default-container normal tab, 20 s timeout, 20 MB cap enforced while reading), sniffs the type from the first bytes and puts a PNG or JPEG on the clipboard, converting other types to PNG first. A download passes the address to `downloads.download` with the sender tab's `incognito` and `cookieStoreId`, buffering nothing. Every failure is an `Outcome` with a message, and the clipboard changes only in the last step. Browser calls come in through `ImageDeps` (wired in `browser_deps.ts`), so tests use fakes.
