@@ -1,9 +1,13 @@
 # devtools
 
-The page that Firefox loads in each toolbox (`devtools_page` in the manifest). It builds as `devtools.js`, with its own size limit in `MAX_BYTES` in `tools/build.mjs`.
+The page that Firefox loads in each toolbox (`devtools_page` in the manifest). It builds as `devtools.js`.
+
+Behavior is in `docs/design/interfaces_hints.md`, section "Devtools files for hints".
 
 - `main.ts`: wires `run_page` to `browser.devtools.inspectedWindow` and `browser.runtime.connect`.
-- `hand_off.ts`: `run_page` connects to the background with the name `devtools_inspect`, says which tab it inspects (`devtools_hello`) and, on each `devtools_pick`, evals one constant string that deletes `window.__desertfox_pick` and passes the node to `inspect()`. The string carries no page data. One eval reads and deletes together, so a second pick that lands in rapid mode is never deleted before its own message arrives, and a failed select leaves nothing on the page. Picks run one after another. A closed port is reopened after a second, which also covers a restarted background: its relay then sends the pick that waited.
+- `hand_off.ts`: `run_page`: the connection to the background and the `inspect()` call for each pick.
 - `devtools.html`: the page the manifest points `devtools_page` at. It only loads `devtools.js`.
 
-The relay is `background/inspect_relay.ts`. The hints bundle sets the property (`content/hints/inspect.ts`).
+Rules across files:
+
+- The relay is `src/background/inspect_relay.ts`. The hints bundle sets the pick property (`src/content/hints/inspect.ts`).
