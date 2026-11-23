@@ -475,7 +475,6 @@ const BASE_SECTIONS: KeymapConfig = {
   },
 };
 
-
 const media_action = (action: string, value?: string, label?: string) => ({ id: "media.act", args: { action, ...(value === undefined ? {} : { value }) }, ...(label === undefined ? {} : { label }) });
 
 // The keys of the media mode. It takes the normal keys whose commands run in media mode (`MODE_PARENTS`), so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach. A taken key can make a free letter a prefix (`t` for `tM`), and then that letter no longer reaches the page. A digit is a count (`5l`), except `0`, which is the start unless a count is under way.
