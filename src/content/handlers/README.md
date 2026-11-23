@@ -1,24 +1,17 @@
 # handlers
 
-The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object with a `run(args, repeat)` function. `repeat` is true when an auto-repeat keydown started the run and false for every other source. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
+The content-side code of each command that runs in the page: one `ContentHandler` object per command. Behavior is in `docs/design/keys.md`, section "Handlers files for content commands".
 
 - `types.ts`: the `ContentHandler` type.
-- `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`). The `scroll_selector` site setting picks the target first. The pick of the whole-page scan is kept per axis and dropped on `focusin`, `pointerdown`, a failed re-check or a 1 s pause between scroll keys.
-- `page.ts`: `page.blur`. It holds `blur_focused_element` and remembers the last blurred field, which the bundles read through the host. It also holds `hand_focus_to_parent`, the hand-off of a hidden input frame (`../hidden_frame.ts`).
-- `mode.ts`, `stop.ts`: the mode and stop commands.
-- `focus.ts`: a helper that has no handler object.
+- `scroll.ts`: the `scroll.*` commands, and `scroll_target` and `end_flight` for the bundle host.
+- `page.ts`: `page.blur`, and the hand-off of a hidden input frame to the parent.
+- `mode.ts`: the `mode.*` commands.
+- `stop.ts`: `page.stop`.
+- `focus.ts`: a helper that has no handler object. `src/content/main.ts` imports it directly.
 
-How a handler is found and called:
+Rules across files:
 
-- `../handler_map.ts` maps a command id such as `scroll.lines` to its handler. It is the only id-to-code link in the content bundle.
-- `../run_content.ts` looks the id up. An id with no handler but with a `bundle` on the invocation runs through the bundle host, which loads the bundle first. Any other id fails. It calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
-- The args are already checked, with defaults filled in, by the background compiler.
-
-The count rule is not on the handler. The command definition in `src/commands` holds it, and the background compiler puts it on each `LeafStep` as `count_rule`. The definitions import only a few constants from this folder.
-
-To add a handler:
-
-- Write the `ContentHandler` in the file of its group, or in a new file.
-- Add it to `handler_map.ts` under the command id.
-- Define the command in `src/commands`, with its count rule.
-- To report a success, call `show_toast` from `../ui_proxy.ts`. `../page/copy.ts` takes it as a parameter. To report a failure, return it as an `Outcome`.
+- `../handler_map.ts` maps a command id to its handler. It is the only id-to-code link in the content bundle.
+- `../run_content.ts` looks the id up and runs it. The background compiler checks the args and sets the count rule.
+- The count rule lives in the command definition in `src/commands`, not on the handler.
+- To add a handler: write it here, add it to `handler_map.ts` and define the command in `src/commands` with its count rule.
