@@ -1,7 +1,12 @@
 # media
 
-The `media` bundle (`media.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`). Unlike the other bundles, the content script never loads it: the background injects it, by frame id, into each frame of a tab that has no listener for a scan (`src/background/media_actions.ts`), so a key pressed in one frame reaches a player in another. It works without `content.js`, which a subframe starts only on its first focus.
+The `media` bundle (`media.js`): the media keys, in every frame of a tab. Behavior is in `docs/design/interfaces_media.md`, section "Media files for the media bundle".
 
-- `main.ts`: one `runtime.onMessage` listener for `media_scan` (the frame's media) and `media_apply`, added once per frame however often the file runs. The listener stays until the frame navigates, so a later key finds it without an injection. The message types live in `src/shared/media.ts`.
-- `fullscreen.ts`: `F` enters fullscreen through the site's own button when the player box holds one, else on the player box. It leaves every nested level.
-- `frame_media.ts`: finds the `video` and `audio` elements, through closed shadow roots (`shadow_root_of`), measures each video's visible area, describes the frame for the background's choice and changes the chosen elements (play, speed, volume, seek, picture-in-picture, fullscreen, from `fullscreen.ts`, mute and loop, and `info`, which only reports). A request of the target `pinned` acts on the video that `;M` pinned in this frame (a weak reference on `window`, found among the frame's players), and the scan says whether the frame has one. The apply finds the elements again, so a page change between scan and apply cannot leave it holding a removed element. It reads the page through a small `FrameView`, so the tests pass plain objects.
+- `main.ts`: the `runtime.onMessage` listener for `media_scan` and `media_apply`.
+- `fullscreen.ts`: `F`, fullscreen through the site's own button or the player box.
+- `frame_media.ts`: finds the frame's `video` and `audio` elements, describes them and applies the chosen action.
+
+Rules across files:
+
+- The content script never loads this bundle. The background injects it by frame id (`src/background/media_actions.ts`).
+- The message types live in `src/shared/media.ts`. The bundle works without `content.js`.
