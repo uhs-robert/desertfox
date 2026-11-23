@@ -20,7 +20,7 @@ Behavior is in `docs/design/bundles.md`, section "Item files for the item bundle
 Rules across files:
 
 - `finder.ts`, `aria_lists.ts` and `menus.ts` read the page only through `PageReader` (`src/content/lib/page_reader.ts`), so tests pass fakes.
-- The repeated blocks (`lib/groups.ts`) and the real-element reader (`lib/dom_reader.ts`) live in `src/content/lib`, shared with `next_page`.
+- The repeated blocks (`src/content/lib/groups.ts`) and the real-element reader (`src/content/lib/dom_reader.ts`) live in `lib`, shared with `next_page`.
 - The shared item types are in `src/content/lib/item_types.ts`.
 - Tests: `test/item_selection.test.ts`, `test/item_derived.test.ts`, `test/item_hover.test.ts`, `test/item_ends.test.ts`, `test/item_aria_lists.test.ts`, `test/site_item.test.ts`.
 - Finder precision on saved pages: `test/next_page/item_marks.test.ts`.
