@@ -1,8 +1,8 @@
 # Registry
 
 Area: the command registry.
-READMEs: `src/shared/registry/README.md`, `src/commands/README.md`, `src/background/README.md`.
-Source: `src/shared/registry`, `src/commands`, `src/background`.
+READMEs: `src/shared/registry/README.md`, `src/commands/README.md`, `src/background/README.md`, `src/shared/README.md`.
+Source: `src/shared/registry`, `src/commands`, `src/background`, `src/shared`.
 
 ## Registry
 
@@ -97,3 +97,9 @@ Behavior of the `src/background` files for this area, moved here from `src/backg
 - `selection_ask.ts`: reads the selection of a frame for a `selection` context source, and the scroll offset of the top frame for a command with the `jumps` flag. The `page` bundle answers `get_selection` and `get_jump_offset` (the offset with the page's own address, so the router records nothing when another page answered), so on no answer it injects `page.js` into the frame and asks again.
 - `issue_report.ts`: the body and the URL of the `:issue` report. Pure. The form body has the versions, the system and the warning count. The copy body adds the warnings word for word, at most 10 and 2 KB with a count of the cut ones, and replaces the config folder path in them with `<config dir>`.
 - `snippets.ts`: the user's snippets as commands. `matches` and `requires` are checked here against the tab URL, the code runs in the top frame only, and `desertfox.run` calls come back through the `snippet_run` message with the caller's depth (limit 5).
+
+### Shared files for the registry
+
+Behavior of the `src/shared` files for this area, moved here from `src/shared/README.md`.
+
+- `command.ts`: a command definition, and the `commands.json` entry cut from it. Also the value lists that a command and its content handler share (`SETTABLE_MODES`, `COPY_FORMATS`, `SCROLL_TO_DEFAULT_AXIS`).

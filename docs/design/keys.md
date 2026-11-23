@@ -1,8 +1,8 @@
 # Keys and modes
 
 Area: keys and modes.
-READMEs: `src/shared/keys/README.md`, `src/content/README.md`, `src/content/handlers/README.md`, `src/background/README.md`.
-Source: `src/shared/keys`, `src/content`, `src/content/handlers`, `src/background`.
+READMEs: `src/shared/keys/README.md`, `src/content/README.md`, `src/content/handlers/README.md`, `src/background/README.md`, `src/shared/README.md`.
+Source: `src/shared/keys`, `src/content`, `src/content/handlers`, `src/background`, `src/shared`.
 
 ## Keys and modes
 
@@ -89,3 +89,9 @@ Behavior of the `src/background` files for this area, moved here from `src/backg
 - `tab_modes.ts`: the mode of each tab, in `storage.local`: the mode of the child frame whose document holds the focus, else the top frame's. Ignore mode in the top frame beats a focused child frame. Reports and navigations run one at a time, and a report that changes nothing writes nothing. The start of a load forgets the mode, and so does the new page taking over, but not an address change the page makes itself. It also holds the insert hold of `tab_insert.ts` and the ignore-mode gate for Firefox shortcuts.
 - `keymap_source.ts`: the compiled keymap from `storage.local`, held in memory after the first read. Every background reader of it but `strip_patterns.ts` (one `get` for the keymap and the config status) goes through `stored_keymap`. `config_store.ts` calls `drop_keymap` right after it writes the keymap, so a change event that arrives late cannot leave the old map. Many frames asking at once share one read, and `storage.onChanged` drops the copy (a read in flight at that moment is read again, not stored). Its listener is added when the module loads, ahead of the other `onChanged` listeners, so they read the new map. A storage other than `browser.storage.local` reads straight through.
 - `page_keymap.ts`: answers `read_keymap`. It reads the stored keymap (through `keymap_source.ts`), resolves the site table columns for the sender (`rule_addresses_of` over `sender_at`, which takes the request's `url` in place of the load address in `sender.url`; `site_columns_for`, `normal_tree_for`, in `shared/site/site_columns.ts`), trims the normal tree, grafts the page's `keymap.<mode>` binds onto the other mode trees (`keymap_mode_trees_for`, also read by `list_keys.ts`, and skipped on an all-off page) and replies with the `PageKeymap` as a JSON string. While a macro records it also swaps the record key for `macro.stop` and adds the register name. `site_value` gives a per-site setting's value, which beats the global one (`site_zoom.ts` uses it). `top_frame_address_of` gives the top frame's address for a tab-wide value asked by a frame. `frame_site_values_for` resolves the named settings that act inside one frame against the frame's own address: `blur_on_load`, `focus_on_load` and `escape_to_page` go into the reply as `site_values`, and `hint_selectors_reply` answers the hints bundle's `read_hint_selectors` with `hint_add` and `hint_remove`. It grafts the merged `bind` column onto the normal tree (`graft_binds`, in `shared/site/site_columns.ts`) before `pass` and `only` prune it, and `off` skips the graft. A guarded bind (`when_focus`, `when_present`) keeps the leaf it replaced at the end of its `otherwise` chain, after any further choices, so the key can fall through to it.
+
+### Shared files for keys
+
+Behavior of the `src/shared` files for this area, moved here from `src/shared/README.md`.
+
+- `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script. Its `format_version` is bumped when the shape changes, and `current_keymap` hides an older one until the background recompiles at its next start. A `SiteRule` holds its `bind` as normalized key to tokens and leaf.
