@@ -95,3 +95,31 @@ Behavior of the `src/background` files for this area, moved here from `src/backg
 Behavior of the `src/shared` files for this area, moved here from `src/shared/README.md`.
 
 - `prefix_tree.ts`: the compiled keymap stored in `storage.local` for the content script. Its `format_version` is bumped when the shape changes, and `current_keymap` hides an older one until the background recompiles at its next start. A `SiteRule` holds its `bind` as normalized key to tokens and leaf.
+
+### Handlers files for content commands
+
+Behavior of the `src/content/handlers` files, moved here from `src/content/handlers/README.md`.
+
+The content-side code of each command that runs in the page. One file per command group, and each command is one `ContentHandler` object with a `run(args, repeat)` function. `repeat` is true when an auto-repeat keydown started the run and false for every other source. `run` returns nothing for done, throws for failed, or returns an `Outcome` or a promise of one. A command that hands control to the user (`hint.run`, `cmdline.open`, `find.open`) stays pending until the user finishes: a pick or Enter is done, and Escape, an unrelated key or a page change is cancelled. A failed command returns its message and does not toast it, so the caller shows it once.
+
+- `types.ts`: the `ContentHandler` type.
+- `scroll.ts`: the `scroll.*` commands. It exports `scroll_target` and `end_flight` for the bundle host (`scroll_box_`). The `scroll_selector` site setting picks the target first. The pick of the whole-page scan is kept per axis and dropped on `focusin`, `pointerdown`, a failed re-check or a 1 s pause between scroll keys.
+- `page.ts`: `page.blur`. It holds `blur_focused_element` and remembers the last blurred field, which the bundles read through the host. It also holds `hand_focus_to_parent`, the hand-off of a hidden input frame (`src/content/hidden_frame.ts`).
+- `mode.ts`: the mode commands.
+- `stop.ts`: the stop command.
+- `focus.ts`: a helper that has no handler object.
+
+How a handler is found and called:
+
+- `src/content/handler_map.ts` maps a command id such as `scroll.lines` to its handler. It is the only id-to-code link in the content bundle.
+- `src/content/run_content.ts` looks the id up. An id with no handler but with a `bundle` on the invocation runs through the bundle host, which loads the bundle first. Any other id fails. It calls `run` once per args set that the count rule gives. A thrown error also becomes a failed outcome, which the caller shows as a toast.
+- The args are already checked, with defaults filled in, by the background compiler.
+
+The count rule is not on the handler. The command definition in `src/commands` holds it, and the background compiler puts it on each `LeafStep` as `count_rule`. The definitions import only a few constants from this folder.
+
+To add a handler:
+
+- Write the `ContentHandler` in the file of its group, or in a new file.
+- Add it to `handler_map.ts` under the command id.
+- Define the command in `src/commands`, with its count rule.
+- To report a success, call `show_toast` from `src/content/ui_proxy.ts`. `src/content/page/copy.ts` takes it as a parameter. To report a failure, return it as an `Outcome`.
