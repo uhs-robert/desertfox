@@ -45,10 +45,12 @@ export function background_command_cannot_cast_args_wide(): void {
 }
 
 const strict_values = [{ name: "action", type: "string", values: ["play", "pause"], strict: true }] as const;
+const optional_strict_values = [{ name: "action", type: "string", values: ["play", "pause"], strict: true, optional: true }] as const;
 const loose_values = [{ name: "action", type: "string", values: ["play", "pause"] }] as const;
 
 export function strict_values_are_a_union(): void {
   assert_type<Equal<ArgsOf<typeof strict_values>["action"], "play" | "pause">>();
+  assert_type<Equal<ArgsOf<typeof optional_strict_values>["action"], "play" | "pause" | "">>();
   assert_type<Equal<ArgsOf<typeof loose_values>["action"], string>>();
   define("typed.values", {
     bridge: false,

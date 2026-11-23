@@ -10,32 +10,34 @@ The registry lives in the background page. A command is plain data plus a handle
 
 ```ts
 define("tab.close", {
+  bridge: true,
   label: "Close tab",
   intent: "Close the current tab and focus the next one, or close the tabs around it.",
   params: [
-    { name: "side", type: "enum", values: ["none", "all_before", "all_after", "focus_previous"],
-      default: "none", short: { all_before: "B", all_after: "A", focus_previous: "P" },
-      value_labels: { focus_previous: "and focus previous" } },
+    { name: "side", type: "enum", values: ["none", "all_before", "all_after", "focus_previous", "site"],
+      default: "none", short: { all_before: "B", all_after: "A", focus_previous: "P", site: "S" },
+      value_labels: { focus_previous: "and focus previous", site: "for its whole site" } },
   ],
   runs_in: "background",
   count: "repeat",
-  run: async (ctx, { side }) => { /* side: "none" | "all_before" | "all_after" | "focus_previous" */ },
+  run: async (ctx, { side }) => { /* side: "none" | "all_before" | "all_after" | "focus_previous" | "site" */ },
 });
 
 define("open.search", {
-  label: "Search",
-  intent: "Search with a keyword engine from the search engine list.",
   name: "search",
+  label: "Search",
+  intent: "Search with a keyword engine. The engine comes from the search engine list. It defaults to the default_engine setting and the query to the selection, else the query of the search results page you are on.",
   params: [
-    { name: "engine", type: "enum", values: from_engines },
-    { name: "query", type: "string", main: true, default: { from: "selection" } },
-    { name: "where", type: "enum", values: WHERE, default: "here",
-      short: { tab: "t", background: "b", window: "w" } },
-    { name: "container", type: "string", values: from_containers, short: "c",
-      when: { where: ["tab", "background", "window"] } },
+    // Empty stands for "none named", so the default_engine setting decides.
+    { name: "engine", type: "enum", values: { from: "search_engines" }, optional: true },
+    { name: "query", type: "string", rest: true, main: true, default: { from: "selection", then: "search_query" } },
+    WHERE_PARAM,
+    CONTAINER_PARAM,
   ],
+  bridge: false,
   runs_in: "background",
-  run: async (ctx, { engine, query, where, container }) => { /* where is a union of WHERE, container is string | undefined */ },
+  // engine and query are string, where is the union of WHERE, container is string | undefined
+  run: async (ctx, args) => open_in(ctx, await search_target(ctx, args.engine, args.query), args.where, container_of(args)),
 });
 ```
 
