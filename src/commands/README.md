@@ -1,25 +1,61 @@
 # commands
 
-The command definitions. Each file is a command module: it calls `define` from `src/shared/registry/` once per command and holds the code that runs it. Keys, the command line, completion, help and which-key read the definition and never carry behavior of their own.
+The command definitions. Each file is a command module: it calls `define` from `src/shared/registry/` once per command and holds the code that runs it. Keys, the command line, completion,
+help and which-key read the definition and never carry behavior of their own.
 
-This folder and `src/background/` import each other. `src/background/command_modules.ts` imports every command module for its side effect. A command may call background helpers. The background takes only the wiring calls in `main.ts` from here. The pure plan and URL helpers live in `src/shared/` (`settings_plan.ts`, `url_build.ts`). A command module may use a background value while it loads (11 do: three by calling, `media.ts`, `help.ts` and `session.ts`, and the rest by reading exports) only when that background module does not reach back to that command module, directly or through `availability.ts`.
+This folder and `src/background/` import each other. `src/background/command_modules.ts` imports every command module for its side effect. A command may call background helpers. The
+background takes only the wiring calls in `main.ts` from here. The pure plan and URL helpers live in `src/shared/` (`settings_plan.ts`, `url_build.ts`). A command module may use a background
+value while it loads (11 do: three by calling, `media.ts`, `help.ts` and `session.ts`, and the rest by reading exports) only when that background module does not reach back to that command
+module, directly or through `availability.ts`.
 
-- A definition gives an id (`tab.pin`, group then verb), a label, an intent, params and `runs_in`. The first sentence of the intent is the summary that lists show: a verb first, at most 60 characters, no other command named. Every flag param has a one-sentence `description`. A registry audit test checks both. A `background` command runs here, with browser APIs. A `content` command's `run` is a handler from `src/content/handlers/`, which the content script runs in the page (`scroll.ts`, `copy.ts`, `mode.ts`).
-- State `bridge: true` or `bridge: false` on every definition. True lets a program outside the browser run the command through the bridge socket. The built-in `define` requires the field, a registry audit test checks it, and a hard-coded never-list in `src/background/bridge_run.ts` wins over a true. Say true only for a command that is safe to run with no one watching: tab navigation, media, scroll and mode commands today.
-- Set the typed `name` by hand, and only for one-word commands and family words (`open`, `search`, `tab`). Every other command is typed by its dotted id. The registry rejects a duplicate name.
-- Modules by group: `tab`, `tab_group` (the `tabgroup.*` commands on the tab's native tab group, over `TabGroupDeps`), `tab_split` (`tab.split_other` and `tab.split_swap`, the other pane and swap of a split view, over `src/background/tab_split.ts`), `window` (it also holds `tab.attach`, which moves the tab to another window), `bookmark`, `history`, `browser`, `zoom`, `page`, `url`, `scroll`, `mode`, `copy` (it also holds `copy.links`, which runs in the hints bundle), `copy_tabs` (`copy.tabs`, `yT`, runs in the background: it lists the open web tabs of this window or all windows in the link-list formats of `src/shared/copy/link_list.ts`, without the tracking parameters), `config`, `native`, `settings` and `help`. `perf.ts` holds `debug.perf` (`:perf`, no key), which copies the timing summary to the clipboard. `native.ts` holds `native.install`, `native.update` and `permissions.grant`, which open the Help grant panel at `#grant/<permission>`, and `browser.open_firefox_page` (`:firefox`, the `,f` keys), whose handler and page table sit in `firefox_page.ts`: it asks the native host to open an `about:` page, and without the host it copies the address. `issue.ts` holds `help.issue` (`:issue`, no key): it opens the prefilled GitHub new-issue form (versions, system, warning count), or with `--copy` copies the report with the warning text and opens the blank form. It sends nothing itself, and the form is the review step. The report text comes from `src/background/issue_report.ts`. `help.ts` builds the `:help` choices from the registry: the page names (`quick_start`) and the command ids, matched exactly, so `command_modules.ts` imports it last. `open.ts` holds `open.url`, `open.search` and `open.clipboard`. `engine.ts` holds `engine.show`. `quickmark.ts` holds `quickmark.add` (`M<key>`) and `quickmark.open` (`go<key>`, `gn<key>`): the handlers take a `QuickmarkDeps` object, and the table is `quickmarks.toml` with the saved entries on top. `register.ts` holds `register.list` (`:registers`), which toasts the registers that hold something or one register in full. `session.ts` holds `session.save`, `session.open`, `session.delete` and `session.rename`: the handlers take a `SessionDeps` object with the store and the browser calls, and the new window and tab creation lives there (the store and the restore plan are in `src/background/session_store.ts`). `register_param.ts` holds the `register` param that the yank commands (`copy.url`, `copy.links`, `copy.tabs`, `hint.run`, `visual.act`) and `open.clipboard` share: the `"<reg>` prefix fills it. `text.ts` holds `text.insert`, which the typed-text recorder stores and `.` replays, and `register.paste`, which `<C-r><reg>` runs in insert mode; the code of both sits in the `text` bundle. `text.ts` also holds `text.edit_external` (`<C-o>` in insert mode), whose code sits in the `editor` bundle and whose job the background keeps (`src/background/external_editor.ts`). `mark.ts` holds `mark.add`, `mark.jump` and `mark.step` (`]'`, `['`), whose code sits in the `page` bundle. `jump.ts` holds `page.jump` (`<C-o>`, `<C-i>`), also in the `page` bundle. `page.focus_link` (`]l`, `[l`, in `page.ts`) runs in the hints bundle. `page.send_key` (in `page.ts`) is meant for the `bind` column of a site row, and it also backs the default `<A-Escape>` insert binding, which sends Escape to the page on any site. Its code sits in the `site_actions` bundle. `macro.ts` holds `macro.record` (`q<reg>`) and `macro.stop`, which drive the recorder in `src/background/macro_recorder.ts` and store the steps in the register, and `macro.play` (`@<reg>`), which runs the replay in `src/background/macro_replay.ts`. `media.ts` holds `media.act` (`media`), which runs the frame fan-out in `src/background/media_actions.ts`. `command.ts` holds `command.repeat`, which replays the stored request through a router that `main.ts` wires in.
-- `settings.ts` holds `set`, `toggle` and `unset`. The pure `plan_set`, `plan_toggle` and `plan_unset` (in `src/shared/settings_plan.ts`) turn the checked params into the edits to keep (saved for a consent setting, or temp with `--temp`) and the toast that answers. `plan_set` refuses to save any other setting, but `save_in_browser` also saves `default_engine` there. The handlers publish through `change_edits` in `config_store.ts` and toast after the publish. Without `--temp`, a name in `FILE_WRITTEN_SETTINGS` goes to the settings.toml writes of `config_setting_writes.ts` instead, and the toast waits for the host write and says where the change went.
-- A handler throws `RuntimeRefusal` (`src/shared/command.ts`) for a failure that depends on browser or config state. A bad argument value belongs in the param schema (`min`, `pattern`, `strict`, `optional`), never in a handler.
-- `hint.ts`, `heading.ts`, `cmdline.ts`, `caret.ts` and `visual.ts` hold commands whose code sits in a bundle. Such a command has a `bundle` field and no `run`. The compiler and the router pass the field to the content script (`LeafStep.bundle`, `Invocation.bundle`), which loads the bundle on the first run, or refuses with `needs <label>` while the bundle registers no handler (`run_content.ts`).
+The rules for a definition and the notes per module are in "Commands files for the registry" in `docs/design/registry.md`.
+
+- `bookmark.ts`: the `bookmark.*` commands: add, open, remove, rename, edit_url, move and open_folder.
+- `browser.ts`: `browser.focus_page`, `frame.exit` and `browser.close_all`.
+- `caret.ts`: `caret.move` and `caret.find`. The code sits in a bundle.
+- `cmdline.ts`: the `cmdline.*` commands, `list.act` and `list.select`. The code sits in the `cmdline` bundle.
+- `command.ts`: `command.repeat`, which replays the stored request through a router that `main.ts` wires in.
+- `config.ts`: `config.reload` and `debug.restart`.
+- `copy.ts`: `copy.url` and `copy.links`.
+- `copy_tabs.ts`: `copy.tabs` (`yT`), which lists the open web tabs in the link-list formats.
+- `engine.ts`: `engine.show`.
 - `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.
+- `firefox_page.ts`: the handler and page table of `browser.open_firefox_page`: it asks the native host to open an `about:` page.
 - `grab.ts`: the keys of grab mode (`grab.move`, `grab.step`, `grab.drop`, `grab.cancel`). The `grab` bundle runs them.
-- `hint_text.ts`: `hint.key`, the binding that holds Tab, Enter, Space and Slash while the hints bundle loads. The bundle takes those keys itself once hint mode is open.
+- `heading.ts`: `heading.go`. The code sits in a bundle.
+- `help.ts`: `help.open`, `help.key` and `help.whichkey`. It builds the `:help` choices from the registry, so `command_modules.ts` imports it last.
+- `help_tab.ts`: `open_help_url`, which opens a help page URL beside the asking tab or navigates in place. Shared by the help and native commands.
+- `hint.ts`: `hint.run`. The code sits in the `hints` bundle.
+- `hint_text.ts`: `hint.key`, the binding that holds Tab, Enter, Space and Slash while the hints bundle loads.
+- `history.ts`: `history.open`.
+- `issue.ts`: `help.issue` (`:issue`): opens the prefilled GitHub new-issue form, or with `--copy` copies the report.
+- `jump.ts`: `page.jump` (`<C-o>`, `<C-i>`), in the `page` bundle.
+- `macro.ts`: `macro.record`, `macro.stop` and `macro.play`, over the recorder and replay in `src/background/`.
+- `mark.ts`: `mark.add`, `mark.jump` and `mark.step`, in the `page` bundle.
 - `mark_list.ts`: `mark.list`, `mark.delete` and `mark.clear`. Typing the command is the confirmation, and `.` never replays `all`.
-- `reload_clear.ts`: the clear scopes of `reload --clear` (`site` and `all`). Firefox ignores `hostnames` for the cache, local storage and service workers, so a site clear takes only the cookies by host name.
+- `media.ts`: `media.act` (`media`), which runs the frame fan-out in `src/background/media_actions.ts`.
+- `mode.ts`: the mode commands (`mode.set`, `mode.site`, `mode.insert`, `mode.escape`, `mode.pass_next`) and `page.focus_input` and `page.blur`.
+- `native.ts`: `native.install`, `native.update`, `permissions.grant` and `browser.open_firefox_page`.
+- `open.ts`: `open.url`, `open.search`, `open.clipboard` and `open.anything`.
+- `open_target.ts`: the `where` and `container` params, `open_in`, the container lookup and `typed_url_target` for typed text.
+- `page.ts`: the `page.*` commands, for example back, forward, reload, home, `page.click`, `page.item`, `page.tree`, `page.heading`, `page.send_key` and `page.clipboard`.
+- `perf.ts`: `debug.perf` (`:perf`), which copies the timing summary to the clipboard.
+- `quickmark.ts`: the `quickmark.*` commands: add, open, delete and list, over a `QuickmarkDeps` object.
+- `register.ts`: `register.list` (`:registers`).
+- `register_param.ts`: the `register` param that the yank commands and `open.clipboard` share.
+- `reload_clear.ts`: the clear scopes of `reload --clear` (`site` and `all`).
+- `scroll.ts`: the `scroll.*` commands: lines, pixels, pages, to and align.
+- `session.ts`: `session.save`, `session.open`, `session.delete` and `session.rename`, over a `SessionDeps` object.
+- `settings.ts`: `set`, `toggle` and `unset` (ids `settings.set`, `settings.toggle`, `settings.unset`), over the planners in `src/shared/settings_plan.ts`.
+- `tab.ts`: the `tab.*` commands: next, prev, undo_close, move, duplicate, detach, goto, alternate, pin, mute and more.
+- `tab_group.ts`: the `tabgroup.*` commands on the tab's native tab group, over `TabGroupDeps`.
+- `tab_split.ts`: `tab.split_other` and `tab.split_swap`, over `src/background/tab_split.ts`.
+- `text.ts`: `text.insert`, `register.paste` and `text.edit_external`. The code sits in the `text` and `editor` bundles.
+- `url.ts`: `url.parent`, `url.root` and `url.increment`.
+- `visual.ts`: `visual.act`, `visual.object` and `visual.open`. The code sits in a bundle.
+- `window.ts`: `window.new`, `window.close`, `window.undo_close` and `tab.attach`.
+- `zoom.ts`: `zoom.by` and `zoom.set`.
 
-Helpers:
-
-- `help_tab.ts`: `open_help_url`, which opens a help page URL beside the asking tab or navigates in place. `help.open`, `help.key`, `native.install` and `permissions.grant` share it. `help.open site_rules` adds the invoking tab's address (not the help page's) to the hash, which the Site Rules page reads. `help.key` (`:helpkey ,r`) reads the compiled keymap in normal mode through `key_command_id` in `background/open_help.ts` and opens the card of the command the keys run. A count or register prefix is read as the page reads it, and a key bound to several steps opens the first step's card. Key notation is checked by the param `format: "keys"`, so only an unbound sequence refuses in the handler.
-- `open_target.ts`: the `where` and `container` params, `open_in` (opens a URL here, in a tab or in a window), the container lookup, `current_tab_url` and `current_page` (the page that engine slots read), and `typed_url_target` for text a person typed (`config_url_target` in `src/shared/url_build.ts` does the pure part).
-
-To add a command: pick the module of its group, or add one. Call `define` with the id, label, intent and params. Import the module in `src/background/command_modules.ts`, which the commands.json build tool reads too. Put browser access in `run` and keep URL math in a pure function with a test. A command that only opens a URL is better as an engine in the user's config, and one that needs the page DOM or several steps as a snippet.
+To add a command: pick the module of its group, or add one. Call `define` with the id, label, intent and params. Import the module in `src/background/command_modules.ts`, which the
+commands.json build tool reads too. Put browser access in `run` and keep URL math in a pure function with a test. A command that only opens a URL is better as an engine in the user's config,
+and one that needs the page DOM or several steps as a snippet.
