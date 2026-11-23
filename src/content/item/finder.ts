@@ -260,13 +260,14 @@ function kind_of(boxes: readonly Box[]): FinderKind {
   return wide * 2 > rows.size ? "grid" : "list";
 }
 
-// Paragraph text outside the links and outside the items of the list. A page whose prose lies around the list (a reference list or a table of contents inside an article) is a text page that holds link lists, so the finder gives no list. A text page whose entries are the items (a manual's) is left to the title link test.
+// Paragraph text outside the links and outside the items of the list. Prose that starts below the list does not count: a long README under a file table is no sign of an article. A page whose prose lies around the list (a reference list or a table of contents inside an article) is a text page that holds link lists, so the finder gives no list. A text page whose entries are the items (a manual's) is left to the title link test.
 function prose_around<N>(reader: PageReader<N>, scope: readonly N[], best: Group<N>, chrome: (node: N) => boolean): boolean {
   const holders = new Set(best.items);
+  const bottom = Math.max(...best.boxes.map((box) => box.y + box.h));
   let around = 0;
   for (const node of scope) {
     const tag = reader.tag_(node);
-    if ((tag !== "p" && tag !== "pre") || reader.text_length_(node) < MIN_PROSE_PARAGRAPH || chrome(node) || [...ancestors(reader, node)].some((at) => holders.has(at))) continue;
+    if ((tag !== "p" && tag !== "pre") || reader.text_length_(node) < MIN_PROSE_PARAGRAPH || (reader.box_(node)?.y ?? 0) >= bottom || chrome(node) || [...ancestors(reader, node)].some((at) => holders.has(at))) continue;
     const links = descendants(reader, node, (inner) => reader.tag_(inner) === "a").reduce((sum, link) => sum + reader.text_length_(link), 0);
     around += reader.text_length_(node) - links;
   }
