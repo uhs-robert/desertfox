@@ -39,7 +39,7 @@ define("zoom.by", {
   bridge: false,
   runs_in: "background",
   count: "repeat",
-  run: (ctx, args) => handlers.by(ctx, args as { delta: number }),
+  run: (ctx, args) => handlers.by(ctx, args),
 });
 
 define("zoom.set", {
@@ -49,5 +49,5 @@ define("zoom.set", {
   params: [{ name: "level", type: "float" }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.set(ctx, args as { level: number }),
+  run: (ctx, args) => handlers.set(ctx, args),
 });

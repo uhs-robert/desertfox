@@ -223,7 +223,7 @@ define("session.save", {
   params: [{ ...NAME_PARAM, pattern: NEW_NAME_PATTERN }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.save(ctx, args as { name: string }),
+  run: (ctx, args) => handlers.save(ctx, args),
 });
 
 define("session.open", {
@@ -243,7 +243,7 @@ define("session.open", {
   ],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.open(ctx, args as { name: string; into: SessionInto }),
+  run: (ctx, args) => handlers.open(ctx, args),
 });
 
 define("session.delete", {
@@ -252,7 +252,7 @@ define("session.delete", {
   params: [NAME_PARAM],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.remove(ctx, args as { name: string }),
+  run: (ctx, args) => handlers.remove(ctx, args),
 });
 
 define("session.rename", {
@@ -261,5 +261,5 @@ define("session.rename", {
   params: [NAME_PARAM, { name: "to", type: "string", pattern: NEW_NAME_PATTERN, description: "Give the session this name." }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.rename(ctx, args as { name: string; to: string }),
+  run: (ctx, args) => handlers.rename(ctx, args),
 });
