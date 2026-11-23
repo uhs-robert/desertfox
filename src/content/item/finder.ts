@@ -36,6 +36,8 @@ const MIN_ITEM_WIDTH_PX = 120;
 const MIN_PROSE_PARAGRAPH = 40;
 // Prose around a list of this many characters outweighs it (see `prose_around`).
 const PROSE_AROUND_CHARS = 5000;
+// Prose above and beside a list under this many characters leaves the prose below it uncounted (see `prose_around`).
+const PROSE_ABOVE_CHARS = 1000;
 
 const HEADING = /^h[1-6]$/;
 const DEEP_HEADING = /^h[3-6]$/;
@@ -260,16 +262,20 @@ function kind_of(boxes: readonly Box[]): FinderKind {
   return wide * 2 > rows.size ? "grid" : "list";
 }
 
-// Paragraph text outside the links and outside the items of the list. Prose that starts below the list does not count: a long README under a file table is no sign of an article. A page whose prose lies around the list (a reference list or a table of contents inside an article) is a text page that holds link lists, so the finder gives no list. A text page whose entries are the items (a manual's) is left to the title link test.
+// Paragraph text outside the links and outside the items of the list. A page whose prose lies around the list (a reference list inside an article, a side rail, comments under a question) is a text page that holds link lists, so the finder gives no list. A text page whose entries are the items (a manual's) is left to the title link test.
+// Prose that starts below the list's bottom edge counts only once the prose above and beside the list reaches PROSE_ABOVE_CHARS. Almost no text before the list means the list leads the page and the prose below is its README, not an article around it.
 function prose_around<N>(reader: PageReader<N>, scope: readonly N[], best: Group<N>, chrome: (node: N) => boolean): boolean {
   const holders = new Set(best.items);
   const bottom = Math.max(...best.boxes.map((box) => box.y + box.h));
-  let around = 0;
+  let above = 0;
+  let below = 0;
   for (const node of scope) {
     const tag = reader.tag_(node);
-    if ((tag !== "p" && tag !== "pre") || reader.text_length_(node) < MIN_PROSE_PARAGRAPH || (reader.box_(node)?.y ?? 0) >= bottom || chrome(node) || [...ancestors(reader, node)].some((at) => holders.has(at))) continue;
+    if ((tag !== "p" && tag !== "pre") || reader.text_length_(node) < MIN_PROSE_PARAGRAPH || chrome(node) || [...ancestors(reader, node)].some((at) => holders.has(at))) continue;
     const links = descendants(reader, node, (inner) => reader.tag_(inner) === "a").reduce((sum, link) => sum + reader.text_length_(link), 0);
-    around += reader.text_length_(node) - links;
+    const chars = reader.text_length_(node) - links;
+    if ((reader.box_(node)?.y ?? 0) >= bottom) below += chars;
+    else above += chars;
   }
-  return around >= PROSE_AROUND_CHARS;
+  return above + (above >= PROSE_ABOVE_CHARS ? below : 0) >= PROSE_AROUND_CHARS;
 }
