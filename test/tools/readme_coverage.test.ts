@@ -30,10 +30,8 @@ test("every source file has an entry in its folder README", () => {
   assert.equal(problems.length, 0, `\n${problems.length} source file(s) have no README entry:\n${problems.sort().join("\n")}\n`);
 });
 
-// A README is a code map. A "cut" README has no line over LINE_CAP characters (headings, prose, list items and indented lines alike). A README not yet cut sits in UNCUT_FILE with a byte ceiling: its size when listed plus a fixed 512 bytes (UNCUT_SLACK, the same number for every README and never moved per edit). The slack is there so map-line edits in parallel changes do not fail on a few bytes. The ceiling stops an uncut README growing. The list shrinks: a listed README that is gone or is now cut must be removed from it, so a cut README cannot regrow unnoticed. Only READMEs under src are checked. READMEs elsewhere (host, tools, docs) are out of scope on purpose.
+// A README is a code map: no line over LINE_CAP characters (headings, prose, list items and indented lines alike). Only READMEs under src are checked. READMEs elsewhere (host, tools, docs) are out of scope on purpose.
 const LINE_CAP = 200;
-const UNCUT_SLACK = 512;
-const UNCUT_FILE = "test/tools/readme_uncut.json";
 
 function all_readmes(): string[] {
   return readdirSync("src", { recursive: true, withFileTypes: true })
@@ -89,24 +87,11 @@ test("no README entry names a file or folder that is gone", () => {
   assert.equal(problems.length, 0, `\n${problems.length} stale README entr(ies):\n${problems.join("\n")}\n`);
 });
 
-test(`a cut README has no line over ${LINE_CAP} characters, and an uncut one stays under its ceiling`, () => {
-  const uncut = JSON.parse(readFileSync(UNCUT_FILE, "utf8")) as Record<string, number>;
+test(`no README has a line over ${LINE_CAP} characters`, () => {
   const problems: string[] = [];
-  const readmes = all_readmes();
-  for (const readme of readmes) {
-    const ceiling = uncut[readme];
-    const size = readFileSync(readme).length;
-    if (ceiling === undefined) {
-      const long_lines = lines_over_cap(readme);
-      if (long_lines.length > 0) problems.push(`${readme}: ${long_lines.length} line(s) over ${LINE_CAP} characters, for example "${(long_lines[0] ?? "").slice(0, 60)}...". Move behavior to docs/design/ or a code comment`);
-    } else if (size > ceiling) {
-      problems.push(`${readme}: ${size} bytes, over its ceiling of ${ceiling} in ${UNCUT_FILE}. Cut it instead of raising the ceiling`);
-    } else if (lines_over_cap(readme).length === 0) {
-      problems.push(`${readme}: now cut (no line over ${LINE_CAP}), remove it from ${UNCUT_FILE}`);
-    }
-  }
-  for (const listed of Object.keys(uncut)) {
-    if (!readmes.includes(listed)) problems.push(`${listed}: gone, remove it from ${UNCUT_FILE}`);
+  for (const readme of all_readmes()) {
+    const long_lines = lines_over_cap(readme);
+    if (long_lines.length > 0) problems.push(`${readme}: ${long_lines.length} line(s) over ${LINE_CAP} characters, for example "${(long_lines[0] ?? "").slice(0, 60)}...". Move behavior to docs/design/ or a code comment`);
   }
   assert.equal(problems.length, 0, `\n${problems.length} README size problem(s):\n${problems.join("\n")}\n`);
 });
