@@ -1,10 +1,18 @@
 # next_page
 
-The `next_page` bundle (`next_page.js`, its own guard in `tools/build.mjs`): the `page.follow` handler of `]]` and `[[`. The content script loads it on the first press. It borrows the collect walk, the presence test and the click from `../lib/`, but does not load the hints bundle. It watches for the user leaving a load with `../user_left.ts`.
+The `next_page` bundle (`next_page.js`): the `page.follow` handler of `]]` and `[[`. The content script loads it on the first press.
 
-- `detect.ts`: the detector. It reads the page only through a `PageReader` (`../lib/page_reader.ts`; boxes in page coordinates, hidden, sideways scroller, fixed or sticky), so it is pure: `follow_links.ts` passes real elements and the suite in `test/fixtures/next_page/` passes saved ones. It answers what to do (`follow`, `click`, `scroll` or `none`) and does nothing itself. `detect_next_page` takes the first `rel` link, else the best next word (`rank_by_text`: a whole-word match in a text of at most five words, then an earlier pattern, a link over a button, the shorter text), passing over a control in a carousel or sideways scroller, in a media player (a box of at most one screen that holds a video) or inside one item of a repeated list (not past a `nav`, and an item of at most two screens). With nothing found, it runs the load step it is given.
-- `load_more.ts`: the load step. It finds the main list (the repeated block of three or more stacked items with the most area, outside page chrome, carousels and fixed boxes, read through `../lib/groups.ts` as the item finder reads it) and takes the nearest lone control just below its last item: one whose text is a load word (`is_load_text`, the whole text or the word and one noun, in nine languages), else a plain button within 300 px. A div or span with no role also counts as a control when its own pointer cursor starts there (`PageReader.pointer_`, the hints' click sign), it holds no link or button and its text is a load word; it never counts as a plain button. It never takes a toggle, a control inside an item or one in a branch of more than three controls. With no control, it answers `scroll` with the last item, but only when the list ends within half a screen of the page end, so an article or a front page does not jump.
-- `follow_links.ts`: the live side. `find_next_page` gathers the `rel` links, the present links and buttons (off-screen ones count) across shadow roots and same-origin frames, and the detector reads real elements through `dom_reader` of `../lib/dom_reader.ts`.
-- `load_outcome.ts`: `wait_for_new_content` answers whether the page added an element (not a script, style or our own layer) or grew within 3 s. `create_load_step` runs one load at a time per document, so a `]]` during a pending load does nothing, and a page hidden during the wait (the page cache) shows no "Nothing loaded" later.
-- `item_after_load.ts`: after a load, moves the `page.item` box to the first item that follows the last old item still on the page (`first_item_after`), never by the old count, since a page that virtualizes drops items above. Only a batch that adds an item reads the list, and one more look at the end of the wait finds an item that faded in. It reads and moves the box through the item bundle's `item.cursor` handler, and leaves the box when the user moved it, left the mode of the press (normal or item mode) or left the page during the wait.
-- `main.ts`: the handler. It reads `next_patterns` or `prev_patterns` from the stored config status. A `follow` opens like a hint of the same place (`follow_like_a_hint`), and a `<link>` navigates by its address. Only `]]` in place runs the load step. After a `click` or a `scroll` the answer comes at once, and a toast says "Nothing loaded" when the wait finds nothing. The item bundle is asked for its cursor only when it has loaded, so `]]` never loads it. Not unit tested, it needs a DOM.
+Behavior is in `docs/design/bundles.md`, section "Next page files for the next_page bundle".
+
+- `detect.ts`: the pure detector. It reads the page through a `PageReader` and answers `follow`, `click`, `scroll` or `none`. Open it to change how the next link is chosen.
+- `load_more.ts`: the load step. It finds the main list and the control below it, or answers `scroll`. Open it for load-more buttons.
+- `follow_links.ts`: the live side. `find_next_page` gathers the candidates from the page and runs the detector on real elements.
+- `load_outcome.ts`: `wait_for_new_content` and `create_load_step`, which runs one load at a time per document.
+- `item_after_load.ts`: moves the `page.item` box to the first new item after a load.
+- `main.ts`: the handler. It reads the patterns from config and turns the detector's answer into a follow, click or scroll.
+
+Rules across files:
+
+- This bundle borrows the collect walk, the presence test and the click from `../lib/`, and does not load the hints bundle.
+- `detect.ts` touches the page only through `PageReader`. Tests feed it saved pages through `PageReader` (`test/fixtures/next_page/`).
+- `item_after_load.ts` reaches the item bundle only through its `item.cursor` handler.
