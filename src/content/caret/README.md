@@ -27,5 +27,5 @@ Behavior is in `docs/design/interfaces_caret_search_marks.md`, section "Caret fi
 Rules across files:
 
 - `page_text.ts` owns the page text. Caret and search read it from there and keep no model of their own.
-- `selection_mirror.ts` is the only writer of page selections. Only the sink's `enter` starts a session, in `caret_session.ts`.
-- Pure files import no DOM or browser global. The regex scan runs in the background (`src/background/find_scan.ts`).
+- `selection_mirror.ts` is the only file that paints the page selection. Only the sink's `enter` starts a session, in `caret_session.ts`.
+- Pure files use no DOM or browser global. The regex scan runs in the background (`src/background/find_scan.ts`).

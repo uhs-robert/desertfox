@@ -17,7 +17,8 @@ Behavior is in `docs/design/interfaces_pages.md`, section "New tab files for the
 - `air_quality.ts`: the air quality row in the More panel.
 - `ip_info.ts`: the opt-in IP info line (`newtab_ip_info`).
 - `clock.ts`: the 12 hour SVG clock without ticks.
-- `digital_clock.ts`: the digital clock in seven-segment digits. `fonts/` holds the DSEG7 font and its OFL text.
+- `digital_clock.ts`: the digital clock in seven-segment digits.
+- `fonts/`: the DSEG7 Classic font and its OFL text.
 - `newtab.html`: the page, its styles, the built-in links and the Settings gear as plain anchors.
 
 Rules across files:
