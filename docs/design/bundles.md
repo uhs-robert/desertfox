@@ -72,7 +72,7 @@ A property name that ends in `_` is internal, and the build (`tools/build.mjs`, 
 
 Behavior of the `src/shared` files for this area, moved here from `src/shared/README.md`.
 
-- `messages/`: every message by channel: `content.ts` (content script and bundles to the background), `page.ts` (extension pages to the background), `tab.ts` (background to a frame) `ports.ts` (the devtools and tab model ports) and `map.ts` (each request with its answer type, one map per direction, and the request unions derived from them).
+- `messages/`: every message by channel: `content.ts` (content script and bundles to the background), `page.ts` (extension pages to the background), `tab.ts` (background to a frame), `ports.ts` (the devtools and tab model ports) and `map.ts` (each request with its answer type, one map per direction, and the request unions derived from them).
 - `relay.ts`: the handlers a frame may ask the background to run in another frame of its tab (`relay` message), each with its bundle and direction: to the top frame, or to a frame named by id. The background adds the sender's `from_frame`.
 - `page_bundle_tag.ts`: the extension pages' side of a bundle load. `listen_for_bundle_requests` adds a bundle's `<script src>` tag when the background asks, joins repeat asks and answers after the script has run.
 - `swallow.ts`: one helper per reason an error is dropped: `ignore_refusal`, `best_effort`, `keep_chain`, `refused_as(promise, fallback)` and the handler `warn_and_go(label)`, which logs. They replace an inline silent `.catch`, which the `no-restricted-syntax` lint rule in `eslint.config.mjs` flags. The content script imports it, so keep it free of classes and strings.

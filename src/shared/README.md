@@ -28,18 +28,19 @@ The detail of the long entries is in the "Shared files for ..." sections of thes
 - `icon_cache.ts` (in `page/`): the favicon cache in `storage.local` (`favicon_cache`), which the background saver fills and the new tab page reads.
 - `storage_keys.ts` (in `config/`): every `storage.local` key the background owns. The keymap key lives in `prefix_tree.ts`, the theme and user CSS keys in `theme/apply.ts`.
 - `config_load.ts` (in `config/`): reads the stored config, the setting edits and `build_config_status`. It touches `browser.storage`, so the background and every extension page import it.
-- `site/`, `completion/`, `hints/`, `ui/`: pure views, rows and text rules. `copy/`: copy and yank helpers, one of which writes the clipboard. See their READMEs.
-- `url_build.ts`: pure URL math: `parent_url`, `root_url`, `url_target`, `config_url_target`, `engine_search_url`, `engine_url` and `own_pages`.
+- `site/`, `completion/`, `hints/`, `ui/`: pure views, rows and text rules. See their READMEs.
+- `copy/`: copy and yank helpers, one of which writes the clipboard. See its README.
+- `url_build.ts`: URL math: `openable_url` (the one allow-list for opening an address), `parent_url`, `root_url`, `url_target`, `engine_search_url`, `engine_url`, `own_pages`.
 - `page_bundle_tag.ts`: the extension pages' side of a bundle load: `listen_for_bundle_requests` adds the `<script src>` tag when the background asks.
 - `registry/`: the command registry, the one validator and the command line parser. See its README.
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
 - `keys/`: key notation, the prefix tree compiler and the matcher. See its README.
-- `theme/`: the theme roles, the base16 reader, the theme lookup and the stored theme as CSS (`apply.ts`). See its README.
+- `theme/`: the theme roles, the base16 reader, the theme lookup (`load.ts`, never imported by a page or content bundle) and the stored theme as CSS. See its README.
 - `config_build/`: the pure config build over raw file text. Only the background may import it. See its README.
 - `page_base.css`: the base sheet of the help and new tab pages: the fallback palette, the type and spacing tokens and the key cap styles, at zero specificity.
 - `key_caps.ts`: `key_caps(text)` draws a key sequence as a row of `kbd.desertfox-keycap` caps.
 - `icons.ts`: the inline SVG icons the extension pages draw (`chevron_icon`, `menu_icon`, `heart_icon`). The brand mark stays the file `icons/desertfox.svg`.
-- `swallow.ts`: one helper per reason an error is dropped (`ignore_refusal`, `best_effort`, `keep_chain`, `refused_as`, `warn_and_go`). The content script imports it.
+- `swallow.ts`: one helper per reason to drop an error (`ignore_refusal`, `best_effort`, `keep_chain`, `refused_as`, `warn_and_go`). The content script imports it: keep it free of classes and strings.
 - `index.ts`: the barrel of the types and the constants that every folder may import.
 - `anything_ref.ts`: the reference a finder row carries to the `anything` command, so the handler acts on the row the list showed and never ranks again.
 - `config_file_path.ts`: which paths the files editor may store. The page refuses early and the background decides.

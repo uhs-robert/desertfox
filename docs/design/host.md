@@ -89,4 +89,4 @@ Behavior of the `src/background` files for this area, moved here from `src/backg
 
 Behavior of the `src/shared` files for this area, moved here from `src/shared/README.md`.
 
-- `native_host.ts`: the host name, the `nativeMessaging` permission, `host_channel` (a development install follows `main`, any other build its own version) `install_hashes_of` (reads `host_sha256.json`), and the two one-line install commands the Help panel shows: checked against the signed build for a release, unchecked from `main` otherwise.
+- `native_host.ts`: the host name, the `nativeMessaging` permission, `host_channel` (a development install follows `main`, any other build its own version), `install_hashes_of` (reads `host_sha256.json`), and the two one-line install commands the Help panel shows: checked against the signed build for a release, unchecked from `main` otherwise.
