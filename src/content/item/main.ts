@@ -1,7 +1,7 @@
 // The `item` bundle: the handler of `page.item`, which item mode and site rows bind to j and k on result pages, and `item.start`, which starts item mode on a list page. Loaded on the first press.
 
 import type { PageHostApi } from "../bundle_host.ts";
-import { all_items, carry_row, current_item, follow_item, move_item, read_cursor, watch_lands } from "./pick.ts";
+import { all_items, carry_row, current_item, follow_item, link_in, move_item, read_cursor, watch_lands } from "./pick.ts";
 import type { ItemArgs } from "../lib/item_types.ts";
 import { create_item_overlay } from "./overlay.ts";
 import { in_view_, live_derived_row } from "./derived.ts";
@@ -87,7 +87,7 @@ if (!item_window.desertfox_item_ready && host) {
   // The item actions read the range of visual item mode (the items from the anchor to the cursor, and the anchor) through a callback, as for `item.current`.
   host.register_handler_("item.range", (args) => {
     const found = selection.tick_();
-    args.take(found?.list_, found?.keys_, found?.from_, found?.to_, found?.anchor_);
+    args.take(found?.list_, found?.keys_, found?.from_, found?.to_, found?.anchor_, link_in(page));
   });
   // Only the next_page bundle calls this, through `run_command_`, and hands a callback that takes the cursor.
   host.register_handler_("item.cursor", (args) => args.take(read_cursor(page, overlay.shown_())));

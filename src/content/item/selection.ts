@@ -1,9 +1,11 @@
 // The range of visual item mode: two ends in the list of items, the anchor where `v` was pressed and the cursor that the keys move. Only keys and last known places are kept, never nodes, because a page that redraws its list replaces them.
 
+import { LINK } from "./pick.ts";
+
 // The key that finds the item again after a redraw, and the place it last stood at.
 export type End = [key: string, index: number];
 
-const href_of = (item: Element) => (item.matches("a[href]") ? item : item.querySelector("a[href]"))?.getAttribute("href");
+const href_of = (item: Element) => (item.matches(LINK) ? item : item.querySelector(LINK))?.getAttribute("href");
 const id_of = (item: Element) => item.getAttribute("data-id");
 
 // One scheme for the whole read, never one per item, so two keys never mix schemes: the link address when every item has its own, else `data-id`, else the row index, each key marked with its scheme so a change of scheme never matches the keys of the other.

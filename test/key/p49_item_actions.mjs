@@ -156,6 +156,10 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await press_keys("-k", "Return");
     await poll_until("the notice", async () => (await toast_text()).includes("This item has no link"));
     expect((await hash()) === "", `Enter opened ${await hash()}`);
+    // Ctrl+Enter takes the same rule: no row link, no tab, and the first link of the card stays shut.
+    await press_keys("-M", "ctrl", "-k", "Return", "-m", "ctrl");
+    await poll_until("the notice again", async () => (await toast_text()).includes("No link to open"));
+    expect((await in_background(`(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes("id=ia_miss_a")).length)()`)) === 1, "Ctrl+Enter opened a tab");
   });
 
   await run_case("f labels the page, and the current item's targets take the first labels", async () => {

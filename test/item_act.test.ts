@@ -165,18 +165,19 @@ test("Enter clicks the Tab-focused child of the current item, and the link when 
   assert.deepEqual(clicked, ["button", "other link"], "Enter opens the link of the current item");
 });
 
-// Drives the real handler with a fake host. A row is a fake item whose first link has the given address.
-async function run_open(action: string, mode: "item" | "item_visual", range: { addresses: (string | undefined)[]; from: number; to: number }) {
+// Drives the real handler with a fake host. A row is a fake item. The host answers each row's link by the row's own rule (`addresses`), as the item bundle does, while the first a[href] of the row (`first_links`, a vote link) is a different address.
+async function run_open(action: string, mode: "item" | "item_visual", range: { addresses: (string | undefined)[]; from: number; to: number; first_links?: string[] }) {
   const sent: { url: string; where: string }[] = [];
   const events: string[] = [];
-  const row = (address?: string) => ({ matches: () => false, querySelector: () => (address ? { href: address } : null) });
+  const row = (address: string | undefined, index: number) => ({ link: address ? { href: address } : undefined, matches: () => false, querySelector: () => ({ href: range.first_links?.[index] ?? "https://first-link/" }) });
   const rows = range.addresses.map(row);
+  const link_of = (item: (typeof rows)[number]) => item.link;
   const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
   const host = {
     register_handler_: (id: string, handler: (args: Record<string, unknown>) => Promise<unknown>) => handlers.set(id, handler),
     run_command_: (id: string, _bundle: string, args: { take: (...taken: unknown[]) => void }) => {
-      if (id === "item.range" && mode === "item_visual") args.take(rows, rows.map((_, index) => `i${index}`), range.from, range.to, range.from);
-      if (id === "item.current") args.take(rows[range.from], undefined);
+      if (id === "item.range" && mode === "item_visual") args.take(rows, rows.map((_, index) => `i${index}`), range.from, range.to, range.from, link_of);
+      if (id === "item.current") args.take(rows[range.from], link_of(rows[range.from]!));
       return Promise.resolve({ ok: true });
     },
     set_mode_: (next: string) => events.push(`mode ${next}`),
@@ -226,4 +227,20 @@ test("a range with no link refuses and keeps the selection", async () => {
   const { sent, events, outcome } = await run_open("open_range", "item_visual", { addresses: [undefined], from: 0, to: 0 });
   assert.equal(outcome, "No link to open");
   assert.deepEqual([sent, events], [[], []]);
+});
+
+test("the link of each item is the row's link, not the first a[href] of the item", async () => {
+  const { sent } = await run_open("open_range", "item_visual", { addresses: ["https://story-a/", "https://story-b/"], first_links: ["https://vote-a/", "https://vote-b/"], from: 0, to: 1 });
+  assert.deepEqual(sent, [{ url: "https://story-b/", where: "background" }, { url: "https://story-a/", where: "here" }]);
+  const single = await run_open("open_background", "item", { addresses: ["https://story-a/"], first_links: ["https://vote-a/"], from: 0, to: 0 });
+  assert.deepEqual(single.sent, [{ url: "https://story-a/", where: "background" }]);
+});
+
+test("an item whose row link finds nothing refuses, though it holds other links", async () => {
+  const visual = await run_open("open_range", "item_visual", { addresses: [undefined, undefined], first_links: ["https://vote-a/", "https://vote-b/"], from: 0, to: 1 });
+  assert.equal(visual.outcome, "No link to open");
+  assert.deepEqual(visual.sent, []);
+  const single = await run_open("open_background", "item", { addresses: [undefined], first_links: ["https://vote-a/"], from: 0, to: 0 });
+  assert.equal(single.outcome, "No link to open");
+  assert.deepEqual(single.sent, []);
 });

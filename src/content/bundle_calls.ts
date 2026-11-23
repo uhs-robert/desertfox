@@ -20,7 +20,7 @@ type ItemListsArgs = { selector?: string | undefined; row_only?: boolean | undef
   | { region: ListRegion; focus?: HTMLElement | undefined; take?: undefined }
   | { take: (regions: ListRegion[]) => void; region?: undefined; focus?: undefined }
 );
-type ItemRange = [items?: Element[], keys?: string[], from?: number, to?: number, anchor?: number];
+type ItemRange = [items?: Element[], keys?: string[], from?: number, to?: number, anchor?: number, link_of?: (item: Element) => Element | null | undefined];
 
 // A frame's relayed call carries the frame it came from. `remote_id` names the command line a subframe opened.
 type FromFrame = { from_frame?: number };
@@ -67,7 +67,7 @@ type BundleCalls = {
   "item.start": { bundle: "item"; args: { selectors?: string[] | undefined; resume?: boolean | undefined } };
   "item.mark": { bundle: "item"; args: { element: Element } };
   "item.lists": { bundle: "item"; args: ItemListsArgs };
-  "item.current": { bundle: "item"; args: { take: (item: Element | undefined, link: Element | undefined) => void } };
+  "item.current": { bundle: "item"; args: { take: (item: Element | undefined, link: Element | null | undefined) => void } };
   "item.range": { bundle: "item"; args: { take: (...range: ItemRange) => void } };
   "item.cursor": { bundle: "item"; args: { take: (cursor: ItemCursor | undefined) => void } };
   // Callers pass fields that may be undefined (tree reads them from its own args), which `exactOptionalPropertyTypes` refuses on ItemArgs itself.
