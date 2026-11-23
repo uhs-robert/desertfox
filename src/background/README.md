@@ -32,7 +32,9 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `config_start.ts`: `reload_config`, the start read with its three migrations, and `choose_host_start`.
 - `config_main.ts`: `create_config_service` wires the services, store, swap, write modules and start, and the file exports the production instances.
 - `services.ts`: `create_services` builds `snippets`, `host_update`, `native_host` and the autoconfig mirror. It takes `get_config` late, which breaks the import cycle with the config store.
-- `keymap_merge.ts`, `compile.ts` and `shared/config/config_load.ts`: the files config `config.reload` stored, default keymap under user keymap, and the args check per binding.
+- `keymap_merge.ts`: merges the default keymap under the user keymap by key spelling. Open it for how two keymaps combine.
+- `compile.ts`: compiles the config into the keymap, with the args check per binding. Open it for key edits, site rows and the keymap build.
+- `shared/config/config_load.ts`: reads the files config that `config.reload` stored (`pick_config`, `load_effective_config`). Open it for what a page reads as the config.
 - `edit_layers.ts`: the browser edit layers other than settings, one `storage.local` key and one load check per kind in `EDIT_LAYERS`.
 - `item_hover.ts`: `without_hover` takes the `hover` arg off the `page.item` steps of a shipped row, for the `item_hover` setting off.
 - `item_landings.ts`: `with_item_landings` gives a site row with an item selector the item-mode landing keys (`I`, `zt`, `zz`, `zb`, `}`, `{`). `compile.ts` applies it to user and shipped rows.
