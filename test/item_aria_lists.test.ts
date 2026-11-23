@@ -286,3 +286,11 @@ test("a tree whose rows did not change is not read again", () => {
   row.items_();
   assert.equal(finds(), 1);
 });
+
+test("a folder opened before the pick is read in: the pick keeps the old rows but not the old count", () => {
+  const { row, open_folder, text_of } = tree_with_folder();
+  const tree = row.lists_().find((region) => region.home_)!;
+  open_folder();
+  row.pick_(tree);
+  assert.ok(text_of(row.items_()).includes("child a"));
+});

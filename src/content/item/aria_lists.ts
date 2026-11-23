@@ -72,7 +72,6 @@ export function find_aria_lists<N>(reader: PageReader<N>, out_of_time: () => boo
       // A calendar row holds a week of day numbers, whatever whitespace the markup leaves between its cells.
       const is_calendar = role === "grid" && items.every((item) => reader.text_(item).replace(/\s/g, "").length < DATE_ROW_CHARS);
       if (is_calendar || !stacked_items(reader, items)) continue;
-      // A folder that opens adds rows to the tree, and a closed folder is an item of its own (the `li`) where an open one is its label. Only a fresh read tells them apart, so a changed count of treeitems says the kept items are old.
       regions.push({
         kind: "list",
         items,

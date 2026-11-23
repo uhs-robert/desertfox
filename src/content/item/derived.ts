@@ -42,14 +42,14 @@ const item_selector = (items: readonly Element[] = []): string => {
 };
 
 // A folder that opens adds rows to a tree, and a closed folder is an item of its own (the `li`) where an open one is its label. Only a fresh read tells them apart, so a changed count of treeitems says the kept items are old.
-const rows_of = (region: Region<Element>): number => (region.tree_ ? region.home_!.querySelectorAll("[role=treeitem]").length : 0);
+const rows_of = (region: Region<Element>): number | undefined => (region.tree_ ? region.home_!.querySelectorAll("[role=treeitem]").length : undefined);
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   // The items of the list that was active at the last read, so the next read can tell which list it was. A feed that drops or hides its first items still matches through one that stays.
   let active_items: Element[] = [];
   // The widget of the active list when it has one (an ARIA list), for a page that replaces the rows as the list scrolls.
   let active_home: Element | undefined;
-  let kept: { found: Found<Element>; active: Region<Element>; url: string; at: number; tail: unknown[]; rows: number } | undefined;
+  let kept: { found: Found<Element>; active: Region<Element>; url: string; at: number; tail: unknown[] } | undefined;
   // The count of reads in a row that ran out of time at `read_at`, the address of the last read. It starts again at a new address.
   let timeouts_in_a_row = 0;
   let read_at: string | undefined;
@@ -74,7 +74,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   };
   // `old` keeps the answer for now and asks for a read with the short budget. `gone` needs a read. A list in view that is not the active one also asks for a read, so a hand-over sees lists that loaded since the last read. `keep` is an end command that follows its own list: the active list stays while it is on the page.
   const state = (keep: boolean): typeof GOOD | typeof OLD | typeof GONE => {
-    if (!kept || kept.url !== deps.url_() || kept.active.items[0]?.isConnected === false || rows_of(kept.active) !== kept.rows) return GONE;
+    if (!kept || kept.url !== deps.url_() || kept.active.items[0]?.isConnected === false || rows_of(kept.active) !== kept.active.rows_) return GONE;
     if ((keep && kept.active.items[0]) || kept.active.items.some(deps.in_view_)) return GOOD;
     return most_in_view(long_regions(kept.found.regions)) ? GONE : deps.now_() - kept.at < NONE_RECHECK_MS ? GOOD : OLD;
   };
@@ -101,6 +101,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
         timeouts_in_a_row = found.timed_out_ ? timeouts_in_a_row + 1 : 0;
         if (timeouts_in_a_row >= 2) overran = { url, until: deps.now_() + OVERRUN_PAUSE_MS };
         if (timeouts_in_a_row !== 1) {
+          // Every tree gets its count now, so a pick of one that was not active keeps a baseline from this read.
+          for (const region of found.regions) region.rows_ = rows_of(region);
           // The list the user was on stays active while it shows (or, for an end command, always), and otherwise the list in view takes over.
           const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)) || (!!active_home && region.home_ === active_home));
           // A read that ran out of time shows nothing about the list, so only a whole read that lacks it drops the pin.
@@ -110,7 +112,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
           const focused = hold || old?.focus_none_ ? undefined : most_in_view(found.regions.filter((region) => region.items.some((item) => item.contains(focus))));
           const active = (hold ? old : focused ?? most_in_view(old ? [old] : [])) ?? most_in_view(long_regions(found.regions)) ?? old ?? long_regions(found.regions)[0] ?? found;
           if (!(pin && found.timed_out_)) remember(active);
-          kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items), rows: rows_of(active) };
+          kept = { found, active, url, at: deps.now_(), tail: deps.tail_(active.items) };
         }
       } catch (error) {
         console.error(error);
@@ -124,7 +126,6 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
     if (!kept) return;
     kept.active = region;
     kept.tail = deps.tail_(region.items);
-    kept.rows = rows_of(region);
   };
   return {
     items_: (keep) => read(keep)?.items.filter(deps.is_shown_) ?? [],
