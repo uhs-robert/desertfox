@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_item_start, ROW_ITEMS_WAIT_MS, UNLOAD_SETTLE_MS } from "../../src/content/item/start.ts";
+import { NONE_RECHECK_MS } from "../../src/content/item/derived.ts";
 
 function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) {
   const idle: (() => void)[] = [];
@@ -10,6 +11,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
   const clock = { now: 0, late: 0 };
   const unload_listeners = new Set<() => void>();
   let entered = 0;
+  let left = 0;
   const state = { mode: "normal", active: false, field: false, list: true };
   const start = create_item_start({
     mode_: () => state.mode,
@@ -17,6 +19,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
     in_field_: () => state.field,
     has_list_: () => state.list,
     enter_: () => void entered++,
+    leave_: () => void left++,
     when_idle_: (run) => void idle.push(run),
     later_: (run, ms) => void timers.push({ run, ms }),
     now_: () => clock.now,
@@ -32,7 +35,7 @@ function make(overrides: Partial<Parameters<typeof create_item_start>[0]> = {}) 
       next.run();
     }
   };
-  return { start, state, idle, timers, pass, clock, unload_listeners, entered: () => entered };
+  return { start, state, idle, timers, pass, clock, unload_listeners, entered: () => entered, left: () => left };
 }
 
 test("a page with a list in normal mode enters item mode once it is idle, and not before", () => {
@@ -242,4 +245,77 @@ test("an earlier leave's timer does not clear the flag of a later leave", () => 
   timers.shift()!.run();
   idle[1]!();
   assert.equal(entered(), 1);
+});
+
+// A resume: the tab was in item mode when the load began, and the new page joined the mode at its first keymap read.
+test("a resumed page that joined item mode keeps it through keys pressed during the load when it has a list", () => {
+  const { start, state, idle, entered, left } = make();
+  Object.assign(state, { mode: "item", active: true });
+  start([], true);
+  idle[0]!();
+  assert.equal(entered(), 0);
+  assert.equal(left(), 0);
+});
+
+test("a resumed page in item mode with no list drops to normal mode, and an item_navigator start in item mode drops nothing", () => {
+  const resumed = make();
+  Object.assign(resumed.state, { mode: "item", active: true, list: false });
+  resumed.start([], true);
+  resumed.idle[0]!();
+  assert.equal(resumed.left(), 0, "the drop waits for the finder's kept none to expire");
+  resumed.pass(NONE_RECHECK_MS);
+  assert.equal(resumed.left(), 1);
+  assert.equal(resumed.timers.length, 0, "it looks once more, not again and again");
+  const asked = make();
+  Object.assign(asked.state, { mode: "item", list: false });
+  asked.start();
+  asked.idle[0]!();
+  assert.equal(asked.left(), 0, "the user pressed I there");
+});
+
+test("a resumed page with a row's selectors drops to normal only when the wait for the row's items ends empty", () => {
+  const late = make();
+  Object.assign(late.state, { mode: "item", list: false });
+  late.start(["div.file"], true);
+  late.idle[0]!();
+  late.pass(2000);
+  assert.equal(late.left(), 0);
+  late.state.list = true;
+  late.pass(250);
+  assert.equal(late.left(), 0);
+  assert.equal(late.timers.length, 0, "the wait ends once the items show");
+  const none = make();
+  Object.assign(none.state, { mode: "item", list: false });
+  none.start(["div.file"], true);
+  none.idle[0]!();
+  none.pass(ROW_ITEMS_WAIT_MS + NONE_RECHECK_MS);
+  assert.equal(none.left(), 1);
+  assert.equal(none.timers.length, 0);
+});
+
+test("a resumed page the user took out of item mode during the load (Escape, a field, visual) is left alone", () => {
+  for (const change of [{ mode: "normal", active: true }, { mode: "insert", field: true }, { mode: "item_visual" }]) {
+    const { start, state, idle, entered, left } = make();
+    Object.assign(state, change, { list: false });
+    start([], true);
+    idle[0]!();
+    assert.deepEqual([entered(), left()], [0, 0], JSON.stringify(change));
+  }
+});
+
+test("a resumed page whose keymap read came before the commit, so it did not join, falls back to the usual start", () => {
+  const { start, idle, entered } = make();
+  start([], true);
+  idle[0]!();
+  assert.equal(entered(), 1);
+});
+
+test("a resumed page whose list a key read too early keeps item mode once the finder's kept none expires", () => {
+  const { start, state, idle, pass, entered, left } = make();
+  Object.assign(state, { mode: "item", active: true, list: false });
+  start([], true);
+  idle[0]!();
+  state.list = true;
+  pass(NONE_RECHECK_MS);
+  assert.deepEqual([entered(), left()], [0, 0]);
 });

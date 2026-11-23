@@ -1,4 +1,4 @@
-// The item_navigator setting means that list pages start in item mode: when a page with a list has loaded, the badge says ITEM with no key pressed. A page with no list stays in normal mode, Escape leaves item mode for good on that page, a key pressed before the load completes keeps the page in normal mode, and a site row that sets the setting to false keeps its page in normal mode. With the setting at its default, a link to the same host followed in item mode (Enter, also while the page loads, and ]]) opens a list page in item mode. A reload, Back, a link to another host and :open do not.
+// The item_navigator setting means that list pages start in item mode: when a page with a list has loaded, the badge says ITEM with no key pressed. A page with no list stays in normal mode, Escape leaves item mode for good on that page, a key pressed before the load completes keeps the page in normal mode, and a site row that sets the setting to false keeps its page in normal mode. With the setting at its default, a link to the same host followed in item mode (Enter, also while the page loads, and ]]) opens a list page in item mode, from its first keymap read, so a key pressed during its load runs in item mode. Escape during that load leaves the mode for good, and a page with no list drops to normal mode when its load completes. A reload, Back, a link to another host and :open do not.
 // A page that should start opens without the key probe, since any key pressed before the start wins over it. The probe runs once the badge says ITEM.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -6,13 +6,15 @@ import { ROW_ITEMS_WAIT_MS } from "../../src/content/item/start.ts";
 
 export const areas = ["keys", "config", "bundles"];
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, run_line, in_active_tab, poll_until, expect, sleep, in_background, events, wait_event, url_of, settle_focus }) {
+const IS_OFF_ROW = '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_off*"\nitem_navigator = false\n';
+
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, on_teardown, open_page, press_keys, run_line, in_active_tab, poll_until, expect, sleep, in_background, events, wait_event, url_of, settle_focus }) {
   await setup("load a config with item_navigator on and a row that turns it off for the is_off pages", async () => {
     const dir = config_copy();
     const file = join(dir, "settings.toml");
     // A top-level setting goes above the first table.
     writeFileSync(file, `item_navigator = true\n${readFileSync(file, "utf8")}`);
-    appendFileSync(file, '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_off*"\nitem_navigator = false\n');
+    appendFileSync(file, IS_OFF_ROW);
     // A row that names its items, as the shipped rows do, for the pages that draw them late.
     appendFileSync(file, '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=is_late*"\nitem_navigator = "shipped"\nkeymap.item.j = { id = "page.item", args = { selector = "div.late", direction = "down" } }\n');
     await load_config_dir(dir);
@@ -116,7 +118,10 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   await setup("load the config with item_navigator at its default, which starts no test page", async () => {
     // The reload key is a normal mode key, and the last page may sit in item mode.
     await open_page("page", "is_sticky_setup", { new_tab: true });
-    await load_config_dir(config_copy());
+    // The row that turns item mode off for the is_off pages stays, so a link followed in the mode can land on one.
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), IS_OFF_ROW);
+    await load_config_dir(dir);
   });
 
   await run_case("Enter on an item whose link opens a list page in the same tab lands in item mode, and a reload or Back does not", async () => {
@@ -175,6 +180,92 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await press_keys("]", "]");
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "is_sticky_series_2", "content script ready on is_sticky_series_2", 6000);
     await expect_started("is_sticky_series_2");
+  });
+
+  // ]] from a list page in item mode to `to`, which loads slowly. Returns once `to_id` takes keys, with the load still open.
+  const jump_to_slow_page = async (from_id, to, to_id) => {
+    await list_in_item_mode(from_id, to);
+    await in_active_tab(`document.body.insertAdjacentHTML("beforeend", '<a rel="next" href=${JSON.stringify(to)}>Next</a>'); 0`);
+    const mark = events.length;
+    await press_keys("]", "]");
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === to_id, `content script ready on ${to_id}`, 6000);
+    // Firefox drops a key pressed in about the first 120 ms of a page. The probe key counts as a press, which a carried mode outlives.
+    await settle_focus({ keys_page_id: to_id });
+    expect((await in_active_tab("document.readyState")) !== "complete", "the load completed before the page took keys, so the case tests nothing");
+  };
+  const expect_item_while_loading = async () => {
+    await expect_badge("ITEM");
+    expect((await in_active_tab("document.readyState")) !== "complete", "item mode came only when the load completed");
+  };
+
+  // Logs, from the background, when the top frame commits and when its keymap read arrives. The join needs the commit first, and a read that comes first leaves the start to the completed load. The listener answers nothing.
+  const watch_commit_and_read = async () => {
+    await in_background(`(() => {
+      const order = (globalThis.p49_order = []);
+      globalThis.p49_commit = ({ frameId, url }) => void (frameId === 0 && order.push(["commit", url, performance.now()]));
+      globalThis.p49_read = (message, sender) => void (message?.type === "read_keymap" && sender.frameId === 0 && order.push(["read_keymap", sender.url, performance.now()]));
+      browser.webNavigation.onCommitted.addListener(globalThis.p49_commit);
+      browser.runtime.onMessage.addListener(globalThis.p49_read);
+      return 0;
+    })()`);
+    on_teardown(() => in_background(`(browser.webNavigation.onCommitted.removeListener(globalThis.p49_commit), browser.runtime.onMessage.removeListener(globalThis.p49_read), 0)`));
+    return async (to) => {
+      const on_page = (await in_background("globalThis.p49_order")).filter(([, url]) => url === to);
+      console.log(`p49 event order on the next page: ${on_page.map(([kind, , ms]) => `${kind} ${(ms - on_page[0][2]).toFixed(1)} ms`).join(", ")}`);
+    };
+  };
+
+  await run_case("j pressed while a next page from ]] in item mode loads runs in item mode, and the page stays in it", async () => {
+    const to = url_of("item_list", "is_sticky_jump_slow");
+    const log_order = await watch_commit_and_read();
+    await jump_to_slow_page("is_sticky_jump", to, "is_sticky_jump_slow");
+    await press_keys("j");
+    await expect_item_while_loading();
+    await poll_until("focus on c0", async () => (await focused()) === "c0");
+    expect((await in_active_tab("document.readyState")) !== "complete", "the load completed before j, so the case tests nothing");
+    await log_order(to);
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
+    await sleep(1500);
+    expect((await badge()) === "ITEM", `the key cancelled the carried mode, the badge is ${await badge()}`);
+    await press_keys("j");
+    await poll_until("focus on c1", async () => (await focused()) === "c1");
+  });
+
+  await run_case("a next page from ]] in item mode with a frame takes item mode in the frame too while it loads", async () => {
+    await jump_to_slow_page("is_sticky_framed", url_of("item_list", "is_sticky_framed_slow_frame"), "is_sticky_framed_slow_frame");
+    await expect_item_while_loading();
+    await in_active_tab(`document.getElementById("inner").contentWindow.focus(); 0`);
+    await press_keys("j");
+    await poll_until("focus on f0 in the frame", async () => (await in_active_tab(`document.getElementById("inner").contentDocument.activeElement?.id ?? ""`)) === "f0");
+  });
+
+  await run_case("Escape pressed while a next page from ]] in item mode loads leaves item mode for good", async () => {
+    await jump_to_slow_page("is_sticky_esc", url_of("item_list", "is_sticky_esc_slow"), "is_sticky_esc_slow");
+    await expect_item_while_loading();
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    expect((await in_active_tab("document.readyState")) !== "complete", "the load completed before Escape, so the case tests nothing");
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
+    await sleep(2500);
+    expect((await badge()) === "NORMAL", `item mode came back after Escape, the badge is ${await badge()}`);
+  });
+
+  await run_case("a next page from ]] in item mode with no list drops to normal mode when its load completes", async () => {
+    // A page with no list whose image holds the load open for 2.5 s. It also changes its own address while it loads, which keeps the mode.
+    const to = url_of("replaces_address", "is_sticky_none");
+    await jump_to_slow_page("is_sticky_none_from", to, "is_sticky_none");
+    await expect_item_while_loading();
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
+    await expect_badge("NORMAL");
+  });
+
+  await run_case("a next page from ]] in item mode whose site row sets item_navigator to false stays in normal mode while it loads", async () => {
+    await jump_to_slow_page("is_sticky_refused", url_of("item_list", "is_off_sticky_slow"), "is_off_sticky_slow");
+    await poll_until("the badge to show", async () => (await badge()) !== null);
+    expect((await badge()) === "NORMAL", `the page joined item mode during its load, the badge is ${await badge()}`);
+    await poll_until("the load to complete", async () => (await in_active_tab("document.readyState")) === "complete", { timeout_ms: 5000 });
+    await sleep(1500);
+    expect((await badge()) === "NORMAL", `the badge is ${await badge()}`);
   });
 
   await run_case("Enter on an item that links to another host ends item mode", async () => {

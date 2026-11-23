@@ -104,6 +104,10 @@ const tab_item = create_tab_item({
   storage: browser.storage.session,
   send_step: (tab_id, on, frame_id, from, document_id) => browser.tabs.sendMessage(tab_id, { type: "media", on, from, item: true } satisfies MediaStep, step_target(frame_id, document_id)),
   steps: tab_steps,
+  takes_carried_mode: async (tab_id) => {
+    const top = await refused_as(browser.webNavigation.getFrame({ tabId: tab_id, frameId: 0 }), null);
+    return !(await read_disabled()) && (await item_start_for(browser.storage.local, top?.url, { resume: true })) !== undefined;
+  },
 });
 wire_before_own_load(tab_item.end_for_own_load);
 
@@ -415,7 +419,7 @@ const start_item_mode = async (tab_id: number, address: string | undefined) => {
     start_for: async (at) => ((await read_disabled()) ? undefined : item_start_for(browser.storage.local, at, { resume })),
     top_document: (id) => refused_as(browser.webNavigation.getFrame({ tabId: id, frameId: 0 }) as Promise<{ url?: string; documentId?: string } | null>, null).then((frame) => frame ?? undefined),
     // The bundled types do not list `documentId`.
-    send_start: (id, document_id, start) => best_effort(browser.tabs.sendMessage(id, { type: "run_in_content", invocations: [{ id: "item.start", args: start, bundle: "item" }] } satisfies BackgroundToContent, { frameId: 0, documentId: document_id } as { frameId: number })),
+    send_start: (id, document_id, start) => best_effort(browser.tabs.sendMessage(id, { type: "run_in_content", invocations: [{ id: "item.start", args: { ...start, resume }, bundle: "item" }] } satisfies BackgroundToContent, { frameId: 0, documentId: document_id } as { frameId: number })),
   }, tab_id, address);
 };
 
