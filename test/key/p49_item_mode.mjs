@@ -81,7 +81,7 @@ export async function run_cases({ events, wait_event, run_line, config_dir, conf
     await expect_badge("ITEM");
   });
 
-  await run_case("i and V in item mode reach insert and visual mode", async () => {
+  await run_case("i in item mode reaches insert mode and V reaches visual item mode", async () => {
     await open_list("im_keys_modes");
     await run_line("mode item");
     await expect_badge("ITEM");
@@ -92,9 +92,9 @@ export async function run_cases({ events, wait_event, run_line, config_dir, conf
     await run_line("mode item");
     await expect_badge("ITEM");
     await press_keys("V");
-    await expect_badge("VISUAL");
-    // Text visual mode selects a page range. Visual item mode shows the same word and selects none.
-    await poll_until("a page selection", async () => (await in_active_tab("getSelection().rangeCount")) === 1);
+    await expect_badge("VISUAL 1");
+    // Visual item mode selects an item range and no page text.
+    expect((await in_active_tab("getSelection().rangeCount")) === 0, "V selected page text");
   });
 
   await run_case("f labels the page and Escape returns to item mode, and gi focuses the field and leaves the mode", async () => {
