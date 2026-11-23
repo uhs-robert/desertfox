@@ -57,7 +57,6 @@ export function stacked_items<N>(reader: PageReader<N>, items: readonly N[]): bo
   return items.length >= 3 && rows.size >= 3;
 }
 
-
 export const normalize = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
 
 // An item of a repeated block reads as its tag and first class, so siblings built from one template share it.
