@@ -157,6 +157,10 @@ export function compile_config(input: CompileInput): CompileOutput {
     check_branch(root, [], mode, input, warnings);
     if (Object.keys(root.children).length === 0) delete compiled.modes[mode as keyof CompiledKeymap["modes"]];
   }
+  for (const [child, link] of Object.entries(compiled.mode_parents ?? {})) {
+    // The leave step runs in the child mode, before the parent's key.
+    if (link.leave && !keep_node({ kind: "leaf", steps: [link.leave] }, [], child, input, warnings)) delete compiled.mode_parents![child as KeymapMode];
+  }
   for (const rule of compiled.site_rules ?? []) {
     const { site } = rule;
     check_site_binds(rule.bind, `bind or keymap "normal" `, "normal", site, input, warnings);
@@ -164,10 +168,30 @@ export function compile_config(input: CompileInput): CompileOutput {
     for (const [name, mode] of Object.entries(rule.modes ?? {})) check_site_binds(mode.bind, `mode "${name}" `, "normal", site, input, warnings);
   }
   warn_unknown_modes(compiled.site_rules ?? [], compiled.modes.normal, warnings);
+  fill_parent_runs(compiled, input);
   const selects_with_arrows = compiled.frame_site_globals?.item_select === "arrows" || (compiled.site_rules ?? []).some((rule) => rule.values?.["item_select"] === "arrows");
   const select_keys = selects_with_arrows ? item_select_keys(input.get_command, input.enum_sources) : undefined;
   if (select_keys) compiled.item_select_keys = select_keys;
   return { compiled, theme: { dark: theme.dark, light: theme.light, ...stored_font(input.config.settings) }, warnings: [...resolve_warnings, ...warnings] };
+}
+
+// Each parent link's `runs`: of the commands the trees and the site rows use, the ones that run in the mode a taken key runs in. A command with no `modes` runs in normal mode, as `mode_problem` reads it.
+function fill_parent_runs(compiled: CompiledKeymap, input: CompileInput): void {
+  if (!compiled.mode_parents) return;
+  const ids = new Set<string>();
+  const add_leaf = (leaf: TreeLeaf): void => {
+    for (const step of leaf.steps) ids.add(step.invocation.id);
+    if (leaf.otherwise) add_leaf(leaf.otherwise);
+  };
+  const add_node = (node: TreeNode): void => (node.kind === "leaf" ? add_leaf(node) : Object.values(node.children).forEach(add_node));
+  Object.values(compiled.modes).forEach(add_node);
+  for (const rule of compiled.site_rules ?? []) {
+    for (const { leaf } of [...Object.values(rule.bind ?? {}), ...Object.values(rule.keymap ?? {}).flatMap((binds) => Object.values(binds))]) add_leaf(leaf);
+  }
+  for (const [child, link] of Object.entries(compiled.mode_parents)) {
+    const run_mode = link.leave ? link.parent : child;
+    link.runs = [...ids].filter((id) => (input.get_command(id)?.modes ?? ["normal"]).includes(run_mode as Mode)).sort();
+  }
 }
 
 // Checks the binds of a site row, one of its keymap modes or one of its site modes, and drops the bad ones in place. `mode` is the keymap mode the commands must fit: a site mode lays over normal mode, so its binds run in normal mode.

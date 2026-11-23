@@ -40,7 +40,15 @@ function groups_list(group_names: Record<string, string>): string {
   return Object.entries(group_names).map(([prefix, name]) => `- ${code(prefix)}: ${name}`).join("\n");
 }
 
-const NOT_MODES = ["group_names", "search_keys", "container_keys", "site_keys", "modifiers"];
+const NOT_MODES = ["group_names", "search_keys", "container_keys", "site_keys", "modifiers", "mode_parents"];
+
+// One line for the keys a child mode takes from its parent: listing them would repeat the parent's table.
+function parent_line(mode: KeymapMode, keymap: KeymapConfig): string {
+  const link = keymap.mode_parents?.[mode];
+  if (!link) return "";
+  const runs = link.leave ? `switches to ${link.parent} mode first and then runs as there` : `runs as in ${link.parent} mode`;
+  return `\n\nEvery key of ${link.parent} mode that this table does not bind also works here: it ${runs}. A key of ${link.parent} mode comes here only when each command of the key runs in ${link.leave ? link.parent : mode} mode.`;
+}
 
 export function render(keymap: KeymapConfig, registry: Lookup): string {
   const missing = [...MODES, "browser", ...Object.keys(keymap).filter((name) => !NOT_MODES.includes(name))].filter((mode) => !MODE_ORDER.includes(mode as KeymapMode));
@@ -49,7 +57,7 @@ export function render(keymap: KeymapConfig, registry: Lookup): string {
   const per_mode = by_mode.map(({ mode, rows }) => `${mode} ${rows.length}`).join(", ");
   const sections = by_mode.map(({ mode, rows }) => {
     const groups = mode === "normal" && keymap.group_names ? `\n\nWhich-key group names:\n\n${groups_list(keymap.group_names)}` : "";
-    return `### ${mode}\n\n${table(rows)}${groups}`;
+    return `### ${mode}\n\n${table(rows)}${parent_line(mode, keymap)}${groups}`;
   });
   const counts = `bound: ${by_mode.reduce((sum, { rows }) => sum + rows.length, 0)} (${per_mode})`;
   return [counts, ...sections].join("\n\n");

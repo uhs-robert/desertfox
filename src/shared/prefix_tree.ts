@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 17;
+export const COMPILED_KEYMAP_VERSION = 18;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -26,6 +26,8 @@ export type LeafStep = {
   register?: true;
   // The command moves the view and the router records the place it left, so the leaf goes there for a first press and the keys after it wait. A held key's repeats run in the page and record nothing.
   jump?: true;
+  // The step a child mode puts before each key it takes from its parent (`mode_parents.ts`). Key listings skip it, so the key lists under the parent's command. The matcher and the runner ignore it.
+  leave?: true;
 };
 
 export type TreeLeaf = {
@@ -79,10 +81,15 @@ export type SiteRule = SiteRuleSource & { site: string; regex: string; off?: boo
 
 export type ItemSelectKeys = Record<"down" | "up" | "left" | "right", LeafStep>;
 
+// A mode's parent as the compile stores it. `leave` is the checked step that sets the parent mode. `runs` holds the ids of the keymap's commands that run in the mode a taken key runs in (the parent after a leave step, else the child), so a reader needs no registry. `blocked` holds the keys the child's section unbinds, each as tokens: an inherited key or group there is dropped.
+export type CompiledModeParent = { parent: KeymapMode; leave?: LeafStep; runs: string[]; blocked?: string[][] };
+
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
-  // Root branch per mode. A mode without bindings is absent.
+  // Root branch per mode. A mode without bindings is absent. A child mode holds only its own keys: every reader resolves its parent's keys in (`resolve_mode_parents`).
   modes: Partial<Record<KeymapMode, TreeBranch>>;
+  // Absent when no mode has a parent. Pages never see this field: the background resolves their trees.
+  mode_parents?: Partial<Record<KeymapMode, CompiledModeParent>>;
   // Settings the content script needs before it can handle a key.
   // In list order. Each column takes the first rule that fits the page and sets it. Absent when no rule exists.
   site_rules?: SiteRule[];
@@ -137,7 +144,7 @@ export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partia
 // What a site mode adds to the page's normal tree: its badge label and the top-level children that differ from the normal tree, which the content script lays over it. A sticky mode ignores mouse presses and keys the page keeps.
 export type PageSiteMode = { label: string; tree: Record<string, TreeNode>; sticky?: boolean };
 
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals" | "item_navigator" | "item_select_keys">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media" | "item"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals" | "item_navigator" | "item_select_keys" | "mode_parents">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media" | "item"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>

@@ -10,6 +10,7 @@ import type { TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
 import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
 import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
 import { plan_slots, SLOT_COUNT } from "./slots.ts";
+import { shown_steps, with_resolved_modes } from "../shared/keys/mode_parents.ts";
 import type { SlotMap } from "./slots.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import type { Registry } from "../shared/registry/index.ts";
@@ -130,9 +131,11 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   const { tokens } = normalized;
   const near_after = leaves_near(after.compiled.modes[mode], tokens);
   const sources = { search_engines: Object.keys(state.config.search_engines) };
-  const shadows = [...leaves_near(before.compiled.modes[mode], tokens)]
-    .filter(([keys, leaf]) => JSON.stringify(near_after.get(keys)) !== JSON.stringify(leaf))
-    .map(([keys, leaf]) => ({ keys, text: binding_text(leaf.steps.map((step) => step.invocation), registry, sources) }));
+  // The shadows count the keys a child mode takes from its parent. Whether the binding lands reads the mode's own keys, since a taken key would stand in for a skipped one.
+  const resolved_near_after = leaves_near(with_resolved_modes(after.compiled).modes[mode], tokens);
+  const shadows = [...leaves_near(with_resolved_modes(before.compiled).modes[mode], tokens)]
+    .filter(([keys, leaf]) => JSON.stringify(resolved_near_after.get(keys)) !== JSON.stringify(leaf))
+    .map(([keys, leaf]) => ({ keys, text: binding_text(shown_steps(leaf).map((step) => step.invocation), registry, sources) }));
   const warnings = after.warnings.filter((warning) => !warnings_before.has(warning));
   // An unbind always lands. A binding lands when the compile kept it: a skip leaves its reason in the new warnings.
   let saves = text === "" || near_after.has(normalized.keys);

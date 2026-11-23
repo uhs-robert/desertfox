@@ -1,17 +1,22 @@
-// Visual item mode, entered with v in item mode. v and Escape return to item mode and a second Escape goes to normal mode. The cursor keys move the end of the selection and o swaps the ends. The selection follows its items when the page draws the list again: every node replaced, an end removed, every item removed. The tab holds the mode: a second frame stays in item mode, and a frame that reloads joins as item mode.
+// Visual item mode, entered with v in item mode. v, V and Escape return to item mode and a second Escape goes to normal mode. Every other key of item mode ends the selection and runs as in item mode: f, J, gt and the command line, also after a config reload rebinds the item key. The cursor keys move the end of the selection and o swaps the ends. The selection follows its items when the page draws the list again: every node replaced, an end removed, every item removed. The tab holds the mode: a second frame stays in item mode, and a frame that reloads joins as item mode.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const areas = ["keys", "tabs", "bundles"];
-export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
-  await setup("bind j on the iv_row_ pages to the even cards, which the finder does not single out", async () => {
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, in_background, hint_label_count, wait_active_tab, open_cmdline, close_cmdline, poll_until, expect, sleep }) {
+  const row_config = () => {
     const dir = config_copy();
     appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=iv_row_*"', 'keymap = { item = { j = "page.item --direction=down div.card.even" } }', ""].join("\n"));
-    await load_config_dir(dir);
+    return dir;
+  };
+  await setup("bind j on the iv_row_ pages to the even cards, which the finder does not single out", async () => {
+    await load_config_dir(row_config());
   });
 
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
+  // The badge of a tab that is not the active one, found by its page id.
+  const badge_in_tab_of = (page_id) => in_background(`(async () => { const [tab] = (await browser.tabs.query({})).filter((tab) => tab.url.includes(${JSON.stringify(`id=${page_id}`)})); return (await browser.tabs.executeScript(tab.id, { code: 'document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null' }))[0]; })()`);
   const focused = () => in_active_tab("document.activeElement?.id ?? ''");
   // The badge says how many items the range holds.
   const expect_range = (count) => expect_badge(`VISUAL ${count}`);
@@ -264,6 +269,68 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     expect((await in_active_tab(`[...document.querySelectorAll("#dyn .card a")].map((link) => link.id).join(",")`)) === "c4,c5,c6,c7,c8,c9,c10,c11", "a row was skipped or one outside the range was clicked");
   });
 
+  await run_case("V ends the selection as v does", async () => {
+    await start("iv_shift_v_dyn");
+    await press_keys("j");
+    await expect_range(2);
+    await press_keys("V");
+    await expect_badge("ITEM");
+    await expect_focus("c1");
+  });
+
+  await run_case("f leaves the selection, then shows the hints, and Escape returns to item mode", async () => {
+    await start("iv_hint_dyn");
+    await press_keys("jj");
+    await expect_range(3);
+    await press_keys("f");
+    await poll_until("the hint labels", async () => (await hint_label_count()) > 1);
+    expect(!(await badge())?.startsWith("VISUAL"), "the badge still says VISUAL under the hints");
+    await press_keys("-k", "Escape");
+    await expect_badge("ITEM");
+    await poll_until("no hint labels", async () => (await hint_label_count()) === 0);
+    // Item mode goes on from the cursor, with no range.
+    await press_keys("j");
+    await expect_focus("c3");
+    await expect_badge("ITEM");
+  });
+
+  await run_case("gt shares the g group with the own gg: gg still extends, and gt ends the selection and goes to the next tab", async () => {
+    await start("iv_gt_dyn");
+    await press_keys("jjj");
+    await expect_range(4);
+    await press_keys("gg");
+    await expect_focus("c0");
+    await expect_range(1);
+    await press_keys("jj");
+    await expect_range(3);
+    await press_keys("gt");
+    await wait_active_tab((page_id) => page_id !== "iv_gt_dyn", "another tab to be active");
+    const mode_there = await badge_in_tab_of("iv_gt_dyn");
+    expect(mode_there === "ITEM", `the list tab is in ${mode_there}, not item mode`);
+  });
+
+  // J runs in the background, so the page sends the whole leaf to the router, which sends the step back to item mode to the page before it switches the tab.
+  await run_case("J, a background key, ends the selection in the page and goes to the next tab", async () => {
+    await start("iv_tab_dyn");
+    await press_keys("j");
+    await expect_range(2);
+    await press_keys("J");
+    await wait_active_tab((page_id) => page_id !== "iv_tab_dyn", "another tab to be active");
+    const mode_there = await badge_in_tab_of("iv_tab_dyn");
+    expect(mode_there === "ITEM", `the list tab is in ${mode_there}, not item mode`);
+  });
+
+  await run_case("the command line opens from visual item mode, and closing it returns to item mode", async () => {
+    await start("iv_cmdline_dyn");
+    await press_keys("j");
+    await expect_range(2);
+    await open_cmdline();
+    await close_cmdline();
+    await expect_badge("ITEM");
+    await press_keys("j");
+    await expect_focus("c2");
+  });
+
   await run_case("I in visual item mode ends the selection and picks the list in item mode", async () => {
     await start("iv_pick_dyn");
     await press_keys("jj");
@@ -274,5 +341,24 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("c2");
     await press_keys("j");
     await expect_focus("c3");
+  });
+
+  // Last, since it rebinds f for the rest of the piece. The page reads the keymap again after the reload, and the background resolves the new item key into visual item mode.
+  await run_case("after a config reload rebinds f in item mode, f in visual item mode ends the selection and runs the new binding", async () => {
+    const dir = row_config();
+    appendFileSync(join(dir, "keymap.toml"), ["", "[item]", 'f = "page.item --direction=down"', ""].join("\n"));
+    // The reload key is a normal mode key, and the case before ends in item mode.
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    await load_config_dir(dir);
+    await start("iv_reload_f_dyn");
+    await press_keys("j");
+    await expect_range(2);
+    await press_keys("f");
+    await expect_badge("ITEM");
+    await expect_focus("c2");
+    expect((await hint_label_count()) === 0, "f still shows hints");
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
   });
 }

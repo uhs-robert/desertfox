@@ -498,7 +498,6 @@ Which-key group names:
 
 | Key | Command | Label |
 | --- | --- | --- |
-| `I` | `mode item ; hint --lists ; page.item --current` | Set mode |
 | `j` | `page.item --down --extend` | Extend to the next item |
 | `k` | `page.item --up --extend` | Extend to the previous item |
 | `h` | `page.item --left --extend` | Extend to the item on the left |
@@ -510,10 +509,13 @@ Which-key group names:
 | `<Space>` | `item_action --toggle-range` | Toggle the checkboxes of the range |
 | `o` | `page.item --other-end --extend` | Swap the ends of the selection |
 | `v` | `mode item` | End the selection |
+| `V` | `mode item` | End the selection |
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
 | `?` | `help.whichkey` | Show the keys |
 | `<A-?>` | `help.whichkey` | Show the keys |
+
+Every key of item mode that this table does not bind also works here: it switches to item mode first and then runs as there. A key of item mode comes here only when each command of the key runs in item mode.
 
 ### grab
 

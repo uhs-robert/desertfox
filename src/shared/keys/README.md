@@ -8,6 +8,7 @@ Behavior is in `docs/design/keys.md`, section "Keys files for keys".
 - `notation.ts`: parses a sequence such as `gx$` or `<AC-Escape>` into tokens.
 - `compiler.ts`: builds the `CompiledKeymap`, with which-key labels and the expanded key groups.
 - `prune_tree.ts`: copies a mode's tree with a `site_rules` row's `pass` or `only` keys applied.
+- `mode_parents.ts`: gives a child mode the keys of its parent mode. Every reader of a child's tree calls it, since the stored keymap holds own keys only.
 - `matcher.ts`: walks the tree with count and register prefixes. It ships in the content script, so it stays small.
 - `firefox_shortcut.ts`: turns a `browser` chord into a `commands.update` shortcut string.
 - `default_keymap.ts`: the shipped keys, the source of `docs/keymap.md`. Data only, types-only imports.
@@ -16,4 +17,4 @@ Behavior is in `docs/design/keys.md`, section "Keys files for keys".
 Rules across files:
 
 - Import `prune_tree.ts` and `default_keymap.ts` directly, not through `index.ts`.
-- The content script does not import `prune_tree.ts`.
+- The content script does not import `prune_tree.ts` or `mode_parents.ts`.

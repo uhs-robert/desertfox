@@ -12,7 +12,7 @@ export function merge_keymaps(defaults: KeymapConfig, user: KeymapConfig): Keyma
   const merged: KeymapConfig = {};
   const modes = new Set([...Object.keys(defaults), ...Object.keys(user)]);
   for (const name of modes) {
-    if ((GENERATOR_KEYS as readonly string[]).includes(name)) continue;
+    if ((GENERATOR_KEYS as readonly string[]).includes(name) || name === "mode_parents") continue;
     const mode = name as KeymapMode;
     (merged as Keymap)[mode] = merge_mode(defaults[mode], user[mode]);
   }
@@ -20,6 +20,8 @@ export function merge_keymaps(defaults: KeymapConfig, user: KeymapConfig): Keyma
     const generated = { ...defaults[key], ...user[key] };
     if (Object.keys(generated).length > 0) (merged as Record<string, unknown>)[key] = generated;
   }
+  // Only the default keymap declares parents.
+  if (defaults.mode_parents) merged.mode_parents = defaults.mode_parents;
   return merged;
 }
 
@@ -29,7 +31,7 @@ export function default_layer_of(defaults: KeymapConfig, user: KeymapConfig): Ke
     Object.fromEntries(Object.entries(own ?? {}).filter(([key]) => !(key in (over ?? {}))));
   const layer: Record<string, unknown> = {};
   for (const name of Object.keys(defaults)) {
-    if (name === "modifiers" || name === "group_names") continue;
+    if (name === "modifiers" || name === "group_names" || name === "mode_parents") continue;
     layer[name] = kept(defaults[name as keyof KeymapConfig] as Record<string, unknown>, user[name as keyof KeymapConfig] as Record<string, unknown>);
   }
   return layer as KeymapConfig;

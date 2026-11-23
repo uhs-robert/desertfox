@@ -5,7 +5,7 @@ import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, CompiledModeParent, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BindingTable } from "../settings_table.ts";
@@ -443,6 +443,29 @@ function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, se
   });
 }
 
+// The default keymap's parent links, with the keys each child section unbinds. A leave link without a `mode.set` to run drops with a warning, since the child would run the parent's keys in its own mode.
+function compiled_mode_parents(keymap: KeymapConfig, resolve: ResolveCommand, warnings: string[]): CompiledKeymap["mode_parents"] {
+  const links = Object.entries(keymap.mode_parents ?? {}) as [KeymapMode, NonNullable<KeymapConfig["mode_parents"]>[KeymapMode]][];
+  const compiled: NonNullable<CompiledKeymap["mode_parents"]> = {};
+  for (const [child, link] of links) {
+    if (!link) continue;
+    const blocked = Object.entries(keymap[child] ?? {}).flatMap(([sequence, binding]) => {
+      const { tokens } = parse_sequence(sequence);
+      return binding === null && tokens ? [tokens] : [];
+    });
+    const set_mode = link.leave ? resolve("mode.set") : undefined;
+    if (link.leave && !set_mode) {
+      warnings.push(`${child}: keeps only its own keys: no mode.set to leave it for ${link.parent}`);
+      continue;
+    }
+    const leave: LeafStep | undefined = set_mode && { invocation: { id: "mode.set", args: { mode: link.parent } }, runs_in: set_mode.runs_in, count_rule: set_mode.count, ...(set_mode.bundle && { bundle: set_mode.bundle }), leave: true };
+    // The compile fills `runs` once it has checked the trees against the registry.
+    const entry: CompiledModeParent = { parent: link.parent, ...(leave && { leave }), runs: [], ...(blocked.length > 0 && { blocked }) };
+    compiled[child] = entry;
+  }
+  return Object.keys(compiled).length > 0 ? compiled : undefined;
+}
+
 export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}, row_sources: readonly SiteRuleSource[] = []): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
@@ -457,6 +480,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
+  const mode_parents = compiled_mode_parents(keymap, resolve, warnings);
   const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, resolve, settings, label_sources, warnings, row_sources);
   const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || is_default_value(name, settings[name]) ? [] : [[name, settings[name]]])));
   const which_key_skip = (settings.which_key_skip ?? []).flatMap((entry) => {
@@ -468,6 +492,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
+    ...(mode_parents && { mode_parents }),
     ...(site_rules.length > 0 ? { site_rules } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     ...(settings.bridge === true ? { bridge: true as const } : {}),
