@@ -45,33 +45,31 @@ function invocation_text(invocation: BoundInvocation, registry: Registry, source
 const STEP_JOINER = " ; ";
 const binding_text = (binding: KeyBinding, registry: Registry, sources: EnumSources) => [binding].flat().map((step) => invocation_text(step, registry, sources)).join(STEP_JOINER);
 
-// The keys each child mode takes from its parent (`mode_parents`), spelled as the edits spell them. A child's own keys and the user's unbinds in the child do not count, so a taken key the user removed still has a row to restore.
-export type TakenKeys = Partial<Record<KeymapMode, ReadonlySet<string>>>;
+// The keys each child mode takes from its parent (`mode_parents`), spelled as the edits spell them, with the text of the command that runs. A child's own keys and the user's unbinds in the child do not count, so a taken key the user removed still has a row to restore.
+export type TakenKeys = Partial<Record<KeymapMode, ReadonlyMap<string, string>>>;
 
-export function taken_keys(compiled: CompiledKeymap, default_keymap: KeymapConfig): TakenKeys {
+export function taken_keys(compiled: CompiledKeymap, default_keymap: KeymapConfig, registry: Registry, sources: EnumSources): TakenKeys {
   const taken: TakenKeys = {};
   for (const [child, link] of Object.entries(compiled.mode_parents ?? {}) as [KeymapMode, CompiledModeParent][]) {
     const default_blocks = Object.entries(default_keymap[child] ?? {}).flatMap(([keys, binding]) => (binding === null ? [parse_sequence(keys).tokens ?? []] : []));
     const parents = { ...compiled.mode_parents, [child]: { ...link, blocked: default_blocks } };
     const tree = resolve_mode_parents({ ...compiled.modes, [child]: undefined }, parents)[child];
-    taken[child] = new Set(leaves_near(tree, []).keys());
+    taken[child] = new Map([...leaves_near(tree, [])].map(([keys, leaf]) => [keys, binding_text(shown_steps(leaf).map((step) => step.invocation), registry, sources)]));
   }
   return taken;
 }
 
 export function binding_rows(default_keymap: KeymapConfig, file_keymap: KeymapConfig, edits: KeymapEdits, registry: Registry, sources: EnumSources, taken: TakenKeys = {}): BindingRow[] {
   const rows: BindingRow[] = [];
-  // A taken key shows the text of its parent's row, as a default of the child.
-  const shown_text = new Map<string, string>();
+  // The keys each mode lists with a command. The modes come parents first, so a child reads its parent's set.
+  const listed = new Map<string, Set<string>>();
   for (const mode of KEYMAP_MODES) {
     const defaults = default_keymap[mode] ?? {};
     const files = by_spelling(file_keymap[mode] ?? {});
     const edited = edits[mode] ?? {};
     const parent = default_keymap.mode_parents?.[mode]?.parent;
-    const inherited = new Map([...(taken[mode] ?? [])].flatMap((keys) => {
-      const text = shown_text.get(`${parent} ${keys}`);
-      return text === undefined || Object.hasOwn(defaults, keys) ? [] : [[keys, text] as const];
-    }));
+    // A taken key gets a row only when its parent lists it, and shows the text of the command that runs, as a default of the child.
+    const inherited = new Map([...(taken[mode] ?? [])].filter(([keys]) => !Object.hasOwn(defaults, keys) && listed.get(parent ?? "")?.has(keys)));
     for (const keys of new Set([...Object.keys(defaults), ...inherited.keys(), ...Object.keys(files), ...Object.keys(edited)])) {
       const shipped = defaults[keys];
       const default_text = shipped ? binding_text(shipped, registry, sources) : inherited.get(keys);
@@ -85,8 +83,7 @@ export function binding_rows(default_keymap: KeymapConfig, file_keymap: KeymapCo
       } else if (file) rows.push({ mode, keys, text: binding_text(file, registry, sources), origin: "file", ...replaced_default });
       else if (default_text !== undefined) rows.push({ mode, keys, text: default_text, origin: "default" });
     }
-    // The modes come parents first, so a child reads its parent's rows here.
-    for (const row of rows) if (row.mode === mode && row.text !== "") shown_text.set(`${mode} ${spelling_of(row.keys)}`, row.text);
+    listed.set(mode, new Set(rows.filter((row) => row.mode === mode && row.text !== "").map((row) => spelling_of(row.keys))));
   }
   return rows;
 }
@@ -158,7 +155,7 @@ export function check_candidate(state: KeymapState, registry: Registry, request:
   const warnings_before = new Set(before.warnings);
   const { tokens } = normalized;
   const near_after = leaves_near(after.compiled.modes[mode], tokens);
-  const sources = { search_engines: Object.keys(state.config.search_engines) };
+  const sources = sources_of(state.config);
   // The shadows count the keys a child mode takes from its parent. Whether the binding lands reads the mode's own keys, since a taken key would stand in for a skipped one.
   const resolved_near_after = leaves_near(with_resolved_modes(after.compiled).modes[mode], tokens);
   const shadows = [...leaves_near(with_resolved_modes(before.compiled).modes[mode], tokens)]
@@ -211,10 +208,10 @@ function skip_reason(mode: KeymapMode, keys: string, compiled: CompileOutput): s
   return reason ?? (has_leaf ? undefined : `${mode}: skipped "${keys}": the compile skips it`);
 }
 
-// An edit the compile dropped shows why, instead of showing in force.
-function with_skipped_edits(rows: BindingRow[], compiled: CompileOutput): BindingRow[] {
+// An edit or file binding the compile dropped shows why, instead of showing in force.
+function with_skipped_rows(rows: BindingRow[], compiled: CompileOutput): BindingRow[] {
   return rows.map((row) => {
-    const reason = row.origin === "edit" ? skip_reason(row.mode, row.keys, compiled) : undefined;
+    const reason = row.origin === "edit" || row.origin === "file" ? skip_reason(row.mode, row.keys, compiled) : undefined;
     return reason === undefined ? row : { ...row, skipped: reason };
   });
 }
@@ -222,25 +219,27 @@ function with_skipped_edits(rows: BindingRow[], compiled: CompileOutput): Bindin
 // Why a set would not land, or undefined when it lands. A move checks with its old key freed, so a full set of slots has room for the new chord.
 function set_refusal(state: KeymapState, deps: KeymapMessageDeps, request: { mode: KeymapMode; keys: string; text: string; old_keys: string | undefined }): { ok: false; message: string; problems: string[] } | undefined {
   const { mode, keys, old_keys } = request;
-  const checked = old_keys === undefined ? state : { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, taken_in(state, deps.default_keymap), mode, old_keys) } };
+  const checked = old_keys === undefined ? state : { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, taken_in(state, deps.default_keymap, deps.registry), mode, old_keys) } };
   const verdict = check_candidate(checked, deps.registry, request);
   if (verdict.saves) return undefined;
   const problems = [...verdict.problems, ...verdict.warnings];
   return { ok: false, message: `${mode} "${keys}" not saved: ${problems[0] ?? "the compile skips it"}`, problems };
 }
 
-const taken_in = (state: KeymapState, default_keymap: KeymapConfig): TakenKeys => taken_keys(state.compile(state.layers).compiled, default_keymap);
+const sources_of = (config: MergedConfig): EnumSources => ({ search_engines: Object.keys(config.search_engines) });
+
+const taken_in = (state: KeymapState, default_keymap: KeymapConfig, registry: Registry): TakenKeys => taken_keys(state.compile(state.layers).compiled, default_keymap, registry, sources_of(state.config));
 
 const failure = (error: unknown): { ok: false; message: string } => ({ ok: false, message: error instanceof Error ? error.message : String(error) });
 
 export function create_keymap_messages(deps: KeymapMessageDeps) {
-  const rows_of = (config: MergedConfig, edits: KeymapEdits, taken: TakenKeys) => binding_rows(deps.default_keymap, config.keymap, edits, deps.registry, { search_engines: Object.keys(config.search_engines) }, taken);
+  const rows_of = (config: MergedConfig, edits: KeymapEdits, taken: TakenKeys) => binding_rows(deps.default_keymap, config.keymap, edits, deps.registry, sources_of(config), taken);
 
   async function list(): Promise<ListBindingsAnswer> {
     try {
       const state = await deps.read_keymap_state();
       const compiled = state.compile(state.layers);
-      return { ok: true, bindings: with_skipped_edits(rows_of(state.config, state.layers.keymap, taken_keys(compiled.compiled, deps.default_keymap)), compiled) };
+      return { ok: true, bindings: with_skipped_rows(rows_of(state.config, state.layers.keymap, taken_keys(compiled.compiled, deps.default_keymap, deps.registry, sources_of(state.config))), compiled) };
     } catch (error) {
       return failure(error);
     }
@@ -251,7 +250,7 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
       let state = await deps.read_keymap_state();
       const from = is_mode(request.mode) && typeof request.move_from === "string" ? normalized_keys(request.mode, request.move_from) : undefined;
       // A move frees the old key first, so a full set of slots has room for the new chord.
-      if (from && !("problem" in from) && is_mode(request.mode)) state = { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, taken_in(state, deps.default_keymap), request.mode, from.keys) } };
+      if (from && !("problem" in from) && is_mode(request.mode)) state = { ...state, layers: { ...state.layers, keymap: without_binding(state.layers.keymap, state.config, deps.default_keymap, taken_in(state, deps.default_keymap, deps.registry), request.mode, from.keys) } };
       return { ok: true, ...check_candidate(state, deps.registry, request) };
     } catch (error) {
       return failure(error);
@@ -287,7 +286,7 @@ export function create_keymap_messages(deps: KeymapMessageDeps) {
       await deps.change_layers("keymap", (current, state) => {
         const { config } = state;
         // A key only an edit binds is unbound by dropping the edit. Unbinding a file or default binding takes an empty text.
-        const taken = taken_in(state, deps.default_keymap);
+        const taken = taken_in(state, deps.default_keymap, deps.registry);
         const underlying = has_underlying(config, deps.default_keymap, taken, mode, keys);
         already_unbound = action === "remove" && underlying && current[mode]?.[keys] === "";
         const text = action === "set" ? request.text : action === "remove" && underlying ? "" : undefined;

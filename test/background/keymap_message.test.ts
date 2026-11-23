@@ -155,6 +155,35 @@ test("the key editor lists the keys item and media mode take from normal mode, a
   assert.deepEqual(stored.edits, { item: { K: "" } });
 });
 
+test("visual item mode shows the text of the command it runs when item mode's own binding of the key was skipped", async () => {
+  const row_of = async (config: MergedConfig, edits: KeymapEdits, mode: string, keys: string) => {
+    const listed = await messages_over(config, { edits }).list();
+    assert.ok(listed.ok);
+    return listed.bindings.find((candidate) => candidate.mode === mode && candidate.keys === keys);
+  };
+  // `tab.close` runs in normal mode only, so the compile drops it from item mode and item mode takes the normal `f`.
+  const from_file = config_with({ item: { f: { id: "tab.close" } } });
+  assert.deepEqual(await row_of(from_file, {}, "item_visual", "f"), { mode: "item_visual", keys: "f", text: "hint", origin: "default" });
+  const item_row = await row_of(from_file, {}, "item", "f");
+  assert.equal(item_row?.default_text, "hint");
+  assert.match(item_row?.skipped ?? "", /item: skipped "f"/);
+  const from_edit = await row_of(config_with({}), { item: { f: "tab.close" } }, "item_visual", "f");
+  assert.equal(from_edit?.text, "hint");
+  assert.equal(from_edit?.origin, "default");
+  const edit_row = await row_of(config_with({}), { item: { f: "tab.close" } }, "item", "f");
+  assert.match(edit_row?.skipped ?? "", /skipped "f"/);
+  // With an empty config, a child lists a taken key only when its parent lists it, and prints the parent's text. Item and media read normal mode, visual item reads item mode.
+  const listed = await messages_over(config_with({}), { edits: {} }).list();
+  assert.ok(listed.ok);
+  const in_mode = (mode: string) => listed.bindings.filter((candidate) => candidate.mode === mode);
+  for (const [child, parent] of [["item", "normal"], ["media", "normal"], ["item_visual", "item"]] as const) {
+    const parent_rows = new Map(in_mode(parent).map((row) => [row.keys, row.text]));
+    const taken = in_mode(child).filter((candidate) => !Object.hasOwn(DEFAULT_KEYMAP[child] ?? {}, candidate.keys));
+    assert.ok(taken.length > 10, child);
+    for (const row of taken) assert.equal(parent_rows.get(row.keys), row.text, `${child} ${row.keys}`);
+  }
+});
+
 test("set, remove and reset change the layer, and a set the check refuses changes nothing", async () => {
   const stored: { edits: KeymapEdits } = { edits: {} };
   const messages = messages_over(config_with({ normal: { zq: { id: "tab.close" } } }), stored);
