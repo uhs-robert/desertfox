@@ -63,7 +63,7 @@ define("mark.list", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.list(ctx, args as { mark: string }),
+  run: (ctx, args) => handlers.list(ctx, args),
 });
 
 define("mark.delete", {
@@ -73,7 +73,7 @@ define("mark.delete", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.delete(ctx, args as { mark: string }),
+  run: (ctx, args) => handlers.delete(ctx, args),
 });
 
 // No default key and no confirmation: typing the command is the confirmation. Not repeatable, so `.` never replays `all`.
@@ -84,5 +84,5 @@ define("mark.clear", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.clear(ctx, args as { scope: MarkClearScope }),
+  run: (ctx, args) => handlers.clear(ctx, args),
 });

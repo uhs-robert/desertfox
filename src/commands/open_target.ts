@@ -17,7 +17,7 @@ export type Where = (typeof WHERE)[number];
 // `-t -b -w` mean the same on every command that has a where param, and `-c` always means container.
 export const WHERE_SHORT = { tab: "t", background: "b", window: "w" } as const;
 
-export const WHERE_PARAM: ParamDef = {
+export const WHERE_PARAM = {
   name: "where",
   type: "enum",
   values: WHERE,
@@ -25,17 +25,17 @@ export const WHERE_PARAM: ParamDef = {
   short: WHERE_SHORT,
   value_labels: { tab: "in new tab", background: "in background tab", window: "in new window" },
   description: { tab: "Open in a new tab.", background: "Open in a background tab.", window: "Open in a new window." },
-};
+} as const satisfies ParamDef;
 
 // Firefox cannot change the container of an open tab, so the param needs a new tab or window.
-export const CONTAINER_PARAM: ParamDef = {
+export const CONTAINER_PARAM = {
   name: "container",
   type: "string",
   values: { from: "containers" },
   when: { where: ["tab", "background", "window"] },
   short: "c",
   description: "Open in a container.",
-};
+} as const satisfies ParamDef;
 
 export type FindContainerStoreId = (container_name: string) => Promise<string | undefined>;
 

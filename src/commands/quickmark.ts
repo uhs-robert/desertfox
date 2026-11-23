@@ -74,7 +74,7 @@ define("quickmark.add", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.add(ctx, args as { key: string }),
+  run: (ctx, args) => handlers.add(ctx, args),
 });
 
 define("quickmark.open", {
@@ -83,7 +83,7 @@ define("quickmark.open", {
   params: [{ name: "key", type: "key", pattern: KEY_PARAM_SOURCE, description: "Open the quickmark under this letter or digit." }, WHERE_PARAM],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.open(ctx, args as { key: string; where: Where }),
+  run: (ctx, args) => handlers.open(ctx, args),
 });
 
 define("quickmark.list", {
@@ -94,7 +94,7 @@ define("quickmark.list", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.list(ctx, args as { quickmark: string }),
+  run: (ctx, args) => handlers.list(ctx, args),
 });
 
 define("quickmark.delete", {
@@ -104,5 +104,5 @@ define("quickmark.delete", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.delete(ctx, args as { quickmark: string }),
+  run: (ctx, args) => handlers.delete(ctx, args),
 });

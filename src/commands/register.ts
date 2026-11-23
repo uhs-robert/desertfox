@@ -48,5 +48,5 @@ define("register.list", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.list(ctx, args as { name?: string }),
+  run: (ctx, args) => handlers.list(ctx, args),
 });
