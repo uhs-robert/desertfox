@@ -3,6 +3,11 @@
 import type { CmdlineOpened } from "../shared/messages/content.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, CMDLINE_LATEST_TICKET_STORAGE_PREFIX, CMDLINE_OPENER_STORAGE_PREFIX, CMDLINE_TARGET_STORAGE_PREFIX, CMDLINE_TICKET_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { keep_chain } from "../shared/swallow.ts";
+import { MODES } from "../shared/command.ts";
+import type { CommandMeta, Mode } from "../shared/command.ts";
+import { key_labels } from "../shared/completion/keys.ts";
+import { with_resolved_modes } from "../shared/keys/mode_parents.ts";
+import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 
 export const HISTORY_LIMIT = 100;
 
@@ -18,10 +23,15 @@ export type CmdlineServiceDeps = {
   container_stores: () => Promise<CmdlineOpened["container_stores"]>;
   // Read on every open, after the config has loaded.
   page_config: () => Promise<Pick<CmdlineOpened, "commands" | "help_ids" | "command_aliases" | "theme_names" | "font_names" | "prompt" | "all_windows" | "statusbar_widgets">>;
+  // The keys column for a line opened from `mode`.
+  key_text: (mode: string) => Promise<CmdlineOpened["keys"]>;
   tab_count: (window_id: number) => Promise<number>;
   // False once the frame is gone from the tab.
   frame_exists: (tab_id: number, frame_id: number) => Promise<boolean>;
 };
+
+// The keys column of a line opened from `mode`. The trees are the global ones, as the help page reads them: the line does not know the page's site rows. A child mode lists the keys it takes from its parent too.
+export const line_key_text = (keymap: CompiledKeymap | undefined, commands: readonly CommandMeta[], mode: string): CmdlineOpened["keys"] => Object.fromEntries(key_labels(keymap && with_resolved_modes(keymap), commands, mode));
 
 // A repeated command moves to the newest place instead of filling the cap with copies.
 export function add_to_history(history: readonly string[], text: string): string[] {
@@ -73,7 +83,7 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       if ((await deps.tickets.get(key))[key] === frame_id) await deps.tickets.remove(key);
     },
     // Used up on the first try, so a frame reloaded with an old ticket gets nothing either.
-    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined, tab: { url?: string | undefined; index?: number | undefined } = {}, incognito = false): Promise<CmdlineOpened | undefined> => {
+    open: async (ticket: unknown, tab_id: number | undefined, frame_id: number | undefined, window_id: number | undefined, tab: { url?: string | undefined; index?: number | undefined } = {}, incognito = false, mode: unknown = "normal"): Promise<CmdlineOpened | undefined> => {
       if (typeof ticket !== "string" || tab_id === undefined || frame_id === undefined || window_id === undefined) return undefined;
       const redeemed = (redemptions.get(ticket) ?? Promise.resolve()).then(() => redeem(ticket));
       const settled = keep_chain(redeemed);
@@ -89,7 +99,9 @@ export function create_cmdline_service(deps: CmdlineServiceDeps) {
       // After the pending writes, so a line reopened at once already has the last command.
       await last_write;
       const status = { url: tab.url ?? "", tab_index: tab.index ?? 0, tab_count: await deps.tab_count(window_id) };
-      return { history: await read(), sources: await deps.sources(), container_stores: incognito ? [] : await deps.container_stores(), window_id, status, ...(await deps.page_config()) };
+      // The mode comes from the page, so only a known mode names a tree.
+      const keys = await deps.key_text(MODES.includes(mode as Mode) ? (mode as Mode) : "normal");
+      return { history: await read(), sources: await deps.sources(), container_stores: incognito ? [] : await deps.container_stores(), window_id, status, keys, ...(await deps.page_config()) };
     },
     // Whether this frame of the tab redeemed the tab's latest ticket, and the tab has not closed or navigated since.
     is_opener: async (tab_id: number | undefined, frame_id: number | undefined): Promise<boolean> => {

@@ -191,6 +191,19 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, wai
     await j_is_media(id, 0.75);
   });
 
+  await run_case("keys media mode takes from normal mode run there: as speeds the video up and A opens the line with media, and the mode stays", async () => {
+    const id = "p29_taken";
+    await open_media_page(id);
+    const mark = events.length;
+    await press_keys("as");
+    await wait_event(mark, media(id, "ratechange", "big", (event) => event.rate === 1.05), "as at 1.05x");
+    await j_is_media(id, 0.95);
+    await press_keys("A");
+    await wait_cmdline((line) => line.open && line.value === "media ", 'the line to open with "media "');
+    await close_cmdline();
+    await j_is_media(id, 0.9);
+  });
+
   await run_case(";M pins the hinted video, the keys act on it until the mode ends, and a new start drops the pin", async () => {
     const id = "p29_pin";
     await open_page("media_mode", id, { new_tab: true });

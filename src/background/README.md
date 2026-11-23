@@ -71,7 +71,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `load_log.ts`: the last 20 bundle loads in storage, which the key test reads. Writes run one at a time and a storage failure is dropped, so the log never fails a load. Pure.
 - `timing_log.ts`, `timing_summary.ts`, `timing_browser.ts`: the last 300 timings in `storage.session`, and the pure summary that `debug.perf` copies.
 - `snippets.ts`: the user's snippets as commands: `matches` and `requires` are checked here, the code runs in the top frame only.
-- `cmdline_service.ts`: what the command line page asks for: the one-time ticket, `open_cmdline`, `record_cmdline`, and the opener and target frame of each line.
+- `cmdline_service.ts`: what the command line page asks for: the ticket, `open_cmdline` with its keys column, `record_cmdline`, and the opener and target frame of each line.
 - `frame_cue.ts`: the toast in the top frame after `;ff` focused a frame. It names the key bound to `frame.exit`, or leaves that sentence out when none is.
 - `open_help.ts`: `open_help` opens the help page at a command card in a foreground tab beside the asking tab, only for the frame whose line redeemed a ticket.
 - `keymap_message.ts`: the key editor's messages `list_bindings`, `check_binding` and `change_keymap`, from top-level extension pages only.

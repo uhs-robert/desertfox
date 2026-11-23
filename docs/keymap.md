@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 612 (normal 264, media 58, item 101, item_visual 16, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 504 (normal 264, media 26, item 25, item_visual 16, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -330,38 +330,6 @@ Which-key group names:
 | Key | Command | Label |
 | --- | --- | --- |
 | `0` | `media seek reset` | Seek to the start |
-| `f` | `hint` | Click element |
-| `;v` | `hint --caret --prose` | Start caret mode at text |
-| `;V` | `hint --visual --prose` | Start visual mode at text |
-| `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
-| `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
-| `;b` | `hint --buttons` | Click button |
-| `;a` | `hint --every` | Click every element |
-| `;t` | `hint --prose` | Click text |
-| `;s` | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |
-| `;i` | `hint --inputs` | Click input |
-| `;l` | `hint --links` | Click link |
-| `;I` | `hint --images` | Open image in new tab |
-| `;yl` | `hint --copy --links` | Copy link URL |
-| `;yi` | `hint --copy-image --images` | Copy picture |
-| `;yI` | `hint --copy --images` | Copy image URL |
-| `;ym` | `hint --copy --media` | Copy media URL |
-| `;yf` | `hint --copy --frames` | Copy frame URL |
-| `;yt` | `hint --copy-text --all` | Copy text |
-| `;yc` | `hint --copy-selector --every` | Copy CSS selector |
-| `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
-| `;yh` | `hint --copy-html --every` | Copy outer HTML |
-| `;ff` | `hint --frames` | Focus frame |
-| `;of` | `hint --inspect --frames` | Inspect frame |
-| `;hf` | `hint --hover --frames` | Hover frame |
-| `;xf` | `hint --delete --frames` | Delete frame |
-| `;fs` | `hint --focus --scrollable` | Focus scroll box |
-| `;fh` | `hint --focus --headings` | Focus heading |
-| `;m` | `hint --media` | Play or pause media |
-| `;M` | `hint --enter-media --media` | Start media mode at a video |
-| `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |
-| `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
-| `:` | `cmdline.open` | Command line |
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
 | `?` | `help.whichkey` | Show the keys |
@@ -388,86 +356,12 @@ Which-key group names:
 | `r` | `media loop` | Toggle loop |
 | `i` | `media info` | Show the time, speed, quality and volume |
 
+Every key of normal mode that this table does not bind also works here: it runs as in normal mode. A key of normal mode comes here only when each command of the key runs in media mode. This mode unbinds `;fF` and `;fe`.
+
 ### item
 
 | Key | Command | Label |
 | --- | --- | --- |
-| `<C-d>` | `scroll.pages --fraction=0.5` | Scroll half page down |
-| `<C-u>` | `scroll.pages --fraction=-0.5` | Scroll half page up |
-| `<C-f>` | `scroll.pages` | Scroll page down |
-| `<C-b>` | `scroll.pages --fraction=-1` | Scroll page up |
-| `H` | `page.back` | Back |
-| `L` | `page.forward` | Forward |
-| `<C-o>` | `page.jump --older` | Jump back |
-| `<C-i>` | `page.jump --newer` | Jump forward |
-| `]]` | `page.follow --next` | Next page |
-| `[[` | `page.follow --prev` | Previous page |
-| `J` | `tab.next` | Next tab |
-| `K` | `tab.prev` | Previous tab |
-| `gt` | `tab.goto` | Next tab |
-| `gT` | `tab.prev` | Previous tab |
-| `am` | `tab.mute` | Toggle mute |
-| `aa` | `media enter` | Start media mode |
-| `ap` | `media play_pause` | Play or pause |
-| `as` | `media speed up` | Speed up |
-| `aS` | `media speed down` | Slow down |
-| `ar` | `media speed reset` | Reset speed |
-| `av` | `media volume up` | Volume up |
-| `aV` | `media volume down` | Volume down |
-| `al` | `media seek up` | Seek forward |
-| `ah` | `media seek down` | Seek back |
-| `aP` | `media pip` | Toggle picture-in-picture |
-| `af` | `media fullscreen` | Toggle fullscreen |
-| `A` | `cmdline.open --text='media '` | Media command |
-| `gi` | `page.focus_input` | Focus input |
-| `i` | `mode.insert` | Insert mode |
-| `<S-Escape>` | `mode ignore` | Set mode |
-| `<S-Insert>` | `mode ignore` | Set mode |
-| `<AC-Escape>` | `mode ignore` | Set mode |
-| ``<AC-`>`` | `mode ignore` | Set mode |
-| `<C-v>` | `mode.pass_next` | Pass next key |
-| `<F1>` | `help` | Help |
-| `,i` | `mode ignore` | Set mode |
-| `f` | `hint` | Click element |
-| `F` | `hint --background` | Click element in background tab |
-| `;v` | `hint --caret --prose` | Start caret mode at text |
-| `;V` | `hint --visual --prose` | Start visual mode at text |
-| `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
-| `;;` | `cmdline.open --text='hint '` | Open the command line with hint |
-| `;b` | `hint --buttons` | Click button |
-| `;a` | `hint --every` | Click every element |
-| `;t` | `hint --prose` | Click text |
-| `;s` | `hint --grab-swipe --swipeable` | Swipe a carousel or slider with the keys |
-| `;i` | `hint --inputs` | Click input |
-| `;l` | `hint --links` | Click link |
-| `;I` | `hint --images` | Open image in new tab |
-| `;yl` | `hint --copy --links` | Copy link URL |
-| `;yi` | `hint --copy-image --images` | Copy picture |
-| `;yI` | `hint --copy --images` | Copy image URL |
-| `;ym` | `hint --copy --media` | Copy media URL |
-| `;yf` | `hint --copy --frames` | Copy frame URL |
-| `;yt` | `hint --copy-text --all` | Copy text |
-| `;yc` | `hint --copy-selector --every` | Copy CSS selector |
-| `;Y` | `hint --copy --links --rapid` | Copy several link URLs |
-| `;yh` | `hint --copy-html --every` | Copy outer HTML |
-| `;ff` | `hint --frames` | Focus frame |
-| `;of` | `hint --inspect --frames` | Inspect frame |
-| `;hf` | `hint --hover --frames` | Hover frame |
-| `;xf` | `hint --delete --frames` | Delete frame |
-| `;fs` | `hint --focus --scrollable` | Focus scroll box |
-| `;fh` | `hint --focus --headings` | Focus heading |
-| `;m` | `hint --media` | Play or pause media |
-| `;M` | `hint --enter-media --media` | Start media mode at a video |
-| `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |
-| `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |
-| `:` | `cmdline.open` | Command line |
-| `/` | `find` | Find forward |
-| `*` | `find --word` | Find word forward |
-| `#` | `find --backward --word` | Find word backward |
-| `n` | `find.next` | Next match |
-| `N` | `find.prev` | Previous match |
-| `g?` | `help` | Help |
-| `gV` | `mode caret` | Set mode |
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
 | `?` | `help.whichkey` | Show the keys |
@@ -493,6 +387,8 @@ Which-key group names:
 | `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
+
+Every key of normal mode that this table does not bind also works here: it runs as in normal mode. A key of normal mode comes here only when each command of the key runs in item mode. This mode unbinds `;fF` and `;fe`.
 
 ### item_visual
 

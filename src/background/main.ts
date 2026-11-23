@@ -10,7 +10,7 @@ import { effective_settings } from "../shared/config.ts";
 import { container_names, read_disabled, container_stores, make_router_deps, page_of, reinject_deps } from "./browser_deps.ts";
 import { HELP_PAGE_FILE } from "../shared/page/help_route.ts";
 import { open_quick_start_on_install } from "./first_install.ts";
-import { create_cmdline_service } from "./cmdline_service.ts";
+import { create_cmdline_service, line_key_text } from "./cmdline_service.ts";
 import { create_frame_cue } from "./frame_cue.ts";
 import { stored_keymap } from "./keymap_source.ts";
 import { listed_by_search } from "./history_cache.ts";
@@ -61,7 +61,7 @@ import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
-import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_global_mark_jump } from "./global_mark_jump.ts";
@@ -208,6 +208,7 @@ const cmdline = create_cmdline_service({
     const settings = effective_settings(config.settings);
     return { commands: registry.list().map(command_meta), help_ids: [...built_in_ids], command_aliases: config.command_aliases, theme_names: Object.keys(config.local_themes ?? {}).filter((name) => !built_in_theme_names().includes(name)), font_names: await refused_as(font_names.read(), []), prompt: settings.cmdline_prompt, all_windows: settings.completion_all_windows, statusbar_widgets: settings.statusbar_widgets };
   },
+  key_text: async (mode) => line_key_text(current_keymap(await stored_keymap(browser.storage.local)), registry.list().map(command_meta), mode),
 });
 
 const frame_cue = create_frame_cue({

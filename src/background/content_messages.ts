@@ -186,7 +186,7 @@ export const content_handlers = (deps: ContentDeps) => {
         // A frame that asks names itself. The top page cannot name the frame of another site that it focuses, so its mark covers the next first focus of any frame.
         tab_modes.expect_entry(tab_id, frame_id === 0 ? undefined : frame_id).then(() => (request.toast ? deps.frame_cue(tab_id) : undefined)),
     },
-    open_cmdline: { from: "any", run: (request, sender) => get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true)) },
+    open_cmdline: { from: "any", run: (request, sender) => get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true, request.mode)) },
     record_cmdline: { from: "any", run: (request, sender) => cmdline.record(request.text, sender.tab?.incognito === true) },
     complete_items: { from: "any", run: (request, sender) => complete_items.answer(request.kind, asker_of(sender)) },
     tab_rows_action: { from: "any", run: (request, sender) => complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id) },
