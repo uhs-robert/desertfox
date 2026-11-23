@@ -6,9 +6,12 @@ import type { Outcome } from "../messages/content.ts";
 // The registry the extension uses. Command modules call `define` on import. Only the background page and Node tools import this file, because the call runs at import and keeps define.ts and the setting rules in the bundle.
 export const registry = create_registry();
 
+// Inference keeps a misspelled param field in `P`, so this rejects any field `ParamDef` lacks, as the wide signature does.
+type KnownFields<P extends readonly ParamDef[]> = { readonly [K in keyof P]: P[K] & Record<Exclude<keyof P[K], keyof ParamDef>, never> };
+
 type TypedBackgroundInput<P extends readonly ParamDef[]> = Omit<BackgroundCommandDef, "id" | "params" | "run"> & {
   bridge: boolean;
-  params?: P;
+  params?: P & KnownFields<P>;
   run: (ctx: CommandContext, args: ArgsOf<P>) => Promise<void | Outcome> | void | Outcome;
 };
 
