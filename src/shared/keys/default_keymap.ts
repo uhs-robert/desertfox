@@ -515,16 +515,17 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys, `gi`, the media keys, the keys that start insert, caret, visual and ignore mode, the find repeat keys and `<C-v>`, and any other key goes to the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. Of normal mode the section keeps the tab switch, Ctrl scroll, command line, help, hint, find, page follow and jump keys, `gi`, the media keys, the keys that start insert, caret and ignore mode, the find repeat keys and `<C-v>`, and any other key goes to the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
-const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L", "am", "aa", "ap", "as", "aS", "ar", "av", "aV", "al", "ah", "aP", "af", "A", "i", "V", "gV", "n", "N", "*", "#", "<S-Escape>", "<S-Insert>", "<AC-Escape>", "<AC-`>", ",i", "<C-v>"];
+const KEPT_IN_ITEM = ["J", "K", "gt", "gT", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "g?", "f", "F", "/", "]]", "[[", "<C-o>", "<C-i>", "gi", "H", "L", "am", "aa", "ap", "as", "aS", "ar", "av", "aV", "al", "ah", "aP", "af", "A", "i", "gV", "n", "N", "*", "#", "<S-Escape>", "<S-Insert>", "<AC-Escape>", "<AC-`>", ",i", "<C-v>"];
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
 const keys_copied_to_item = Object.entries(BASE_SECTIONS.normal ?? {}).filter(([sequence]) => (KEPT_IN_ITEM.includes(sequence) || sequence.startsWith(";")) && !NORMAL_ONLY_HINT_GROUP_KEYS.has(sequence));
 // `body` focus never matches, unlike `when_focus`, so a page that shows a tree keeps the plain item keys until the focus is in the tree. A tree that moves its focus by aria-activedescendant holds the focus itself and so matches.
 const TREE_HAS_FOCUS = "[role=tree]:focus-within";
 // A key of item mode that walks a tree while the focus is in a treeitem, and runs `fallback` otherwise (a page with no tree, or a focus outside one).
 const aria_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", label: string, fallback?: BoundInvocation): BoundInvocation => ({ id: "page.tree", args: { action, preset: "aria" }, label, when_present: TREE_HAS_FOCUS, ...(fallback && { fallback }) });
+const ENTER_ITEM_VISUAL = [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }];
 const ITEM_KEYS: ModeBindings = {
   ...Object.fromEntries(keys_copied_to_item),
   "<Escape>": { id: "mode.escape" },
@@ -542,7 +543,8 @@ const ITEM_KEYS: ModeBindings = {
   "<Enter>": { id: "page.item_action", args: { action: "open" }, label: "Open the item's link, or click the focused element in it" },
   "<Tab>": { id: "page.item_focus", args: { direction: "next" }, label: "Focus the next element in the item" },
   "<S-Tab>": { id: "page.item_focus", args: { direction: "prev" }, label: "Focus the previous element in the item" },
-  v: [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }],
+  v: ENTER_ITEM_VISUAL,
+  V: ENTER_ITEM_VISUAL,
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
   h: aria_tree("parent", "Parent in a tree, else the item to the left", item_step("left", "Item to the left, or scroll left")),

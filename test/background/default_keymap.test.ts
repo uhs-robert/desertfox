@@ -103,6 +103,7 @@ test("visual item mode: v enters it from item mode and v or Escape leaves it", (
   assert.deepEqual((DEFAULT_KEYMAP.item_visual?.I as { id: string }[]).map((step) => step.id), ["mode.set", "hint.run", "page.item"]);
   assert.equal((DEFAULT_KEYMAP.item_visual?.o as { args?: { extend?: boolean } }).args?.extend, true);
   assert.equal(DEFAULT_KEYMAP.item?.v !== undefined && Array.isArray(DEFAULT_KEYMAP.item.v), true);
+  assert.deepEqual(DEFAULT_KEYMAP.item?.V, DEFAULT_KEYMAP.item?.v, "V enters visual item mode as v does");
   assert.equal(DEFAULT_KEYMAP.item_visual?.f, undefined);
   assert.equal(DEFAULT_KEYMAP.item_visual?.["<Enter>"], undefined);
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });

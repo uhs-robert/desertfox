@@ -430,7 +430,6 @@ Which-key group names:
 | `,i` | `mode ignore` | Set mode |
 | `f` | `hint` | Click element |
 | `F` | `hint --background` | Click element in background tab |
-| `V` | `mode visual` | Start visual mode |
 | `;v` | `hint --caret --prose` | Start caret mode at text |
 | `;V` | `hint --visual --prose` | Start visual mode at text |
 | `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |
@@ -485,6 +484,7 @@ Which-key group names:
 | `<Tab>` | `item_focus next` | Focus the next element in the item |
 | `<S-Tab>` | `item_focus prev` | Focus the previous element in the item |
 | `v` | `mode item_visual ; page.item --current --extend` | Select a range of items |
+| `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
 | `h` | `tree --parent --aria` | Parent in a tree, else the item to the left |
