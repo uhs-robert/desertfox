@@ -1,8 +1,8 @@
 # Pages and panels
 
 Area: which-key, help, new tab, popup and external editor.
-READMEs: `src/content/whichkey/README.md`, `src/help/README.md`, `src/newtab/README.md`, `src/popup/README.md`, `src/content/editor/README.md`, `src/background/README.md`.
-Source: `src/content/whichkey`, `src/help`, `src/newtab`, `src/popup`, `src/content/editor`, `src/background`.
+READMEs: `src/content/whichkey/README.md`, `src/help/README.md`, `src/newtab/README.md`, `src/popup/README.md`, `src/content/editor/README.md`, `src/background/README.md`, `src/shared/README.md`.
+Source: `src/content/whichkey`, `src/help`, `src/newtab`, `src/popup`, `src/content/editor`, `src/background`, `src/shared`.
 
 ### Which-key
 
@@ -110,3 +110,11 @@ Behavior of the `src/help` files, moved here from `src/help/README.md`.
 `STYLE_VARIABLES` and `STYLE_CLASSES` in `model.ts` list the public styling surface. The variables come from the theme role list, so a new role shows on the Styling page with a meaning the compiler forces you to write. Add a surface's class names there when it ships.
 
 Look: the page styles read `var(--desertfox-*)` only, including the `accent`, `info`, `ok`, `warn` and `error` roles (fallbacks in `page_base.css`). A command card has a head row (title left, `key_caps` right, a muted dash and an `aria-label` of "no keys" when unbound), the description, the usage line and the params table, which stays open because a hint or Tab cannot reach closed content. `commands_view.ts` sets `data-accent` on each card, cycling over the command groups, and the stylesheet maps it to a bar color. Warnings use `warn`, errors `error` and the "changed" tag `ok`. The control rules (inputs, selects, textareas, the key capture box that wears `desertfox-settings-input`, and buttons with their hover and disabled states) sit entirely inside `:where()`, so a control needs no class and any class rule wins over them. Heading sizes are in `em`, so they follow the body size a theme sets in `--desertfox-font`. The `font_scale` setting multiplies the text size only (`--desertfox-font-scale`), never the root, and `font_family` and `font_family_mono` set `--desertfox-font-family` and `--desertfox-font-family-mono` (key caps). The sidebar link of the section on screen carries `aria-current="location"` (`mark_current_section` in `sidebar.ts`). One scroll listener and a `ResizeObserver` on the page column queue the mark once per frame, it writes only on change, and the sidebar scrolls only when the current link changes. Quick Start draws a key it names with `key_caps` (the `keys` inline kind in `blocks.ts`), and a command line or setting name stays inline code. The root is 16px up to 1600px wide. Above that it grows in a straight line to 18px at 3440px, and the column cap (60rem at 1600px, at most 110rem) grows with it, so a wide screen gets bigger text and a wider column. Prose (`p`, `li`, the tip) stays within 80ch, so a long line never forms. At or under 40rem the window is a drawer, as above.
+
+### Shared files for pages
+
+Behavior of the `src/shared` files for this area, moved here from `src/shared/README.md`.
+
+- `icon_cache.ts` (in `page/`): the favicon cache in `storage.local` (`favicon_cache`), which the background saver fills and the new tab page reads. The storage is passed in, so the module needs no browser global.
+- `page_base.css`: the base sheet of the help and new tab pages, copied to `dist/` and linked first in both html files. It holds the fallback palette (including the accent, info, ok, warn and error roles), the type and spacing tokens, the key cap, card and pill styles, and a 15px root size. The help page overrides it with 16px, which its layout is measured in. Every fallback sits in `:where(:root)`, at zero specificity, so a theme or `style.css` rule always wins. Pages add their own colors only as `var(--desertfox-*)`, never as a declaration.
+- `key_caps.ts`: `key_caps(text)` draws a key sequence (`gt`, `<Space> g t`, `<C-x>`) as a row of `kbd.desertfox-keycap`. It reuses `parse_sequence`, and a word the notation refuses stays as one literal cap.
