@@ -17,7 +17,7 @@ import type { Registry } from "../shared/registry/index.ts";
 import { print_command } from "../shared/registry/print_command.ts";
 import { config_entry_resolver } from "./compile.ts";
 import type { CompileOutput } from "./compile.ts";
-import { by_spelling, normalized_keys } from "./edit_layers.ts";
+import { by_spelling, normalized_keys, spelling_of } from "./edit_layers.ts";
 import type { EditLayers, KeymapEdits } from "./edit_layers.ts";
 
 // Read in the change queue. `compile` compiles the config in force under the given layers.
@@ -61,12 +61,15 @@ export function taken_keys(compiled: CompiledKeymap, default_keymap: KeymapConfi
 
 export function binding_rows(default_keymap: KeymapConfig, file_keymap: KeymapConfig, edits: KeymapEdits, registry: Registry, sources: EnumSources, taken: TakenKeys = {}): BindingRow[] {
   const rows: BindingRow[] = [];
+  // The keys each mode lists with a command. The modes come parents first, so a child reads its parent's set.
+  const listed = new Map<string, Set<string>>();
   for (const mode of KEYMAP_MODES) {
     const defaults = default_keymap[mode] ?? {};
     const files = by_spelling(file_keymap[mode] ?? {});
     const edited = edits[mode] ?? {};
-    // A taken key shows the text of the command that runs, as a default of the child.
-    const inherited = new Map([...(taken[mode] ?? [])].filter(([keys]) => !Object.hasOwn(defaults, keys)));
+    const parent = default_keymap.mode_parents?.[mode]?.parent;
+    // A taken key gets a row only when its parent lists it, and shows the text of the command that runs, as a default of the child.
+    const inherited = new Map([...(taken[mode] ?? [])].filter(([keys]) => !Object.hasOwn(defaults, keys) && listed.get(parent ?? "")?.has(keys)));
     for (const keys of new Set([...Object.keys(defaults), ...inherited.keys(), ...Object.keys(files), ...Object.keys(edited)])) {
       const shipped = defaults[keys];
       const default_text = shipped ? binding_text(shipped, registry, sources) : inherited.get(keys);
@@ -80,6 +83,7 @@ export function binding_rows(default_keymap: KeymapConfig, file_keymap: KeymapCo
       } else if (file) rows.push({ mode, keys, text: binding_text(file, registry, sources), origin: "file", ...replaced_default });
       else if (default_text !== undefined) rows.push({ mode, keys, text: default_text, origin: "default" });
     }
+    listed.set(mode, new Set(rows.filter((row) => row.mode === mode && row.text !== "").map((row) => spelling_of(row.keys))));
   }
   return rows;
 }

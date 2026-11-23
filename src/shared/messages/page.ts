@@ -42,7 +42,7 @@ export type ChangeSettingAnswer = { ok: true; setting: SettingListRow; message: 
 export type ListSettingsAnswer = { ok: true; settings: SettingListRow[] } | { ok: false; message: string };
 
 // One key binding as the key editor lists it. `text` is the command as keymap.toml writes it, empty for a removed binding. `origin` names the layer that decides it: the shipped default, the config files, a browser edit, or an unbind by either. `default_text` is the shipped binding a file or edit replaced.
-// `skipped` is set on an edit the compile dropped: the warning that says why. The binding under it runs instead.
+// `skipped` is set on an edit or file binding the compile dropped: the warning that says why. The binding under it runs instead.
 export type BindingRow = { mode: KeymapMode; keys: string; text: string; origin: "default" | "file" | "edit" | "removed"; default_text?: string; skipped?: string };
 
 // From an extension page: every binding of every mode, except the ones generators make (`search_keys` and the like). The answer is a ListBindingsAnswer.

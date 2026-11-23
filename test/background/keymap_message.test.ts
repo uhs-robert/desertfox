@@ -172,13 +172,16 @@ test("visual item mode shows the text of the command it runs when item mode's ow
   assert.equal(from_edit?.origin, "default");
   const edit_row = await row_of(config_with({}), { item: { f: "tab.close" } }, "item", "f");
   assert.match(edit_row?.skipped ?? "", /skipped "f"/);
-  // Every key visual item mode takes unchanged shows the text of the item row, whatever its prompt, label or steps.
+  // With an empty config, a child lists a taken key only when its parent lists it, and prints the parent's text. Item and media read normal mode, visual item reads item mode.
   const listed = await messages_over(config_with({}), { edits: {} }).list();
   assert.ok(listed.ok);
   const in_mode = (mode: string) => listed.bindings.filter((candidate) => candidate.mode === mode);
-  const taken = in_mode("item_visual").filter((candidate) => !Object.hasOwn(DEFAULT_KEYMAP.item_visual ?? {}, candidate.keys));
-  assert.ok(taken.length > 10);
-  for (const row of taken) assert.equal(row.text, in_mode("item").find((candidate) => candidate.keys === row.keys)?.text, row.keys);
+  for (const [child, parent] of [["item", "normal"], ["media", "normal"], ["item_visual", "item"]] as const) {
+    const parent_rows = new Map(in_mode(parent).map((row) => [row.keys, row.text]));
+    const taken = in_mode(child).filter((candidate) => !Object.hasOwn(DEFAULT_KEYMAP[child] ?? {}, candidate.keys));
+    assert.ok(taken.length > 10, child);
+    for (const row of taken) assert.equal(parent_rows.get(row.keys), row.text, `${child} ${row.keys}`);
+  }
 });
 
 test("set, remove and reset change the layer, and a set the check refuses changes nothing", async () => {
