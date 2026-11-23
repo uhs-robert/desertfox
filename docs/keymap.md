@@ -356,7 +356,7 @@ Which-key group names:
 | `r` | `media loop` | Toggle loop |
 | `i` | `media info` | Show the time, speed, quality and volume |
 
-Every key of normal mode that this table does not bind also works here: it runs as in normal mode. A key of normal mode comes here only when each command of the key runs in media mode. This mode unbinds `;fF` and `;fe`.
+Every key of normal mode that this table does not bind also works here: it runs as in normal mode. A key of normal mode comes here only when each command of the key runs in media mode. This mode unbinds `aa`.
 
 ### item
 
@@ -388,7 +388,7 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 
-Every key of normal mode that this table does not bind also works here: it runs as in normal mode. A key of normal mode comes here only when each command of the key runs in item mode. This mode unbinds `;fF` and `;fe`.
+Every key of normal mode that this table does not bind also works here: it runs as in normal mode. A key of normal mode comes here only when each command of the key runs in item mode. This mode unbinds `;fF`, `;fe` and `gF`.
 
 ### item_visual
 

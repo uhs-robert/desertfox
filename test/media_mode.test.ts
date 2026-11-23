@@ -84,6 +84,7 @@ test("media mode holds the media keys and, of normal mode, f, : and the hint gro
   assert.deepEqual(without_normal_only(group(media)), without_normal_only(group(normal)));
   const focus_keys = (mode: typeof media) => Object.keys((group(mode).f as { children: Record<string, unknown> }).children);
   assert.deepEqual(focus_keys(normal).filter((key) => !focus_keys(media).includes(key)).sort(), ["F", "e"]);
+  // `t` is a prefix here now (`tM` comes from normal mode), so it no longer goes to the page.
   for (const key of ["g", "d", "x", "/", "o", "<C-v>", "G", "n"]) assert.equal(media.children[key], undefined, key);
   assert.deepEqual(Object.keys((media.children["t"] as { children: object }).children), ["M"], "of the t group only tM, which opens the line");
 });

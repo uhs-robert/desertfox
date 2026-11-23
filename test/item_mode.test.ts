@@ -161,11 +161,12 @@ test("a step that ended the mode while a line was open sends the line back to no
 test("item mode holds the item keys and, of normal mode, the tab, page scroll, command line, help, hint, find, follow, jump, gi, media, insert, caret, visual, find repeat, ignore and pass-next keys", () => {
   const item = compiled_with().modes.item!;
   for (const key of ["j", "k", "h", "l", "G", "I", "<Escape>", "<C-[>", "J", "K", "<C-d>", "<C-u>", "<C-f>", "<C-b>", ":", "<F1>", "?", "<A-?>", "f", "F", "/", "<C-o>", "<C-i>", "H", "L", "i", "v", "V", "n", "N", "*", "#", "A", "<S-Escape>", "<C-v>", ","]) assert.ok(item.children[key], key);
-  assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["$", "0", "?", "F", "T", "V", "g", "i", "t"], "the g group holds gg, gt, gT, g0, g$, gF, g?, gi and gV");
+  assert.deepEqual(Object.keys((item.children["g"] as { children: object }).children).sort(), ["$", "0", "?", "T", "V", "g", "i", "t"], "the g group holds gg, gt, gT, g0, g$, g?, gi and gV, and item mode unbinds gF");
   for (const group of ["]", "["]) assert.deepEqual(Object.keys((item.children[group] as { children: object }).children).sort(), [group, "T", "j", "t", "v"].sort(), `${group}${group} and the tab, jump and video keys`);
   const semicolons = (branch: { children: Record<string, unknown> }, prefix: string): string[] => Object.entries(branch.children).flatMap(([key, node]) => ((node as { kind: string }).kind === "branch" ? semicolons(node as never, prefix + key) : [prefix + key]));
   assert.deepEqual(semicolons(item.children[";"] as never, ";").sort(), semicolons(compiled_with().modes.normal!.children[";"] as never, ";").filter((key) => key !== ";fF" && key !== ";fe").sort(), "the ; family but the normal-only keys");
   assert.deepEqual(Object.keys((item.children["a"] as { children: object }).children).sort(), ["P", "S", "V", "a", "f", "h", "l", "m", "p", "r", "s", "v"], "the a media group");
+  // `t` is a prefix here now (`tn`, `tp` and the rest come from normal mode), so it no longer goes to the page.
   for (const key of ["o", "x", "d", "y", "p", "u", "q", "m"]) assert.equal(item.children[key], undefined, `${key} goes to the page`);
 });
 

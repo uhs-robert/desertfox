@@ -130,16 +130,16 @@ test("the arrows rewrite runs on the resolved trees, so visual item mode takes t
 });
 
 test("graft, then the key rule, then resolve: a child of normal takes the page's normal tree", () => {
-  const row = { site: "https://rows.test/*", pass: "aa", bind: { "<A-x>": { id: "hint.run" } } };
+  const row = { site: "https://rows.test/*", pass: "as", bind: { "<A-x>": { id: "hint.run" } } };
   const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: [row] } as never }, default_keymap: DEFAULT_KEYMAP, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.deepEqual(warnings, []);
   const address = "https://rows.test/";
   const trees = page_mode_trees_for(compiled, site_columns_for(compiled, [address]), address);
-  assert.equal(at(trees.media, "aa"), undefined, "a key the row passes in normal mode passes in the child too");
+  assert.equal(at(trees.media, "as"), undefined, "a key the row passes in normal mode passes in the child too");
   assert.deepEqual(ids(trees.media?.children["<A-x>"]), ["hint.run"], "a row's normal bind reaches the child, with no leave step");
   assert.ok(at(trees.media, "j"), "the child's own keys stay");
   const elsewhere = page_mode_trees_for(compiled, site_columns_for(compiled, ["https://other.test/"]), "https://other.test/");
-  assert.deepEqual(ids(at(elsewhere.media, "aa")), ids(at(compiled.modes.normal, "aa")));
+  assert.deepEqual(ids(at(elsewhere.media, "as")), ids(at(compiled.modes.normal, "as")));
   assert.equal(elsewhere.media?.children["<A-x>"], undefined);
 });
 

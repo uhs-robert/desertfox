@@ -134,6 +134,27 @@ test("the check's shadows count the keys visual item mode takes from item mode, 
   assert.deepEqual(taken.ok && taken.shadows, [{ keys: "J", text: "tab.next" }]);
 });
 
+test("the key editor lists the keys item and media mode take from normal mode, and an old unbind of one shows and can be undone", async () => {
+  // `item.J = ""` is what removing the copied item J wrote before item mode took it from normal mode.
+  const stored: { edits: KeymapEdits } = { edits: { item: { J: "" } } };
+  const messages = messages_over(config_with({}), stored);
+  const listed = await messages.list();
+  assert.ok(listed.ok);
+  const row = (mode: string, keys: string) => (listed.ok ? listed.bindings : []).find((candidate) => candidate.mode === mode && candidate.keys === keys);
+  assert.deepEqual(row("item", "J"), { mode: "item", keys: "J", text: "", origin: "removed", default_text: "tab.next" });
+  assert.deepEqual(row("item", "K"), { mode: "item", keys: "K", text: "tab.prev", origin: "default" });
+  assert.equal(row("media", "f")?.origin, "default");
+  assert.equal(row("media", "J"), undefined, "tab.next runs in no media mode");
+  assert.equal(row("item", "gF"), undefined, "item mode unbinds gF");
+
+  const reset = await messages.change({ type: "change_keymap", mode: "item", keys: "J", action: "reset" });
+  assert.deepEqual(reset.ok && reset.row, { mode: "item", keys: "J", text: "tab.next", origin: "default" });
+  assert.deepEqual(stored.edits, {});
+  const removed = await messages.change({ type: "change_keymap", mode: "item", keys: "K", action: "remove" });
+  assert.equal(removed.ok, true, JSON.stringify(removed));
+  assert.deepEqual(stored.edits, { item: { K: "" } });
+});
+
 test("set, remove and reset change the layer, and a set the check refuses changes nothing", async () => {
   const stored: { edits: KeymapEdits } = { edits: {} };
   const messages = messages_over(config_with({ normal: { zq: { id: "tab.close" } } }), stored);

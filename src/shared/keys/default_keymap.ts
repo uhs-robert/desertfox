@@ -475,14 +475,13 @@ const BASE_SECTIONS: KeymapConfig = {
   },
 };
 
-// `;fF` and `;fe` pass the `modes` filter of `MODE_PARENTS` but serve normal mode, so item and media mode unbind them.
-const UNBIND_NORMAL_ONLY_HINT_KEYS = { ";fF": null, ";fe": null };
 
 const media_action = (action: string, value?: string, label?: string) => ({ id: "media.act", args: { action, ...(value === undefined ? {} : { value }) }, ...(label === undefined ? {} : { label }) });
 
-// The keys of the media mode. It takes the normal keys whose commands run in media mode (`MODE_PARENTS`), so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach. A digit is a count (`5l`), except `0`, which is the start unless a count is under way.
+// The keys of the media mode. It takes the normal keys whose commands run in media mode (`MODE_PARENTS`), so a hint or `:media quality` never leaves it. Everything else of normal mode stays out of reach. A taken key can make a free letter a prefix (`t` for `tM`), and then that letter no longer reaches the page. A digit is a count (`5l`), except `0`, which is the start unless a count is under way.
 const MEDIA_KEYS: ModeBindings = {
-  ...UNBIND_NORMAL_ONLY_HINT_KEYS,
+  // Media mode is already on, so the normal key that starts it stays out.
+  aa: null,
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
@@ -511,7 +510,7 @@ const MEDIA_KEYS: ModeBindings = {
   i: media_action("info", undefined, "Show the time, speed, quality and volume"),
 };
 
-// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. It takes the normal keys whose commands run in item mode (`MODE_PARENTS`), and any other key goes to the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
+// The keys of item mode, which walks the list or grid of items that the finder reads (`src/content/item/finder.ts`). A site row binds the same keys with its own item selector in its `item` keymap. With no list on the page, j, k, h, l, gg and G scroll as the plain keys do. It takes the normal keys whose commands run in item mode (`MODE_PARENTS`), and any other key goes to the page. A taken key can make a free letter a prefix (`t` for `tn`), and then that letter no longer reaches the page. Media mode started here returns to item mode on Escape. The hints label the whole page, with the current item's targets first. `I` picks another list. `zt`, `zz` and `zb` go back to the current item and then scroll it to the top, middle or bottom.
 // The `hover` arg is the `item_hover` setting: compile drops it when the setting is off.
 const item_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, hover: true }, label });
 const item_align = (position: "top" | "center" | "bottom", label: string) => [{ id: "page.item", args: { direction: "current" }, label }, { id: "scroll.align", args: { position } }];
@@ -521,7 +520,10 @@ const TREE_HAS_FOCUS = "[role=tree]:focus-within";
 const aria_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", label: string, fallback?: BoundInvocation): BoundInvocation => ({ id: "page.tree", args: { action, preset: "aria" }, label, when_present: TREE_HAS_FOCUS, ...(fallback && { fallback }) });
 const ENTER_ITEM_VISUAL = [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }];
 const ITEM_KEYS: ModeBindings = {
-  ...UNBIND_NORMAL_ONLY_HINT_KEYS,
+  // These serve normal mode, though their commands run in item mode too.
+  ";fF": null,
+  ";fe": null,
+  gF: null,
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },

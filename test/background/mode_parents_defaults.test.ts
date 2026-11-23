@@ -30,8 +30,8 @@ const COPIED: Record<"item" | "media", (sequence: string) => boolean> = {
 
 // The keys the rule adds. Each one is a normal key whose commands all list the mode in the registry.
 const GAINED = {
-  item: [",?", ",h", ",s", "<A-m>", "[T", "[j", "[t", "[v", "]T", "]j", "]t", "]v", "g$", "g0", "gF", "sh", "t$", "t0", "tM", "tn", "tp", "wh"],
-  media: ["A", "[v", "]v", "aP", "aS", "aV", "aa", "af", "ah", "al", "ap", "ar", "as", "av", "sh", "tM", "wh"],
+  item: [",?", ",h", ",s", "<A-m>", "[T", "[j", "[t", "[v", "]T", "]j", "]t", "]v", "g$", "g0", "sh", "t$", "t0", "tM", "tn", "tp", "wh"],
+  media: ["A", "[v", "]v", "aP", "aS", "aV", "af", "ah", "al", "ap", "ar", "as", "av", "sh", "tM", "wh"],
 };
 
 const old_keys = (mode: "item" | "media"): Map<string, TreeLeaf> => {
@@ -42,23 +42,24 @@ const old_keys = (mode: "item" | "media"): Map<string, TreeLeaf> => {
 
 test("the default keymap with its parent links compiles with no warnings", () => {
   assert.deepEqual(warnings, []);
-  assert.deepEqual(compiled.mode_parents?.item?.blocked, [[";", "f", "F"], [";", "f", "e"]]);
-  assert.deepEqual(compiled.mode_parents?.media?.blocked, [[";", "f", "F"], [";", "f", "e"]]);
+  assert.deepEqual(compiled.mode_parents?.item?.blocked, [[";", "f", "F"], [";", "f", "e"], ["g", "F"]]);
+  assert.deepEqual(compiled.mode_parents?.media?.blocked, [["a", "a"]]);
 });
 
 for (const mode of ["item", "media"] as const) {
-  test(`${mode} mode: every key the copied list gave resolves to the same leaf`, () => {
+  // `old_keys` applies the old copy rule to the current normal tree, so this pins the rule, not a snapshot of the old trees.
+  test(`${mode} mode: each key the old copy rule picked resolves to the leaf normal mode has for it`, () => {
     const now = leaves_of(resolved[mode]);
     const before = old_keys(mode);
     assert.ok(before.size > 100, `${before.size} keys`);
     for (const [sequence, leaf] of before) assert.deepEqual(now.get(sequence), leaf, sequence);
   });
 
-  test(`${mode} mode: the rule adds exactly the reviewed keys, and ;fF and ;fe stay out`, () => {
+  test(`${mode} mode: the rule adds exactly the reviewed keys, and ;fF, ;fe and gF stay out`, () => {
     const before = old_keys(mode);
     const gained = [...leaves_of(resolved[mode]).keys()].filter((sequence) => !before.has(sequence));
     assert.deepEqual(gained.sort(), [...GAINED[mode]].sort());
-    for (const sequence of NORMAL_ONLY_HINT_KEYS) assert.equal(leaves_of(resolved[mode]).get(sequence), undefined, sequence);
+    for (const sequence of [...NORMAL_ONLY_HINT_KEYS, "gF"]) assert.equal(leaves_of(resolved[mode]).get(sequence), undefined, sequence);
   });
 
   test(`${mode} mode: every key runs commands that list ${mode} mode, so the rest of normal mode stays out of reach`, () => {
