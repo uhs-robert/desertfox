@@ -38,7 +38,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `native.ts`: `native.install`, `native.update`, `permissions.grant` and `browser.open_firefox_page`.
 - `open.ts`: `open.url`, `open.search`, `open.clipboard` and `open.anything`.
 - `open_target.ts`: the `where` and `container` params, `open_in`, the container lookup and `typed_url_target` for typed text.
-- `page.ts`: the page commands: back, forward, reload, print, save_pdf, stop, home, follow, `page.focus_field`, `page.focus_link`, `page.heading` and `page.send_key`.
+- `page.ts`: the `page.*` commands, for example back, forward, reload, home, `page.click`, `page.item`, `page.tree`, `page.heading`, `page.send_key` and `page.clipboard`.
 - `perf.ts`: `debug.perf` (`:perf`), which copies the timing summary to the clipboard.
 - `quickmark.ts`: the `quickmark.*` commands: add, open, delete and list, over a `QuickmarkDeps` object.
 - `register.ts`: `register.list` (`:registers`).
