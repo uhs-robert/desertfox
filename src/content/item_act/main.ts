@@ -52,7 +52,7 @@ if (!item_act.desertfox_item_act_ready && host) {
     }
     if (args.action === "open_range" || args.action === "open_background") {
       const [items, , from = 0, to = 0, , link_of] = await read_list();
-      const [first, ...rest] = (items ? items.slice(from, to + 1).map(link_of!) : [(await current_item()).link]).filter((link) => link) as HTMLAnchorElement[];
+      const [first, ...rest] = (items ? items.slice(from, to + 1).map(link_of!) : [(await current_item()).link]).filter((link) => (link as HTMLAnchorElement | null)?.href) as HTMLAnchorElement[];
       if (!first) throw new RuntimeRefusal("No link to open");
       // One message per address, as a hint pick sends it, so `.` repeats none of them. The first goes last when it opens here, so the page is still there while the rest are sent.
       for (const link of [...rest, first]) await browser.runtime.sendMessage({ type: "run", invocations: [{ id: "open.url", args: { url: link.href, where: args.action === "open_range" && link === first ? "here" : "background" } }], mode: "normal", from_hints: true });

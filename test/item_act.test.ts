@@ -169,7 +169,7 @@ test("Enter clicks the Tab-focused child of the current item, and the link when 
 async function run_open(action: string, mode: "item" | "item_visual", range: { addresses: (string | undefined)[]; from: number; to: number; first_links?: string[] }) {
   const sent: { url: string; where: string }[] = [];
   const events: string[] = [];
-  const row = (address: string | undefined, index: number) => ({ link: address ? { href: address } : undefined, matches: () => false, querySelector: () => ({ href: range.first_links?.[index] ?? "https://first-link/" }) });
+  const row = (address: string | undefined, index: number) => ({ link: address === undefined ? undefined : { href: address }, matches: () => false, querySelector: () => ({ href: range.first_links?.[index] ?? "https://first-link/" }) });
   const rows = range.addresses.map(row);
   const link_of = (item: (typeof rows)[number]) => item.link;
   const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
@@ -243,4 +243,12 @@ test("an item whose row link finds nothing refuses, though it holds other links"
   const single = await run_open("open_background", "item", { addresses: [undefined], first_links: ["https://vote-a/"], from: 0, to: 0 });
   assert.equal(single.outcome, "No link to open");
   assert.deepEqual(single.sent, []);
+});
+
+test("a row link with no href (a role=button element) counts as no link", async () => {
+  const buttons = await run_open("open_range", "item_visual", { addresses: ["", ""], from: 0, to: 1 });
+  assert.equal(buttons.outcome, "No link to open");
+  assert.deepEqual(buttons.sent, []);
+  const mixed = await run_open("open_background", "item_visual", { addresses: ["", "https://b/"], from: 0, to: 1 });
+  assert.deepEqual(mixed.sent, [{ url: "https://b/", where: "background" }]);
 });
