@@ -555,11 +555,10 @@ const ITEM_KEYS: ModeBindings = {
   G: item_step("last", "Last item, or scroll to bottom"),
 };
 
-// The keys of visual item mode, which marks a range of items from the item where `v` was pressed (the anchor) to the item the cursor keys move to. `v` or Escape ends the mode back to item mode.
+// The keys of visual item mode, which marks a range of items from the item where `v` was pressed (the anchor) to the item the cursor keys move to. `v`, `V` or Escape ends the mode back to item mode. Every other key of item mode ends the selection and then runs as in item mode (`MODE_PARENTS`).
 const extend_step = (direction: "down" | "up" | "left" | "right" | "first" | "last" | "next_section" | "prev_section", label: string) => ({ id: "page.item", args: { direction, extend: true }, label });
+const END_SELECTION = { id: "mode.set", args: { mode: "item" }, label: "End the selection" };
 const ITEM_VISUAL_KEYS: ModeBindings = {
-  // The selection belongs to one list, so picking another list ends it and goes on in item mode.
-  I: [{ id: "mode.set", args: { mode: "item" } }, ...(PICK_LIST as { id: string }[])] as KeyBinding,
   j: extend_step("down", "Extend to the next item"),
   k: extend_step("up", "Extend to the previous item"),
   h: extend_step("left", "Extend to the item on the left"),
@@ -570,7 +569,8 @@ const ITEM_VISUAL_KEYS: ModeBindings = {
   G: extend_step("last", "Extend to the last item"),
   "<Space>": { id: "page.item_action", args: { action: "toggle_range" }, label: "Toggle the checkboxes of the range" },
   o: { id: "page.item", args: { direction: "other_end", extend: true }, label: "Swap the ends of the selection" },
-  v: { id: "mode.set", args: { mode: "item" }, label: "End the selection" },
+  v: END_SELECTION,
+  V: END_SELECTION,
   "<Escape>": { id: "mode.escape" },
   "<C-[>": { id: "mode.escape" },
   "?": { id: "help.whichkey", label: "Show the keys" },
@@ -592,4 +592,7 @@ const GRAB_KEYS: ModeBindings = {
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS };
+// Each child mode takes the keys of its parent that it does not bind itself (`src/shared/keys/mode_parents.ts`).
+const MODE_PARENTS: KeymapConfig["mode_parents"] = { item_visual: { parent: "item", leave: true } };
+
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS, mode_parents: MODE_PARENTS };

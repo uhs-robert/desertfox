@@ -8,6 +8,8 @@ import { is_default_value } from "../shared/keys/compiler.ts";
 import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageKeymap, PageSiteMode, SiteBind, TreeBranch, TreeLeaf } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { with_item_select } from "./item_select.ts";
+import { resolve_mode_parents } from "../shared/keys/mode_parents.ts";
+import type { KeymapMode } from "../shared/keymap.ts";
 import { frees_of } from "../shared/keys/prune_tree.ts";
 import type { PerSiteName, Settings } from "../shared/settings_table.ts";
 import type { SiteModeColumn } from "../shared/match_pattern.ts";
@@ -106,15 +108,22 @@ export function keymap_mode_trees_for(modes: CompiledKeymap["modes"], columns: P
   return Object.fromEntries(Object.entries(columns.keymap ?? {}).map(([mode, binds]) => [mode, graft_binds(modes[mode as keyof CompiledKeymap["modes"]], binds)]));
 }
 
-// The mode trees of one page: the row binds grafted on, and the item tree rewritten for the site's own arrow keys when `item_select` says `arrows` for the frame's own address. The page reply and which-key both read them here, so they show the same keys.
+// The mode trees of one page: the row binds grafted on, each child mode given its parent's keys from the page's own trees (after `pass` and `only`), and the item trees rewritten for the site's own arrow keys when `item_select` says `arrows` for the frame's own address. The page reply and which-key both read them here, so they show the same keys.
 export function page_mode_trees_for(keymap: CompiledKeymap, columns: PageSiteColumns, frame_address: string | undefined): CompiledKeymap["modes"] {
-  const trees = keymap_mode_trees_for(keymap.modes, columns);
-  const item = trees.item ?? keymap.modes.item;
+  const grafted = keymap_mode_trees_for(keymap.modes, columns);
+  const normal = normal_tree_for(keymap.modes.normal, columns).tree;
+  const resolved = resolve_mode_parents({ ...keymap.modes, ...grafted, ...(normal && { normal }) }, keymap.mode_parents);
+  const children = Object.fromEntries((Object.keys(keymap.mode_parents ?? {}) as KeymapMode[]).flatMap((mode) => (resolved[mode] ? [[mode, resolved[mode]]] : [])));
+  const trees: CompiledKeymap["modes"] = { ...grafted, ...children };
   const arrows = frame_site_values_for(keymap, frame_address, ITEM_SELECT_SITE_SETTINGS)?.item_select === "arrows";
   if (!arrows || !keymap.item_select_keys) return trees;
-  // The normal tree too: a row's `I` lands on its items from normal mode, and the landing selects there as well.
-  const normal = normal_tree_for(keymap.modes.normal, columns).tree;
-  return { ...trees, ...(item && { item: with_item_select(item, keymap.item_select_keys) }), ...(normal && { normal: with_item_select(normal, keymap.item_select_keys) }) };
+  const { item_select_keys } = keymap;
+  // The normal tree too: a row's `I` lands on its items from normal mode, and the landing selects there as well. Visual item mode takes the rewritten item keys.
+  const rewritten = (["item", "item_visual", "normal"] as const).flatMap((mode) => {
+    const tree = mode === "normal" ? normal : (trees[mode] ?? keymap.modes[mode]);
+    return tree ? [[mode, with_item_select(tree, item_select_keys)]] : [];
+  });
+  return { ...trees, ...Object.fromEntries(rewritten) };
 }
 
 // Each site mode of the page as what it adds to the normal tree: its binds go onto the tree after `pass` and `only` prune it, so a mode bind survives a key rule. The page lays the unchanged children of the normal tree under them, so only the children the mode replaced are sent.
@@ -162,7 +171,7 @@ export async function page_keymap_for(storage: KeymapStorage, addresses: readonl
 async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[]): Promise<PageKeymap | undefined> {
   const keymap = current_keymap(await stored_keymap(storage));
   if (keymap === undefined) return undefined;
-  const { site_rules: _, frame_site_globals: __, item_navigator: ___, item_select_keys: ____, ...keymap_without_rules } = keymap;
+  const { site_rules: _, frame_site_globals: __, item_navigator: ___, item_select_keys: ____, mode_parents: _____, ...keymap_without_rules } = keymap;
   const columns = site_columns_for(keymap, addresses);
   const page_tree = normal_tree_for(keymap.modes.normal, columns);
   const site_values = frame_site_values_for(keymap, addresses[0], PAGE_REPLY_SITE_SETTINGS);

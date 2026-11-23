@@ -16,6 +16,9 @@ export type Keymap = Partial<Record<KeymapMode, ModeBindings>>;
 export type Modifier = { label?: string } & Record<string, unknown>;
 
 // `keymap` section of the merged config: the modes plus the generators.
+// A mode that takes the keys of another mode where it binds none of its own. `leave` sets the parent mode before each key it takes.
+export type ModeParent = { parent: KeymapMode; leave?: true };
+
 export type KeymapConfig = Keymap & {
   // Last key of the sequence to search engine name.
   search_keys?: Record<string, string>;
@@ -27,4 +30,6 @@ export type KeymapConfig = Keymap & {
   modifiers?: Record<string, Modifier>;
   // Key sequence of a group to its name in which-key, for example `g` to `Go`. Applies to every mode that has the group.
   group_names?: Record<string, string>;
+  // The default keymap alone sets it. The config schema has no such section, so a user file cannot.
+  mode_parents?: Partial<Record<KeymapMode, ModeParent>>;
 };

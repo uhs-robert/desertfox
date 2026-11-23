@@ -14,6 +14,7 @@ import type { KeymapMode } from "../shared/keymap.ts";
 import type { Prompt } from "../shared/invocation.ts";
 import { LIVE_KEY, token_label } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
+import { resolve_mode_parents, shown_steps } from "../shared/keys/mode_parents.ts";
 import { describe_default, is_dynamic_values, positional_params, source_text } from "../shared/registry/params.ts";
 import type { EnumSources } from "../shared/registry/check_args.ts";
 import { print_command } from "../shared/registry/print_command.ts";
@@ -125,7 +126,7 @@ function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Ma
     for (const [token, child] of Object.entries(node.children)) if (token !== LIVE_KEY) collect_keys(child, [...path, token_label(token)], mode, into, printing);
     return;
   }
-  for (const step of node.steps) {
+  for (const step of shown_steps(node)) {
     const rows = into.get(step.invocation.id) ?? [];
     rows.push({ mode, keys: path.join(""), args: describe_args(printing.sources, printing.commands.get(step.invocation.id), step.invocation.args, step.invocation.count, step.invocation.prompt) });
     into.set(step.invocation.id, rows);
@@ -134,8 +135,9 @@ function collect_keys(node: TreeNode, path: string[], mode: KeymapMode, into: Ma
 
 function keys_by_command(compiled: CompiledKeymap | undefined, printing: Printing): Map<string, KeyRow[]> {
   const into = new Map<string, KeyRow[]>();
+  const modes = compiled && resolve_mode_parents(compiled.modes, compiled.mode_parents);
   for (const mode of MODE_ORDER) {
-    const root = compiled?.modes[mode];
+    const root = modes?.[mode];
     if (root) collect_keys(root, [], mode, into, printing);
   }
   return into;

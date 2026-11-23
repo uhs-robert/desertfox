@@ -5,13 +5,14 @@ import { compile_config } from "../../src/background/compile.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { ANY_KEY, LIVE_KEY } from "../../src/shared/prefix_tree.ts";
-import type { TreeBranch } from "../../src/shared/prefix_tree.ts";
+import type { TreeBranch, TreeLeaf, TreeNode } from "../../src/shared/prefix_tree.ts";
+import { resolve_mode_parents } from "../../src/shared/keys/mode_parents.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { panel_after_prefix } from "../../src/background/list_keys.ts";
 import { check_args } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
-const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names" && name !== "site_keys" && name !== "modifiers");
+const bindings_of = (keymap: KeymapConfig) => Object.entries(keymap).filter(([name]) => name !== "group_names" && name !== "site_keys" && name !== "modifiers" && name !== "mode_parents");
 
 const ids_in = (keymap: KeymapConfig) =>
   bindings_of(keymap).flatMap(([, section]) => [section]).flatMap((section) =>
@@ -100,15 +101,43 @@ test("visual item mode: v enters it from item mode and v or Escape leaves it", (
   for (const key of ["j", "k", "h", "l", "gg", "G", "}", "{"]) assert.equal((DEFAULT_KEYMAP.item_visual?.[key] as { args?: { extend?: boolean } }).args?.extend, true, key);
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.o, { id: "page.item", args: { direction: "other_end", extend: true }, label: "Swap the ends of the selection" });
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Space>"], { id: "page.item_action", args: { action: "toggle_range" }, label: "Toggle the checkboxes of the range" });
-  assert.deepEqual((DEFAULT_KEYMAP.item_visual?.I as { id: string }[]).map((step) => step.id), ["mode.set", "hint.run", "page.item"]);
   assert.equal((DEFAULT_KEYMAP.item_visual?.o as { args?: { extend?: boolean } }).args?.extend, true);
   assert.equal(DEFAULT_KEYMAP.item?.v !== undefined && Array.isArray(DEFAULT_KEYMAP.item.v), true);
   assert.deepEqual(DEFAULT_KEYMAP.item?.V, DEFAULT_KEYMAP.item?.v, "V enters visual item mode as v does");
-  assert.equal(DEFAULT_KEYMAP.item_visual?.f, undefined);
-  assert.equal(DEFAULT_KEYMAP.item_visual?.["<Enter>"], undefined);
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });
+  assert.deepEqual(DEFAULT_KEYMAP.item_visual?.V, DEFAULT_KEYMAP.item_visual?.v, "V ends the selection as v does");
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Escape>"], { id: "mode.escape" });
-  assert.equal(DEFAULT_KEYMAP.item_visual?.V, undefined, "only v enters");
+  assert.deepEqual(DEFAULT_KEYMAP.mode_parents, { item_visual: { parent: "item", leave: true } });
+});
+
+test("visual item mode takes the other item keys, each after a step back to item mode", () => {
+  const { compiled, warnings } = compile(DEFAULT_KEYMAP);
+  assert.deepEqual(warnings, []);
+  assert.equal(compiled.modes.item_visual?.children["f"], undefined, "the stored tree holds the own keys only");
+  const visual = resolve_mode_parents(compiled.modes, compiled.mode_parents).item_visual!;
+  const leave = { invocation: { id: "mode.set", args: { mode: "item" } }, runs_in: "content", count_rule: "ignore", leave: true };
+  const leaf_at = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), visual) as TreeLeaf;
+  const item_leaf = (keys: string[]) => keys.reduce<TreeNode | undefined>((node, key) => (node?.kind === "branch" ? node.children[key] : undefined), compiled.modes.item) as TreeLeaf;
+  for (const keys of [["f"], ["<Enter>"], ["J"], [":"], ["g", "t"], [";", "y", "l"], ["I"]]) {
+    const leaf = leaf_at(keys);
+    assert.deepEqual(leaf.steps[0], leave, keys.join(""));
+    assert.deepEqual(leaf.steps.slice(1), item_leaf(keys).steps, keys.join(""));
+    assert.equal(leaf.label, item_leaf(keys).label, keys.join(""));
+  }
+  assert.equal(leaf_at(["f"]).steps[1]!.invocation.id, "hint.run");
+  assert.deepEqual(leaf_at(["I"]).steps.map((step) => step.invocation.id), ["mode.set", "hint.run", "page.item"]);
+  // The own keys win, also inside a group both modes share.
+  assert.equal(leaf_at(["g", "g"]).steps[0]!.invocation.args?.["extend"], true);
+  assert.deepEqual(leaf_at(["V"]).steps.map((step) => step.invocation), [{ id: "mode.set", args: { mode: "item" } }]);
+  assert.equal(leaf_at(["V"]).steps[0]!.leave, undefined, "V is an own key, not a taken one");
+  assert.ok(leaf_at([";", "B", "l"]), "the modifier variants of the hint group come too");
+  for (const keys of [["z", "a"], ["z", "o"]]) {
+    // A guarded key leaves only when its guard holds: without `otherwise` a failed guard sends the key to the page.
+    const leaf = leaf_at(keys);
+    assert.ok(leaf.when_present);
+    assert.equal(leaf.steps[0]!.leave, true);
+  }
+  for (const keys of [["h"], ["}"]]) assert.equal(leaf_at(keys).steps[0]!.invocation.args?.["extend"], true, `${keys.join("")} stays the own key`);
 });
 
 test("plain r, t, x, tu and tU are prefixes only", () => {

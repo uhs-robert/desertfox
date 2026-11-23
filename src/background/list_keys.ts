@@ -15,6 +15,7 @@ import type { CompiledKeymap, TreeBranch, TreeLeaf, TreeNode } from "../shared/p
 
 import { is_available } from "./availability.ts";
 import { page_mode_trees_for } from "./page_keymap.ts";
+import { shown_steps } from "../shared/keys/mode_parents.ts";
 import { normal_tree_for, site_columns_for } from "../shared/site/site_columns.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
@@ -25,7 +26,7 @@ type KeymapStorage = Pick<typeof browser.storage.local, "get">;
 
 // The bundle has no command registry, so each leaf of a guard chain carries the label and intent it would show as a row, with the precedence of `row_of`.
 function described(leaf: TreeLeaf, find_command: (id: string) => CommandMeta | undefined): TreeLeaf {
-  const first = leaf.steps[0];
+  const first = shown_steps(leaf)[0];
   const command = first && find_command(first.invocation.id);
   const label = leaf.label ?? command?.label ?? first?.invocation.id;
   const intent = leaf.intent ?? command?.intent;
@@ -34,7 +35,7 @@ function described(leaf: TreeLeaf, find_command: (id: string) => CommandMeta | u
 
 function row_of(token: string, node: TreeNode, find_command: (id: string) => CommandMeta | undefined): WhichKeyRow {
   if (node.kind === "branch") return { keys: token, command: `+${node.label ?? token}`, description: "", more: true };
-  const first = node.steps[0];
+  const first = shown_steps(node)[0];
   const command = first && find_command(first.invocation.id);
   const row: WhichKeyRow = { keys: token_label(token), command: node.label ?? command?.label ?? first?.invocation.id ?? "", description: node.intent ?? command?.intent ?? "", more: false };
   return node.when_focus || node.when_present ? { ...row, chain: described(node, find_command) } : row;

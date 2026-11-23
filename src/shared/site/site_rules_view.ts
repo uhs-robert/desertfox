@@ -2,6 +2,7 @@
 
 import type { CompiledKeymap, SiteBind, SiteRule, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { resolve_site_columns } from "../match_pattern.ts";
+import { shown_steps, with_resolved_modes } from "../keys/mode_parents.ts";
 import { hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, type PageSiteColumns } from "./site_columns.ts";
 
 // One column a row sets, shown as text. `shadowed` means an earlier matching row already decides it.
@@ -16,7 +17,7 @@ export type SiteRulesView = { address: string; rows: SiteRuleRowView[] };
 
 const KEY_RULE_NAMES = ["pass", "only"] as const;
 
-const leaf_text = (leaf: TreeLeaf): string => leaf.label ?? leaf.intent ?? leaf.steps.map((step) => step.invocation.id).join(", ");
+const leaf_text = (leaf: TreeLeaf): string => leaf.label ?? leaf.intent ?? shown_steps(leaf).map((step) => step.invocation.id).join(", ");
 
 const guard_text = (leaf: TreeLeaf): string | undefined => [leaf.when_present && `while the page shows ${leaf.when_present}`, leaf.when_focus && `while the focus is in ${leaf.when_focus}`].filter(Boolean).join(" and ") || undefined;
 
@@ -136,5 +137,7 @@ export function site_rules_view(keymap: CompiledKeymap | undefined, address: str
   const matching = site_rules_matching(keymap, [address]);
   const normal = keymap?.modes.normal;
   const page = page_state(keymap, address);
-  return { address, rows: matching.map((rule, index) => row_view(rule, resolve_site_columns(matching.slice(0, index)) as PageSiteColumns, page, normal, keymap)) };
+  // What a keymap mode bind replaces counts the keys a child mode takes from its parent.
+  const resolved = keymap && with_resolved_modes(keymap);
+  return { address, rows: matching.map((rule, index) => row_view(rule, resolve_site_columns(matching.slice(0, index)) as PageSiteColumns, page, normal, resolved)) };
 }
