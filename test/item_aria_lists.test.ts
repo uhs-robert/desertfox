@@ -220,6 +220,12 @@ test("a role=tree sidebar of leaves in an aside is one region, the ARIA one", ()
 
 // A tree whose folder opens after the pick, the way GitHub's file sidebar does: the folder li gains a label row and a group of child rows, and the rows below it move down.
 function tree_with_folder() {
+  // A saved node has no `querySelectorAll`, which the derived row calls on the widget to count its treeitems.
+  const count_rows = (node: SavedNode): number => (node.c ?? []).reduce((sum, child) => sum + count_rows(child), node.a?.role === "treeitem" ? 1 : 0);
+  const with_tree_query = (found: ReturnType<typeof find_items>) => {
+    for (const region of found.regions) Object.assign(region.home_ as object, { querySelectorAll: () => ({ length: count_rows(region.home_ as unknown as SavedNode) - ((region.home_ as unknown as SavedNode).a?.role === "treeitem" ? 1 : 0) }) });
+    return found;
+  };
   const leaf = (top: number, name: string): SavedNode => ({ t: "li", a: { role: "treeitem" }, r: [20, top, 260, 30], c: [{ t: "span", r: [20, top, 200, 30], s: name }] });
   const label: SavedNode = { t: "div", r: [20, 160, 260, 30], s: "folder" };
   const group: SavedNode = { t: "ul", a: { role: "group" }, r: [20, 190, 260, 60], c: [leaf(190, "child a"), leaf(220, "child b")] };
@@ -238,7 +244,7 @@ function tree_with_folder() {
   };
   let finds = 0;
   const row = create_derived_row({
-    find_: () => (finds++, with_contains(find_items(saved_reader(page))) as never),
+    find_: () => (finds++, with_tree_query(with_contains(find_items(saved_reader(page)))) as never),
     url_: () => "https://a.test/",
     now_: () => 0,
     is_shown_: () => true,

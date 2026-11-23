@@ -1,5 +1,5 @@
 // The derived row of the page: what the finder found, kept for the document so a key press does not read the page again.
-// The finder answers every top-level list, and one of them is active. A read first makes active the list that holds the keyboard focus, whether it is long or pick-only. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, a tree's count of rows changed (`stale_`), and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
+// The finder answers every top-level list, and one of them is active. A read first makes active the list that holds the keyboard focus, whether it is long or pick-only. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, a tree's count of rows changed (`tree_rows_`), and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
 
 import { find_items, FINDER_BUDGET_MS, LONG_BUDGET_MS } from "./finder.ts";
 import type { Found } from "./finder.ts";
@@ -71,7 +71,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   };
   // `old` keeps the answer for now and asks for a read with the short budget. `gone` needs a read. A list in view that is not the active one also asks for a read, so a hand-over sees lists that loaded since the last read. `keep` is an end command that follows its own list: the active list stays while it is on the page.
   const state = (keep: boolean): typeof GOOD | typeof OLD | typeof GONE => {
-    if (!kept || kept.url !== deps.url_() || kept.active.items[0]?.isConnected === false || kept.active.stale_?.()) return GONE;
+    if (!kept || kept.url !== deps.url_() || kept.active.items[0]?.isConnected === false || (kept.active.tree_rows_ !== undefined && kept.active.home_?.querySelectorAll("[role=treeitem]").length !== kept.active.tree_rows_)) return GONE;
     if ((keep && kept.active.items[0]) || kept.active.items.some(deps.in_view_)) return GOOD;
     return most_in_view(long_regions(kept.found.regions)) ? GONE : deps.now_() - kept.at < NONE_RECHECK_MS ? GOOD : OLD;
   };
