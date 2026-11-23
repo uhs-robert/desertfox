@@ -81,7 +81,7 @@ export function find_aria_lists<N>(reader: PageReader<N>, out_of_time: () => boo
         home_: widget,
         // A branch's own box covers its children, so the box follows the focus onto leaves only.
         box_selector_: role === "tree" ? "[role=treeitem]:not(:has([role=treeitem]))" : role === "grid" ? "[role=row],tr:not([role])" : `[role=${ITEM_ROLE[role]}]`,
-        ...(role === "tree" && { tree_rows_: descendants(reader, widget, (node) => reader.attr_(node, "role") === "treeitem").length }),
+        ...(role === "tree" && { tree_: true as const }),
         // The keys of a widget that names its active row stay with the widget, which a focus on a row would take away.
         ...(above.some((at) => reader.attr_(at, "aria-activedescendant") !== null) && { focus_none_: true as const }),
       });
