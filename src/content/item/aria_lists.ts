@@ -72,6 +72,9 @@ export function find_aria_lists<N>(reader: PageReader<N>, out_of_time: () => boo
       // A calendar row holds a week of day numbers, whatever whitespace the markup leaves between its cells.
       const is_calendar = role === "grid" && items.every((item) => reader.text_(item).replace(/\s/g, "").length < DATE_ROW_CHARS);
       if (is_calendar || !stacked_items(reader, items)) continue;
+      // A folder that opens adds rows to the tree, and a closed folder is an item of its own (the `li`) where an open one is its label. Only a fresh read tells them apart, so a changed count of treeitems says the kept items are old.
+      const tree_rows = () => reader.query_all_("[role=treeitem]").filter((row) => holds(reader, [widget], [row])).length;
+      const rows_read = role === "tree" ? tree_rows() : 0;
       regions.push({
         kind: "list",
         items,
@@ -81,6 +84,7 @@ export function find_aria_lists<N>(reader: PageReader<N>, out_of_time: () => boo
         // A branch's own box covers its children, so the box follows the focus onto leaves only.
         box_selector_: role === "tree" ? "[role=treeitem]:not(:has([role=treeitem]))" : role === "grid" ? "[role=row],tr:not([role])" : `[role=${ITEM_ROLE[role]}]`,
         // The keys of a widget that names its active row stay with the widget, which a focus on a row would take away.
+        ...(role === "tree" && { stale_: () => tree_rows() !== rows_read }),
         ...(above.some((at) => reader.attr_(at, "aria-activedescendant") !== null) && { focus_none_: true as const }),
       });
     }

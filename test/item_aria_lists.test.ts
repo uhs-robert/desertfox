@@ -217,3 +217,66 @@ test("a role=tree sidebar of leaves in an aside is one region, the ARIA one", ()
   assert.equal(found.regions.length, 1);
   assert.equal(found.regions[0]!.home_, tree);
 });
+
+// A tree whose folder opens after the pick, the way GitHub's file sidebar does: the folder li gains a label row and a group of child rows, and the rows below it move down.
+function tree_with_folder() {
+  const leaf = (top: number, name: string): SavedNode => ({ t: "li", a: { role: "treeitem" }, r: [20, top, 260, 30], c: [{ t: "span", r: [20, top, 200, 30], s: name }] });
+  const label: SavedNode = { t: "div", r: [20, 160, 260, 30], s: "folder" };
+  const group: SavedNode = { t: "ul", a: { role: "group" }, r: [20, 190, 260, 60], c: [leaf(190, "child a"), leaf(220, "child b")] };
+  const folder: SavedNode = { t: "li", a: { role: "treeitem", "aria-expanded": "false" }, r: [20, 160, 260, 30], c: [label] };
+  const after = [leaf(190, "after a"), leaf(220, "after b"), leaf(250, "after c")];
+  const tree: SavedNode = { t: "ul", a: { role: "tree" }, r: [20, 100, 260, 300], c: [leaf(100, "first a"), leaf(130, "first b"), folder, ...after] };
+  const page = page_of(tree);
+  for (const node of group.c!) node.c![0]!.up = node;
+  const open_folder = () => {
+    folder.a!["aria-expanded"] = "true";
+    folder.r = [20, 160, 260, 90];
+    folder.c = [label, group];
+    group.up = folder;
+    group.c!.forEach((node) => (node.up = group));
+    after.forEach((node, index) => (node.r![1] = 250 + index * 30));
+  };
+  let finds = 0;
+  const row = create_derived_row({
+    find_: () => (finds++, with_contains(find_items(saved_reader(page))) as never),
+    url_: () => "https://a.test/",
+    now_: () => 0,
+    is_shown_: () => true,
+    in_view_: () => 1,
+    tail_: () => [],
+    focus_: () => null,
+  });
+  const text_of = (items: unknown[]) => (items as SavedNode[]).map((node) => (node.c?.[0]?.s ?? node.s ?? "?") as string);
+  return { row, folder, open_folder, finds: () => finds, text_of };
+}
+
+test("a folder that opens after the pick: the rows are read again, so every child is an item", () => {
+  const { row, folder, open_folder, text_of } = tree_with_folder();
+  const tree = row.lists_().find((region) => region.home_);
+  row.pick_(tree!);
+  assert.equal(row.items_().length, 6);
+  assert.ok(row.items_().includes(folder as never), "closed, the folder li is its own item");
+  open_folder();
+  const items = row.items_();
+  assert.deepEqual(text_of(items), ["first a", "first b", "folder", "child a", "child b", "after a", "after b", "after c"]);
+  assert.ok(!items.includes(folder as never), "open, the folder is its label");
+});
+
+test("the reread keeps the picked tree, and a pin on it", () => {
+  const { row, open_folder, text_of } = tree_with_folder();
+  const tree = row.lists_().find((region) => region.home_)!;
+  row.pin_(tree);
+  open_folder();
+  assert.equal(row.items_().length, 8);
+  assert.equal(row.pinned_(), true);
+  assert.equal(row.active_()!.home_, tree.home_);
+  assert.ok(text_of(row.active_()!.items).includes("child a"));
+});
+
+test("a tree whose rows did not change is not read again", () => {
+  const { row, finds } = tree_with_folder();
+  row.pick_(row.lists_().find((region) => region.home_)!);
+  row.items_();
+  row.items_();
+  assert.equal(finds(), 1);
+});
