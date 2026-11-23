@@ -71,6 +71,7 @@ const handlers = make_settings_handlers({
 const SETTABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].settable);
 const TOGGLEABLE = SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle);
 
+// The name casts below only narrow `name`: `SETTABLE` is filtered at run time, so it types as `string`, and the strict param already refused any other name.
 const TEMP_PARAM = { name: "temp", type: "bool", default: false, short: "t", description: "Keep the change only until the browser restarts." } as const;
 
 define("settings.set", {
@@ -85,7 +86,7 @@ define("settings.set", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.set(ctx, args as { name: keyof Settings; value: string; temp?: boolean }),
+  run: (ctx, args) => handlers.set(ctx, args as typeof args & { name: keyof Settings }),
 });
 
 define("settings.toggle", {
@@ -96,7 +97,7 @@ define("settings.toggle", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.toggle(ctx, args as { name: keyof Settings; temp?: boolean }),
+  run: (ctx, args) => handlers.toggle(ctx, args as typeof args & { name: keyof Settings }),
 });
 
 define("settings.unset", {
@@ -107,5 +108,5 @@ define("settings.unset", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.unset(ctx, args as { name: keyof Settings | "all"; temp?: boolean }),
+  run: (ctx, args) => handlers.unset(ctx, args as typeof args & { name: keyof Settings | "all" }),
 });

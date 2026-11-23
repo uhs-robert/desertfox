@@ -64,7 +64,7 @@ define("macro.record", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.record(ctx, args as { reg: string }),
+  run: (ctx, args) => handlers.record(ctx, args),
 });
 
 define("macro.stop", {
@@ -88,7 +88,7 @@ define("macro.play", {
   runs_in: "background",
   count: { param: "count" },
   repeatable: false,
-  run: (ctx, args) => handlers.play(ctx, args as { reg: string; count: number }),
+  run: (ctx, args) => handlers.play(ctx, args),
 });
 
 // A recorded `macro.play` step through the same checks as a typed one: the register name, the count and the count's own limits.
