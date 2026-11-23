@@ -103,6 +103,9 @@ export function create_tab_item(deps: TabItemDeps) {
           return;
         }
         if (!hold?.frames.includes(frame_id) || KEEPS_THE_MODE.includes(mode)) return;
+        // The old document of a frame whose new document took the mode answers its step off late. A frame still `rejoined` has a new document that has not joined yet, and its reports count.
+        const joined_document = hold.documents?.[frame_id];
+        if (document_id !== undefined && joined_document !== undefined && joined_document !== document_id && !hold.rejoined?.includes(frame_id)) return;
         if (mode === "normal" && hold.rejoined?.includes(frame_id)) return;
         if (mode === "normal" && hold.stale_offs?.includes(frame_id)) {
           await deps.storage.set({ [key_of(tab_id)]: without_stale_off(hold, frame_id) });

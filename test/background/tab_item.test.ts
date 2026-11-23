@@ -569,3 +569,16 @@ test("Escape during the load spends the mark, so a same-host redirect of the pag
   assert.equal(await tab_item.join(4, 0, "landed"), false);
   assert.equal(await tab_item.take_resume(4), false);
 });
+
+test("a late report of normal from the old top document, after the new one took the joined mode, leaves the hold on", async () => {
+  const { tab_item, steps, data } = await load_in_hold(commit_as("link"));
+  await tab_item.join(4, 0, "next");
+  await tab_item.reported(4, 7, "item", true, "child");
+  await tab_item.reported(4, 0, "item", true, "next");
+  steps.length = 0;
+  await tab_item.reported(4, 0, "normal", true, "old");
+  assert.deepEqual(steps, []);
+  assert.ok(data["desertfox_tab_item_4"]);
+  await tab_item.reported(4, 0, "normal", false, "next");
+  assert.deepEqual(steps, ["4:off:7"], "the current document leaving still ends the hold");
+});
