@@ -123,3 +123,18 @@ To add a handler:
 - Add it to `handler_map.ts` under the command id.
 - Define the command in `src/commands`, with its count rule.
 - To report a success, call `show_toast` from `src/content/ui_proxy.ts`. `src/content/page/copy.ts` takes it as a parameter. To report a failure, return it as an `Outcome`.
+
+### Keys files for keys
+
+Behavior of the `src/shared/keys` files, moved here from `src/shared/keys/README.md`.
+
+Key notation, the prefix tree compiler and the matcher. Pure TypeScript, no browser APIs.
+
+- `token.ts`: the normalized key token and `event_to_token`. The compiler and the content script both use it, so a keymap sequence and a keydown meet in one form. `physical_token` gives the Latin letter on the physical key of a plain letter of another script, for the `layout_fallback` setting.
+- `notation.ts`: parses a sequence such as `gx$` or `<AC-Escape>` into tokens.
+- `compiler.ts`: builds the `CompiledKeymap`, gives every leaf its which-key label (the binding `label`, else the command label with the phrases of the args the binding sets, and the binding `intent` when it has one), expands `search_keys`, `container_keys` and `site_keys` (the `s/<letter>` and `S/<letter>` leaves, which carry their candidate engines in `site_search`), expands `modifiers` into variant keys that the registry validator accepts (the modifier label names the group), puts `group_names` on the branches, and warns about shadowed or unknown entries.
+- `prune_tree.ts`: copies a mode's tree with the `pass` or `only` sequences of a `site_rules` row applied, and `frees_of` names the keys a rule hands to the page. The compiler, the background (which trims each page's tree) and which-key share it. The content script does not import it.
+- `matcher.ts`: walks the tree with count prefixes and the `"<reg>` register prefix. The register keys (`"` then a name, checked with `REGISTER_KEY`) sit beside the count and not in `typed`, so a count may stand on either side of them. At a match the register fills the `register` arg of each step the compiler flagged (`LeafStep.register`). A user binding of `"` wins over the prefix. A branch with an `ANY_KEY` child takes one printable key and fills the leaf's `key` param (the capture). A character find's branch also holds a `LIVE_KEY` child, the repeat leaf, which the key flow feeds in place of the key while a find is live. `binds_after_` reads ahead without moving the walk, so key_flow can tell which keys typed during a bundle load can bind. It ships in the content script, so it stays small.
+- `firefox_shortcut.ts`: turns a `browser` chord into a `commands.update` shortcut string.
+- `default_keymap.ts`: the shipped keys, the source of `docs/keymap.md` (`just docs-gen`). Keys that need the user's engines or containers are left to the config. Data only, types-only imports.
+- `index.ts`: re-exports `token`, `notation`, `compiler`, `matcher` and `firefox_shortcut`. `prune_tree.ts` and `default_keymap.ts` are imported directly.
