@@ -1,4 +1,4 @@
-// The load-more step of `]]`, tried when the next pass finds no next page. Structure first: it finds the page's main list and takes the lone control right after its last item. The words only break ties. With no control, it scrolls to the end of the list, but only when that list reaches the end of the page.
+// The load-more step of `]]`, tried when the next pass finds no next page. Structure first: it finds the page's main list and takes the lone control right after its last item, preferring one with a load word over a nearer plain button (a plain button counts only within 300 px). With no control, it scrolls to the end of the list, but only when that list reaches the end of the page.
 
 import { in_chrome as node_in_chrome, in_pinned as node_in_pinned, is_actionable as node_is_actionable, list_groups, main_list } from "../lib/groups.ts";
 import { ancestors, descendants, in_carousel, is_item_size, normalize } from "../lib/page_reader.ts";
