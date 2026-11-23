@@ -36,7 +36,7 @@ Example: the `prompt` action, commit `f51dcc82`.
 3. Bind a key in `src/shared/keys/default_keymap.ts`, then run `just docs-gen`.
 4. Add unit tests in `test/hints/`, and a case in `test/key/p6_hints.mjs`. Add one in `test/key/p6_frames.mjs` when the action behaves differently in a frame.
 5. Run `just build`. It fails when `content.js` passes its size guard. Hint code lives in the on-demand `hints` bundle, so keep it out of `content.js`: see "Content script size" in [`AGENTS.md`](../AGENTS.md).
-6. In [`src/content/hints/README.md`](../src/content/hints/README.md), add a bullet for a new file and extend the `actions.ts` entry.
+6. In [`src/content/hints/README.md`](../src/content/hints/README.md), add a map line for a new file, and extend the `actions.ts` entry in "Hints files for the hints bundle" in [`docs/design/interfaces_hints.md`](design/interfaces_hints.md).
 
 ## Add a bundle
 
