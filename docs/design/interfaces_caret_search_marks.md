@@ -165,9 +165,9 @@ The text goes to `storage.session` only (the `.` slot, which a private window ha
 
 ### Library files for the text bundle (src/content/lib)
 
-Behavior of the `src/content/lib` files that the `text` bundle reads.
+Behavior of the `src/content/lib` files that the `text` bundle reads. `entry.ts` is also read by the `hints` and `page` bundles, `secret_field.ts` and `field_writer.ts` by the `editor` bundle, and `field_writer.ts` by `hints`.
 
 - `entry.ts`: the entry of the typed text. `page.focus_input`, `page.focus_field` and a hint pick that ended in insert mode mark the field they focused on `window`, and the first session in that field takes the mark. A field focused by a click has none, so its replay types into the field the last Escape left.
-- `host_editable.ts`: `is_editable_in_frame`, the field check of the `text` bundle. It asks the frame's host, because a bundle's own `editable.ts` holds no per-site rules.
+- `host_editable.ts`: `is_editable_in_frame`, the field check of `entry.ts`, `field_writer.ts` and `hints/insert_text.ts`. It asks the frame's host, because a bundle's own `editable.ts` holds no per-site rules.
 - `secret_field.ts`: `is_secret_field`, the one test for a field whose text is never recorded: a password input, or an `autocomplete` of `current-password`, `new-password` or `one-time-code`. A field seen as secret stays secret, so a show-password toggle does not expose it. The text recorder (`main.ts`) and the `editor` bundle call it.
 - `field_writer.ts`: `write_into_field`, the one writer of text into a field, through `execCommand("insertText")` so React and Vue fields see a real input event. It refuses with `RuntimeRefusal` when no field is focused and none was left. `text.insert` and `<C-r>` paste (`main.ts`) call it. Hint keys (`src/content/hints/insert_text.ts`) and the `editor` bundle, for a contenteditable result, call `type_at_caret` directly.
