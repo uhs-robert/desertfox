@@ -1,6 +1,6 @@
-import { is_editable_in_frame } from "../text/host_editable.ts";
+import { is_editable_in_frame } from "../lib/host_editable.ts";
 import { deepest_focused_element } from "../editable.ts";
-import { type_at_caret } from "../text/field_writer.ts";
+import { type_at_caret } from "../lib/field_writer.ts";
 
 // Types keys into the focused field as text and returns the keys it left alone, in order.
 // Queued hint keys are single characters, so each one is its own text.

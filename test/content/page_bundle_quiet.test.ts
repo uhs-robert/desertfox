@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LEAVE_QUIET_MS } from "../../src/content/page/leave_watch.ts";
+import { LEAVE_QUIET_MS } from "../../src/content/lib/leave_watch.ts";
 
 // The `page` bundle as it starts in a top frame, with the host, the background and the Navigation API faked.
 const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();

@@ -1,7 +1,7 @@
 // The box that `page.item` draws around the item it moved to, in a closed shadow root so the page cannot restyle it. It does not use `create_surface`: that module and the theme code it pulls in would take the bundle from about 3 KB to over 10 KB. So the box has the default colors and takes no user theme, and it sits at the top of the page's stacking order, not in the top layer. It follows scroll and resize with the follower the hint labels use, and clears itself when the user moves the focus off the item or the mode is no longer wanted. When a page script moves the focus, the box follows it to the item that takes it.
 
 import { LAYERS } from "../../shared/layers.ts";
-import { follow_windows } from "../hints/follow.ts";
+import { follow_windows } from "../lib/follow.ts";
 import type { UserLeft } from "../user_left.ts";
 import { hover_at } from "./hover.ts";
 import { item_rect } from "./pick.ts";

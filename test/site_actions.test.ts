@@ -6,7 +6,7 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
 import { SEND_KEY_MAX_TIMES } from "../src/shared/send_key_limit.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";
-import { KEY_PAIR_GAP_MS, queued_in_page, send_key, send_key_queued } from "../src/content/site_actions/send_key.ts";
+import { KEY_PAIR_GAP_MS, queued_in_page, send_key, send_key_queued } from "../src/content/lib/send_key.ts";
 
 type Sent = { type: string; init: KeyboardEventInit };
 
@@ -170,7 +170,7 @@ test("a count over the limit is refused by the handler after args_for_count fill
   assert.equal(SEND_KEY_MAX_TIMES, 99);
 });
 
-import { clipboard_action } from "../src/content/site_actions/clipboard.ts";
+import { clipboard_action } from "../src/content/lib/clipboard.ts";
 
 // A page whose `execCommand` fires its event only when `fires` is set, as a browser that runs the action does. `takes_focus` false is a target that cannot be focused. The listener is the document's capture listener, so `listeners` holds what is attached after the call.
 function clipboard_page(fires: boolean, accepts = fires, takes_focus = true) {

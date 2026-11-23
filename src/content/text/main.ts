@@ -4,11 +4,11 @@ import type { BundleHostApi } from "../bundle_host.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { RegisterRead } from "../../shared/messages/content.ts";
 import { deepest_focused_element } from "../editable.ts";
-import { write_into_field } from "./field_writer.ts";
-import { take_text_entry } from "./entry.ts";
+import { write_into_field } from "../lib/field_writer.ts";
+import { take_text_entry } from "../lib/entry.ts";
 import { read_field_text } from "../lib/field_text.ts";
 import { create_text_recorder } from "./recorder.ts";
-import { is_secret_field } from "./secret_field.ts";
+import { is_secret_field } from "../lib/secret_field.ts";
 
 declare const browser: MessagingBrowser;
 

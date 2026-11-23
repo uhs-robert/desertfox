@@ -3,8 +3,8 @@
 import type { BundleHostApi } from "../bundle_host.ts";
 import { deepest_focused_element, is_editable_element } from "../editable.ts";
 import { read_field_text } from "../lib/field_text.ts";
-import { type_at_caret } from "../text/field_writer.ts";
-import { is_secret_field } from "../text/secret_field.ts";
+import { type_at_caret } from "../lib/field_writer.ts";
+import { is_secret_field } from "../lib/secret_field.ts";
 import { CLIPBOARD_NOT_RESTORED, copy_through_clipboard, paste_through_clipboard, VIRTUALIZED_EDITOR } from "./clipboard_fallback.ts";
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { EditorAnswer, EditorOpen, BackgroundToContent, EditorDone } from "../../shared/messages/index.ts";

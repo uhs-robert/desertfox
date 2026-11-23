@@ -11,7 +11,7 @@ import type { ArrowPage } from "../src/content/site_actions/arrow.ts";
 import { site_mode } from "../src/content/site_mode.ts";
 import { mode_site } from "../src/content/handlers/mode.ts";
 import { deepest_focused_element } from "../src/content/editable.ts";
-import { KEY_PAIR_GAP_MS } from "../src/content/site_actions/send_key.ts";
+import { KEY_PAIR_GAP_MS } from "../src/content/lib/send_key.ts";
 import { create_key_flow } from "../src/content/key_flow.ts";
 import { create_mode_state } from "../src/content/mode_state.ts";
 import { check_args } from "../src/shared/registry/check_args.ts";

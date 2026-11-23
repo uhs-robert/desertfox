@@ -2,7 +2,7 @@
 
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { PageHostApi } from "../bundle_host.ts";
-import { click_like_a_hint } from "../hints/actions.ts";
+import { click_like_a_hint } from "../lib/actions.ts";
 import { checkbox_in } from "./checkbox.ts";
 import { focusables_in, next_focus } from "./focus.ts";
 

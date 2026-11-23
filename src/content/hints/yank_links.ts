@@ -4,9 +4,9 @@ import { strip_tracking } from "../../shared/copy/strip_tracking.ts";
 import { format_link_list, is_web_address } from "../../shared/copy/link_list.ts";
 import type { Outcome } from "../../shared/messages/content.ts";
 import type { Yanked } from "../../shared/copy/copy_text.ts";
-import { collect, name_candidates, query_for } from "./candidates.ts";
-import type { Found } from "./candidates.ts";
-import { rendered_text } from "./heading_match.ts";
+import { collect, name_candidates, query_for } from "../lib/candidates.ts";
+import type { Found } from "../lib/candidates.ts";
+import { rendered_text } from "../lib/heading_match.ts";
 
 export const LINK_FORMATS = ["markdown", "plain", "org"] as const;
 export type LinkFormat = (typeof LINK_FORMATS)[number];
