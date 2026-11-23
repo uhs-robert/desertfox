@@ -1,4 +1,4 @@
-// The repeated blocks of a page, for the load-more step of `]]` (`../next_page/load_more.ts`) and the item finder (`finder.ts`). Both build the groups with this code, and each decides its own items and picks its own main list.
+// The repeated blocks of a page, for the load-more step of `]]` (`../next_page/load_more.ts`) and the item finder (`../item/finder.ts`). Both build the groups with this code, and each decides its own items and picks its own main list.
 
 import { ancestors, in_carousel, signature, stacked_items } from "./page_reader.ts";
 import type { Box, PageReader } from "./page_reader.ts";

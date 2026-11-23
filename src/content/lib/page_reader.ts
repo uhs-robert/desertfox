@@ -1,5 +1,7 @@
 // What the item finder, the load step and the `]]` detector share to read a page: a `PageReader` and the walks and block tests over it.
 
+// The order of the declarations below keeps next_page.js under its size guard. Build before you reorder.
+
 export type Box = { x: number; y: number; w: number; h: number };
 
 // Layout facts about one node. `box_` is in page coordinates and undefined for a node with no box or one hidden by visibility or opacity.
