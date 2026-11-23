@@ -8,7 +8,7 @@ The command line: press `:` and a bar opens at the bottom. Type a command, press
 - `page.ts`: the page in the iframe (`cmdline_page.js`): its own matcher over the stored keymap, and Enter parses the line with `parse_command_line`.
 - `session.ts`: the text, the inline message, the completion list and the history walk, apart from the DOM. Pure.
 - Completion: what the list offers is in `src/shared/completion/` (see its README), because the omnibox in the background builds the same rows.
-- `list.ts`: draws the rows, ten at most, as a window that follows the selection.
+- `list.ts`: draws the list rows as a window that follows the selection.
 - `status.ts`: the labels and the security state of the status widgets (`status_widgets`). Pure.
 - `key_input.ts`: one key token to an effect, or to text when no key is bound. A step that `waits` (the session's `waits_for_rows`) comes back as a hold with the steps left. Pure.
 - `wheel.ts`: turns wheel events into whole list rows. Trackpad pixel deltas add up until they pass one row, and a mouse notch moves 3 rows.

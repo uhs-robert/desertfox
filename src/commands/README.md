@@ -43,7 +43,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `quickmark.ts`: the `quickmark.*` commands: add, open, delete and list, over a `QuickmarkDeps` object.
 - `register.ts`: `register.list` (`:registers`).
 - `register_param.ts`: the `register` param that the yank commands and `open.clipboard` share.
-- `reload_clear.ts`: the clear scopes of `reload --clear` (`site` and `all`). A site clear takes only the cookies by host name.
+- `reload_clear.ts`: the clear scopes of `reload --clear` (`site` and `all`).
 - `scroll.ts`: the `scroll.*` commands: lines, pixels, pages, to and align.
 - `session.ts`: `session.save`, `session.open`, `session.delete` and `session.rename`, over a `SessionDeps` object.
 - `settings.ts`: `set`, `toggle` and `unset` (ids `settings.set`, `settings.toggle`, `settings.unset`), over the planners in `src/shared/settings_plan.ts`.
