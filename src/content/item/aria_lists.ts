@@ -1,9 +1,9 @@
 // The lists that a page declares with an ARIA role (a web app's inbox grid, a chat's channel tree, a feed of posts). The finder's title-link rule fits none of them, so they are offered only to the `I` picker, as `pick_only_` regions.
 // Pure over `PageReader`, like `finder.ts`.
 
-import { ancestors, descendants, is_item_size, stacked_items } from "../next_page/detect.ts";
-import type { PageReader } from "../next_page/detect.ts";
-import type { Region } from "./finder.ts";
+import { ancestors, descendants, is_item_size, stacked_items } from "../lib/page_reader.ts";
+import type { PageReader } from "../lib/page_reader.ts";
+import type { Region } from "../lib/item_types.ts";
 
 const ITEM_ROLE: Record<string, string> = { listbox: "option", grid: "row", feed: "article", tree: "treeitem" };
 const WIDGETS = Object.keys(ITEM_ROLE)

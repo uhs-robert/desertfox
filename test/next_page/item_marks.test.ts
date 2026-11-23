@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { ancestors, descendants } from "../../src/content/next_page/detect.ts";
-import type { PageReader } from "../../src/content/next_page/detect.ts";
+import { ancestors, descendants } from "../../src/content/lib/page_reader.ts";
+import type { PageReader } from "../../src/content/lib/page_reader.ts";
 import { find_items } from "../../src/content/item/finder.ts";
 import { find_menus } from "../../src/content/item/menus.ts";
-import type { FinderKind, Found } from "../../src/content/item/finder.ts";
+import type { FinderKind } from "../../src/content/lib/item_types.ts";
+import type { Found } from "../../src/content/item/finder.ts";
 import { FIXTURES, read_saved_page, saved_reader } from "../support/snapshot_page.ts";
 import type { SavedNode, SavedPage } from "../support/snapshot_page.ts";
 

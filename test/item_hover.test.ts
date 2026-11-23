@@ -12,7 +12,8 @@ import { registry } from "../src/shared/registry/builtin.ts";
 import { create_item_overlay } from "../src/content/item/overlay.ts";
 import { hover_at, thumbnail } from "../src/content/item/hover.ts";
 import { move_item } from "../src/content/item/pick.ts";
-import type { ItemArgs, ItemPage } from "../src/content/item/pick.ts";
+import type { ItemArgs } from "../src/content/lib/item_types.ts";
+import type { ItemPage } from "../src/content/item/pick.ts";
 
 // A page of fake elements: a chain document > tile > link > picture, so the events of a hover land on a known path. `events` logs `type@name` for each dispatch.
 type Rect = { left: number; top: number; width: number; height: number };

@@ -2,8 +2,8 @@
 
 import { shadow_root_of } from "../shadow.ts";
 import { is_shown } from "../shown.ts";
-import { once } from "../next_page/detect.ts";
-import type { Box, PageReader } from "../next_page/detect.ts";
+import { once } from "./page_reader.ts";
+import type { Box, PageReader } from "./page_reader.ts";
 
 const style_of = (element: Element): CSSStyleDeclaration => element.ownerDocument.defaultView!.getComputedStyle(element);
 

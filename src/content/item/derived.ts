@@ -2,8 +2,9 @@
 // The finder answers every top-level list, and one of them is active. A read first makes active the list that holds the keyboard focus, whether it is long or pick-only. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
 
 import { find_items, FINDER_BUDGET_MS, LONG_BUDGET_MS } from "./finder.ts";
-import type { Found, Region } from "./finder.ts";
-import { dom_reader } from "./dom_reader.ts";
+import type { Found } from "./finder.ts";
+import type { Region } from "../lib/item_types.ts";
+import { dom_reader } from "../lib/dom_reader.ts";
 import { is_shown } from "../shown.ts";
 
 // Read through the `href` attribute, because an `a` in an svg has no string `href` property, and a malformed one is another page. The address resolves against the base of the document, and the page is where the browser is.

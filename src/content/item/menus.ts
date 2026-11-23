@@ -1,9 +1,9 @@
 // The menu pass of the item finder: the navigation and sidebar link stacks of a page, offered to the `I` picker as pick-only regions. They never start item mode and never win a hand-over, so a page of menus alone still scrolls on j and k until the user picks one.
 
-import { ancestors, descendants, stacked_items } from "../next_page/detect.ts";
-import type { PageReader } from "../next_page/detect.ts";
-import type { Region } from "./finder.ts";
-import { list_groups } from "./groups.ts";
+import { ancestors, descendants, stacked_items } from "../lib/page_reader.ts";
+import type { PageReader } from "../lib/page_reader.ts";
+import type { Region } from "../lib/item_types.ts";
+import { list_groups } from "../lib/groups.ts";
 
 // A menu is a stack of at least this many sibling links. Fewer is a navbox or a pager, not worth a label.
 const MIN_MENU_ITEMS = 4;

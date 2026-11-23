@@ -39,11 +39,11 @@ export const area_rules = [
   { globs: ["src/content/strip_setting.ts", "src/shared/copy/{link_list,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
   // The user-left watch serves the next_page load wait and the end follow of page.item.
   { globs: ["src/content/user_left.ts", "src/content/pointer_events.ts"], areas: ["hints", "engines", "bundles", "keys"] },
-  { globs: ["src/content/hints/**", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts", "src/content/page/focus_input.ts", "src/content/lib/hint_keys.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/hints/**", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts", "src/content/page/focus_input.ts", "src/content/lib/{hint_keys,page_reader}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   // Ahead of page/**: first match wins, and scroll.align belongs to the scroll area.
   { globs: ["src/content/page/align.ts"], areas: ["scroll"] },
-  { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/content/item/**", "src/content/item_act/**", "src/content/tree/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles", "keys"] },
+  { globs: ["src/background/selection_ask.ts", "src/content/page/**", "src/content/site_actions/**", "src/content/item/**", "src/content/lib/{groups,dom_reader,item_types}.ts", "src/content/item_act/**", "src/content/tree/**", "src/shared/send_key_limit.ts"], areas: ["engines", "bundles", "keys"] },
   { globs: ["src/content/run_content.ts", "src/commands/{caret,cmdline,copy,find,heading,help,hint,hint_text,page,visual}.ts", "src/background/{bundle_loader,command_modules,extension_page}.ts", "src/content/{bundle_calls,bundle_host,bundles}.ts", "src/content/text/**", "src/content/lib/field_text.ts", "src/content/editor/**", "src/background/external_editor.ts", "src/commands/text.ts", "src/shared/bundles.ts"], areas: ["bundles"] },
   { globs: ["src/shared/page_bundle_tag.ts"], areas: ["bundles", "help", "newtab"] },
   { globs: ["src/shared/{icons,key_caps,page_base}.*"], areas: ["help", "newtab"] },

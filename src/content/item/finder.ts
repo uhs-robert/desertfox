@@ -1,17 +1,14 @@
 // The item finder: reads a page once and answers where its list or grid of items is, or that it is not sure. The answer is a derived row, the shape of a site row without the selectors: the items and the link that takes the focus in each.
 // It is pure over `PageReader`, so the live page (`dom_reader.ts`) and the saved pages of `test/fixtures/next_page/` run the same code. Unsure means `none`, and then the keys scroll as they do without it.
 
-import { ancestors, descendants, once, signature } from "../next_page/detect.ts";
-import type { Box, PageReader } from "../next_page/detect.ts";
+import { ancestors, descendants, once, signature } from "../lib/page_reader.ts";
+import type { Box, PageReader } from "../lib/page_reader.ts";
 import { find_aria_lists, holds } from "./aria_lists.ts";
-import { in_chrome, list_groups, plain_block } from "./groups.ts";
+import { in_chrome, list_groups, plain_block } from "../lib/groups.ts";
 import { find_menus } from "./menus.ts";
-import type { Group, GroupRules } from "./groups.ts";
+import type { Group, GroupRules } from "../lib/groups.ts";
+import type { FinderKind, Region } from "../lib/item_types.ts";
 
-export type FinderKind = "list" | "grid" | "none";
-
-// `links` holds the link of each item that takes the focus, or undefined for an item with no link. `sections` is the block of groups the items sit in, kept for a later key that jumps between sections (a front page sorts its cards into sections). `row_` marks the list of a site row's items, which the picker offers (`lists_with_row` in `main.ts`) and which is no finder list. `timed_out_` marks a `none` that only says the time budget ran out. The last three fields belong to the ARIA lists (`aria_lists.ts`): `home_` is the widget, which names the region again after the page replaced its rows, `box_selector_` is what the box follows a page script's focus by (their items are often classless), and `focus_none_` says the widget names its own active row, so a pick or a move leaves the focus where it is.
-export type Region<N> = { kind: FinderKind; items: N[]; links: Map<N, N | undefined>; sections?: N[]; pick_only_?: true; row_?: true; home_?: N; box_selector_?: string; focus_none_?: true };
 // The answer is its first region (the one with the most area) plus every top-level list of the page in `regions`, from the largest down, so the derived row can follow the one in view.
 export type Found<N> = Region<N> & { regions: Region<N>[]; timed_out_?: true };
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ItemCursor } from "../../src/content/item/pick.ts";
+import type { ItemCursor } from "../../src/content/lib/item_types.ts";
 import { first_item_after, move_box_after_load } from "../../src/content/next_page/item_after_load.ts";
 import type { ItemAfterLoadDeps } from "../../src/content/next_page/item_after_load.ts";
 import { LOAD_WAIT_MS } from "../../src/content/next_page/load_outcome.ts";

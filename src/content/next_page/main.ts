@@ -13,7 +13,7 @@ import { find_load_more } from "./load_more.ts";
 import { create_load_step, dom_content_watch } from "./load_outcome.ts";
 import { move_box_after_load } from "./item_after_load.ts";
 import { watch_user_left } from "../user_left.ts";
-import type { ItemCursor } from "../item/pick.ts";
+import type { ItemCursor } from "../lib/item_types.ts";
 
 declare const browser: MessagingBrowser;
 

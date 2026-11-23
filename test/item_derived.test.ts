@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_derived_row, in_view_, list_tail, NONE_RECHECK_MS, OVERRUN_PAUSE_MS } from "../src/content/item/derived.ts";
 import { FINDER_BUDGET_MS, LONG_BUDGET_MS } from "../src/content/item/finder.ts";
-import type { Found, Region } from "../src/content/item/finder.ts";
+import type { Found } from "../src/content/item/finder.ts";
+import type { Region } from "../src/content/lib/item_types.ts";
 
 type Fake = { name: string; isConnected: boolean; shown: boolean; area?: number; covered?: boolean; contains: (node: unknown) => boolean };
 type FakeLink = { name: string; isConnected: boolean; shown: boolean };
