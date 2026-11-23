@@ -13,6 +13,6 @@ Behavior is in `docs/design/interfaces_caret_search_marks.md`, section "Text fil
 
 Rules across files:
 
-- `src/content/main.ts` keeps two hooks that must not wait for this bundle: the `beforeinput` listener and the flush.
+- `../main.ts` keeps two hooks that must not wait for this bundle: the `beforeinput` listener and the flush.
 - `main.ts` and the `editor` bundle call `is_secret_field`. The `editor` bundle writes through `type_at_caret` in `field_writer.ts`.
 - The text goes to `storage.session` only, never `storage.local`.
