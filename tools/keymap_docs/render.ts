@@ -47,7 +47,9 @@ function parent_line(mode: KeymapMode, keymap: KeymapConfig): string {
   const link = keymap.mode_parents?.[mode];
   if (!link) return "";
   const runs = link.leave ? `switches to ${link.parent} mode first and then runs as there` : `runs as in ${link.parent} mode`;
-  return `\n\nEvery key of ${link.parent} mode that this table does not bind also works here: it ${runs}. A key of ${link.parent} mode comes here only when each command of the key runs in ${link.leave ? link.parent : mode} mode.`;
+  // After a leave step a key runs in the parent mode, where the compile already checked it, so only a link without one filters.
+  const filter = link.leave ? "" : ` A key of ${link.parent} mode comes here only when each command of the key runs in ${mode} mode.`;
+  return `\n\nEvery key of ${link.parent} mode that this table does not bind also works here: it ${runs}.${filter}`;
 }
 
 export function render(keymap: KeymapConfig, registry: Lookup): string {

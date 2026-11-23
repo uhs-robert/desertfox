@@ -6,7 +6,6 @@ import type { KeymapMode } from "../keymap.ts";
 import { LIVE_KEY, token_label } from "../prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../prefix_tree.ts";
 import { default_of, flag_params } from "../registry/params.ts";
-import { resolve_mode_parents, shown_steps } from "../keys/mode_parents.ts";
 
 // Keys shown before the rest fold into `+N`.
 const SHOWN_KEYS = 2;
@@ -47,7 +46,7 @@ function collect(node: TreeNode, path: string, commands: ReadonlyMap<string, Com
     for (const [token, child] of Object.entries(node.children)) if (token !== LIVE_KEY) collect(child, path + token_label(token), commands, into);
     return;
   }
-  for (const { invocation } of shown_steps(node)) {
+  for (const { invocation } of node.steps) {
     const command = commands.get(invocation.id);
     const kind = command && bareness(command, invocation.args, invocation.prompt !== undefined);
     if (!kind) continue;
@@ -61,9 +60,8 @@ function collect(node: TreeNode, path: string, commands: ReadonlyMap<string, Com
 export function key_labels(keymap: CompiledKeymap | undefined, commands: readonly CommandMeta[], line_mode: string): Map<string, string> {
   const by_id = new Map(commands.map((command) => [command.id, command]));
   const sequences = new Map<string, Sequences>();
-  const modes = keymap && resolve_mode_parents(keymap.modes, keymap.mode_parents);
   for (const mode of [line_mode as KeymapMode, "browser" as const]) {
-    const root = modes?.[mode];
+    const root = keymap?.modes[mode];
     if (root) collect(root, "", by_id, sequences);
   }
   const labels = new Map<string, string>();

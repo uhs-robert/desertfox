@@ -515,7 +515,7 @@ Which-key group names:
 | `?` | `help.whichkey` | Show the keys |
 | `<A-?>` | `help.whichkey` | Show the keys |
 
-Every key of item mode that this table does not bind also works here: it switches to item mode first and then runs as there. A key of item mode comes here only when each command of the key runs in item mode.
+Every key of item mode that this table does not bind also works here: it switches to item mode first and then runs as there.
 
 ### grab
 

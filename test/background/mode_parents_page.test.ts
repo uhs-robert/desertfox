@@ -13,7 +13,7 @@ import type { CompiledKeymap, TreeLeaf, TreeNode } from "../../src/shared/prefix
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { command_meta } from "../../src/shared/registry/index.ts";
 import { site_columns_for } from "../../src/shared/site/site_columns.ts";
-import { key_labels } from "../../src/shared/completion/keys.ts";
+import { site_rules_view } from "../../src/shared/site/site_rules_view.ts";
 import { build_help_model } from "../../src/help/model.ts";
 
 function compile(keymap: KeymapConfig = {}, settings: Record<string, unknown> = {}) {
@@ -162,13 +162,9 @@ test("a config reload: each read resolves the keymap in force", async () => {
   assert.equal(JSON.stringify(await source.read()), cached);
 });
 
-test("help and completion list a taken key under the item command, not under mode.set", () => {
+test("help lists a taken key under the item command, not under mode.set", () => {
   const { compiled } = compile();
   const commands = registry.list().map(command_meta);
-  const labels = key_labels(compiled, commands, "item_visual");
-  assert.match(labels.get("tab.next") ?? "", /J/);
-  assert.match(labels.get("hint.run") ?? "", /\bf\b/);
-  assert.equal(labels.get("mode.set"), undefined, "no taken key lists under its leave step");
   const model = build_help_model(commands, compiled, []);
   const rows_of = (id: string) => model.groups.flatMap((group) => group.commands).find((command) => command.id === id)!.keys.filter((row) => row.mode === "item_visual").map((row) => row.keys);
   assert.ok(rows_of("hint.run").includes("f"));
@@ -176,4 +172,10 @@ test("help and completion list a taken key under the item command, not under mod
   // An authored mode.set stays under mode.set: v and V, and the taken keys that start another mode (gV).
   for (const keys of ["v", "V", "gV"]) assert.ok(rows_of("mode.set").includes(keys), keys);
   for (const keys of ["f", "J", "I"]) assert.ok(!rows_of("mode.set").includes(keys), keys);
+});
+
+test("the site table view reads what a visual item bind replaces from the resolved tree", () => {
+  const compiled = row_compile({ site: "https://rows.test/*", keymap: { item_visual: { J: { id: "page.item", args: { direction: "other_end", extend: true } } } } });
+  const change = site_rules_view(compiled, "https://rows.test/").rows[0]!.changes.find((entry) => entry.keymap_mode === "item_visual" && entry.keys === "J");
+  assert.equal(change?.replaces, (at(compiled.modes.item, "J") as TreeLeaf).label);
 });

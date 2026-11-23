@@ -128,6 +128,12 @@ test("the check reports only what the binding adds, and the bindings it replaces
   assert.equal(bad_keys.ok && /needs Ctrl or Alt/.test(bad_keys.problems[0]!), true, JSON.stringify(bad_keys));
 });
 
+test("the check's shadows count the keys visual item mode takes from item mode, without the leave step", async () => {
+  const messages = messages_over(config_with({}), { edits: {} });
+  const taken = await messages.check({ type: "check_binding", mode: "item_visual", keys: "J", text: "page.item --direction=other_end --extend" });
+  assert.deepEqual(taken.ok && taken.shadows, [{ keys: "J", text: "tab.next" }]);
+});
+
 test("set, remove and reset change the layer, and a set the check refuses changes nothing", async () => {
   const stored: { edits: KeymapEdits } = { edits: {} };
   const messages = messages_over(config_with({ normal: { zq: { id: "tab.close" } } }), stored);
