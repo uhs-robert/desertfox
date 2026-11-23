@@ -37,7 +37,7 @@ const MAX_BYTES = {
   // Item mode and the item finder behind `page.item`. Loads on the first j or k on a list page.
   "item.js": 25.5 * 1024,
   // Item actions (Space, Enter) in item mode.
-  "item_act.js": 3.5 * 1024,
+  "item_act.js": 4 * 1024,
   // page.tree and the fold keys. Loads on the first press.
   "tree.js": 5 * 1024,
   // page.follow (]] and [[). Loads on the first press.

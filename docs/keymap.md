@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 504 (normal 264, media 26, item 25, item_visual 16, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 507 (normal 264, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -375,6 +375,7 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `zo` | `tree --unfold --aria` | Unfold the tree item |
 | `<Space>` | `item_action --toggle` | Toggle the item's checkbox |
 | `<Enter>` | `item_action --open` | Open the item's link, or click the focused element in it |
+| `<C-Enter>` | `item_action --open-background` | Open the item's link in a background tab |
 | `<Tab>` | `item_focus next` | Focus the next element in the item |
 | `<S-Tab>` | `item_focus prev` | Focus the previous element in the item |
 | `v` | `mode item_visual ; page.item --current --extend` | Select a range of items |
@@ -403,6 +404,8 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `gg` | `page.item --first --extend` | Extend to the first item |
 | `G` | `page.item --last --extend` | Extend to the last item |
 | `<Space>` | `item_action --toggle-range` | Toggle the checkboxes of the range |
+| `<Enter>` | `item_action --open-range` | Open the first item here and the rest in background tabs, then end the selection |
+| `<C-Enter>` | `item_action --open-background` | Open every selected item in background tabs, then end the selection |
 | `o` | `page.item --other-end --extend` | Swap the ends of the selection |
 | `v` | `mode item` | End the selection |
 | `V` | `mode item` | End the selection |

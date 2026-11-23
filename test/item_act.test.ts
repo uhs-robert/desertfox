@@ -164,3 +164,66 @@ test("Enter clicks the Tab-focused child of the current item, and the link when 
   await handlers.get("page.item_action")!({ action: "open" });
   assert.deepEqual(clicked, ["button", "other link"], "Enter opens the link of the current item");
 });
+
+// Drives the real handler with a fake host. A row is a fake item whose first link has the given address.
+async function run_open(action: string, mode: "item" | "item_visual", range: { addresses: (string | undefined)[]; from: number; to: number }) {
+  const sent: { url: string; where: string }[] = [];
+  const events: string[] = [];
+  const row = (address?: string) => ({ matches: () => false, querySelector: () => (address ? { href: address } : null) });
+  const rows = range.addresses.map(row);
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+  const host = {
+    register_handler_: (id: string, handler: (args: Record<string, unknown>) => Promise<unknown>) => handlers.set(id, handler),
+    run_command_: (id: string, _bundle: string, args: { take: (...taken: unknown[]) => void }) => {
+      if (id === "item.range" && mode === "item_visual") args.take(rows, rows.map((_, index) => `i${index}`), range.from, range.to, range.from);
+      if (id === "item.current") args.take(rows[range.from], undefined);
+      return Promise.resolve({ ok: true });
+    },
+    set_mode_: (next: string) => events.push(`mode ${next}`),
+    show_toast_: () => {},
+  };
+  const globals = globalThis as Record<string, unknown>;
+  globals.window = { desertfox_host: host };
+  globals.browser = {
+    runtime: {
+      sendMessage: (message: { invocations: { args: { url: string; where: string } }[] }) => {
+        sent.push(message.invocations[0]!.args);
+        events.push(`open ${message.invocations[0]!.args.url}`);
+        return Promise.resolve({ ok: true });
+      },
+    },
+  };
+  await import(`${new URL("../src/content/item_act/main.ts", import.meta.url).href}?open_${Math.random()}`);
+  const outcome = await handlers.get("page.item_action")!({ action }).then(() => "ok", (error: Error) => error.message);
+  return { sent, events, outcome };
+}
+
+test("open_range opens the first item here, the rest in background tabs in order, then ends the selection", async () => {
+  const { sent, events } = await run_open("open_range", "item_visual", { addresses: ["https://a/", "https://b/", "https://c/", "https://d/"], from: 0, to: 2 });
+  assert.deepEqual(sent.map((one) => one.url).sort(), ["https://a/", "https://b/", "https://c/"]);
+  assert.deepEqual(sent.filter((one) => one.where === "here").map((one) => one.url), ["https://a/"]);
+  assert.deepEqual(events, ["open https://b/", "open https://c/", "open https://a/", "mode item"]);
+});
+
+test("open_range skips an item with no link and takes the first link as the one opened here", async () => {
+  const { sent } = await run_open("open_range", "item_visual", { addresses: [undefined, "https://b/", "https://c/"], from: 0, to: 2 });
+  assert.deepEqual(sent, [{ url: "https://c/", where: "background" }, { url: "https://b/", where: "here" }]);
+});
+
+test("open_background opens every selected item in background tabs and ends the selection", async () => {
+  const { sent, events } = await run_open("open_background", "item_visual", { addresses: ["https://a/", "https://b/"], from: 0, to: 1 });
+  assert.deepEqual(sent, [{ url: "https://b/", where: "background" }, { url: "https://a/", where: "background" }]);
+  assert.equal(events.at(-1), "mode item");
+});
+
+test("open_background in item mode opens the current item in a background tab and leaves the mode", async () => {
+  const { sent, events } = await run_open("open_background", "item", { addresses: ["https://a/", "https://b/"], from: 1, to: 1 });
+  assert.deepEqual(sent, [{ url: "https://b/", where: "background" }]);
+  assert.deepEqual(events, ["open https://b/"]);
+});
+
+test("a range with no link refuses and keeps the selection", async () => {
+  const { sent, events, outcome } = await run_open("open_range", "item_visual", { addresses: [undefined], from: 0, to: 0 });
+  assert.equal(outcome, "No link to open");
+  assert.deepEqual([sent, events], [[], []]);
+});

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 export const areas = ["keys", "config", "bundles", "hints"];
 
-export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep }) {
+export async function run_cases({ run_line, config_copy, load_config_dir, setup, run_case, open_page, press_keys, in_active_tab, poll_until, expect, sleep, in_background }) {
   await setup("bind Space on the ia_star_ pages to the span a site names", async () => {
     const dir = config_copy();
     appendFileSync(join(dir, "settings.toml"), ["", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ia_star_*"', 'keymap = { item = { "<Space>" = "page.item_action --action=toggle --target=.star" } }', "", "[[site_rules]]", 'site = "*://127.0.0.1/*?id=ia_miss_*"', 'keymap = { item = { j = "page.item --direction=down --link=a.nothing div.card" } }', ""].join("\n"));
@@ -33,6 +33,16 @@ export async function run_cases({ run_line, config_copy, load_config_dir, setup,
     await expect_focus("c1");
     await press_keys("-k", "space");
     await poll_until("the role box clicked", async () => (await toggled()) === "box0,box1");
+  });
+
+  await run_case("Ctrl+Enter opens the current item in a background tab and keeps this tab where it is", async () => {
+    await open_boxes("ia_ctrl_enter");
+    await press_keys("j");
+    await expect_focus("c1");
+    await press_keys("-M", "ctrl", "-k", "Return", "-m", "ctrl");
+    await poll_until("the item open in a background tab", async () => (await in_background(`(async () => (await browser.tabs.query({})).filter((tab) => tab.url.includes("id=ia_ctrl_enter_boxes") && tab.url.endsWith("#c1")).length)()`)) === 1);
+    expect((await hash()) === "", "the current tab moved");
+    await expect_badge("ITEM");
   });
 
   await run_case("Space on an item with no checkbox shows the notice and clicks nothing", async () => {

@@ -4,7 +4,7 @@ The `item_act` bundle (`item_act.js`): the item mode actions, kept out of `conte
 
 Behavior is in `docs/design/bundles.md`, section "Item action files for the item_act bundle".
 
-- `main.ts`: registers `page.item_action` (`toggle`, `open`, `toggle_range`) and `page.item_focus`.
+- `main.ts`: registers `page.item_action` (`toggle`, `open`, `toggle_range`, `open_range`, `open_background`) and `page.item_focus`.
 - `focus.ts`: the focus ring behind `page.item_focus`.
 - `checkbox.ts`: `checkbox_in`, which finds the checkbox of an item.
 
