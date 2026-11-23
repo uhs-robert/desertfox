@@ -33,7 +33,7 @@ Source: `src/content`, `src/shared`, `src/content/item`, `src/content/lib`, `src
 
 ### Content script root files
 
-Behavior of the files in `src/content` itself, moved here from its README. The README keeps one line per file. The key, mode and badge files are under "Key flow and mode reports in the content script" in `keys.md`, the which-key files under "Which-key content files" in `interfaces_pages.md`.
+Behavior of the files in `src/content` itself, moved here from its README. The README keeps one line per file. The key, mode and badge files are under "Key flow and mode reports in the content script" in `keys.md`, the which-key files under "Which-key files for the which-key panel" in `interfaces_pages.md`.
 
 The content script. It runs at `document_start` in every frame. A subframe starts on its first focus (`start_content_once` in `handlers/focus.ts`). Until then its loaded flag `desertfox_content_loaded` holds the start, so `hint --all-frames` can start the frame from the hints bundle. This costs content.js 28 bytes, under admission clause C. Every frame asks the background for its keymap, already trimmed for the page's site rule, so the content script holds no rule logic.
 
@@ -101,7 +101,7 @@ The `page` bundle (`page.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`).
 - `align.ts`: the code of `scroll.align`.
 - `copy.ts`: the code of `copy.url`.
 - `focus_input.ts`: the code of `page.focus_input`.
-- `main.ts`: registers the seven handlers with the host and the `get_selection` listener. `mark.add`, `mark.jump`, `mark.step` and `page.jump` (a step of the jump list) read the scroll box through the host (`scroll_box_`, which ends a smooth scroll in flight, because that state lives in `content.js`) and talk to the background mark store, and a jump scrolls with `behavior: "instant"`, unless the answer carries no offset: then the background moves to the tab of a global mark and the arrival jump scrolls. `page.focus_input` also marks the field it focused as the entry of typed text (`src/content/text/entry.ts`). `scroll.align` aligns the heading that `]h`, `[h` or `sh` last reached before the focus or the selection, and reads it from a window slot that the hints bundle writes (`src/content/align_target.ts`). The code of the other three is in `align.ts`, `copy.ts` and `focus_input.ts`. The mark code sits in `main.ts`. The last blurred field and the toast come from the host (`last_blurred_`, `show_toast_`), because this bundle has no copy of the content script's state.
+- `main.ts`: registers the seven handlers with the host and the `get_selection` listener. `mark.add`, `mark.jump`, `mark.step` and `page.jump` (a step of the jump list) read the scroll box through the host (`scroll_box_`, which ends a smooth scroll in flight, because that state lives in `content.js`) and talk to the background mark store, and a jump scrolls with `behavior: "instant"`, unless the answer carries no offset: then the background moves to the tab of a global mark and the arrival jump scrolls. `page.focus_input` also marks the field it focused as the entry of typed text (`src/content/text/entry.ts`). `scroll.align` aligns the heading that `]h`, `[h` or `sh` last reached before the focus or the selection, and reads it from a window slot that the hints bundle writes (`src/content/align_target.ts`). The last blurred field and the toast come from the host (`last_blurred_`, `show_toast_`), because this bundle has no copy of the content script's state.
 
 ### Tree files for the tree bundle
 
@@ -120,14 +120,14 @@ Behavior of the `src/content/ui` files, moved here from `src/content/ui/README.m
 
 The `ui` bundle (`ui.js`), which the content script loads on first use. It draws the mode badge and the toast (a short message that disappears after `toast_ms`, or after `toast_error_ms` for an error: 3 and 6 seconds by default).
 
-- `main.ts`: the bundle entry. It registers two handlers with the host: `ui.toast` (shows `args.message`, styled by the optional `args.kind`: error, warning, info or success, error when unset, and hidden after `args.duration_ms`, which the content script picks by kind from the compiled keymap) and `ui.badge` (sets `args.label` and `args.mode`, and removes the badge when the label is undefined). A second run does not register again.
+- `main.ts`: the bundle entry. It registers four handlers with the host: `ui.toast` (shows `args.message`, styled by the optional `args.kind`: error, warning, info or success, error when unset, and hidden after `args.duration_ms`, which the content script picks by kind from the compiled keymap), `ui.badge` (takes a `BadgeState`: `mode`, `pass_next`, `setting`, `recording`, `site_label` and `count`, and hides the badge when the args are empty or the media mode is in full screen), `ui.frame_watch` (turns the frame hide watch on or off) and `ui.badge_count` (the size of the visual item range from a child frame). A second run does not register again.
 - `frame_hide_watch.ts`: the top frame watches the child frame that holds the keys and takes the focus back when that frame hides.
 
-The drawing code is in `src/content/toast.ts` and `src/content/mode_indicator.ts`. Both draw in a closed shadow root made by `src/content/surface.ts`. Only this bundle runs them. 
+The drawing code is in `src/content/toast.ts` and `src/content/mode_indicator.ts`. Both draw in a closed shadow root made by `src/content/surface.ts`. Only this bundle runs them.
 
 Other code does not import the bundle. It calls `src/content/ui_proxy.ts`:
 
-- `show_toast(message, duration_ms, kind?)`: shows a toast for `duration_ms`.
+- `show_toast(message, kind?)`: shows a toast. The duration comes from `toast_ms` or `toast_error_ms`.
 - `show_mode_label(state?)`: shows the badge for a mode, pass-next flag, setting and recording name, and no state removes the badge. Only the top frame draws it.
 
-Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. `copy.ts` in `src/content/page/` is an example of a caller. The mode wiring in `src/content/main.ts` sets the badge.
+Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. Only `src/content/main.ts` imports the proxy. It sets the badge from the mode wiring.

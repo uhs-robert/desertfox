@@ -11,7 +11,7 @@ Behavior is in `docs/design/interfaces_pages.md`, section "Which-key files for t
 - `guarded_rows.ts`: `rows_for_page`, which drops a row whose `chain` holds no leaf in this frame.
 - `panel.ts`: draws the panel in a closed shadow root.
 - `style.ts`: the panel's sheet (`STYLE`). Pure text with no imports.
-- `layout.ts`: the column count and the title fit. Pure text with no imports.
+- `layout.ts`: the column count and the title fit. Pure, with no imports.
 - `timer.ts`: starts the panel after a pause in a half-typed sequence.
 
 Rules across files:

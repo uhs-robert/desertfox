@@ -7,7 +7,7 @@ Behavior is in `docs/design/interfaces_hints.md`, section "Site action files for
 - `send_key.ts`: the `page.send_key` handler and its queue of key pairs.
 - `arrow.ts`: the `page.arrow` handler, bound by the shipped `arrow` site mode.
 - `clipboard.ts`: the `page.clipboard` handler.
-- `main.ts`: registers the handlers with the host.
+- `main.ts`: registers the three handlers with the host.
 
 Rules across files:
 

@@ -4,7 +4,7 @@ The `quality` bundle (`quality.js`): the video quality commands and the `media_q
 
 Behavior is in `docs/design/interfaces_media.md`, section "Quality files for the quality bundle".
 
-The probe (`quality_probe.js`) is injected at each navigation and finds a video.
+The probe (`quality_probe.js`) finds a video. The rule injects it at each navigation, unless its value is `off` or `auto` with no site row.
 
 - `probe_main.ts`: the probe entry. It sends `quality_probe` once per address.
 - `probe.ts`: the probe in one frame, with its deps injected for tests.
