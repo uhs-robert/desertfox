@@ -86,7 +86,7 @@ define("settings.set", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.set(ctx, args as typeof args & { name: keyof Settings }),
+  run: (ctx, args) => handlers.set(ctx, args),
 });
 
 define("settings.toggle", {
@@ -97,7 +97,7 @@ define("settings.toggle", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.toggle(ctx, args as typeof args & { name: keyof Settings }),
+  run: (ctx, args) => handlers.toggle(ctx, args),
 });
 
 define("settings.unset", {
@@ -108,5 +108,5 @@ define("settings.unset", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => handlers.unset(ctx, args as typeof args & { name: keyof Settings | "all" }),
+  run: (ctx, args) => handlers.unset(ctx, args),
 });

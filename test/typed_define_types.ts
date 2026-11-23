@@ -28,3 +28,40 @@ export function arg_types_follow_the_validator(): void {
   assert_type<Equal<ArgsOf<typeof arms_only_bool>["flag"], boolean | undefined>>();
   assert_type<Equal<ArgsOf<typeof arms_then_value_bool>["flag"], boolean>>();
 }
+
+export function background_command_cannot_cast_args_wide(): void {
+  define("typed.wide", {
+    bridge: false,
+    label: "Wide",
+    intent: "Wide.",
+    params: [{ name: "n", type: "int", default: 1 }],
+    runs_in: "background",
+    run: (_ctx, args) => {
+      // @ts-expect-error `n` is a number. The wide overload would take this cast from `unknown`.
+      const wrong = args.n as string;
+      void wrong;
+    },
+  });
+}
+
+const strict_values = [{ name: "action", type: "string", values: ["play", "pause"], strict: true }] as const;
+const optional_strict_values = [{ name: "action", type: "string", values: ["play", "pause"], strict: true, optional: true }] as const;
+const loose_values = [{ name: "action", type: "string", values: ["play", "pause"] }] as const;
+
+export function strict_values_are_a_union(): void {
+  assert_type<Equal<ArgsOf<typeof strict_values>["action"], "play" | "pause">>();
+  assert_type<Equal<ArgsOf<typeof optional_strict_values>["action"], "play" | "pause" | "">>();
+  assert_type<Equal<ArgsOf<typeof loose_values>["action"], string>>();
+  define("typed.values", {
+    bridge: false,
+    label: "Values",
+    intent: "Values.",
+    params: strict_values,
+    runs_in: "background",
+    run: (_ctx, args) => {
+      // @ts-expect-error "stop" is not one of the values.
+      const wrong: "stop" = args.action;
+      void wrong;
+    },
+  });
+}
