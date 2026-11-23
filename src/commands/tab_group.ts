@@ -141,7 +141,7 @@ define("tabgroup.add", {
   params: [{ name: "group", type: "string", rest: true, main: true, optional: true, values: { from: "groups" }, description: "Join this group, or start a group with this title." }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.add(ctx, args as { group: string }),
+  run: (ctx, args) => handlers.add(ctx, args),
 });
 
 define("tabgroup.remove", {
@@ -166,7 +166,7 @@ define("tabgroup.name", {
   params: [{ name: "title", type: "string", rest: true, main: true, optional: true, description: "Set this title." }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.name(ctx, args as { title: string }),
+  run: (ctx, args) => handlers.name(ctx, args),
 });
 
 define("tabgroup.collapse", {
@@ -199,7 +199,7 @@ define("tabgroup.color", {
   params: [{ name: "color", type: "enum", values: [...GROUP_COLORS], description: Object.fromEntries(GROUP_COLORS.map((color) => [color, `Set the color to ${color}.`])) }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.color(ctx, args as { color: (typeof GROUP_COLORS)[number] }),
+  run: (ctx, args) => handlers.color(ctx, args),
 });
 
 const group_count_param = { name: "count", type: "int", min: 1, default: 1, description: "Move over this many groups." } as const;
@@ -211,7 +211,7 @@ define("tabgroup.next", {
   bridge: false,
   runs_in: "background",
   count: { param: "count" },
-  run: (ctx, args) => handlers.next(ctx, args as { count: number }),
+  run: (ctx, args) => handlers.next(ctx, args),
 });
 
 define("tabgroup.prev", {
@@ -221,5 +221,5 @@ define("tabgroup.prev", {
   bridge: false,
   runs_in: "background",
   count: { param: "count" },
-  run: (ctx, args) => handlers.prev(ctx, args as { count: number }),
+  run: (ctx, args) => handlers.prev(ctx, args),
 });

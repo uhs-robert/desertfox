@@ -97,7 +97,7 @@ define("window.new", {
   bridge: false,
   runs_in: "background",
   run: async (ctx, args) => {
-    const { url, private: private_window } = args as { url: string; private: boolean };
+    const { url, private: private_window } = args;
     await handlers.create({ url: url.trim() === "" ? "" : await typed_url_target(url, own_pages_for(ctx)), private: private_window });
   },
 });
@@ -125,5 +125,5 @@ define("tab.attach", {
   params: [{ name: "window", type: "string", rest: true, main: true, optional: true, values: { from: "windows" }, pattern: "^\\s*\\d+(\\s|$)" }],
   bridge: false,
   runs_in: "background",
-  run: (ctx, args) => handlers.attach(ctx, args as { window: string }),
+  run: (ctx, args) => handlers.attach(ctx, args),
 });
