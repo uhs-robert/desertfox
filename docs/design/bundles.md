@@ -113,3 +113,21 @@ The `tree` bundle (`tree.js`, its limit is in `MAX_BYTES` in `tools/build.mjs`).
 - `walk.ts`: the pure moves on a list of `{ item, depth }`: `parent_of`, `child_of` and `sibling_of`. Hidden items are not in the list, so a folded item has no child and the walk skips its replies.
 
 Tests: `test/tree_walk.test.ts` (the walk), `test/page_tree.test.ts` (the schema and the Hacker News row), `test/key/p50_comment_trees.mjs` (the keys on a stand-in thread) and `test/key/p52_aria_trees.mjs` (an ARIA tree).
+
+### UI files for the ui bundle
+
+Behavior of the `src/content/ui` files, moved here from `src/content/ui/README.md`.
+
+The `ui` bundle (`ui.js`), which the content script loads on first use. It draws the mode badge and the toast (a short message that disappears after `toast_ms`, or after `toast_error_ms` for an error: 3 and 6 seconds by default).
+
+- `main.ts`: the bundle entry. It registers two handlers with the host: `ui.toast` (shows `args.message`, styled by the optional `args.kind`: error, warning, info or success, error when unset, and hidden after `args.duration_ms`, which the content script picks by kind from the compiled keymap) and `ui.badge` (sets `args.label` and `args.mode`, and removes the badge when the label is undefined). A second run does not register again.
+- `frame_hide_watch.ts`: the top frame watches the child frame that holds the keys and takes the focus back when that frame hides.
+
+The drawing code is in `src/content/toast.ts` and `src/content/mode_indicator.ts`. Both draw in a closed shadow root made by `src/content/surface.ts`. Only this bundle runs them. 
+
+Other code does not import the bundle. It calls `src/content/ui_proxy.ts`:
+
+- `show_toast(message, duration_ms, kind?)`: shows a toast for `duration_ms`.
+- `show_mode_label(state?)`: shows the badge for a mode, pass-next flag, setting and recording name, and no state removes the badge. Only the top frame draws it.
+
+Both calls load the bundle if needed. A call made before the load finishes waits and runs after it. The proxy holds no keys while it waits. `copy.ts` in `src/content/page/` is an example of a caller. The mode wiring in `src/content/main.ts` sets the badge.
