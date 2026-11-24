@@ -61,7 +61,7 @@ const source_stems = new Set(
 );
 
 const test_files = list("test")
-  .filter((path) => path.endsWith(".test.ts") && !path.startsWith("fixtures/"))
+  .filter((path) => path.endsWith(".test.ts"))
   .sort();
 
 // Returns why a test path breaks the rule, or undefined when it follows it.
