@@ -1,5 +1,5 @@
 // The derived row of the page: what the finder found, kept for the document so a key press does not read the page again.
-// The finder answers every top-level list, and one of them is active. A read first makes active the list that holds the keyboard focus, whether it is long or pick-only. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
+// The finder answers every top-level list, and one of them is active. A read first makes active the list that holds the keyboard focus, whether it is long or pick-only. The active list stays while any of its items shows in the view. When none does, the next press makes the list with the most area in view active, and with no list in view it keeps the active one and reads the page again once the answer is old. The page is also read again when the active list's first item has left the DOM or the address changed, a tree's count of rows changed (`rows_of`), and at the end of the list when something new follows its last item. There is no MutationObserver and no scroll listener: a page that changes under a shown list keeps the old answer until one of those holds, and the switch happens on a press.
 
 import { find_items, FINDER_BUDGET_MS, LONG_BUDGET_MS } from "./finder.ts";
 import type { Found } from "./finder.ts";
@@ -41,6 +41,9 @@ const item_selector = (items: readonly Element[] = []): string => {
   return item ? (items.some((other) => other.localName !== item.localName) ? "" : item.localName) + (item.classList[0] ? `.${CSS.escape(item.classList[0])}` : "") : "";
 };
 
+// A folder that opens adds rows to a tree, and a closed folder is an item of its own (the `li`) where an open one is its label. Only a fresh read tells them apart, so a changed count of treeitems says the kept items are old.
+const rows_of = (region: Region<Element>): number | undefined => (region.tree_ ? region.home_!.querySelectorAll("[role=treeitem]").length : undefined);
+
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   // The items of the list that was active at the last read, so the next read can tell which list it was. A feed that drops or hides its first items still matches through one that stays.
   let active_items: Element[] = [];
@@ -71,7 +74,7 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
   };
   // `old` keeps the answer for now and asks for a read with the short budget. `gone` needs a read. A list in view that is not the active one also asks for a read, so a hand-over sees lists that loaded since the last read. `keep` is an end command that follows its own list: the active list stays while it is on the page.
   const state = (keep: boolean): typeof GOOD | typeof OLD | typeof GONE => {
-    if (!kept || kept.url !== deps.url_() || kept.active.items[0]?.isConnected === false) return GONE;
+    if (!kept || kept.url !== deps.url_() || kept.active.items[0]?.isConnected === false || rows_of(kept.active) !== kept.active.rows_) return GONE;
     if ((keep && kept.active.items[0]) || kept.active.items.some(deps.in_view_)) return GOOD;
     return most_in_view(long_regions(kept.found.regions)) ? GONE : deps.now_() - kept.at < NONE_RECHECK_MS ? GOOD : OLD;
   };
@@ -98,6 +101,8 @@ export function create_derived_row(deps: DerivedDeps): DerivedRow {
         timeouts_in_a_row = found.timed_out_ ? timeouts_in_a_row + 1 : 0;
         if (timeouts_in_a_row >= 2) overran = { url, until: deps.now_() + OVERRUN_PAUSE_MS };
         if (timeouts_in_a_row !== 1) {
+          // Every tree gets its count now, so a pick of one that was not active keeps a baseline from this read.
+          for (const region of found.regions) region.rows_ = rows_of(region);
           // The list the user was on stays active while it shows (or, for an end command, always), and otherwise the list in view takes over.
           const old = found.regions.find((region) => region.items.some((item) => active_items.includes(item)) || (!!active_home && region.home_ === active_home));
           // A read that ran out of time shows nothing about the list, so only a whole read that lacks it drops the pin.
