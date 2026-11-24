@@ -127,8 +127,12 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
     const incoming = await read_import_source(source);
     await get_config();
     const built_in_commands = commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
-    return preview_import(incoming, (await load_files_source()).files, built_in_commands, await read_folder_for_import());
+    const folder = await read_folder_for_import();
+    return preview_import(incoming, (await load_files_source()).files, built_in_commands, folder, paths_with_write_out(incoming));
   }
+
+  // The paths of `files` with a host write still out, which can land after the import's folder read.
+  const paths_with_write_out = (files: ConfigFiles): Set<string> => new Set(Object.keys(files).filter((path) => writes_of(path).out !== undefined));
 
   // The config folder's files, or undefined when the host cannot read it or the folder holds no config files. Then an import stays in the browser, as a start or `,r` would not take such a folder either.
   async function read_folder_for_import(): Promise<ConfigFiles | undefined> {
@@ -153,9 +157,8 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       const snippet_count = Object.keys(consented).length;
       if (!replaces_config) return { ...(await apply_files({ ...current, files: planned_files }, "import")), replaces_config, snippets: snippet_count };
       const folder = await read_folder_for_import();
-      const paths_out = new Set(Object.keys(planned_files).filter((path) => writes_of(path).out !== undefined));
       // The copy holds the folder's consent keys too, so the text written and the record's view of the copy are one.
-      const plan = folder && plan_folder_writes(planned_files, folder, paths_out);
+      const plan = folder && plan_folder_writes(planned_files, folder, paths_with_write_out(planned_files));
       const { warnings } = await apply_files({ files: plan?.files ?? planned_files, dir_label: IMPORT_DIR_LABEL, imported: true }, "import", undefined, plan?.record);
       if (!plan) return { warnings, replaces_config, snippets: snippet_count };
       return { warnings, replaces_config, snippets: snippet_count, picks: Object.keys(plan.record).map(mark_pick), settings_kept_for_consent: plan.settings_kept_for_consent };

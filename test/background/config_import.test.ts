@@ -446,3 +446,27 @@ test("a folder settings.toml without consent keys gets none from an import", asy
   await startup.import_config(zip_of({ "d/settings.toml": 'hint_letters = "xyz"\nbridge = true\n' }), {});
   assert.equal(host.files["settings.toml"], 'hint_letters = "xyz"\n');
 });
+
+test("an imported settings.d file that does not parse gives the build's problem list, not a raw parse error", async () => {
+  const { startup } = await started("bad_settings_d", { "settings.toml": 'hint_letters = "ab"\nbridge = true\n' });
+  const source = zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/settings.d/50-bad.toml": "hint_letters = \n" });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.equal(preview.ok, true);
+  assert.match(preview.problems.join("\n"), /50-bad\.toml/);
+  assert.deepEqual(preview.folder_files, []);
+});
+
+test("the preview names a write the import makes behind a write still out, and none for equal text without one", async () => {
+  const { startup, local, fake } = await started("preview_write_out");
+  const source = zip_of({ "d/settings.toml": 'hint_letters = "ab"\n' });
+  const quiet = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(quiet.folder_files, []);
+  const held = hold_writes(fake);
+  const set = startup.set_in_settings_file("which_key_delay_ms", 7);
+  await until(() => held.length === 1, "the :set write did not go out");
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, ["settings.toml"]);
+  held.shift()!();
+  await set;
+  assert.equal(unsynced_of(local), undefined);
+});

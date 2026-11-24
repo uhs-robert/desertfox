@@ -1,7 +1,7 @@
 // The pure part of a config import: the user's zip or folder to the raw files to apply, and the preview the settings page shows first.
 // No snippet runs here. A snippet file is only read as text, and its header parsed, until the user accepts it by its exact code.
 
-import { parse, stringify } from "smol-toml";
+import { parse, stringify, TomlError } from "smol-toml";
 import type { CommandMeta } from "../shared/command.ts";
 import { build_config } from "../shared/config_build/build_config.ts";
 import { ConfigErrors } from "../shared/config_build/errors.ts";
@@ -120,6 +120,7 @@ export function plan_folder_writes(files: ConfigFiles, folder: ConfigFiles, path
 
 // The import's settings.toml with the consent keys the folder's settings.toml sets, so a write of it to the folder keeps the consent given on this machine. The import's own consent keys are already gone (`drop_consent_settings`).
 // Undefined when a folder file that does not parse or a key the editor cannot set leaves that consent unknown or lost.
+// An imported settings file that does not parse counts the same, so the build reports it.
 function with_folder_consent(files: ConfigFiles, folder: ConfigFiles): ConfigFiles | undefined {
   if (files[SETTINGS_FILE] === undefined) return files;
   let folder_settings: Record<string, unknown>;
@@ -134,7 +135,7 @@ function with_folder_consent(files: ConfigFiles, folder: ConfigFiles): ConfigFil
     try {
       kept = with_setting_in_files(kept, key, folder_settings[key] as TomlValue);
     } catch (error) {
-      if (!(error instanceof RuntimeRefusal)) throw error;
+      if (!(error instanceof RuntimeRefusal || error instanceof TomlError)) throw error;
       return undefined;
     }
   }
@@ -172,11 +173,11 @@ export function preview_snippet(path: string, code: string, current: ConfigFiles
 }
 
 // The build runs with every snippet accepted, so a problem shows before the user decides. Declining a snippet a key binds makes the commit refuse.
-// `folder` is the config folder's files when the host could read them, so the review names the files the import writes there.
-export function preview_import(incoming: ConfigFiles, current: ConfigFiles, commands: CommandMeta[], folder?: ConfigFiles): ConfigImportPreview {
+// `folder` is the config folder's files when the host could read them, so the review names the files the import writes there. `paths_out` are as in `plan_folder_writes`, so the review names what the commit would write.
+export function preview_import(incoming: ConfigFiles, current: ConfigFiles, commands: CommandMeta[], folder?: ConfigFiles, paths_out?: ReadonlySet<string>): ConfigImportPreview {
   const imported = split_files(incoming);
   const { files, replaces_config, dropped } = plan_import_files(incoming, current, imported.snippet_files);
-  const folder_plan = replaces_config && folder ? plan_folder_writes(files, folder) : undefined;
+  const folder_plan = replaces_config && folder ? plan_folder_writes(files, folder, paths_out) : undefined;
   const warnings: string[] = [...dropped, ...(folder_plan?.settings_kept_for_consent ? [`${CONSENT_KEPT_NOTE}.`] : [])];
   let problems: string[] = [];
   let reach = no_reach();
