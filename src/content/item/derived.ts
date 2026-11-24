@@ -42,7 +42,8 @@ const item_selector = (items: readonly Element[] = []): string => {
 };
 
 // A folder that opens adds rows to a tree, and a closed folder is an item of its own (the `li`) where an open one is its label. Only a fresh read tells them apart, so a changed count of treeitems says the kept items are old.
-const rows_of = (region: Region<Element>): number | undefined => (region.tree_ ? region.home_!.querySelectorAll("[role=treeitem]").length : undefined);
+// Only shown rows count: a tree that keeps closed folders' rows in the DOM hidden changes its count only when they show.
+const rows_of = (region: Region<Element>): number | undefined => (region.tree_ ? [].filter.call(region.home_!.querySelectorAll("[role=treeitem]"), is_shown).length : undefined);
 
 export function create_derived_row(deps: DerivedDeps): DerivedRow {
   // The items of the list that was active at the last read, so the next read can tell which list it was. A feed that drops or hides its first items still matches through one that stays.
