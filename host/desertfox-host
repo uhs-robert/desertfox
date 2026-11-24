@@ -255,10 +255,11 @@ THEME_NAME_RULE = "of at most 48 lowercase letters, digits, _ and -, which start
 
 # The file names an import carries in a `.d` folder, without the extension: no slash, backslash or control character,
 # and no leading dot, so a name never leaves its folder and never makes a hidden file that read_config skips. The
-# extension's import accepts the same names (src/shared/zip.ts `check_path`). The byte cap leaves room for the hidden
-# temporary name beside the file (see `aside_prefix`) within the 255 bytes of a file name.
+# extension's import accepts the same names (src/shared/zip.ts `check_path`). The byte cap keeps the longest hidden
+# name beside the file, `.<name>-<16 hex>.old` (see `aside_prefix`), within the 255 bytes of a file name, so a file
+# written once can be replaced and deleted too.
 D_FILE_NAME_PATTERN = re.compile(r"[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*")
-D_FILE_NAME_MAX_BYTES = 240
+D_FILE_NAME_MAX_BYTES = 233
 D_FILE_NAME_RULE = f"of at most {D_FILE_NAME_MAX_BYTES} bytes with no slash, backslash or control character, which starts with no dot"
 
 # The files `write_config_file` writes, by kind. `folder` is inside the config folder, None for the folder itself. A kind

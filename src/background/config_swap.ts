@@ -163,9 +163,9 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       const { warnings } = await apply_files({ files: plan?.files ?? planned_files, dir_label: IMPORT_DIR_LABEL, imported: true }, "import", undefined, plan?.record);
       if (!plan) return { warnings, replaces_config, snippets: snippet_count };
       // The source the copy takes once every write lands: one the folder holds whole but for the files the import lacks.
-      const folder_can_hold_copy = plan.kept_for_consent.length === 0 && Object.entries(plan.files).every(([path, text]) => !is_snippet_file(path) || folder.files[path] === text);
+      const folder_can_hold_copy = Object.keys(plan.kept_out).length === 0 && Object.entries(plan.files).every(([path, text]) => !is_snippet_file(path) || folder.files[path] === text);
       const source_once_written = folder_can_hold_copy ? { files: plan.files, dir_label: folder.config_dir, imported: false } : undefined;
-      return { warnings, replaces_config, snippets: snippet_count, picks: Object.keys(plan.record).map(mark_pick), kept_for_consent: plan.kept_for_consent, source_once_written };
+      return { warnings, replaces_config, snippets: snippet_count, picks: Object.keys(plan.record).map(mark_pick), kept_out: plan.kept_out, source_once_written };
     });
     if (!picks) return result;
     const outcomes = await write_files_in_order(in_change_queue, picks.map((pick) => ({ path: pick.path, pick })));

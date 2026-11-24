@@ -106,7 +106,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
 
   // Writes a batch of waiting files in `order_of_writes`, with one gate read for all of them, and gives each path's outcome (that of its pick, when it has one).
   // The order is a guess, so a path the gate holds goes again after a round in which another file landed: what it names can land after it.
-  // A round where every path left is held is a cycle, such as a default engine switch whose file also drops the old engine. A held definitions file then gets one bridge write (`definitions_bridge_text`).
+  // A round where every path left is held can be a cycle, such as a default engine switch whose file also drops the old engine. A held definitions file then gets one bridge write (`definitions_bridge_text`), only when the bridge lets another held path pass its gate.
   async function write_files_in_order(in_queue: QueueRunner, items: { path: string; pick?: PickMark }[]): Promise<Map<string, FileWriteOutcome | undefined>> {
     const batch: GateBatch = {};
     const outcomes = new Map<string, FileWriteOutcome | undefined>();
@@ -123,7 +123,8 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       }
       for (const item of landed ? [] : held.filter(({ path }) => !bridged.has(path))) {
         bridged.add(item.path);
-        const bridge = await write_bridge(in_queue, item.path, definitions_bridge_text, batch);
+        const others_held = held.map(({ path }) => path).filter((path) => path !== item.path);
+        const bridge = await write_bridge(in_queue, item.path, definitions_bridge_text, batch, others_held);
         landed ||= bridge?.kind === "written" || bridge?.kind === "superseded";
       }
       round = landed ? held : [];
@@ -275,7 +276,8 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
 
   // Writes the bridge text `bridge_text_of` gives the file at `path`, from the record's base and the copy's files. Undefined when the record no longer holds the path or the file has no bridge.
   // The record keeps the file at the bridge text as its base, so the copy's own text follows.
-  async function write_bridge(in_queue: QueueRunner, path: string, bridge_text_of: (path: string, base: string | null, files: ConfigFiles) => string | undefined, batch: GateBatch): Promise<SettledWrite | undefined> {
+  // With `unblocks`, the bridge goes only when one of those paths passes its gate on the folder with the bridge in it: a bridge rewrites the file without its comments until the copy's own text lands, so it must buy a write.
+  async function write_bridge(in_queue: QueueRunner, path: string, bridge_text_of: (path: string, base: string | null, files: ConfigFiles) => string | undefined, batch: GateBatch, unblocks?: string[]): Promise<SettledWrite | undefined> {
     const gate_read = await folder_for_gate(in_queue, path, batch);
     if (gate_read !== undefined && !is_gate_folder(gate_read)) return gate_read;
     const folder_now = gate_read;
@@ -283,8 +285,12 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       const unsynced = await read_unsynced();
       if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
       if (is_stale(folder_now)) return { kind: "superseded" } as const;
-      const bridge = bridge_text_of(path, unsynced[path] ?? null, (await load_files_source()).files);
-      return bridge === undefined ? undefined : start_host_write(path, bridge, folder_now);
+      const { files } = await load_files_source();
+      const bridge = bridge_text_of(path, unsynced[path] ?? null, files);
+      if (bridge === undefined) return undefined;
+      const bridged_folder = folder_now && { ...folder_now, files: with_file_text(folder_now.files, path, bridge) };
+      if (unblocks && !(bridged_folder && unblocks.some((other) => write_breaks_folder(other, files[other] ?? null, bridged_folder) === undefined))) return undefined;
+      return start_host_write(path, bridge, folder_now);
     });
     if (started === undefined || "kind" in started) return started;
     const settled = await settle_out_write(in_queue, started);

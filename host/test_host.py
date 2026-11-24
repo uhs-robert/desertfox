@@ -715,7 +715,7 @@ class WriteConfigFileTest(ConfigDirCase):
 
     def test_names_that_could_leave_a_d_folder_or_hide_a_file_are_refused_and_nothing_is_written(self):
         outside = os.path.join(self.tmp.name, "outside.toml")
-        for name in ("../outside", "../../outside", "..", ".", "a/b", "/abs", "a\\b", ".hidden", "", "a\x00b", "a\nb", "a\x1fb", "a\x7fb", "\ud800", "x" * 241, "\u00e9" * 121, 3, None, ["a"]):
+        for name in ("../outside", "../../outside", "..", ".", "a/b", "/abs", "a\\b", ".hidden", "", "a\x00b", "a\nb", "a\x1fb", "a\x7fb", "\ud800", "x" * 234, "\u00e9" * 117, 3, None, ["a"]):
             for kind in ("settings_d", "style_d"):
                 request = {"cmd": "write_config_file", "kind": kind, "name": name, "text": "a = 1\n", "base_sha256": None}
                 _, raw = run_in_process(frame(request))
@@ -724,7 +724,15 @@ class WriteConfigFileTest(ConfigDirCase):
                 self.assertIn("needs a name", reply["error"], (kind, name))
         self.assertEqual(self.tree(), [])
         self.assertFalse(os.path.exists(outside))
-        self.assertTrue(self.write("settings_d", "x" * 240, "a = 1\n", None)["ok"])
+
+    def test_a_d_name_at_the_byte_cap_is_created_replaced_and_deleted(self):
+        name = "x" * host.D_FILE_NAME_MAX_BYTES
+        self.assertTrue(self.write("settings_d", name, "a = 1\n", None)["ok"])
+        reply = self.write("settings_d", name, "a = 2\n", sha("a = 1\n"))
+        self.assertTrue(reply["ok"], reply)
+        reply = self.write("settings_d", name, None, sha("a = 2\n"))
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(self.tree(), ["settings.d/"])
 
     def test_the_page_files_keep_their_own_kinds(self):
         for kind in ("keymap_d", "search_engines_d"):

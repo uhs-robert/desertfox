@@ -142,10 +142,10 @@ test("host_file_of gives every config file but a snippet a kind, and a .d name o
   assert.deepEqual(host_file_of("settings.d/10-Work.local caf\u00e9.toml"), { kind: "settings_d", name: "10-Work.local caf\u00e9" });
   assert.deepEqual(host_file_of("style.d/10-x.css"), { kind: "style_d", name: "10-x" });
   assert.deepEqual(host_file_of("command_aliases.d/zz-desertfox.toml"), { kind: "command_aliases_d", name: "zz-desertfox" });
-  for (const path of ["snippets/a.js", "autoconfig.toml", "settings.d/.hidden.toml", "settings.d/a/b.toml", "settings.d/a\\b.toml", "settings.d/a\u0001.toml", "settings.d/.toml", "style.d/x.toml", "settings.d/x.css", `settings.d/${"x".repeat(241)}.toml`, "other.d/x.toml"]) {
+  for (const path of ["snippets/a.js", "autoconfig.toml", "settings.d/.hidden.toml", "settings.d/a/b.toml", "settings.d/a\\b.toml", "settings.d/a\u0001.toml", "settings.d/.toml", "style.d/x.toml", "settings.d/x.css", `settings.d/${"x".repeat(234)}.toml`, "other.d/x.toml"]) {
     assert.equal(host_file_of(path), undefined, path);
   }
-  assert.deepEqual(host_file_of(`settings.d/${"x".repeat(240)}.toml`), { kind: "settings_d", name: "x".repeat(240) });
+  assert.deepEqual(host_file_of(`settings.d/${"x".repeat(233)}.toml`), { kind: "settings_d", name: "x".repeat(233) });
 });
 
 test("the real host writes each import path where host_file_of names it, and read_config gives it back at that path", { skip: spawnSync("python3", ["--version"]).error !== undefined }, async (t) => {

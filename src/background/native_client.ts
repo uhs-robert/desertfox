@@ -68,7 +68,7 @@ const D_FOLDER_KINDS: Record<string, { kind: NamedFileKind; ext: string }> = {
 // The host's `.d` name check: no slash, backslash or control character, no leading dot, and room for its hidden temporary name.
 // eslint-disable-next-line no-control-regex
 const D_FILE_NAME_PATTERN = /^[^./\\\u0000-\u001f\u007f][^/\\\u0000-\u001f\u007f]*$/;
-const D_FILE_NAME_MAX_BYTES = 240;
+const D_FILE_NAME_MAX_BYTES = 233;
 
 function d_folder_file_of(path: string): HostFile | undefined {
   const slash = path.indexOf("/");
