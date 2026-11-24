@@ -29,7 +29,7 @@ test("the page checks File.size against the zip limits before it reads any file"
 
 const snippet = (path: string, code: string, extra: Partial<SnippetPreview> = {}): SnippetPreview => ({ path, code, replaces: false, problems: [], id: path, matches: ["https://a.test/*"], requires: [], ...extra });
 const NO_REACH = no_reach();
-const preview_of = (snippets: SnippetPreview[], extra: Partial<Extract<ConfigImportPreview, { ok: true }>> = {}): ConfigImportPreview => ({ ok: true, replaces_config: true, config_files: ["settings.toml"], snippets, problems: [], warnings: [], reach: NO_REACH, ...extra });
+const preview_of = (snippets: SnippetPreview[], extra: Partial<Extract<ConfigImportPreview, { ok: true }>> = {}): ConfigImportPreview => ({ ok: true, replaces_config: true, config_files: ["settings.toml"], folder_files: [], snippets, problems: [], warnings: [], reach: NO_REACH, ...extra });
 
 function session_with(answers: Record<string, unknown>) {
   const sent: { type: string; [key: string]: unknown }[] = [];

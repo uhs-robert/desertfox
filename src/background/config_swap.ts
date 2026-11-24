@@ -1,6 +1,6 @@
 // Swaps the config in place.
 
-import { keep_chain, warn_and_go } from "../shared/swallow.ts";
+import { keep_chain, refused_as, warn_and_go } from "../shared/swallow.ts";
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { load_layers } from "./edit_layers.ts";
@@ -11,31 +11,36 @@ import { ENGINE_EDITS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { read_slot_map, store_slot_map } from "./slots.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
-import { checked_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
+import { checked_consent, plan_folder_writes, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
+import type { FolderWrite, ImportResult } from "./config_import.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../shared/messages/page.ts";
 import { key_edits_running } from "./keymap_message.ts";
 import { parse_snippet } from "../shared/config_build/snippet.ts";
 import { commands_of_registry } from "../shared/config_build/build_config.ts";
 import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, TEMP_SETTINGS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
-import { clear_host_pending } from "./host_start.ts";
+import { clear_host_pending, has_config_files } from "./host_start.ts";
 import { read_unsynced, stored_unsynced, unsynced_of_stored } from "./settings_file.ts";
-import type { CopyReplacedBy, UnsyncedFiles } from "./settings_file.ts";
+import type { UnsyncedFiles } from "./settings_file.ts";
+import type { ConfigFiles } from "../shared/config_build/source_files.ts";
+import type { ConfigFileWrites, PickMark } from "./config_file_writes.ts";
 import type { ConfigStore, LoadStep } from "./config_store.ts";
 import type { Services } from "./services.ts";
 
 declare const browser: MessagingBrowser;
 
 // Swaps the config in place: the one commit path of a reload, an import, an editor save and a setting write.
-// `note_record_dropped` belongs to the file-write pipeline, which imports this module, so the caller passes it in.
-export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets"> & { note_record_dropped: (path: string, by: CopyReplacedBy) => void }) {
-  const { snippets, note_record_dropped } = deps;
+// The file-write pipeline calls `apply_files` of this module, so the caller passes in the parts of it an import uses.
+export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_pick" | "write_waiting_file" | "writes_of"> }) {
+  const { snippets, native_host } = deps;
+  const { note_record_dropped, mark_pick, write_waiting_file, writes_of } = deps.file_writes;
   const { get_config, publish, built_in_commands, in_change_queue, read_load_step, set_load_step, read_current_config, set_current_config, count_swap } = store;
   // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
   // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
   // A setting write passes `setting`: the edits that replace the setting edits, the record of the folder's base texts (none when no file is written), and for an Engines page change that touches the old engines layer the layer after it.
   // They go into the same storage write as the files, so a stop between writes never leaves one without the other, and a failure restores them all.
-  async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedFiles | undefined; engines_after?: EngineEdits }): Promise<{ warnings: number }> {
+  // An import that read the folder passes `import_record`, the record of the files it sends there, which replaces the old record whole.
+  async function apply_files(source: FilesSource, action: ApplyAction, setting?: { edits_after: SettingEdits; unsynced: UnsyncedFiles | undefined; engines_after?: EngineEdits }, import_record?: UnsyncedFiles): Promise<{ warnings: number }> {
     const { files, dir_label } = source;
     await get_config();
     const current_step = await read_load_step();
@@ -45,7 +50,7 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
     const engines_after = setting?.engines_after;
     const swapped_keys = [FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY, ...(engines_after ? [ENGINE_EDITS_STORAGE_KEY] : [])];
     const local_before = await browser.storage.local.get(swapped_keys);
-    const unsynced_after = setting ? setting.unsynced : await unsynced_kept_by(action, source);
+    const unsynced_after = setting ? setting.unsynced : (import_record ?? (await unsynced_kept_by(action, source)));
     let local_written = false;
     // From here the registry holds the new snippets while the tabs still run the old keymap.
     // Readers wait on `get_config` until the swap commits, so no command runs against half of it.
@@ -77,7 +82,8 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       commit(published.config);
       count_swap();
       if (!setting) {
-        const dropped = Object.keys(unsynced_of_stored(local_before[SETTINGS_FILE_UNSYNCED_STORAGE_KEY]) ?? {}).filter((path) => !unsynced_after || !Object.hasOwn(unsynced_after, path));
+        const kept = import_record ? undefined : unsynced_after;
+        const dropped = Object.keys(unsynced_of_stored(local_before[SETTINGS_FILE_UNSYNCED_STORAGE_KEY]) ?? {}).filter((path) => !kept || !Object.hasOwn(kept, path));
         for (const path of dropped) note_record_dropped(path, action === "import" || action === "edit" ? action : "reload");
       }
       return { warnings: published.warnings.length };
@@ -121,25 +127,47 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
     const incoming = await read_import_source(source);
     await get_config();
     const built_in_commands = commands_of_registry(registry).filter((command) => !snippets.is_snippet(command.id));
-    return preview_import(incoming, (await load_files_source()).files, built_in_commands);
+    const folder = await read_folder_for_import();
+    return preview_import(incoming, (await load_files_source()).files, built_in_commands, folder, paths_with_write_out(incoming));
+  }
+
+  // The paths of `files` with a host write still out, which can land after the import's folder read.
+  const paths_with_write_out = (files: ConfigFiles): Set<string> => new Set(Object.keys(files).filter((path) => writes_of(path).out !== undefined));
+
+  // The config folder's files, or undefined when the host cannot read it or the folder holds no config files. Then an import stays in the browser, as a start or `,r` would not take such a folder either.
+  async function read_folder_for_import(): Promise<ConfigFiles | undefined> {
+    const reply = await refused_as(native_host.read_config(), undefined);
+    return reply?.config_dir_exists && has_config_files(reply.files) ? reply.files : undefined;
   }
 
   // Applies an import over the slot's raw files: its config files replace the ones in force, and only the snippets in `accepted` join the installed ones.
   // The slot is read inside the queue, so an import after a reload builds on the reloaded files.
-  function import_config(source: unknown, accepted: unknown): Promise<{ warnings: number; replaces_config: boolean; snippets: number }> {
+  // Config files the host writes also go to the folder, so a later `,r` keeps them: the swap stores their record, and the writes run after it, outside the queue, as a `:set`'s do.
+  // The record is in the swap's own storage write, so a stop before the writes leaves it for the next start to write.
+  async function import_config(source: unknown, accepted: unknown): Promise<ImportResult> {
     const reading = read_import_source(source);
     // Settled here too, so a refused read is not an unhandled rejection while the queue waits.
     void keep_chain(reading);
-    return in_change_queue(async () => {
+    const { picks, ...result } = await in_change_queue(async (): Promise<ImportResult & { picks?: PickMark[] | undefined }> => {
       const incoming = await reading;
       const consented = checked_consent(incoming, accepted);
       if (imports_nothing(incoming, consented)) throw new ConfigRefusal(`${KEPT_CURRENT.import} The import holds no config files and no snippet was accepted.`);
       const current = await load_files_source();
-      const { files, replaces_config } = plan_import_files(incoming, current.files, consented);
-      const source = replaces_config ? { files, dir_label: IMPORT_DIR_LABEL, imported: true } : { ...current, files };
-      const { warnings } = await apply_files(source, "import");
-      return { warnings, replaces_config, snippets: Object.keys(consented).length };
+      const { files: planned_files, replaces_config } = plan_import_files(incoming, current.files, consented);
+      const snippet_count = Object.keys(consented).length;
+      if (!replaces_config) return { ...(await apply_files({ ...current, files: planned_files }, "import")), replaces_config, snippets: snippet_count };
+      const folder = await read_folder_for_import();
+      // The copy holds the folder's consent keys too, so the text written and the record's view of the copy are one.
+      const plan = folder && plan_folder_writes(planned_files, folder, paths_with_write_out(planned_files));
+      const { warnings } = await apply_files({ files: plan?.files ?? planned_files, dir_label: IMPORT_DIR_LABEL, imported: true }, "import", undefined, plan?.record);
+      if (!plan) return { warnings, replaces_config, snippets: snippet_count };
+      return { warnings, replaces_config, snippets: snippet_count, picks: Object.keys(plan.record).map(mark_pick), settings_kept_for_consent: plan.settings_kept_for_consent };
     });
+    if (!picks) return result;
+    const folder_writes: FolderWrite[] = [];
+    // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
+    for (const pick of picks) folder_writes.push({ path: pick.path, outcome: (await write_waiting_file(in_change_queue, pick.path, pick)) ?? { kind: "written" } });
+    return { ...result, folder_writes };
   }
 
   // Drops one installed snippet from the slot's raw files and rebuilds. A key in the files or a key edit that binds it refuses the removal, and the snippet stays.

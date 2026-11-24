@@ -83,6 +83,13 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     writes.end = { kind: "replaced", by, written: false };
   }
 
+  // Numbers a pick of the file at `path` once a swap stored it in the record. In the change queue, after that swap.
+  function mark_pick(path: string): PickMark {
+    const writes = writes_of(path);
+    writes.picks_made += 1;
+    return { path, seq: writes.picks_made, drops: writes.drops };
+  }
+
   const already_in_queue: QueueRunner = (work) => work();
 
   // Writes every file the folder lags, one path after the other. A path that ends refused or waiting leaves the next one to its own write.
@@ -421,7 +428,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     return "ignored";
   }
 
-  return { writes_of, note_record_dropped, already_in_queue, write_waiting_files, write_waiting_file, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
+  return { writes_of, note_record_dropped, mark_pick, already_in_queue, write_waiting_files, write_waiting_file, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
 }
 
 export type ConfigFileWrites = ReturnType<typeof create_config_file_writes>;

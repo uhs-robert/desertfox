@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { answer_config_import, read_import_source, strip_top_folder } from "../../src/background/config_import.ts";
+import type { ImportResult } from "../../src/background/config_import.ts";
+import { ENGINE_FILE, PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
+import { KEYS_FILE, keys_file_text } from "../../src/background/engine_keys_file.ts";
 import { ConfigRefusal } from "../../src/background/config_reload.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import type { ConfigImportPreview, ImportSource } from "../../src/shared/messages/page.ts";
 import { write_zip } from "../../src/shared/zip.ts";
-import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
-import { install_fake_browser, type Files } from "./config_fake_browser.ts";
+import { FILES_CONFIG_STORAGE_KEY, FILES_SOURCE_STORAGE_KEY, HOST_START_PENDING_STORAGE_KEY, SAVED_SETTINGS_STORAGE_KEY, SETTINGS_FILE_UNSYNCED_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
+import { install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
 
 type Startup = ConfigService;
@@ -30,7 +34,7 @@ const refusal_of = (promise: Promise<unknown>) =>
 
 // A start on host files with one installed snippet, so each test has a config and a snippet to keep or lose.
 async function started(tag: string, host_files: Files = { "settings.toml": 'hint_letters = "ab"\n', "snippets/home.js": snippet_file(`${tag}.mine`) }) {
-  const host = { files: host_files };
+  const host: Parameters<typeof install_fake_browser>[0] = { files: host_files };
   const browser = install_fake_browser(host);
   const startup = fresh_config_service();
   await startup.get_config();
@@ -197,15 +201,17 @@ test("an import queued behind a reload builds on the reloaded files", async () =
   assert.equal(registry.get("reload_then_import.mine"), undefined);
 });
 
-test("a reload queued behind an import replaces it, imported snippets included", async () => {
+test("a reload queued behind an import writes the import's settings.toml first and keeps it, but drops the imported snippets", async () => {
   const { startup, host, local } = await started("import_then_reload");
   host.files = { "settings.toml": 'hint_letters = "rt"\n' };
   const imported = startup.import_config(zip_of({ "d/settings.toml": 'hint_letters = "ij"\n', "d/snippets/i.js": snippet_file("itr.imported") }), { "snippets/i.js": snippet_file("itr.imported") });
   const reload = startup.reload_config();
   await Promise.all([imported, reload]);
-  assert.deepEqual(slot_of(local).source.files, { "settings.toml": 'hint_letters = "rt"\n' });
-  assert.equal((await startup.get_config()).settings.hint_letters, "rt");
+  assert.deepEqual(host.files, { "settings.toml": 'hint_letters = "ij"\n' });
+  assert.deepEqual(slot_of(local).source.files, { "settings.toml": 'hint_letters = "ij"\n' });
+  assert.equal((await startup.get_config()).settings.hint_letters, "ij");
   assert.equal(registry.get("itr.imported"), undefined);
+  assert.equal(unsynced_of(local), undefined);
 });
 
 test("a :set queued behind an import lands on the imported config", async () => {
@@ -217,14 +223,19 @@ test("a :set queued behind an import lands on the imported config", async () => 
 });
 
 test("the answer names what the import changed, and a preview failure is an answer too", async () => {
-  const deps = (result: { warnings: number; replaces_config: boolean; snippets: number }) => ({
+  const deps = (result: ImportResult) => ({
     preview: async () => {
       throw new ConfigRefusal("Config not imported, the current one stays. Bad zip.");
     },
     commit: async () => result,
   });
   const commit = { type: "commit_config_import", source: folder_of({}), accepted: {} } as const;
-  assert.deepEqual(await answer_config_import(commit, deps({ warnings: 0, replaces_config: true, snippets: 2 })), { ok: true, message: "Imported the config files and 2 snippet(s)" });
+  assert.deepEqual(await answer_config_import(commit, deps({ warnings: 0, replaces_config: true, snippets: 2, folder_writes: [] })), { ok: true, message: "Imported the config files and 2 snippet(s)" });
+  const folder_writes = [{ path: "settings.toml", outcome: { kind: "written" } }, { path: "themes/a.toml", outcome: { kind: "written" } }, { path: "keymap.d/zz-desertfox.toml", outcome: { kind: "waiting", host_outdated: true } }] as const;
+  assert.deepEqual(await answer_config_import(commit, deps({ warnings: 0, replaces_config: true, snippets: 0, folder_writes: [...folder_writes] })), {
+    ok: true,
+    message: "Imported the config files. Wrote settings.toml, themes/a.toml to the config folder. keymap.d/zz-desertfox.toml updates once the native host is updated",
+  });
   assert.deepEqual(await answer_config_import(commit, deps({ warnings: 1, replaces_config: false, snippets: 1 })), { ok: true, message: "Imported 1 snippet(s), with 1 warning(s) on the Help page" });
   assert.deepEqual(await answer_config_import({ type: "preview_config_import", source: folder_of({}) }, deps({ warnings: 0, replaces_config: true, snippets: 0 })), { ok: false, message: "Config not imported, the current one stays. Bad zip." });
 });
@@ -261,4 +272,201 @@ test("an import drops the consent settings, says so in the review, and keeps the
   assert.notEqual(built.bridge, true);
   assert.notEqual(built.bridge_share_tabs, true);
   assert.notEqual(built.host_auto_update, true);
+});
+
+// The import writes the files the host can write, so the folder and the browser copy agree on them.
+
+const IMPORTED_SETTINGS = 'hint_letters = "xyz"\n';
+const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
+const commit_answer = (startup: Startup, source: ImportSource, accepted: Record<string, string> = {}) =>
+  answer_config_import({ type: "commit_config_import", source, accepted }, { preview: startup.preview_config_import, commit: startup.import_config });
+
+test("an import writes the files the host can write, leaves the folder's others, and `,r` keeps it", async () => {
+  const theme = readFileSync(new URL("../../themes/catppuccin_frappe.toml", import.meta.url), "utf8");
+  const { startup, host, local } = await started("writes_folder", { "settings.toml": 'hint_letters = "ab"\n', "themes/old.toml": theme, "keymap.toml": "" });
+  const source = zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/themes/mine.toml": theme, "d/keymap.toml": '[normal]\n"zz" = "tab.next"\n', "d/snippets/s.js": snippet_file("writes_folder.s") });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, ["settings.toml", "themes/mine.toml"]);
+  const answer = await commit_answer(startup, source, { "snippets/s.js": snippet_file("writes_folder.s") });
+  assert.deepEqual(answer, { ok: true, message: "Imported the config files and 1 snippet(s). Wrote settings.toml, themes/mine.toml to the config folder" });
+  assert.deepEqual(host.files, { "settings.toml": IMPORTED_SETTINGS, "themes/old.toml": theme, "themes/mine.toml": theme, "keymap.toml": "" });
+  assert.equal(unsynced_of(local), undefined);
+  await startup.reload_config();
+  assert.equal((await startup.get_config()).settings.hint_letters, "xyz");
+});
+
+test("an import whose write the folder refuses as changed on disk stays, and the copies-differ question takes the file", async () => {
+  const { startup, host, local, fake } = await started("refused_write");
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = async (name, message) => {
+    if (message.cmd === "write_config_file") host.files = { ...host.files, "settings.toml": 'hint_letters = "hand"\n' };
+    return send(name, message);
+  };
+  const answer = await commit_answer(startup, zip_of({ "d/settings.toml": IMPORTED_SETTINGS }));
+  assert.deepEqual(answer, { ok: true, message: "Imported the config files. settings.toml changed on disk, so it stays as it is. Open the Settings page to choose" });
+  assert.equal((await startup.get_config()).settings.hint_letters, "xyz");
+  assert.equal(host.files["settings.toml"], 'hint_letters = "hand"\n');
+  assert.equal(unsynced_of(local), undefined);
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+for (const [name, host_state] of [["no permission", { granted: false }], ["no config folder", { no_folder: true }]] as const) {
+  test(`an import with ${name} stays in the browser and says the folder was not updated`, async () => {
+    const { startup, host, local, sent } = await started(`no_folder_${name.replace(/ /g, "_")}`);
+    Object.assign(host, host_state);
+    sent.length = 0;
+    const answer = await commit_answer(startup, zip_of({ "d/settings.toml": IMPORTED_SETTINGS }));
+    assert.deepEqual(answer, { ok: true, message: "Imported the config files. The config folder was not updated" });
+    assert.equal((await startup.get_config()).settings.hint_letters, "xyz");
+    assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
+    assert.equal(unsynced_of(local), undefined);
+  });
+}
+
+test("a `:set` after an import keeps the record of the files still waiting, its reply says what the write did, and the next `,r` writes them", async () => {
+  const { startup, host, local } = await started("set_after_import");
+  host.refuse = ["settings.toml"];
+  const answer = await commit_answer(startup, zip_of({ "d/settings.toml": IMPORTED_SETTINGS }));
+  assert.match(answer.message, /settings\.toml was not written/);
+  assert.deepEqual(unsynced_of(local), { "settings.toml": 'hint_letters = "ab"\n' });
+  assert.equal((await startup.set_in_settings_file("which_key_delay_ms", 7)).kind, "failed");
+  assert.deepEqual(unsynced_of(local), { "settings.toml": 'hint_letters = "ab"\n' });
+  host.refuse = [];
+  await startup.reload_config();
+  assert.deepEqual((await startup.get_config()).settings, { hint_letters: "xyz", which_key_delay_ms: 7 });
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a `:set` on an imported copy whose files all reached the folder changes only the copy, and says so", async () => {
+  const { startup, local } = await started("set_after_written_import");
+  await startup.import_config(zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/keymap.toml": "" }), {});
+  assert.equal(unsynced_of(local), undefined);
+  assert.deepEqual(await startup.set_in_settings_file("which_key_delay_ms", 7), { kind: "browser_copy" });
+  assert.equal(unsynced_of(local), undefined);
+});
+
+// Holds each config file write until the test releases it, as a slow host would.
+function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]): (() => void)[] {
+  const held: (() => void)[] = [];
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = async (name, message) => {
+    if (message.cmd === "write_config_file") await new Promise<void>((resolve) => held.push(resolve));
+    return send(name, message);
+  };
+  return held;
+}
+
+test("a `:set` write still out when an import reads the folder lands first, and the import's settings.toml follows it", async () => {
+  const { startup, host, local, fake } = await started("write_out_at_import");
+  const held = hold_writes(fake);
+  const set = startup.set_in_settings_file("which_key_delay_ms", 7);
+  await until(() => held.length === 1, "the :set write did not go out");
+  // The import holds the folder's text from before the :set, so only the write out tells the two apart.
+  const imported = startup.import_config(zip_of({ "d/settings.toml": 'hint_letters = "ab"\n' }), {});
+  await until(() => unsynced_of(local) !== undefined && (slot_of(local).source as { imported?: boolean }).imported === true, "the import did not commit");
+  held.shift()!();
+  await until(() => held.length === 1, "the import's write did not go out");
+  held.shift()!();
+  await imported;
+  assert.deepEqual(await set, { kind: "replaced", by: "import", written: true });
+  assert.equal(host.files["settings.toml"], 'hint_letters = "ab"\n');
+  assert.equal(unsynced_of(local), undefined);
+  await startup.reload_config();
+  assert.equal((await startup.get_config()).settings.which_key_delay_ms, undefined);
+});
+
+test("a folder settings.toml that does not parse is not written over, so its consent settings stay", async () => {
+  const { startup, host } = await started("folder_consent_unknown");
+  host.files = { ...host.files, "settings.toml": 'bridge = true\nhint_letters = \n' };
+  const source = zip_of({ "d/settings.toml": IMPORTED_SETTINGS });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, []);
+  assert.match(preview.warnings.join("\n"), /settings\.toml is not written to the config folder/);
+  const answer = await commit_answer(startup, source);
+  assert.match(answer.message, /settings\.toml is not written to the config folder: it sets consent settings/);
+  assert.equal(host.files["settings.toml"], 'bridge = true\nhint_letters = \n');
+  assert.equal((await startup.get_config()).settings.hint_letters, "xyz");
+});
+
+test("an import writes the Engines page's two files and a theme before the settings.toml that names them", async () => {
+  const theme = readFileSync(new URL("../../themes/catppuccin_frappe.toml", import.meta.url), "utf8");
+  const { startup, host, sent } = await started("engines_and_order");
+  sent.length = 0;
+  const engines = `${PAGE_FILE_MARKER}\n[ghost]\nurl = "https://g.test/?q={query}"\n`;
+  const keys = keys_file_text({ g: "ghost" });
+  const settings = 'hint_letters = "xyz"\ndefault_engine = "ghost"\ntheme = "mine"\n';
+  const answer = await commit_answer(startup, zip_of({ "d/settings.toml": settings, "d/themes/mine.toml": theme, [`d/${ENGINE_FILE}`]: engines, [`d/${KEYS_FILE}`]: keys }));
+  assert.equal(answer.ok, true, answer.message);
+  assert.deepEqual(host.files, { "settings.toml": settings, "themes/mine.toml": theme, [ENGINE_FILE]: engines, [KEYS_FILE]: keys, "snippets/home.js": snippet_file("engines_and_order.mine") });
+  const order = sent.filter((message) => message.cmd === "write_config_file").map((message) => message.kind);
+  assert.ok(order.indexOf("settings") > order.indexOf("theme") && order.indexOf("settings") > order.indexOf("engines"), order.join(", "));
+  assert.ok(order.indexOf("search_keys") > order.indexOf("engines"), order.join(", "));
+  await startup.reload_config();
+  assert.equal((await startup.get_config()).settings.default_engine, "ghost");
+});
+
+test("a stop between the import's commit and its write leaves the record, and the next start writes it", async () => {
+  const { startup, host, local, fake } = await started("stop_before_write");
+  const send = fake.runtime.sendNativeMessage;
+  let write_out = false;
+  // The write never answers, as when the browser stops while it is out.
+  fake.runtime.sendNativeMessage = async (name, message) => (message.cmd === "write_config_file" ? ((write_out = true), new Promise<never>(() => {})) : send(name, message));
+  void startup.import_config(zip_of({ "d/settings.toml": IMPORTED_SETTINGS }), {});
+  await until(() => write_out, "the import's write did not go out");
+  assert.deepEqual(unsynced_of(local), { "settings.toml": 'hint_letters = "ab"\n' });
+  fake.runtime.sendNativeMessage = send;
+  const restarted = fresh_config_service();
+  await restarted.reload_config_at_start();
+  assert.equal(host.files["settings.toml"], IMPORTED_SETTINGS);
+  assert.equal(unsynced_of(local), undefined);
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  assert.equal((await restarted.get_config()).settings.hint_letters, "xyz");
+});
+
+test("an import keeps the folder's consent keys in the settings.toml it writes, and never writes its own", async () => {
+  const { startup, host, local, sent } = await started("folder_consent", { "settings.toml": 'hint_letters = "ab"\nbridge = true\n' });
+  sent.length = 0;
+  const source = zip_of({ "d/settings.toml": 'hint_letters = "xyz"\nhost_auto_update = true\n' });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, ["settings.toml"]);
+  await startup.import_config(source, {});
+  const written = 'hint_letters = "xyz"\nbridge = true\n';
+  assert.equal(host.files["settings.toml"], written);
+  assert.equal(slot_of(local).source.files["settings.toml"], written);
+  assert.equal(unsynced_of(local), undefined);
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  await startup.reload_config();
+  const settings = (await startup.get_config()).settings;
+  assert.equal(settings.bridge, true);
+  assert.notEqual(settings.host_auto_update, true);
+});
+
+test("a folder settings.toml without consent keys gets none from an import", async () => {
+  const { startup, host } = await started("no_folder_consent");
+  await startup.import_config(zip_of({ "d/settings.toml": 'hint_letters = "xyz"\nbridge = true\n' }), {});
+  assert.equal(host.files["settings.toml"], 'hint_letters = "xyz"\n');
+});
+
+test("an imported settings.d file that does not parse gives the build's problem list, not a raw parse error", async () => {
+  const { startup } = await started("bad_settings_d", { "settings.toml": 'hint_letters = "ab"\nbridge = true\n' });
+  const source = zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/settings.d/50-bad.toml": "hint_letters = \n" });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.equal(preview.ok, true);
+  assert.match(preview.problems.join("\n"), /50-bad\.toml/);
+  assert.deepEqual(preview.folder_files, []);
+});
+
+test("the preview names a write the import makes behind a write still out, and none for equal text without one", async () => {
+  const { startup, local, fake } = await started("preview_write_out");
+  const source = zip_of({ "d/settings.toml": 'hint_letters = "ab"\n' });
+  const quiet = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(quiet.folder_files, []);
+  const held = hold_writes(fake);
+  const set = startup.set_in_settings_file("which_key_delay_ms", 7);
+  await until(() => held.length === 1, "the :set write did not go out");
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, ["settings.toml"]);
+  held.shift()!();
+  await set;
+  assert.equal(unsynced_of(local), undefined);
 });
