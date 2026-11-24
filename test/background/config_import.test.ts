@@ -352,3 +352,27 @@ test("a stop between the import's commit and its write leaves the record, and th
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
   assert.equal((await restarted.get_config()).settings.hint_letters, "xyz");
 });
+
+test("an import keeps the folder's consent keys in the settings.toml it writes, and never writes its own", async () => {
+  const { startup, host, local, sent } = await started("folder_consent", { "settings.toml": 'hint_letters = "ab"\nbridge = true\n' });
+  sent.length = 0;
+  const source = zip_of({ "d/settings.toml": 'hint_letters = "xyz"\nhost_auto_update = true\n' });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, ["settings.toml"]);
+  await startup.import_config(source, {});
+  const written = 'hint_letters = "xyz"\nbridge = true\n';
+  assert.equal(host.files["settings.toml"], written);
+  assert.equal(slot_of(local).source.files["settings.toml"], written);
+  assert.equal(unsynced_of(local), undefined);
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  await startup.reload_config();
+  const settings = (await startup.get_config()).settings;
+  assert.equal(settings.bridge, true);
+  assert.notEqual(settings.host_auto_update, true);
+});
+
+test("a folder settings.toml without consent keys gets none from an import", async () => {
+  const { startup, host } = await started("no_folder_consent");
+  await startup.import_config(zip_of({ "d/settings.toml": 'hint_letters = "xyz"\nbridge = true\n' }), {});
+  assert.equal(host.files["settings.toml"], 'hint_letters = "xyz"\n');
+});

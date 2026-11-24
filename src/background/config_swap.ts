@@ -11,7 +11,7 @@ import { ENGINE_EDITS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { read_slot_map, store_slot_map } from "./slots.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
-import { checked_consent, import_folder_record, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
+import { checked_consent, import_folder_record, with_folder_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
 import type { FolderWrite, ImportResult } from "./config_import.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../shared/messages/page.ts";
@@ -149,10 +149,12 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       const consented = checked_consent(incoming, accepted);
       if (imports_nothing(incoming, consented)) throw new ConfigRefusal(`${KEPT_CURRENT.import} The import holds no config files and no snippet was accepted.`);
       const current = await load_files_source();
-      const { files, replaces_config } = plan_import_files(incoming, current.files, consented);
+      const { files: planned_files, replaces_config } = plan_import_files(incoming, current.files, consented);
       const snippet_count = Object.keys(consented).length;
-      if (!replaces_config) return { ...(await apply_files({ ...current, files }, "import")), replaces_config, snippets: snippet_count };
+      if (!replaces_config) return { ...(await apply_files({ ...current, files: planned_files }, "import")), replaces_config, snippets: snippet_count };
       const folder = await read_folder_for_import();
+      // The copy holds the folder's consent keys too, so the text written and the record's view of the copy are one.
+      const files = folder ? with_folder_consent(planned_files, folder) : planned_files;
       const record = folder && import_folder_record(files, folder);
       const { warnings } = await apply_files({ files, dir_label: IMPORT_DIR_LABEL, imported: true }, "import", undefined, record);
       return { warnings, replaces_config, snippets: snippet_count, picks: record && Object.keys(record).map(mark_pick) };

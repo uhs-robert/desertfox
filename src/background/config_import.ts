@@ -15,7 +15,9 @@ import { IMPORT_DIR_LABEL } from "../shared/config/config_load.ts";
 import { import_reach, no_reach } from "./import_reach.ts";
 import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
 import { host_file_of } from "./native_client.ts";
-import { outcome_note } from "./settings_file.ts";
+import { outcome_note, SETTINGS_FILE, with_setting_in_files } from "./settings_file.ts";
+import { RuntimeRefusal } from "../shared/command.ts";
+import type { TomlValue } from "./toml_key_edit.ts";
 import type { FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
@@ -108,6 +110,28 @@ export function import_folder_record(files: ConfigFiles, folder: ConfigFiles): U
   return Object.fromEntries(Object.entries(files).filter(([path, text]) => host_file_of(path) !== undefined && folder[path] !== text).map(([path]) => [path, folder[path] ?? null]));
 }
 
+// The import's settings.toml with the consent keys the folder's settings.toml sets, so a write of it to the folder keeps the consent given on this machine.
+// The import's own consent keys are already gone (`drop_consent_settings`). A folder file that does not parse gives none, and a key the editor cannot set is left out.
+export function with_folder_consent(files: ConfigFiles, folder: ConfigFiles): ConfigFiles {
+  if (files[SETTINGS_FILE] === undefined) return files;
+  let folder_settings: Record<string, unknown>;
+  try {
+    folder_settings = parse(folder[SETTINGS_FILE] ?? "");
+  } catch {
+    return files;
+  }
+  let kept = files;
+  for (const key of CONSENT_SETTINGS) {
+    if (!Object.hasOwn(folder_settings, key)) continue;
+    try {
+      kept = with_setting_in_files(kept, key, folder_settings[key] as TomlValue);
+    } catch (error) {
+      if (!(error instanceof RuntimeRefusal)) throw error;
+    }
+  }
+  return kept;
+}
+
 // Consent is to the exact code the preview showed, so the commit takes the code back and stores only an exact match.
 export function checked_consent(incoming: ConfigFiles, accepted: unknown): Record<string, string> {
   if (typeof accepted !== "object" || accepted === null || Array.isArray(accepted)) throw refuse("The accepted snippets are not a list of paths and code.");
@@ -154,7 +178,7 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
     ok: true,
     replaces_config,
     config_files: Object.keys(imported.config_files).sort(),
-    folder_files: replaces_config && folder ? Object.keys(import_folder_record(files, folder)).sort() : [],
+    folder_files: replaces_config && folder ? Object.keys(import_folder_record(with_folder_consent(files, folder), folder)).sort() : [],
     snippets: Object.entries(imported.snippet_files).map(([path, code]) => preview_snippet(path, code, current)),
     problems,
     warnings,
