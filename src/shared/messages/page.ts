@@ -151,9 +151,9 @@ export type KeyRow = { where: string; keys: string; run: string; consent?: "swit
 // What the built import reaches: the addresses it adds, the risky keys by group, and how many site rows add keys of their own.
 export type ImportReach = { addresses: ReachList<ReachRow>; keys: Record<KeyGroup, ReachList<KeyRow>>; site_rows: number };
 
-// `replaces_config` says the import holds config files, which replace every config file in force. `problems` come from a build with every snippet accepted: the commit refuses while any remain.
+// `replaces_config` says the import holds config files, which replace every config file in force. `folder_files` are those the import also writes to the config folder the host read, empty without one. `problems` come from a build with every snippet accepted: the commit refuses while any remain.
 export type ConfigImportPreview =
-  | { ok: true; replaces_config: boolean; config_files: string[]; snippets: SnippetPreview[]; problems: string[]; warnings: string[]; reach: ImportReach }
+  | { ok: true; replaces_config: boolean; config_files: string[]; folder_files: string[]; snippets: SnippetPreview[]; problems: string[]; warnings: string[]; reach: ImportReach }
   | { ok: false; message: string };
 
 export type ConfigImportAnswer = { ok: true; message: string } | { ok: false; message: string };

@@ -14,6 +14,9 @@ import { ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import { IMPORT_DIR_LABEL } from "../shared/config/config_load.ts";
 import { import_reach, no_reach } from "./import_reach.ts";
 import { CONSENT_SETTINGS } from "../shared/settings_schema.ts";
+import { host_file_of } from "./native_client.ts";
+import { outcome_note } from "./settings_file.ts";
+import type { FileWriteOutcome, UnsyncedFiles } from "./settings_file.ts";
 
 const SNIPPETS_PREFIX = "snippets/";
 export { IMPORT_DIR_LABEL };
@@ -99,6 +102,12 @@ export function plan_import_files(incoming: ConfigFiles, current: ConfigFiles, a
   return { files: { ...config_files, ...kept.snippet_files, ...accepted }, replaces_config, dropped };
 }
 
+// The record an import of config files starts, so the folder gets each file the host writes that the import holds at another text: path to the folder's text.
+// A file the import lacks stays as the folder has it. Snippets are code, which the host never writes.
+export function import_folder_record(files: ConfigFiles, folder: ConfigFiles): UnsyncedFiles {
+  return Object.fromEntries(Object.entries(files).filter(([path, text]) => host_file_of(path) !== undefined && folder[path] !== text).map(([path]) => [path, folder[path] ?? null]));
+}
+
 // Consent is to the exact code the preview showed, so the commit takes the code back and stores only an exact match.
 export function checked_consent(incoming: ConfigFiles, accepted: unknown): Record<string, string> {
   if (typeof accepted !== "object" || accepted === null || Array.isArray(accepted)) throw refuse("The accepted snippets are not a list of paths and code.");
@@ -128,7 +137,8 @@ export function preview_snippet(path: string, code: string, current: ConfigFiles
 }
 
 // The build runs with every snippet accepted, so a problem shows before the user decides. Declining a snippet a key binds makes the commit refuse.
-export function preview_import(incoming: ConfigFiles, current: ConfigFiles, commands: CommandMeta[]): ConfigImportPreview {
+// `folder` is the config folder's files when the host could read them, so the review names the files the import writes there.
+export function preview_import(incoming: ConfigFiles, current: ConfigFiles, commands: CommandMeta[], folder?: ConfigFiles): ConfigImportPreview {
   const imported = split_files(incoming);
   const { files, replaces_config, dropped } = plan_import_files(incoming, current, imported.snippet_files);
   const warnings: string[] = [...dropped];
@@ -144,6 +154,7 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
     ok: true,
     replaces_config,
     config_files: Object.keys(imported.config_files).sort(),
+    folder_files: replaces_config && folder ? Object.keys(import_folder_record(files, folder)).sort() : [],
     snippets: Object.entries(imported.snippet_files).map(([path, code]) => preview_snippet(path, code, current)),
     problems,
     warnings,
@@ -151,10 +162,23 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
   };
 }
 
+// What became of each file an import of config files sent to the folder. Absent when the folder could not be read, so the import stayed in the browser.
+export type FolderWrite = { path: string; outcome: FileWriteOutcome };
+export type ImportResult = { warnings: number; replaces_config: boolean; snippets: number; folder_writes?: FolderWrite[] };
+
 export type ConfigImportDeps = {
   preview: (source: unknown) => Promise<ConfigImportPreview>;
-  commit: (source: unknown, accepted: unknown) => Promise<{ warnings: number; replaces_config: boolean; snippets: number }>;
+  commit: (source: unknown, accepted: unknown) => Promise<ImportResult>;
 };
+
+// The end of the answer about the config folder. Only an import of config files has one.
+function folder_note({ replaces_config, folder_writes }: ImportResult): string {
+  if (!replaces_config) return "";
+  if (!folder_writes) return ". The config folder was not updated";
+  const written = folder_writes.filter(({ outcome }) => outcome.kind === "written").map(({ path }) => path);
+  const wrote = written.length === 0 ? "" : `. Wrote ${written.join(", ")} to the config folder`;
+  return wrote + folder_writes.map(({ path, outcome }) => (outcome.kind === "written" ? "" : outcome_note(outcome, path))).join("");
+}
 
 // The settings page's two import messages. Every failure becomes the answer's message, and a refusal already says what stays.
 export function answer_config_import(request: PreviewConfigImport, deps: ConfigImportDeps): Promise<ConfigImportPreview>;
@@ -162,10 +186,11 @@ export function answer_config_import(request: CommitConfigImport, deps: ConfigIm
 export async function answer_config_import(request: PreviewConfigImport | CommitConfigImport, deps: ConfigImportDeps): Promise<ConfigImportPreview | ConfigImportAnswer> {
   try {
     if (request.type === "preview_config_import") return await deps.preview(request.source);
-    const { warnings, replaces_config, snippets } = await deps.commit(request.source, request.accepted);
+    const result = await deps.commit(request.source, request.accepted);
+    const { warnings, replaces_config, snippets } = result;
     const parts = [...(replaces_config ? ["the config files"] : []), ...(snippets > 0 ? [`${snippets} snippet(s)`] : [])];
     const warned = warnings === 0 ? "" : `, with ${warnings} warning(s) on the Help page`;
-    return { ok: true, message: `Imported ${parts.join(" and ")}${warned}` };
+    return { ok: true, message: `Imported ${parts.join(" and ")}${warned}${folder_note(result)}` };
   } catch (error) {
     if (error instanceof ConfigRefusal) return { ok: false, message: error.message };
     const reason = error instanceof Error ? error.message : String(error);

@@ -213,10 +213,15 @@ test("a :set issued while the start adopts the folder waits for the swap and sta
 });
 
 // The browser copy a previous run left: `files` imported over a folder that held `host.files`.
+// The host lacked its permission during the import, so the import stayed in the browser and the folder kept its files.
 async function imported_run(tag: string, local: Record<string, unknown>, files: Files): Promise<void> {
   await stored_run(tag);
+  const { permissions } = (globalThis as unknown as { browser: { permissions: { contains: () => Promise<boolean> } } }).browser;
+  const granted = permissions.contains;
+  permissions.contains = async () => false;
   const seeded = fresh_config_service();
   await seeded.import_config({ kind: "folder", entries: Object.entries(files).map(([path, text]) => ({ path, text })) }, {});
+  permissions.contains = granted;
   assert.equal((local[FILES_SOURCE_STORAGE_KEY] as { dir_label: string }).dir_label, IMPORT_DIR_LABEL);
 }
 
@@ -297,7 +302,8 @@ test("an editor save, an import or a reload while the question is pending clears
     assert.equal(pending_of(local), undefined, change);
     const answered = await answer(startup, "use_folder", seen);
     assert.equal(answered.ok, false, change);
-    assert.equal(answered.message, change === "reload" ? CHOICE_SETTLED : CHOICE_STALE, change);
+    // The import wrote its settings.toml to the folder, so the two copies agree again, as after the reload.
+    assert.equal(answered.message, change === "save" ? CHOICE_STALE : CHOICE_SETTLED, change);
     const expected = { save: "typed", import: "zip", reload: "disk" }[change];
     assert.equal((await startup.get_config()).settings.hint_letters, expected, change);
   }

@@ -38,7 +38,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   const { store, swap, file_writes } = parts;
   const { get_config, publish, built_in_commands, layered_build, in_change_queue, commit_change, mirror_key_edits, read_load_step } = store;
   const { apply_files } = swap;
-  const { writes_of, write_waiting_file, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
+  const { mark_pick, write_waiting_file, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
   // One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then the host writes of the files, in the plan's order unless `path_to_write_first` sends one first (a remove can send the keys file first).
   // `plan` runs in the change queue and gets a build of any files and layer over the aliases in force, so it refuses what a change breaks before anything is stored.
   // The answer has no `file` or `keys` for a file that stayed as it was.
@@ -199,8 +199,9 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   // No picks: the copy did not come from the folder, so only the copy changed.
   async function commit_folder_files(current: FilesSource, planned: FolderFilesPlan): Promise<{ question_was_pending: boolean; picks?: PickMark[] }> {
     // An earlier edit the folder never got keeps its base: the folder still holds that text.
+    // A copy that did not come from the folder keeps the record too: an import's files can still wait for the folder.
     const from_folder = await came_from_folder(current);
-    let unsynced = from_folder ? await read_unsynced() : undefined;
+    let unsynced = await read_unsynced();
     if (from_folder) for (const path of planned.paths) unsynced = with_unsynced_path(unsynced, path, current.files[path] ?? null);
     const edits = await load_edits();
     const question_was_pending = (await browser.storage.local.get(HOST_START_PENDING_STORAGE_KEY))[HOST_START_PENDING_STORAGE_KEY] !== undefined;
@@ -212,12 +213,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
     }
     if (JSON.stringify(planned.edits_after.saved) !== JSON.stringify(edits.saved)) await mirror_key_edits();
     if (!from_folder) return { question_was_pending };
-    const picks = planned.paths.map((path) => {
-      const writes = writes_of(path);
-      writes.picks_made += 1;
-      return { path, seq: writes.picks_made, drops: writes.drops };
-    });
-    return { question_was_pending, picks };
+    return { question_was_pending, picks: planned.paths.map(mark_pick) };
   }
 
   // Saves the theme file `themes/<name>.toml` with `text`, or removes it with `text` null, in the browser copy and then through the host, as `set_in_settings_file` writes settings.toml.

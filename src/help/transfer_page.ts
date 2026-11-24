@@ -89,6 +89,7 @@ function review_view(review: Review, session: TransferSession): HTMLElement {
     "desertfox-transfer-review",
     el("h3", undefined, "Review the import"),
     el("p", undefined, config_line),
+    ...(preview.folder_files.length > 0 ? [el("p", undefined, `The import also writes these files to your config folder: ${preview.folder_files.join(", ")}. The folder's other files stay as they are.`)] : []),
     el("p", "desertfox-help-muted", USER_CSS_PAUSED_NOTE),
     ...preview.problems.map((problem) => el("div", "desertfox-settings-error", problem)),
     ...preview.warnings.map((warning) => el("div", "desertfox-help-muted", warning)),

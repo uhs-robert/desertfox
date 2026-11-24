@@ -12,9 +12,9 @@ import type { Services } from "./services.ts";
 export function create_config_service(parts: { store: ConfigStore; services: Services }) {
   const { store, services } = parts;
   const { snippets, host_update, native_host } = services;
-  // The swap takes `note_record_dropped` from the pipeline, and the pipeline calls `apply_files` of the swap, so the pipeline reads the swap late.
+  // The swap takes the write loop of an import from the pipeline, and the pipeline calls `apply_files` of the swap, so the pipeline reads the swap late.
   const file_writes = create_config_file_writes({ store, services, swap: () => swap });
-  const swap = create_config_swap(store, { snippets, note_record_dropped: file_writes.note_record_dropped });
+  const swap = create_config_swap(store, { snippets, native_host, file_writes });
   const setting_writes = create_config_setting_writes({ store, swap, file_writes });
   const start = create_config_start({ store, services, swap, file_writes, setting_writes });
 
