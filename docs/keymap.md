@@ -382,7 +382,7 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `tree --parent --aria` | Parent in a tree, else the item to the left |
+| `h` | `tree --left --aria` | Fold, else parent in a tree, else the item to the left |
 | `l` | `tree --child --aria` | First child in a tree or open it, else the item to the right |
 | `}` | `tree --next --aria` | Next sibling in a tree, else the next section |
 | `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |

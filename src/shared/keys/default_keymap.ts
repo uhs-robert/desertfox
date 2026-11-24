@@ -516,7 +516,7 @@ const item_align = (position: "top" | "center" | "bottom", label: string) => [{ 
 // `body` focus never matches, unlike `when_focus`, so a page that shows a tree keeps the plain item keys until the focus is in the tree. A tree that moves its focus by aria-activedescendant holds the focus itself and so matches.
 const TREE_HAS_FOCUS = "[role=tree]:focus-within";
 // A key of item mode that walks a tree while the focus is in a treeitem, and runs `fallback` otherwise (a page with no tree, or a focus outside one).
-const aria_tree = (action: "parent" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", label: string, fallback?: BoundInvocation): BoundInvocation => ({ id: "page.tree", args: { action, preset: "aria" }, label, when_present: TREE_HAS_FOCUS, ...(fallback && { fallback }) });
+const aria_tree = (action: "parent" | "left" | "child" | "next" | "prev" | "fold" | "unfold" | "toggle", label: string, fallback?: BoundInvocation): BoundInvocation => ({ id: "page.tree", args: { action, preset: "aria" }, label, when_present: TREE_HAS_FOCUS, ...(fallback && { fallback }) });
 const ENTER_ITEM_VISUAL = [{ id: "mode.set", args: { mode: "item_visual" }, label: "Select a range of items" }, { id: "page.item", args: { direction: "current", extend: true } }];
 const ITEM_KEYS: ModeBindings = {
   // These serve normal mode, though their commands run in item mode too.
@@ -543,7 +543,7 @@ const ITEM_KEYS: ModeBindings = {
   V: ENTER_ITEM_VISUAL,
   j: item_step("down", "Next item, or scroll down"),
   k: item_step("up", "Previous item, or scroll up"),
-  h: aria_tree("parent", "Parent in a tree, else the item to the left", item_step("left", "Item to the left, or scroll left")),
+  h: aria_tree("left", "Fold, else parent in a tree, else the item to the left", item_step("left", "Item to the left, or scroll left")),
   l: aria_tree("child", "First child in a tree or open it, else the item to the right", item_step("right", "Item to the right, or scroll right")),
   "}": aria_tree("next", "Next sibling in a tree, else the next section", item_step("next_section", "Next section")),
   "{": aria_tree("prev", "Previous sibling in a tree, else the previous section", item_step("prev_section", "Previous section")),

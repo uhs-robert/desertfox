@@ -19,10 +19,10 @@ test("page.tree is the tree bundle's command, named tree, for item mode", () => 
   assert.equal(registry.list().filter((entry) => entry.name === "tree").length, 1);
 });
 
-test("the action is required and must be one of the seven", () => {
+test("the action is required and must be one of the eight", () => {
   assert.equal(check_args(command, base).ok, false);
   assert.equal(check_args(command, { ...base, action: "sideways" }).ok, false);
-  for (const action of ["parent", "child", "next", "prev", "fold", "unfold", "toggle"]) assert.equal(check_args(command, { ...base, action }).ok, true, action);
+  for (const action of ["parent", "left", "child", "next", "prev", "fold", "unfold", "toggle"]) assert.equal(check_args(command, { ...base, action }).ok, true, action);
 });
 
 test("extent is an optional selector on page.tree and page.item", () => {
@@ -35,7 +35,7 @@ test("extent is an optional selector on page.tree and page.item", () => {
 });
 
 test("times goes with the moves only", () => {
-  for (const action of ["parent", "child", "next", "prev"]) assert.equal(check_args(command, { ...base, action, times: 3 }).ok, true, action);
+  for (const action of ["parent", "left", "child", "next", "prev"]) assert.equal(check_args(command, { ...base, action, times: 3 }).ok, true, action);
   for (const action of ["fold", "unfold", "toggle"]) assert.equal(check_args(command, { ...base, action, times: 3 }).ok, false, action);
   assert.equal(check_args(command, { ...base, action: "next", times: 0 }).ok, false);
 });
@@ -96,7 +96,7 @@ test("the Reddit thread rows come before the feed rows, bind the tree keys to co
 
 test("the aria preset needs no selector or depth, and fold_by keys goes with the selector form", () => {
   assert.equal(check_args(command, { action: "parent", preset: "aria" }).ok, true);
-  for (const action of ["parent", "child", "next", "prev", "fold", "unfold", "toggle"]) assert.equal(check_args(command, { action, preset: "aria" }).ok, true, action);
+  for (const action of ["parent", "left", "child", "next", "prev", "fold", "unfold", "toggle"]) assert.equal(check_args(command, { action, preset: "aria" }).ok, true, action);
   assert.equal(check_args(command, { action: "parent", preset: "aria", selector: "li" }).ok, false, "the preset reads its own selector");
   assert.equal(check_args(command, { action: "parent", preset: "grove" }).ok, false);
   assert.equal(check_args(command, { action: "parent" }).ok, false, "with no preset the selector is required");
@@ -109,7 +109,7 @@ test("the aria preset needs no selector or depth, and fold_by keys goes with the
 
 test("the default item keys guard the tree keys on the focus in a tree and fall back to the item moves", () => {
   const table = DEFAULT_KEYMAP.item! as Record<string, { id: string; args: Record<string, unknown>; when_present?: string; when_focus?: string; fallback?: { id: string; args: Record<string, unknown> } }>;
-  const expected = { h: "parent", l: "child", "}": "next", "{": "prev", za: "toggle", zc: "fold", zo: "unfold" };
+  const expected = { h: "left", l: "child", "}": "next", "{": "prev", za: "toggle", zc: "fold", zo: "unfold" };
   for (const [key, action] of Object.entries(expected)) {
     assert.equal(table[key]?.id, "page.tree", key);
     assert.deepEqual(table[key]?.args, { action, preset: "aria" }, key);

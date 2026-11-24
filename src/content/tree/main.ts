@@ -101,7 +101,9 @@ if (!tree_window.desertfox_tree_ready && host) {
       return land(rows[index]!.item, args);
     };
     switch (args.action) {
+      case "left":
       case "parent":
+        if (args.action === "left" && !folded_at(at) && !is_leaf(at)) return fold_item(at, false);
         return walk(parent_at, "No parent");
       case "next":
         return walk((index) => sibling_of(rows, index, 1), "No next sibling");
