@@ -133,9 +133,10 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       if ("kind" in started) {
         // A write of another file that is out can make the folder build again once it lands, so this path tries again after it.
         // It settles those writes itself rather than wait for their owners: under `,r` this loop holds the change queue, and an owner settles only in a later turn of it.
+        // One at a time: under `,r` each settle runs inline, and two at once each store the record without the other's path removed.
         const others_out = started.kind === "held" ? writes_out_besides(path) : [];
         if (others_out.length === 0) return started;
-        await Promise.all(others_out.map((write) => settle_out_write(in_queue, write)));
+        for (const write of others_out) await settle_out_write(in_queue, write);
         continue;
       }
       const settled = await settle_out_write(in_queue, started, (shared, reply) => {
@@ -309,8 +310,11 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
   function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: FolderAfterRefusal | undefined): Promise<SettledWrite> {
     const writes = writes_of(write.path);
     if (writes.out === write) delete writes.out;
-    if (reply.ok) writes.replays_in_a_row = 0;
-    write.outcome ??= outcome_of_host_write(write, reply, folder);
+    // Only the first settle resets the count: a later one can run while a newer write loop of the path replays.
+    if (!write.outcome) {
+      if (reply.ok) writes.replays_in_a_row = 0;
+      write.outcome = outcome_of_host_write(write, reply, folder);
+    }
     return write.outcome;
   }
 
