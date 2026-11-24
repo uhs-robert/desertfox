@@ -219,11 +219,17 @@ test("a role=tree sidebar of leaves in an aside is one region, the ARIA one", ()
 });
 
 // A tree whose folder opens after the pick, the way GitHub's file sidebar does: the folder li gains a label row and a group of child rows, and the rows below it move down.
-function tree_with_folder() {
-  // A saved node has no `querySelectorAll`, which the derived row calls on the widget to count its treeitems.
-  const count_rows = (node: SavedNode): number => (node.c ?? []).reduce((sum, child) => sum + count_rows(child), node.a?.role === "treeitem" ? 1 : 0);
+function tree_with_folder(hides_closed_rows = false) {
+  // A saved node has no `querySelectorAll`, so the widget answers with its treeitem nodes. Each answers `is_shown` as a page does: rows under a closed folder stay in the tree but are hidden.
+  let hidden = hides_closed_rows;
+  const treeitems_under = (node: SavedNode, under_group = false): SavedNode[] =>
+    (node.c ?? []).flatMap((child) => {
+      const in_group = under_group || child.a?.role === "group";
+      const shown_node = child.a?.role === "treeitem" ? [Object.assign(child, { checkVisibility: () => !(hidden && in_group), getClientRects: () => [1] })] : [];
+      return [...shown_node, ...treeitems_under(child, in_group)];
+    });
   const with_tree_query = (found: ReturnType<typeof find_items>) => {
-    for (const region of found.regions) Object.assign(region.home_ as object, { querySelectorAll: () => ({ length: count_rows(region.home_ as unknown as SavedNode) - ((region.home_ as unknown as SavedNode).a?.role === "treeitem" ? 1 : 0) }) });
+    for (const region of found.regions) Object.assign(region.home_ as object, { querySelectorAll: () => treeitems_under(region.home_ as unknown as SavedNode) });
     return found;
   };
   const leaf = (top: number, name: string): SavedNode => ({ t: "li", a: { role: "treeitem" }, r: [20, top, 260, 30], c: [{ t: "span", r: [20, top, 200, 30], s: name }] });
@@ -234,7 +240,18 @@ function tree_with_folder() {
   const tree: SavedNode = { t: "ul", a: { role: "tree" }, r: [20, 100, 260, 300], c: [leaf(100, "first a"), leaf(130, "first b"), folder, ...after] };
   const page = page_of(tree);
   for (const node of group.c!) node.c![0]!.up = node;
+  // A hiding tree keeps its child rows in the tree from the start, with no box until the folder opens.
+  if (hides_closed_rows) {
+    folder.c = [label, group];
+    group.up = folder;
+    group.c!.forEach((node) => (node.up = group));
+    group.r = [20, 190, 0, 0];
+    group.c!.forEach((node) => (node.r = [20, 190, 0, 0]));
+  }
   const open_folder = () => {
+    hidden = false;
+    group.r = [20, 190, 260, 60];
+    group.c!.forEach((node, index) => (node.r = [20, 190 + index * 30, 260, 30]));
     folder.a!["aria-expanded"] = "true";
     folder.r = [20, 160, 260, 90];
     folder.c = [label, group];
@@ -293,4 +310,12 @@ test("a folder opened before the pick is read in: the pick keeps the old rows bu
   open_folder();
   row.pick_(tree);
   assert.ok(text_of(row.items_()).includes("child a"));
+});
+
+test("a tree that hides its closed folder rows is read again when the folder opens", () => {
+  const { row, open_folder, text_of } = tree_with_folder(true);
+  row.pick_(row.lists_().find((region) => region.home_)!);
+  assert.equal(row.items_().length, 6);
+  open_folder();
+  assert.deepEqual(text_of(row.items_()), ["first a", "first b", "folder", "child a", "child b", "after a", "after b", "after c"]);
 });

@@ -72,6 +72,16 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await expect_focus("t4");
   });
 
+  await run_case("j reads a tree again when a folder that hides its closed rows opens", async () => {
+    await open_tree("hidden_rows");
+    await press_keys("}");
+    await expect_focus("t4");
+    await press_keys("l");
+    await poll_until("t4 open", async () => (await expanded("t4")) === "true");
+    await press_keys("j");
+    await expect_focus("t5");
+  });
+
   await run_case("a tree with no aria-level takes its depth from the nesting", async () => {
     await open_tree("nolevel");
     await press_keys("l");
