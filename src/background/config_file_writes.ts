@@ -24,8 +24,7 @@ type SettledWrite = FileWriteOutcome | { kind: "superseded" };
 
 // A write of the file at `path` sent to the host (`text` null deletes it). The change queue starts it and settles its reply once, and the host call runs between the two, outside the queue.
 // `covers` and `drops` are the path's `picks_made` and `drops` at the start: the text holds every pick of the path up to `covers` made since that many drops.
-// `settled` resolves once its reply is applied to the record, so a write that waits on another file can go on from the record after it.
-type HostWrite = { path: string; base: string | null; text: string | null; covers: number; drops: number; reply: Promise<HostWriteReply>; outcome?: Promise<SettledWrite>; settled: Promise<void>; mark_settled: () => void };
+type HostWrite = { path: string; base: string | null; text: string | null; covers: number; drops: number; reply: Promise<HostWriteReply>; outcome?: Promise<SettledWrite> };
 
 // What the write loop keeps for one path of the record. Each path has its own, so a refusal, a drop or a write out on one file never decides another file's outcome.
 // It lives in memory only, as the replies that read it do.
@@ -133,16 +132,14 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       if (started === undefined) return outcome ?? (pick && writes.end);
       if ("kind" in started) {
         // A write of another file that is out can make the folder build again once it lands, so this path tries again after it.
+        // It settles those writes itself rather than wait for their owners: under `,r` this loop holds the change queue, and an owner settles only in a later turn of it.
+        // One at a time: under `,r` each settle runs inline, and two at once each store the record without the other's path removed.
         const others_out = started.kind === "held" ? writes_out_besides(path) : [];
         if (others_out.length === 0) return started;
-        await Promise.all(others_out.map((write) => write.settled));
+        for (const write of others_out) await settle_out_write(in_queue, write);
         continue;
       }
-      const reply = await started.reply;
-      const landed_before_read = writes_landed;
-      const folder = changed_on_disk(reply) ? await read_folder_after_write() : undefined;
-      const settled = await in_queue(async () => {
-        const shared = await settle_host_write(started, reply, folder && { ...folder, current: writes_landed === landed_before_read });
+      const settled = await settle_out_write(in_queue, started, (shared, reply) => {
         if (reply.ok && holds_pick(started)) pick_written = true;
         return replaced() ?? shared;
       });
@@ -220,10 +217,16 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     });
     if (started === undefined) return { kind: "written" };
     if ("kind" in started) return started;
-    const reply = await started.reply;
+    return settle_out_write(in_queue, started);
+  }
+
+  // Waits for the host's reply to `write`, reads the folder after a refusal, then settles the write in the change queue. `in_turn` runs in that same turn.
+  // Any caller can settle a write, not just the loop that started it: `settle_host_write` applies the reply once and hands every caller the same outcome.
+  async function settle_out_write(in_queue: QueueRunner, write: HostWrite, in_turn = (shared: SettledWrite, _reply: HostWriteReply) => shared): Promise<SettledWrite> {
+    const reply = await write.reply;
     const landed_before_read = writes_landed;
     const folder = changed_on_disk(reply) ? await read_folder_after_write() : undefined;
-    return in_queue(() => settle_host_write(started, reply, folder && { ...folder, current: writes_landed === landed_before_read }));
+    return in_queue(async () => in_turn(await settle_host_write(write, reply, folder && { ...folder, current: writes_landed === landed_before_read }), reply));
   }
 
   // The files whose writes must leave the folder building: settings.toml and the page's two files can name or drop an engine, a theme, a keyword or a letter another depends on.
@@ -290,9 +293,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     if (problem !== undefined) return { kind: "held", problem };
     const base_sha256 = base === null ? null : await text_sha256(base);
     const reply = native_host.write_config_file(path, text, base_sha256).then((): HostWriteReply => ({ ok: true }), (error: unknown): HostWriteReply => ({ ok: false, error }));
-    let mark_settled!: () => void;
-    const settled = new Promise<void>((resolve) => (mark_settled = resolve));
-    writes.out = { path, base, text, covers: bridge_text === undefined ? writes.picks_made : -1, drops: writes.drops, reply, settled, mark_settled };
+    writes.out = { path, base, text, covers: bridge_text === undefined ? writes.picks_made : -1, drops: writes.drops, reply };
     return writes.out;
   }
 
@@ -309,10 +310,10 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
   function settle_host_write(write: HostWrite, reply: HostWriteReply, folder: FolderAfterRefusal | undefined): Promise<SettledWrite> {
     const writes = writes_of(write.path);
     if (writes.out === write) delete writes.out;
-    if (reply.ok) writes.replays_in_a_row = 0;
+    // Only the first settle resets the count: a later one can run while a newer write loop of the path replays.
     if (!write.outcome) {
+      if (reply.ok) writes.replays_in_a_row = 0;
       write.outcome = outcome_of_host_write(write, reply, folder);
-      void write.outcome.then(write.mark_settled, write.mark_settled);
     }
     return write.outcome;
   }
