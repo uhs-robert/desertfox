@@ -223,3 +223,55 @@ test("a settings.toml refusal whose folder read predates a theme write that land
   assert.deepEqual(copy_of(lag.local), { "settings.toml": `${HAND}theme = "nord"\n`, [THEME]: EDITED });
   assert.equal(unsynced_of(lag.local), undefined);
 });
+
+// settings.toml waits at the gate, since it names an engine no file defines, while the theme write of the start is out. Then `,r` runs and holds the change queue.
+const GHOST = `${MINE}default_engine = "ghost"\n`;
+async function reload_during_held_gate() {
+  const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
+  const lag = await lagging(folder, { "settings.toml": GHOST, [THEME]: EDITED }, { "settings.toml": MINE, [THEME]: FRAPPE }, folder);
+  const held = hold_writes(lag.fake);
+  const restarted = fresh_config_service();
+  await restarted.get_config();
+  const start = restarted.reload_config_at_start();
+  await until(() => held.length === 1, "the theme write did not go out");
+  const reload = restarted.reload_config();
+  // Lets the reload reach the gate of settings.toml before the theme write answers.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return { ...lag, held, restarted, start, reload };
+}
+
+test("`,r` while a gated settings.toml waits and another file's write is out finishes once that write answers", { timeout: 5000 }, async () => {
+  const { held, host, local, start, reload } = await reload_during_held_gate();
+  held.shift()!();
+  await reload;
+  await start;
+  assert.equal(host.files[THEME], EDITED);
+  assert.equal(host.files["settings.toml"], MINE);
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("`,r` writes a gated settings.toml once the folder builds with it after the other file's write lands", { timeout: 5000 }, async () => {
+  const { held, host, start, reload } = await reload_during_held_gate();
+  host.files = { ...host.files, "search_engines.d/hand.toml": '[ghost]\nurl = "https://g.test/?q={query}"\n' };
+  held.shift()!();
+  await until(() => held.length === 1, "settings.toml did not go out after the theme write landed");
+  held.shift()!();
+  await reload;
+  await start;
+  assert.equal(host.files[THEME], EDITED);
+  assert.equal(host.files["settings.toml"], GHOST);
+});
+
+test("a `:set` made during `,r` runs after it and reaches the folder", { timeout: 5000 }, async () => {
+  const { held, host, local, restarted, start, reload } = await reload_during_held_gate();
+  const pick = restarted.set_in_settings_file("hint_letters", "xyz");
+  held.shift()!();
+  await reload;
+  await until(() => held.length === 1, "the pick's write did not go out");
+  held.shift()!();
+  assert.deepEqual(await pick, { kind: "written" });
+  await start;
+  assert.equal(host.files["settings.toml"], MINE.replace('"abc"', '"xyz"'));
+  assert.equal(copy_of(local)["settings.toml"], MINE.replace('"abc"', '"xyz"'));
+  assert.equal(unsynced_of(local), undefined);
+});
