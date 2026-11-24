@@ -183,10 +183,9 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
       return { paths: planned.paths, ...(await commit_folder_files(current, planned)) };
     });
     if ("done" in committed) return committed;
-    if (committed.picks === undefined) return { outcomes: committed.paths.map((): FileWriteOutcome => ({ kind: "browser_copy" })) };
     const outcomes: FileWriteOutcome[] = [];
     // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
-    for (const pick of committed.picks) outcomes.push((await write_waiting_file(in_change_queue, pick.path, pick)) ?? { kind: "written" });
+    for (const pick of committed.picks) outcomes.push(pick ? ((await write_waiting_file(in_change_queue, pick.path, pick)) ?? { kind: "written" }) : { kind: "browser_copy" });
     // The question was made against the copy before the pick. The folder may still differ in other files, so it is asked again or settled.
     if (outcomes.every((outcome) => outcome.kind === "written") && committed.question_was_pending) {
       const folder = await read_folder_after_write();
@@ -196,8 +195,8 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   }
 
   // In the change queue. Swaps in the planned files and edits, with each changed path in the record when the copy came from the folder, and numbers a pick for each path.
-  // No picks: the copy did not come from the folder, so only the copy changed.
-  async function commit_folder_files(current: FilesSource, planned: FolderFilesPlan): Promise<{ question_was_pending: boolean; picks?: PickMark[] }> {
+  // One pick per planned path. None for a path of a copy that did not come from the folder, so only the copy changed, unless an import's record still sends that file to the folder.
+  async function commit_folder_files(current: FilesSource, planned: FolderFilesPlan): Promise<{ question_was_pending: boolean; picks: (PickMark | undefined)[] }> {
     // An earlier edit the folder never got keeps its base: the folder still holds that text.
     // A copy that did not come from the folder keeps the record too: an import's files can still wait for the folder.
     const from_folder = await came_from_folder(current);
@@ -212,8 +211,8 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
       throw error instanceof ConfigRefusal ? new RuntimeRefusal(error.message) : error;
     }
     if (JSON.stringify(planned.edits_after.saved) !== JSON.stringify(edits.saved)) await mirror_key_edits();
-    if (!from_folder) return { question_was_pending };
-    return { question_was_pending, picks: planned.paths.map(mark_pick) };
+    const in_record = (path: string) => unsynced !== undefined && Object.hasOwn(unsynced, path);
+    return { question_was_pending, picks: planned.paths.map((path) => (from_folder || in_record(path) ? mark_pick(path) : undefined)) };
   }
 
   // Saves the theme file `themes/<name>.toml` with `text`, or removes it with `text` null, in the browser copy and then through the host, as `set_in_settings_file` writes settings.toml.

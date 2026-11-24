@@ -11,7 +11,7 @@ import { ENGINE_EDITS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { read_slot_map, store_slot_map } from "./slots.ts";
 import { build_files_config, ConfigRefusal, KEPT_CURRENT } from "./config_reload.ts";
 import type { ApplyAction } from "./config_reload.ts";
-import { checked_consent, import_folder_record, with_folder_consent, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
+import { checked_consent, plan_folder_writes, IMPORT_DIR_LABEL, imports_nothing, plan_import_files, preview_import, preview_snippet, read_import_source } from "./config_import.ts";
 import type { FolderWrite, ImportResult } from "./config_import.ts";
 import { edit_problem, is_snippet_file } from "../shared/config_file_path.ts";
 import type { ConfigImportPreview, SnippetPreview } from "../shared/messages/page.ts";
@@ -23,7 +23,7 @@ import { clear_host_pending, has_config_files } from "./host_start.ts";
 import { read_unsynced, stored_unsynced, unsynced_of_stored } from "./settings_file.ts";
 import type { UnsyncedFiles } from "./settings_file.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
-import type { ConfigFileWrites } from "./config_file_writes.ts";
+import type { ConfigFileWrites, PickMark } from "./config_file_writes.ts";
 import type { ConfigStore, LoadStep } from "./config_store.ts";
 import type { Services } from "./services.ts";
 
@@ -31,9 +31,9 @@ declare const browser: MessagingBrowser;
 
 // Swaps the config in place: the one commit path of a reload, an import, an editor save and a setting write.
 // The file-write pipeline calls `apply_files` of this module, so the caller passes in the parts of it an import uses.
-export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_pick" | "write_waiting_file"> }) {
+export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_pick" | "write_waiting_file" | "writes_of"> }) {
   const { snippets, native_host } = deps;
-  const { note_record_dropped, mark_pick, write_waiting_file } = deps.file_writes;
+  const { note_record_dropped, mark_pick, write_waiting_file, writes_of } = deps.file_writes;
   const { get_config, publish, built_in_commands, in_change_queue, read_load_step, set_load_step, read_current_config, set_current_config, count_swap } = store;
   // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
   // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
@@ -144,7 +144,7 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
     const reading = read_import_source(source);
     // Settled here too, so a refused read is not an unhandled rejection while the queue waits.
     void keep_chain(reading);
-    const { picks, ...result } = await in_change_queue(async () => {
+    const { picks, ...result } = await in_change_queue(async (): Promise<ImportResult & { picks?: PickMark[] | undefined }> => {
       const incoming = await reading;
       const consented = checked_consent(incoming, accepted);
       if (imports_nothing(incoming, consented)) throw new ConfigRefusal(`${KEPT_CURRENT.import} The import holds no config files and no snippet was accepted.`);
@@ -153,11 +153,12 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       const snippet_count = Object.keys(consented).length;
       if (!replaces_config) return { ...(await apply_files({ ...current, files: planned_files }, "import")), replaces_config, snippets: snippet_count };
       const folder = await read_folder_for_import();
+      const paths_out = new Set(Object.keys(planned_files).filter((path) => writes_of(path).out !== undefined));
       // The copy holds the folder's consent keys too, so the text written and the record's view of the copy are one.
-      const files = folder ? with_folder_consent(planned_files, folder) : planned_files;
-      const record = folder && import_folder_record(files, folder);
-      const { warnings } = await apply_files({ files, dir_label: IMPORT_DIR_LABEL, imported: true }, "import", undefined, record);
-      return { warnings, replaces_config, snippets: snippet_count, picks: record && Object.keys(record).map(mark_pick) };
+      const plan = folder && plan_folder_writes(planned_files, folder, paths_out);
+      const { warnings } = await apply_files({ files: plan?.files ?? planned_files, dir_label: IMPORT_DIR_LABEL, imported: true }, "import", undefined, plan?.record);
+      if (!plan) return { warnings, replaces_config, snippets: snippet_count };
+      return { warnings, replaces_config, snippets: snippet_count, picks: Object.keys(plan.record).map(mark_pick), settings_kept_for_consent: plan.settings_kept_for_consent };
     });
     if (!picks) return result;
     const folder_writes: FolderWrite[] = [];
