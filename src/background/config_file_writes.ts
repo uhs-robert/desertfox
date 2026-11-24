@@ -1,7 +1,8 @@
+import { stringify } from "smol-toml";
 import { warn_and_go } from "../shared/swallow.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
-import type { ConfigFiles } from "../shared/config_build/source_files.ts";
+import { parse_toml_text, type ConfigFiles } from "../shared/config_build/source_files.ts";
 import { load_edits, load_files_source } from "../shared/config/config_load.ts";
 import { engine_file_text, engine_resolves_without_owned, engines_in_text, ENGINE_FILE, holds_engine, owned_engines } from "./engine_file.ts";
 import { KEYS_FILE, letters_in_text } from "./engine_keys_file.ts";
@@ -48,9 +49,14 @@ export type PickMark = { path: string; seq: number; drops: number };
 // Runs `start` and `settle` in the change queue, or inline for a caller already in it.
 export type QueueRunner = <T>(work: () => Promise<T>) => Promise<T>;
 
-// The folder as the host reads it now, for the gate of a write of `path`, with the count of writes landed before the read. Undefined when the path has no gate or nothing waits for it.
+// The folder as the host reads it now, for the gate of a write of `path`, with the count of writes landed before the read. Undefined when nothing waits for it.
 // A failed read holds the write, since nothing checked it. A host that is missing or not permitted waits instead, as the write itself would.
-type GateFolder = ConfigFilesReply & { landed: number };
+// `reused`: an earlier gate of the batch read it, so it can miss a hand edit saved since.
+type GateFolder = ConfigFilesReply & { landed: number; reused?: true };
+
+// One gate read that the writes of a batch share: an import's, or the waiting files' at a start or `,r`. Each write the batch lands moves it on, so a batch of 40 files reads the folder once.
+// Empty until the first gate. A write that lands from outside the batch makes it stale, and the next gate reads the folder again.
+type GateBatch = { read?: GateFolder };
 
 // The folder read after a refusal. `current` is false when another path's write settled since the read began, so the read can hold that file's text from before the write.
 type FolderAfterRefusal = ConfigFilesReply & { current: boolean };
@@ -95,13 +101,65 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
   // Writes every file the folder lags, one path after the other. A path that ends refused or waiting leaves the next one to its own write.
   async function write_waiting_files(in_queue: QueueRunner): Promise<void> {
     const unsynced = await in_queue(read_unsynced);
-    for (const path of Object.keys(unsynced ?? {})) await write_waiting_file(in_queue, path);
+    await write_files_in_order(in_queue, Object.keys(unsynced ?? {}).map((path) => ({ path })));
   }
+
+  // Writes a batch of waiting files in `order_of_writes`, with one gate read for all of them, and gives each path's outcome (that of its pick, when it has one).
+  // The order is a guess, so a path the gate holds goes again after a round in which another file landed: what it names can land after it.
+  // A round where every path left is held is a cycle, such as a default engine switch whose file also drops the old engine. A held definitions file then gets one bridge write (`definitions_bridge_text`).
+  async function write_files_in_order(in_queue: QueueRunner, items: { path: string; pick?: PickMark }[]): Promise<Map<string, FileWriteOutcome | undefined>> {
+    const batch: GateBatch = {};
+    const outcomes = new Map<string, FileWriteOutcome | undefined>();
+    const bridged = new Set<string>();
+    let round = order_of_writes(items);
+    while (round.length > 0) {
+      const held: typeof round = [];
+      let landed = false;
+      for (const item of round) {
+        const outcome = await write_waiting_file(in_queue, item.path, item.pick, [], batch);
+        outcomes.set(item.path, outcome);
+        if (outcome?.kind === "held" && !outcome.unread) held.push(item);
+        else if (outcome?.kind === "written") landed = true;
+      }
+      for (const item of landed ? [] : held.filter(({ path }) => !bridged.has(path))) {
+        bridged.add(item.path);
+        const bridge = await write_bridge(in_queue, item.path, definitions_bridge_text, batch);
+        landed ||= bridge?.kind === "written" || bridge?.kind === "superseded";
+      }
+      round = landed ? held : [];
+    }
+    return outcomes;
+  }
+
+  // Definitions first (themes, engines, aliases, quickmarks, CSS), then key files (the page's key letters too), then settings files: a file mostly names what a file of an earlier rank defines.
+  function write_rank(path: string): number {
+    if (path === SETTINGS_FILE || path.startsWith("settings.d/")) return 2;
+    if (path === "keymap.toml" || path.startsWith("keymap.d/")) return 1;
+    return 0;
+  }
+  const order_of_writes = <T extends { path: string }>(items: T[]): T[] => [...items].sort((left, right) => write_rank(left.path) - write_rank(right.path));
+
+  // The files whose top-level tables or keys are each one definition, an engine or an alias, so the union of two texts keeps both sets.
+  const DEFINITIONS_FILE = /^(search_engines|command_aliases)(\.toml$|\.d\/)/;
+
+  // A bridge for a definitions file held in a cycle: the folder's definitions (the record's base) with the copy's over them. It drops nothing a folder file names and holds what the copy's files name, so they can land, then the file as the copy has it.
+  // Undefined for another file, a text that does not parse, or a copy that drops nothing. The page's file has its own bridge (`page_engines_bridge_text`).
+  function definitions_bridge_text(path: string, base: string | null, files: ConfigFiles): string | undefined {
+    const copy = files[path];
+    if (!DEFINITIONS_FILE.test(path) || path === ENGINE_FILE || base === null || copy === undefined) return undefined;
+    const folder_tables = parse_toml_text(path, base, []);
+    const copy_tables = parse_toml_text(path, copy, []);
+    if (!folder_tables || !copy_tables || Object.keys(folder_tables).every((name) => Object.hasOwn(copy_tables, name))) return undefined;
+    return stringify({ ...folder_tables, ...copy_tables });
+  }
+
+  // The folder's engines in the page's file (the record's base) with the copy's over them.
+  const page_engines_bridge_text = (_path: string, base: string | null, files: ConfigFiles): string => engine_file_text({ ...engines_in_text(base), ...owned_engines(files) });
 
   // Writes the browser copy of the file at `path` to the folder while the folder lags it, and again for a pick made during a write. Undefined when nothing waited.
   // With `pick` it stops at the outcome of that pick: the write that holds it, or the swap that replaced it.
   // `waiting_above` holds the paths of the outer loops that wait for this one to land first.
-  async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: PickMark, waiting_above: string[] = []): Promise<FileWriteOutcome | undefined> {
+  async function write_waiting_file(in_queue: QueueRunner, path: string, pick?: PickMark, waiting_above: string[] = [], batch: GateBatch = {}): Promise<FileWriteOutcome | undefined> {
     const writes = writes_of(path);
     let outcome: FileWriteOutcome | undefined;
     writes.replays_in_a_row = 0;
@@ -120,24 +178,29 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       if (first !== undefined && waiting_above.includes(first)) {
         if (bridges === MAX_BRIDGES) return replaced() ?? { kind: "waiting" };
         bridges += 1;
-        const bridged = await write_engine_bridge(in_queue);
+        const bridged = (await write_bridge(in_queue, ENGINE_FILE, page_engines_bridge_text, batch)) ?? { kind: "written" };
         if (bridged.kind !== "written" && bridged.kind !== "superseded") return replaced() ?? bridged;
-        if (path === ENGINE_FILE) await write_waiting_file(in_queue, first, undefined, [...waiting_above, path]);
+        if (path === ENGINE_FILE) await write_waiting_file(in_queue, first, undefined, [...waiting_above, path], batch);
         continue;
       }
       if (first !== undefined) {
         if (written_first.has(first)) return replaced() ?? (first_outcome && first_outcome.kind !== "written" ? first_outcome : { kind: "waiting" });
         written_first.add(first);
-        first_outcome = await write_waiting_file(in_queue, first, undefined, [...waiting_above, path]);
+        first_outcome = await write_waiting_file(in_queue, first, undefined, [...waiting_above, path], batch);
         continue;
       }
-      const gate_read = await folder_for_gate(in_queue, path);
+      const gate_read = await folder_for_gate(in_queue, path, batch);
       if (gate_read !== undefined && !is_gate_folder(gate_read)) return replaced() ?? gate_read;
       const folder_now = gate_read;
       const started = await in_queue(async () => replaced() ?? (is_stale(folder_now) ? "stale" : await start_host_write(path, undefined, folder_now)));
       if (started === "stale") continue;
       if (started === undefined) return outcome ?? (pick && writes.end);
       if ("kind" in started) {
+        // A hand edit since the batch's read can make the folder build with this file, so a held write checks again on a read of its own.
+        if (started.kind === "held" && folder_now?.reused) {
+          delete batch.read;
+          continue;
+        }
         // A write of another file that is out can make the folder build again once it lands, so this path tries again after it.
         // It settles those writes itself rather than wait for their owners: under `,r` this loop holds the change queue, and an owner settles only in a later turn of it.
         // One at a time: under `,r` each settle runs inline, and two at once each store the record without the other's path removed.
@@ -150,6 +213,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
         if (reply.ok && holds_pick(started)) pick_written = true;
         return replaced() ?? shared;
       });
+      move_batch_on(batch, started, settled);
       if (settled.kind === "superseded") continue;
       outcome = settled;
       if (outcome.kind !== "written" || (pick && started.covers >= pick.seq)) return outcome;
@@ -209,22 +273,30 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
   // The writes of a bridge file one write loop makes before it gives up and waits.
   const MAX_BRIDGES = 3;
 
-  // Writes the bridge page file: the folder's engines (the record's base) with the copy's over them. It drops nothing the folder's settings.toml or keys file names and holds what the copy's name.
-  // The record keeps the page file at the bridge text as its base, so the copy's own text follows.
-  async function write_engine_bridge(in_queue: QueueRunner): Promise<SettledWrite> {
-    const gate_read = await folder_for_gate(in_queue, ENGINE_FILE);
+  // Writes the bridge text `bridge_text_of` gives the file at `path`, from the record's base and the copy's files. Undefined when the record no longer holds the path or the file has no bridge.
+  // The record keeps the file at the bridge text as its base, so the copy's own text follows.
+  async function write_bridge(in_queue: QueueRunner, path: string, bridge_text_of: (path: string, base: string | null, files: ConfigFiles) => string | undefined, batch: GateBatch): Promise<SettledWrite | undefined> {
+    const gate_read = await folder_for_gate(in_queue, path, batch);
     if (gate_read !== undefined && !is_gate_folder(gate_read)) return gate_read;
     const folder_now = gate_read;
     const started = await in_queue(async () => {
       const unsynced = await read_unsynced();
-      if (!unsynced || !Object.hasOwn(unsynced, ENGINE_FILE)) return undefined;
+      if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
       if (is_stale(folder_now)) return { kind: "superseded" } as const;
-      const bridge = { ...engines_in_text(unsynced[ENGINE_FILE] ?? null), ...owned_engines((await load_files_source()).files) };
-      return start_host_write(ENGINE_FILE, engine_file_text(bridge), folder_now);
+      const bridge = bridge_text_of(path, unsynced[path] ?? null, (await load_files_source()).files);
+      return bridge === undefined ? undefined : start_host_write(path, bridge, folder_now);
     });
-    if (started === undefined) return { kind: "written" };
-    if ("kind" in started) return started;
-    return settle_out_write(in_queue, started);
+    if (started === undefined || "kind" in started) return started;
+    const settled = await settle_out_write(in_queue, started);
+    move_batch_on(batch, started, settled);
+    return settled;
+  }
+
+  // A write of the batch landed. When it is the only write that landed since the batch's read, the read takes its text, and the next gate needs no read of its own.
+  function move_batch_on(batch: GateBatch, write: HostWrite, settled: SettledWrite): void {
+    const read = batch.read;
+    if (settled.kind !== "written" || !read || read.landed + 1 !== writes_landed) return;
+    batch.read = { ...read, files: with_file_text(read.files, write.path, write.text), landed: writes_landed };
   }
 
   // Waits for the host's reply to `write`, reads the folder after a refusal, then settles the write in the change queue. `in_turn` runs in that same turn.
@@ -236,16 +308,15 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     return in_queue(async () => in_turn(await settle_host_write(write, reply, folder && { ...folder, current: writes_landed === landed_before_read }), reply));
   }
 
-  // The files whose writes must leave the folder building: settings.toml and the page's two files can name or drop an engine, a theme, a keyword or a letter another depends on.
-  const GATED_PATHS = new Set([SETTINGS_FILE, ENGINE_FILE, KEYS_FILE]);
-
-  async function folder_for_gate(in_queue: QueueRunner, path: string): Promise<GateFolder | FileWriteOutcome | undefined> {
-    if (!GATED_PATHS.has(path)) return undefined;
+  // Every write must leave the folder building: a file can name or drop an engine, a theme, an alias, a keyword or a letter another depends on.
+  // The batch's read stands in for a new one while no write from outside it landed.
+  async function folder_for_gate(in_queue: QueueRunner, path: string, batch: GateBatch): Promise<GateFolder | FileWriteOutcome | undefined> {
     const unsynced = await in_queue(read_unsynced);
     if (!unsynced || !Object.hasOwn(unsynced, path)) return undefined;
+    if (batch.read && !is_stale(batch.read)) return { ...batch.read, reused: true };
     const landed = writes_landed;
     try {
-      return { ...(await native_host.read_config()), landed };
+      return (batch.read = { ...(await native_host.read_config()), landed });
     } catch (error) {
       if (error instanceof NativeHostError && (error.failure === "no_permission" || error.failure === "host_missing")) return { kind: "waiting" };
       return { kind: "held", problem: error instanceof Error ? error.message : String(error), unread: true };
@@ -428,7 +499,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     return "ignored";
   }
 
-  return { writes_of, note_record_dropped, mark_pick, already_in_queue, write_waiting_files, write_waiting_file, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
+  return { writes_of, note_record_dropped, mark_pick, already_in_queue, write_waiting_files, write_files_in_order, write_waiting_file, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
 }
 
 export type ConfigFileWrites = ReturnType<typeof create_config_file_writes>;

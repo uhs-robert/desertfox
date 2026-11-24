@@ -105,17 +105,31 @@ export function plan_import_files(incoming: ConfigFiles, current: ConfigFiles, a
 }
 
 // What an import of config files sends to the folder: the copy's files, and the record that sends them (path to the folder's text).
-// `settings_kept_for_consent`: the folder's settings.toml sets a consent key the import's text could not take, so that file stays out of the record.
-export type FolderWritePlan = { files: ConfigFiles; record: UnsyncedFiles; settings_kept_for_consent: boolean };
+// `kept_for_consent`: the folder files the import does not write over, as they hold consent the import's text would lose (see `plan_folder_writes`).
+export type FolderWritePlan = { files: ConfigFiles; record: UnsyncedFiles; kept_for_consent: string[] };
 
 // The record holds each file the host writes that the import holds at another text. A file the import lacks stays as the folder has it. Snippets are code, which the host never writes.
 // A path in `paths_out` has a write still out, which can land after this read: it goes in the record even at the folder's text, so the import's text follows that write.
+// Consent stays with the folder: settings.toml takes the folder's consent keys (`with_folder_consent`), and a folder settings.d file that sets one stays out, since the import's text of it never holds one.
 export function plan_folder_writes(files: ConfigFiles, folder: ConfigFiles, paths_out: ReadonlySet<string> = new Set()): FolderWritePlan {
   const with_consent = with_folder_consent(files, folder);
   const copy = with_consent ?? files;
-  const sent = (path: string, text: string) => host_file_of(path) !== undefined && (folder[path] !== text || paths_out.has(path)) && !(path === SETTINGS_FILE && with_consent === undefined);
-  const record = Object.fromEntries(Object.entries(copy).filter(([path, text]) => sent(path, text)).map(([path]) => [path, folder[path] ?? null]));
-  return { files: copy, record, settings_kept_for_consent: with_consent === undefined };
+  const differs = (path: string, text: string) => host_file_of(path) !== undefined && (folder[path] !== text || paths_out.has(path));
+  const changed = Object.entries(copy).filter(([path, text]) => differs(path, text)).map(([path]) => path);
+  const kept_for_consent = changed.filter((path) => (path === SETTINGS_FILE ? with_consent === undefined : is_settings_file(path) && sets_consent(folder[path])));
+  const record = Object.fromEntries(changed.filter((path) => !kept_for_consent.includes(path)).map((path) => [path, folder[path] ?? null]));
+  return { files: copy, record, kept_for_consent };
+}
+
+// Whether a folder settings file sets a consent key. One that does not parse counts, as its consent is unknown.
+function sets_consent(text: string | undefined): boolean {
+  if (text === undefined) return false;
+  try {
+    const data = parse(text);
+    return CONSENT_SETTINGS.some((key) => Object.hasOwn(data, key));
+  } catch {
+    return true;
+  }
 }
 
 // The import's settings.toml with the consent keys the folder's settings.toml sets, so a write of it to the folder keeps the consent given on this machine. The import's own consent keys are already gone (`drop_consent_settings`).
@@ -142,7 +156,10 @@ function with_folder_consent(files: ConfigFiles, folder: ConfigFiles): ConfigFil
   return kept;
 }
 
-const CONSENT_KEPT_NOTE = `${SETTINGS_FILE} is not written to the config folder: it sets consent settings the imported file could not take, so it stays as it is, and a reload (,r) takes its settings back`;
+const consent_kept_note = (path: string): string =>
+  path === SETTINGS_FILE
+    ? `${SETTINGS_FILE} is not written to the config folder: it sets consent settings the imported file could not take, so it stays as it is, and a reload (,r) takes its settings back`
+    : `${path} is not written to the config folder: it sets consent settings, which an import never changes, so it stays as it is, and a reload (,r) takes its settings back`;
 
 // Consent is to the exact code the preview showed, so the commit takes the code back and stores only an exact match.
 export function checked_consent(incoming: ConfigFiles, accepted: unknown): Record<string, string> {
@@ -178,7 +195,7 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
   const imported = split_files(incoming);
   const { files, replaces_config, dropped } = plan_import_files(incoming, current, imported.snippet_files);
   const folder_plan = replaces_config && folder ? plan_folder_writes(files, folder, paths_out) : undefined;
-  const warnings: string[] = [...dropped, ...(folder_plan?.settings_kept_for_consent ? [`${CONSENT_KEPT_NOTE}.`] : [])];
+  const warnings: string[] = [...dropped, ...(folder_plan?.kept_for_consent ?? []).map((path) => `${consent_kept_note(path)}.`)];
   let problems: string[] = [];
   let reach = no_reach();
   try {
@@ -201,7 +218,7 @@ export function preview_import(incoming: ConfigFiles, current: ConfigFiles, comm
 
 // What became of each file an import of config files sent to the folder. Absent when the folder could not be read, so the import stayed in the browser.
 export type FolderWrite = { path: string; outcome: FileWriteOutcome };
-export type ImportResult = { warnings: number; replaces_config: boolean; snippets: number; folder_writes?: FolderWrite[]; settings_kept_for_consent?: boolean };
+export type ImportResult = { warnings: number; replaces_config: boolean; snippets: number; folder_writes?: FolderWrite[]; kept_for_consent?: string[] };
 
 export type ConfigImportDeps = {
   preview: (source: unknown) => Promise<ConfigImportPreview>;
@@ -209,12 +226,12 @@ export type ConfigImportDeps = {
 };
 
 // The end of the answer about the config folder. Only an import of config files has one.
-function folder_note({ replaces_config, folder_writes, settings_kept_for_consent }: ImportResult): string {
+function folder_note({ replaces_config, folder_writes, kept_for_consent = [] }: ImportResult): string {
   if (!replaces_config) return "";
   if (!folder_writes) return ". The config folder was not updated";
   const written = folder_writes.filter(({ outcome }) => outcome.kind === "written").map(({ path }) => path);
   const wrote = written.length === 0 ? "" : `. Wrote ${written.join(", ")} to the config folder`;
-  const consent = settings_kept_for_consent ? `. ${CONSENT_KEPT_NOTE}` : "";
+  const consent = kept_for_consent.map((path) => `. ${consent_kept_note(path)}`).join("");
   return wrote + folder_writes.map(({ path, outcome }) => (outcome.kind === "written" ? "" : outcome_note(outcome, path))).join("") + consent;
 }
 
