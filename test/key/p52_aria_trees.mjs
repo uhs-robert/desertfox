@@ -31,12 +31,75 @@ export async function run_cases({ run_line, run_case, open_page, press_keys, in_
     await expect_focus("t3");
     await press_keys("{");
     await expect_focus("t1");
-    await press_keys("hh");
-    await expect_toast("No parent");
+    await press_keys("h");
+    await expect_keys("37:t1,");
+    await expect_focus("t1");
+    await press_keys("h");
     await expect_focus("t0");
     await press_keys("2}");
     await expect_focus("t6");
-    expect((await keys()) === "", `a move sent the keys ${await keys()}`);
+    expect((await keys()) === "37:t1,", `a move sent the keys ${await keys()}`);
+  });
+
+  await run_case("h folds an open top-level folder, then has no parent to go to", async () => {
+    await open_tree("h_top");
+    await press_keys("h");
+    await expect_keys("37:t0,");
+    await poll_until("t0 folded", async () => (await expanded("t0")) === "false");
+    await expect_focus("t0");
+    await press_keys("h");
+    await expect_toast("No parent");
+    await expect_focus("t0");
+    expect((await keys()) === "37:t0,", `the second h sent ${await keys()}`);
+  });
+
+  await run_case("h folds an open nested folder in place and goes to the parent from a leaf", async () => {
+    await open_tree("h_nested");
+    await press_keys("ll");
+    await expect_focus("t2");
+    await press_keys("h");
+    await expect_focus("t1");
+    expect((await keys()) === "", `h on a leaf sent ${await keys()}`);
+    await press_keys("h");
+    await expect_keys("37:t1,");
+    await poll_until("t1 folded", async () => (await expanded("t1")) === "false");
+    await expect_focus("t1");
+    await press_keys("h");
+    await expect_focus("t0");
+    expect((await keys()) === "37:t1,", `the walk to the parent sent ${await keys()}`);
+  });
+
+  await run_case("3h on an open folder folds it once", async () => {
+    await open_tree("h_count");
+    await press_keys("l");
+    await expect_focus("t1");
+    await press_keys("3h");
+    await expect_keys("37:t1,");
+    await expect_focus("t1");
+    await sleep(200);
+    expect((await keys()) === "37:t1,", `3h sent ${await keys()}`);
+  });
+
+  await run_case("h on a folded top-level row has no parent and sends no key", async () => {
+    await open_tree("h_folded");
+    await press_keys("}");
+    await expect_focus("t4");
+    await press_keys("h");
+    await expect_toast("No parent");
+    await expect_focus("t4");
+    expect((await keys()) === "", `h on a folded row sent ${await keys()}`);
+  });
+
+  await run_case("h on a branch that just opened, before its children show, folds that branch", async () => {
+    await open_tree("h_lazy");
+    await press_keys("}");
+    await expect_focus("t4");
+    await press_keys("l");
+    await expect_keys("39:t4,");
+    await press_keys("h");
+    await expect_keys("39:t4,37:t4,");
+    await poll_until("t4 folded", async () => (await expanded("t4")) === "false");
+    await expect_focus("t4");
   });
 
   await run_case("za folds and unfolds by the arrows with the key code the page reads", async () => {
