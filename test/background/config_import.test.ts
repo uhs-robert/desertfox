@@ -116,7 +116,8 @@ test("a config import replaces the config files, keeps the installed snippets an
   const config = await startup.get_config();
   assert.deepEqual(config.settings, { which_key_delay_ms: 7 });
   assert.deepEqual(Object.keys(slot_of(local).source.files).sort(), ["keymap.toml", "snippets/home.js"]);
-  assert.equal(slot_of(local).source.dir_label, "import");
+  // Its keymap.toml reached the folder, which already holds the snippet, so the copy takes the folder's label.
+  assert.equal(slot_of(local).source.dir_label, "/home/u/.config/desertfox");
   assert.ok(registry.get("replace.mine"));
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { which_key_delay_ms: 7 });
 
@@ -286,10 +287,10 @@ test("an import writes the files the host can write, leaves the folder's others,
   const { startup, host, local } = await started("writes_folder", { "settings.toml": 'hint_letters = "ab"\n', "themes/old.toml": theme, "keymap.toml": "" });
   const source = zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/themes/mine.toml": theme, "d/keymap.toml": '[normal]\n"zz" = "tab.next"\n', "d/snippets/s.js": snippet_file("writes_folder.s") });
   const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
-  assert.deepEqual(preview.folder_files, ["settings.toml", "themes/mine.toml"]);
+  assert.deepEqual(preview.folder_files, ["keymap.toml", "settings.toml", "themes/mine.toml"]);
   const answer = await commit_answer(startup, source, { "snippets/s.js": snippet_file("writes_folder.s") });
-  assert.deepEqual(answer, { ok: true, message: "Imported the config files and 1 snippet(s). Wrote settings.toml, themes/mine.toml to the config folder" });
-  assert.deepEqual(host.files, { "settings.toml": IMPORTED_SETTINGS, "themes/old.toml": theme, "themes/mine.toml": theme, "keymap.toml": "" });
+  assert.deepEqual(answer, { ok: true, message: "Imported the config files and 1 snippet(s). Wrote settings.toml, themes/mine.toml, keymap.toml to the config folder" });
+  assert.deepEqual(host.files, { "settings.toml": IMPORTED_SETTINGS, "themes/old.toml": theme, "themes/mine.toml": theme, "keymap.toml": '[normal]\n"zz" = "tab.next"\n' });
   assert.equal(unsynced_of(local), undefined);
   await startup.reload_config();
   assert.equal((await startup.get_config()).settings.hint_letters, "xyz");
@@ -337,9 +338,9 @@ test("a `:set` after an import keeps the record of the files still waiting, its 
   assert.equal(unsynced_of(local), undefined);
 });
 
-test("a `:set` on an imported copy whose files all reached the folder changes only the copy, and says so", async () => {
+test("a `:set` on an imported copy whose files all reached the folder but whose snippet did not changes only the copy, and says so", async () => {
   const { startup, local } = await started("set_after_written_import");
-  await startup.import_config(zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/keymap.toml": "" }), {});
+  await startup.import_config(zip_of({ "d/settings.toml": IMPORTED_SETTINGS, "d/keymap.toml": "", "d/snippets/s.js": snippet_file("set_after_written_import.s") }), { "snippets/s.js": snippet_file("set_after_written_import.s") });
   assert.equal(unsynced_of(local), undefined);
   assert.deepEqual(await startup.set_in_settings_file("which_key_delay_ms", 7), { kind: "browser_copy" });
   assert.equal(unsynced_of(local), undefined);
@@ -453,7 +454,7 @@ test("an imported settings.d file that does not parse gives the build's problem 
   const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
   assert.equal(preview.ok, true);
   assert.match(preview.problems.join("\n"), /50-bad\.toml/);
-  assert.deepEqual(preview.folder_files, []);
+  assert.deepEqual(preview.folder_files, ["settings.d/50-bad.toml"]);
 });
 
 test("the preview names a write the import makes behind a write still out, and none for equal text without one", async () => {
@@ -469,4 +470,222 @@ test("the preview names a write the import makes behind a write still out, and n
   held.shift()!();
   await set;
   assert.equal(unsynced_of(local), undefined);
+});
+
+// Every config file of an import reaches the folder through its own host kind, so a later `,r` keeps all of them.
+
+const EVERY_CLASS: Files = {
+  "keymap.toml": '[normal]\n"zz" = "nt"\n',
+  "command_aliases.toml": 'nt = "tab.next"\n',
+  "quickmarks.toml": 'g = "https://github.com"\n',
+  "search_engines.toml": '[ghost]\nurl = "https://g.test/?q={query}"\n',
+  "style.css": "body { color: red; }\n",
+  "settings.toml": 'hint_letters = "xyz"\ndefault_engine = "ghost"\n',
+  "settings.d/10-Work.local.toml": "which_key_delay_ms = 9\n",
+  "keymap.d/10-mine.toml": '[normal]\n"zy" = "pt"\n',
+  "search_engines.d/10-mine.toml": '[wiki]\nurl = "https://w.test/?q={query}"\n',
+  "command_aliases.d/10-mine.toml": 'pt = "tab.prev"\n',
+  "quickmarks.d/10-mine.toml": 'w = "https://wiki.test"\n',
+  "style.d/10-mine.css": "a { color: blue; }\n",
+};
+const zip_in_d = (files: Files) => zip_of(Object.fromEntries(Object.entries(files).map(([path, text]) => [`d/${path}`, text])));
+const imported_flag = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { imported?: boolean }).imported === true;
+const writes_sent = (sent: { cmd: string; kind?: string; name?: string }[]) => sent.filter((message) => message.cmd === "write_config_file").map((message) => (message.name === undefined ? message.kind! : `${message.kind}:${message.name}`));
+
+test("an import writes every class of config file to the folder, and `,r` keeps every class", async () => {
+  const { startup, host, local } = await started("every_class", { "settings.toml": 'hint_letters = "ab"\n', "keymap.toml": "" });
+  const preview = (await startup.preview_config_import(zip_in_d(EVERY_CLASS))) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, Object.keys(EVERY_CLASS).sort());
+  const answer = await commit_answer(startup, zip_in_d(EVERY_CLASS));
+  assert.equal(answer.ok, true, answer.message);
+  assert.deepEqual(host.files, EVERY_CLASS);
+  assert.equal(unsynced_of(local), undefined);
+  await startup.reload_config();
+  assert.deepEqual(slot_of(local).source.files, EVERY_CLASS);
+  const config = await startup.get_config();
+  assert.equal(config.settings.default_engine, "ghost");
+  assert.equal(config.settings.which_key_delay_ms, 9);
+  assert.deepEqual(config.command_aliases, { nt: "tab.next", pt: "tab.prev" });
+});
+
+test("settings.toml naming an engine of search_engines.toml lands after it, so the gate holds neither", async () => {
+  const { startup, host, sent, local } = await started("engine_in_main_file");
+  sent.length = 0;
+  const files = { "settings.toml": 'hint_letters = "xyz"\ndefault_engine = "ghost"\n', "search_engines.toml": '[ghost]\nurl = "https://g.test/?q={query}"\n' };
+  const answer = await commit_answer(startup, zip_in_d(files));
+  assert.equal(answer.ok, true, answer.message);
+  assert.doesNotMatch(answer.message, /not written|stays/);
+  assert.deepEqual(writes_sent(sent), ["search_engines", "settings"]);
+  assert.equal(host.files["settings.toml"], files["settings.toml"]);
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a keymap that binds a new alias lands after the alias file", async () => {
+  const { startup, host, sent } = await started("alias_order", { "settings.toml": 'hint_letters = "ab"\n', "keymap.toml": "" });
+  sent.length = 0;
+  const answer = await commit_answer(startup, zip_in_d({ "keymap.toml": '[normal]\n"zz" = "nt"\n', "command_aliases.toml": 'nt = "tab.next"\n' }));
+  assert.equal(answer.ok, true, answer.message);
+  assert.deepEqual(writes_sent(sent), ["command_aliases", "keymap"]);
+  assert.equal(host.files["keymap.toml"], '[normal]\n"zz" = "nt"\n');
+});
+
+test("a switch of the default engine that also drops the old engine's file entry reaches the folder without a held write", async () => {
+  const folder = { "settings.toml": 'default_engine = "old"\n', "search_engines.toml": '[old]\nurl = "https://o.test/?q={query}"\n' };
+  const { startup, host, local, sent } = await started("engine_switch", folder);
+  sent.length = 0;
+  const files = { "settings.toml": 'default_engine = "new"\n', "search_engines.toml": '[new]\nurl = "https://n.test/?q={query}"\n' };
+  const answer = await commit_answer(startup, zip_in_d(files));
+  assert.equal(answer.ok, true, answer.message);
+  // Each file alone breaks the folder, so the engines file first holds both engines, then settings.toml lands, then the engines file as imported.
+  assert.deepEqual(writes_sent(sent), ["search_engines", "settings", "search_engines"]);
+  assert.doesNotMatch(answer.message, /not written|held|breaks/, answer.message);
+  assert.deepEqual(host.files, files);
+  assert.equal(unsynced_of(local), undefined);
+  await startup.reload_config();
+  assert.equal((await startup.get_config()).settings.default_engine, "new");
+});
+
+test("a keymap that swaps one alias for another the alias file swaps too reaches the folder through the same bridge", async () => {
+  const folder = { "keymap.toml": '[normal]\n"zz" = "old"\n', "command_aliases.toml": 'old = "tab.next"\n' };
+  const { startup, host, sent } = await started("alias_switch", folder);
+  sent.length = 0;
+  const files = { "keymap.toml": '[normal]\n"zz" = "new"\n', "command_aliases.toml": 'new = "tab.prev"\n' };
+  const answer = await commit_answer(startup, zip_in_d(files));
+  assert.equal(answer.ok, true, answer.message);
+  assert.deepEqual(writes_sent(sent), ["command_aliases", "keymap", "command_aliases"]);
+  assert.deepEqual(host.files, files);
+});
+
+test("a host from before the import's kinds answers outdated, and the file waits in the record for the update", async () => {
+  const { startup, host, local } = await started("old_host_kinds");
+  host.no_import_kinds = true;
+  const answer = await commit_answer(startup, zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "keymap.d/10-mine.toml": '[normal]\n"zz" = "tab.next"\n' }));
+  assert.equal(answer.ok, true, answer.message);
+  assert.match(answer.message, /Wrote settings\.toml to the config folder\. keymap\.d\/10-mine\.toml updates once the native host is updated/);
+  assert.deepEqual(unsynced_of(local), { "keymap.d/10-mine.toml": null });
+  assert.equal(imported_flag(local), true);
+  host.no_import_kinds = false;
+  await startup.reload_config();
+  assert.equal(host.files["keymap.d/10-mine.toml"], '[normal]\n"zz" = "tab.next"\n');
+  assert.equal(slot_of(local).source.files["keymap.d/10-mine.toml"], '[normal]\n"zz" = "tab.next"\n');
+});
+
+test("a folder settings.d file that sets a consent key is left alone by the import, and the answer says so", async () => {
+  const { startup, host, local } = await started("settings_d_consent", { "settings.toml": 'hint_letters = "ab"\n', "settings.d/10-local.toml": "bridge = true\n" });
+  const source = zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "settings.d/10-local.toml": "which_key_delay_ms = 4\n" });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.deepEqual(preview.folder_files, ["settings.toml"]);
+  assert.match(preview.warnings.join("\n"), /settings\.d\/10-local\.toml is not written to the config folder: it sets consent settings/);
+  const answer = await commit_answer(startup, source);
+  assert.match(answer.message, /settings\.d\/10-local\.toml is not written to the config folder: it sets consent settings/);
+  assert.equal(host.files["settings.d/10-local.toml"], "bridge = true\n");
+  assert.equal(host.files["settings.toml"], IMPORTED_SETTINGS);
+  assert.equal(imported_flag(local), true);
+});
+
+test("an import whose every file reached the folder, with no snippet the folder lacks, stops being an import, and a :set then writes the folder", async () => {
+  const { startup, host, local } = await started("flag_drops");
+  await startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "keymap.toml": "" }), {});
+  assert.equal(imported_flag(local), false);
+  assert.equal(slot_of(local).source.dir_label, "/home/u/.config/desertfox");
+  assert.equal((await startup.set_in_settings_file("which_key_delay_ms", 7)).kind, "written");
+  assert.equal(host.files["settings.toml"], `${IMPORTED_SETTINGS}which_key_delay_ms = 7\n`);
+});
+
+test("an import keeps its flag while it installed a snippet the folder lacks, or while a write did not land", async () => {
+  const accepted = await started("flag_kept_snippet");
+  await accepted.startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "snippets/s.js": snippet_file("flag_kept_snippet.s") }), { "snippets/s.js": snippet_file("flag_kept_snippet.s") });
+  assert.equal(imported_flag(accepted.local), true);
+  assert.equal(accepted.host.files["settings.toml"], IMPORTED_SETTINGS);
+  const refused = await started("flag_kept_refused");
+  refused.host.refuse = ["keymap.toml"];
+  await refused.startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "keymap.toml": "" }), {});
+  assert.equal(imported_flag(refused.local), true);
+});
+
+test("a stop between the import's commit and its writes leaves the record of every class, and the next start writes them in order", async () => {
+  const { startup, host, local, fake, sent } = await started("stop_every_class");
+  const send = fake.runtime.sendNativeMessage;
+  let write_out = false;
+  fake.runtime.sendNativeMessage = async (name, message) => (message.cmd === "write_config_file" ? ((write_out = true), new Promise<never>(() => {})) : send(name, message));
+  const files = { "settings.toml": 'hint_letters = "xyz"\ndefault_engine = "ghost"\n', "search_engines.d/10-mine.toml": '[ghost]\nurl = "https://g.test/?q={query}"\n', "keymap.toml": '[normal]\n"zz" = "nt"\n', "command_aliases.d/10-mine.toml": 'nt = "tab.next"\n' };
+  void startup.import_config(zip_in_d(files), {});
+  await until(() => write_out, "the import's write did not go out");
+  assert.deepEqual(Object.keys(unsynced_of(local) as object).sort(), Object.keys(files).sort());
+  fake.runtime.sendNativeMessage = send;
+  sent.length = 0;
+  const restarted = fresh_config_service();
+  await restarted.reload_config_at_start();
+  assert.deepEqual(writes_sent(sent), ["search_engines_d:10-mine", "command_aliases_d:10-mine", "keymap", "settings"]);
+  assert.deepEqual(host.files, { ...files, "snippets/home.js": snippet_file("stop_every_class.mine") });
+  assert.equal(unsynced_of(local), undefined);
+  assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("an import file the host has no kind for is named in the answer, and the copy stays an import so a start keeps it", async () => {
+  const theme = readFileSync(new URL("../../themes/catppuccin_frappe.toml", import.meta.url), "utf8");
+  const { startup, host, local } = await started("no_kind_file");
+  const source = zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "themes/Nord.toml": theme });
+  const preview = (await startup.preview_config_import(source)) as Extract<ConfigImportPreview, { ok: true }>;
+  assert.match(preview.warnings.join("\n"), /themes\/Nord\.toml is not written to the config folder: the native host writes no file of that name/);
+  const answer = await commit_answer(startup, source);
+  assert.match(answer.message, /Wrote settings\.toml to the config folder\. themes\/Nord\.toml is not written to the config folder/);
+  assert.equal(host.files["themes/Nord.toml"], undefined);
+  assert.equal(imported_flag(local), true);
+  const restarted = fresh_config_service();
+  await restarted.reload_config_at_start();
+  assert.equal(slot_of(local).source.files["themes/Nord.toml"], theme);
+});
+
+test("a held engines file whose namer the import lacks gets no bridge, so the folder's file stays as the user wrote it", async () => {
+  const mine = '# my engines\n[old]\nurl = "https://o.test/?q={query}"\n';
+  // A folder settings.d file the import lacks names the engine the imported file drops.
+  const { startup, host, sent, local } = await started("no_cycle_bridge", { "settings.toml": 'hint_letters = "ab"\n', "settings.d/50-private.toml": 'default_engine = "old"\n', "search_engines.toml": mine });
+  sent.length = 0;
+  const answer = await commit_answer(startup, zip_in_d({ "settings.toml": 'hint_letters = "ab"\n', "search_engines.toml": '[new]\nurl = "https://n.test/?q={query}"\n' }));
+  assert.equal(answer.ok, true, answer.message);
+  assert.match(answer.message, /search_engines\.toml/);
+  assert.deepEqual(writes_sent(sent), []);
+  assert.equal(host.files["search_engines.toml"], mine);
+  assert.deepEqual(unsynced_of(local), { "search_engines.toml": mine });
+});
+
+test("a folder settings.d file that does not parse is left alone, and the note says why", async () => {
+  const { startup, host } = await started("settings_d_unparsed");
+  host.files = { ...host.files, "settings.d/10-x.toml": "hint_letters = \n" };
+  const answer = await commit_answer(startup, zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "settings.d/10-x.toml": "which_key_delay_ms = 4\n" }));
+  assert.match(answer.message, /settings\.d\/10-x\.toml is not written to the config folder: the folder's file does not parse, so the import cannot tell whether it sets consent settings/);
+  assert.doesNotMatch(answer.message, /it sets consent settings, which/);
+  assert.equal(host.files["settings.d/10-x.toml"], "hint_letters = \n");
+});
+
+test("a write the batch's folder read holds reads the folder again, so a hand edit saved during the batch lets it land", async () => {
+  const hand = '[hand]\nurl = "https://h.test/?q={query}"\nkeyword = "w"\n';
+  const { startup, host, fake } = await started("held_reread", { "settings.toml": 'hint_letters = "ab"\n', "search_engines.d/50-hand.toml": hand });
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = async (name, message) => {
+    // The user removes the engine whose keyword the imported one takes while the batch's first write is out.
+    if (message.cmd === "write_config_file" && message.kind === "quickmarks") {
+      const { ["search_engines.d/50-hand.toml"]: _removed, ...others } = host.files;
+      host.files = others;
+    }
+    return send(name, message);
+  };
+  const imported = { "quickmarks.toml": 'g = "https://github.com"\n', "search_engines.toml": '[wiki]\nurl = "https://w.test/?q={query}"\nkeyword = "w"\n' };
+  const answer = await commit_answer(startup, zip_in_d(imported));
+  assert.equal(answer.ok, true, answer.message);
+  assert.doesNotMatch(answer.message, /not written|held/, answer.message);
+  assert.equal(host.files["search_engines.toml"], imported["search_engines.toml"]);
+});
+
+test("an editor save between the import's last write and the end of the import keeps the copy an import", async () => {
+  const { startup, local, fake } = await started("end_import_skipped");
+  const held = hold_writes(fake);
+  const imported = startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS }), {});
+  await until(() => held.length === 1, "the import's write did not go out");
+  await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', null);
+  held.shift()!();
+  await imported;
+  assert.equal(imported_flag(local), true);
+  assert.equal(slot_of(local).source.files["keymap.toml"], '[normal]\n"zz" = "tab.next"\n');
 });

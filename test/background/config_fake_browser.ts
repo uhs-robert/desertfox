@@ -6,15 +6,47 @@ export type Files = Record<string, string>;
 
 type WriteMessage = { cmd: string; kind?: string; name?: string; text?: string | null; base_sha256?: string | null };
 
+// The path the real host's kind table gives a write request.
+const FIXED_KIND_PATHS: Record<string, string> = {
+  settings: "settings.toml",
+  engines: "search_engines.d/zz-desertfox.toml",
+  search_keys: "keymap.d/zz-desertfox.toml",
+  keymap: "keymap.toml",
+  search_engines: "search_engines.toml",
+  command_aliases: "command_aliases.toml",
+  quickmarks: "quickmarks.toml",
+  style: "style.css",
+};
+const NAMED_KIND_FOLDERS: Record<string, [string, string]> = {
+  theme: ["themes", ".toml"],
+  settings_d: ["settings.d", ".toml"],
+  keymap_d: ["keymap.d", ".toml"],
+  search_engines_d: ["search_engines.d", ".toml"],
+  command_aliases_d: ["command_aliases.d", ".toml"],
+  quickmarks_d: ["quickmarks.d", ".toml"],
+  style_d: ["style.d", ".css"],
+};
+// The kinds of a host from before the import's kinds.
+const PAGE_HOST_KINDS = ["engines", "search_keys", "settings", "theme"];
+
+function kind_path(message: WriteMessage): string {
+  if (message.cmd === "write_settings") return "settings.toml";
+  const fixed = FIXED_KIND_PATHS[message.kind ?? ""];
+  if (fixed !== undefined) return fixed;
+  const [folder, ext] = NAMED_KIND_FOLDERS[message.kind ?? ""]!;
+  return `${folder}/${message.name}${ext}`;
+}
+
 // What the real host's `write_config_file` does to the folder: replace or delete the file the kind and name give, only while it still has the base digest.
-// `old_host` answers as a host from before the write verbs, `settings_only_host` as one that knows `write_settings` alone, `no_engines_kind` as one whose kind table lacks `engines`, and `no_keys_kind` as one that lacks `search_keys` (the `engines` host).
+// `old_host` answers as a host from before the write verbs, `settings_only_host` as one that knows `write_settings` alone, `no_engines_kind` as one whose kind table lacks `engines`, `no_keys_kind` as one that lacks `search_keys` (the `engines` host), and `no_import_kinds` as one that knows only the page's kinds, settings and themes.
 // `refuse` refuses a write of the paths it names, as a host that cannot write that file.
-function write_config_file(host: { files: Files; old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; refuse?: string[] }, message: WriteMessage) {
+type FakeHostKinds = { old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; no_import_kinds?: boolean; refuse?: string[] };
+function write_config_file(host: { files: Files } & FakeHostKinds, message: WriteMessage) {
   if (host.old_host || (host.settings_only_host && message.cmd === "write_config_file")) return { ok: false, error: `unknown cmd: '${message.cmd}'` };
   if (host.no_engines_kind && message.kind === "engines") return { ok: false, error: "write_config_file has no kind 'engines'. It writes settings, theme" };
   if ((host.no_engines_kind || host.no_keys_kind) && message.kind === "search_keys") return { ok: false, error: `write_config_file has no kind 'search_keys'. It writes ${host.no_engines_kind ? "settings, theme" : "engines, settings, theme"}` };
-  const fixed: Record<string, string> = { engines: "search_engines.d/zz-desertfox.toml", search_keys: "keymap.d/zz-desertfox.toml" };
-  const path = message.cmd === "write_settings" || message.kind === "settings" ? "settings.toml" : (fixed[message.kind ?? ""] ?? `themes/${message.name}.toml`);
+  if (host.no_import_kinds && message.cmd === "write_config_file" && !PAGE_HOST_KINDS.includes(message.kind ?? "")) return { ok: false, error: `write_config_file has no kind '${message.kind}'. It writes ${PAGE_HOST_KINDS.join(", ")}` };
+  const path = kind_path(message);
   if (host.refuse?.includes(path)) return { ok: false, error: `cannot write /home/u/.config/desertfox/${path}: Permission denied` };
   const on_disk = host.files[path];
   const digest = on_disk === undefined ? null : createHash("sha256").update(on_disk, "utf8").digest("hex");
@@ -26,7 +58,7 @@ function write_config_file(host: { files: Files; old_host?: boolean; settings_on
 
 // A browser that keeps storage in memory and answers the native host from `host`. A test rewrites `host.files` between reloads.
 // `no_folder` answers as a host whose config folder is missing, and `autoconfig_fails` refuses every autoconfig.toml write.
-export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; no_folder?: boolean; autoconfig_fails?: boolean; old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; refuse?: string[] }) {
+export function install_fake_browser(host: { files: Files; reply?: () => Promise<unknown>; granted?: boolean; no_folder?: boolean; autoconfig_fails?: boolean } & FakeHostKinds) {
   const local: Record<string, unknown> = {};
   const session: Record<string, unknown> = {};
   const area = (store: Record<string, unknown>) => ({

@@ -93,8 +93,8 @@ test("a record of the old `{ base }` shape is written as settings.toml's base, a
 
 test("the stored record keeps only paths the host can write, and a file the copy lacks goes back to its base", () => {
   assert.deepEqual(unsynced_of_stored({ base: null }), { "settings.toml": null });
-  assert.deepEqual(unsynced_of_stored({ "settings.toml": "a", [THEME]: null, "keymap.toml": "x", "themes/../x.toml": "y", "themes/b.toml": 3 }), { "settings.toml": "a", [THEME]: null });
-  assert.equal(unsynced_of_stored({ "keymap.toml": "x" }), undefined);
+  assert.deepEqual(unsynced_of_stored({ "settings.toml": "a", [THEME]: null, "snippets/x.js": "x", "themes/../x.toml": "y", "themes/b.toml": 3 }), { "settings.toml": "a", [THEME]: null });
+  assert.equal(unsynced_of_stored({ "snippets/x.js": "x" }), undefined);
   assert.equal(unsynced_of_stored({}), undefined);
   assert.equal(unsynced_of_stored(null), undefined);
   assert.deepEqual(files_before_unsynced({ "settings.toml": "b", [THEME]: "new", "keymap.toml": "k" }, { "settings.toml": "a", [THEME]: null }), { "settings.toml": "a", "keymap.toml": "k" });

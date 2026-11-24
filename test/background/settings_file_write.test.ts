@@ -20,6 +20,8 @@ const hand_with_theme = (theme: string) => with_theme(theme).replace('"abc"', '"
 
 // `apply_files` drops the record by storing null in its one storage write.
 const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
+// A snippet the folder never holds: an import that installs it stays an import.
+const snippet_named = (id: string) => `// id: ${id}\n// label: Mine\n// intent: Run mine.\n// matches: https://a.test/*\nglobalThis.ran = true;\n`;
 const stored_settings = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files["settings.toml"];
 
 // A profile that read the folder once through the host, as after `,r`.
@@ -326,7 +328,9 @@ test("a written pick keeps the copies-differ question while the folder still dif
 test("a browser copy that did not come from the folder changes alone, and nothing is sent", async () => {
   const host = { files: { "settings.toml": MINE } };
   const { local, sent, startup } = await reloaded(host);
-  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  // The snippet never reaches the folder, so the copy stays an import after its keymap.toml lands.
+  const snippet = snippet_named("copy_alone.one");
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }, { path: "snippets/one.js", text: snippet }] }, { "snippets/one.js": snippet });
   sent.length = 0;
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
   assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
@@ -348,7 +352,8 @@ test("a refused write over a folder the user kept the copy over says the pick st
 test("an edited import never reaches the folder: a pick after an editor save changes the browser copy alone", async () => {
   const host = { files: { "keymap.toml": "" } as Files };
   const { local, sent, startup } = await reloaded(host);
-  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  const snippet = snippet_named("edited_import.one");
+  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }, { path: "snippets/one.js", text: snippet }] }, { "snippets/one.js": snippet });
   await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
   sent.length = 0;
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
@@ -440,8 +445,9 @@ test("an import of a snippet alone keeps the record of a waiting pick, and an im
   assert.equal(result.replaces_config, false);
   assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
 
+  // The import's own record takes the place of the old one: this host cannot write its keymap.toml either.
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
-  assert.equal(unsynced_of(local), undefined);
+  assert.deepEqual(unsynced_of(local), { "keymap.toml": null });
 });
 
 const pause = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -501,7 +507,8 @@ test("a refused write keeps the record of a pick made after Use the folder, and 
 });
 
 test("an import during a write: the pick reached the file, and the reply says the import replaced the browser copy", async () => {
-  const host = { files: { "settings.toml": MINE } };
+  // The folder already holds the imported keymap.toml, so the import writes nothing of its own.
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } };
   const { fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const pick = startup.set_in_settings_file("theme", "oasis_night");
@@ -515,7 +522,7 @@ test("an import during a write: the pick reached the file, and the reply says th
 });
 
 test("an import that runs between a pick and its write: nothing is written, and the reply says so", async () => {
-  const host = { files: { "settings.toml": MINE } };
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } };
   const { local, sent, startup } = await reloaded(host);
   sent.length = 0;
   const pick = startup.set_in_settings_file("theme", "oasis_night");
@@ -562,7 +569,7 @@ test("a refused write whose folder also changed keymap.toml takes that file too,
 });
 
 test("each pick a swap dropped names the swap that dropped it", async () => {
-  const host = { files: { "settings.toml": MINE } };
+  const host = { files: { "settings.toml": MINE, "keymap.toml": "" } };
   const { local, fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const saved_over = startup.set_in_settings_file("theme", "nord");

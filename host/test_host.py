@@ -692,6 +692,54 @@ class WriteConfigFileTest(ConfigDirCase):
         self.assertIn(host.CHANGED_ON_DISK, self.write("search_keys", None, None, sha("read = 1\n"))["error"])
         self.assertEqual(self.read("keymap.d/zz-desertfox.toml"), b"[search_keys]\nh = \"hand\"\n")
 
+    def test_each_import_kind_writes_its_one_top_level_file(self):
+        for kind, path in (("keymap", "keymap.toml"), ("search_engines", "search_engines.toml"), ("command_aliases", "command_aliases.toml"), ("quickmarks", "quickmarks.toml"), ("style", "style.css")):
+            reply = self.write(kind, None, "a = 1\n", None)
+            self.assertTrue(reply["ok"], (kind, reply))
+            self.assertEqual(reply["path"], os.path.join(self.config, path))
+            self.assertIn("takes no name", self.write(kind, "x", "a = 1\n", None)["error"])
+            self.assertIn(host.CHANGED_ON_DISK, self.write(kind, None, "a = 2\n", sha("hand = 1\n"))["error"])
+            self.assertTrue(self.write(kind, None, None, sha("a = 1\n"))["ok"])
+        self.assertEqual(self.tree(), [])
+
+    def test_each_d_folder_kind_creates_its_folder_and_writes_the_named_file(self):
+        for kind, folder, ext in (("settings_d", "settings.d", ".toml"), ("keymap_d", "keymap.d", ".toml"), ("search_engines_d", "search_engines.d", ".toml"), ("command_aliases_d", "command_aliases.d", ".toml"), ("quickmarks_d", "quickmarks.d", ".toml"), ("style_d", "style.d", ".css")):
+            reply = self.write(kind, "10-Work.local caf\u00e9", "a = 1\n", None)
+            self.assertTrue(reply["ok"], (kind, reply))
+            path = os.path.join(folder, f"10-Work.local caf\u00e9{ext}")
+            self.assertEqual(reply["path"], os.path.join(self.config, path))
+            self.assertEqual(self.read(path), b"a = 1\n")
+            self.assertIn(host.CHANGED_ON_DISK, self.write(kind, "10-Work.local caf\u00e9", "a = 2\n", sha("hand = 1\n"))["error"])
+        _, raw = run_in_process(frame({"cmd": "read_config"}))
+        self.assertIn("style.d/10-Work.local caf\u00e9.css", unframe(raw)["files"])
+
+    def test_names_that_could_leave_a_d_folder_or_hide_a_file_are_refused_and_nothing_is_written(self):
+        outside = os.path.join(self.tmp.name, "outside.toml")
+        for name in ("../outside", "../../outside", "..", ".", "a/b", "/abs", "a\\b", ".hidden", "", "a\x00b", "a\nb", "a\x1fb", "a\x7fb", "\ud800", "x" * 234, "\u00e9" * 117, 3, None, ["a"]):
+            for kind in ("settings_d", "style_d"):
+                request = {"cmd": "write_config_file", "kind": kind, "name": name, "text": "a = 1\n", "base_sha256": None}
+                _, raw = run_in_process(frame(request))
+                reply = unframe(raw)
+                self.assertFalse(reply["ok"], (kind, name))
+                self.assertIn("needs a name", reply["error"], (kind, name))
+        self.assertEqual(self.tree(), [])
+        self.assertFalse(os.path.exists(outside))
+
+    def test_a_d_name_at_the_byte_cap_is_created_replaced_and_deleted(self):
+        name = "x" * host.D_FILE_NAME_MAX_BYTES
+        self.assertTrue(self.write("settings_d", name, "a = 1\n", None)["ok"])
+        reply = self.write("settings_d", name, "a = 2\n", sha("a = 1\n"))
+        self.assertTrue(reply["ok"], reply)
+        reply = self.write("settings_d", name, None, sha("a = 2\n"))
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(self.tree(), ["settings.d/"])
+
+    def test_the_page_files_keep_their_own_kinds(self):
+        for kind in ("keymap_d", "search_engines_d"):
+            self.assertIn("other than zz-desertfox", self.write(kind, "zz-desertfox", "a = 1\n", None)["error"])
+        self.assertEqual(self.tree(), [])
+        self.assertTrue(self.write("command_aliases_d", "zz-desertfox", "a = 1\n", None)["ok"])
+
     def test_a_linked_search_engines_d_is_used_as_it_is(self):
         target = os.path.join(self.tmp.name, "dotfiles", "engines")
         os.makedirs(target)
@@ -863,7 +911,7 @@ class WriteConfigFileTest(ConfigDirCase):
         self.assertTrue(self.write("theme", "x" * 48, "a = 1\n", None)["ok"])
 
     def test_a_kind_outside_the_table_and_a_name_for_settings_are_refused(self):
-        for kind in ("keymap", "themes", "../settings", "Settings", "", None, 1):
+        for kind in ("snippets", "themes", "../settings", "Settings", "", None, 1):
             reply = self.write(kind, "a", "a = 1\n", None)
             self.assertFalse(reply["ok"], kind)
             self.assertIn("has no kind", reply["error"], kind)

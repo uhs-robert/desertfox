@@ -12,6 +12,8 @@ in the same framing to stdout and exits. It has nine verbs and no others:
   {"cmd": "write_config_file", "kind": "theme", "name": "<theme name>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
   {"cmd": "write_config_file", "kind": "engines", "text": "<text>" or null, "base_sha256": "<hex>" or null}
   {"cmd": "write_config_file", "kind": "search_keys", "text": "<text>" or null, "base_sha256": "<hex>" or null}
+  {"cmd": "write_config_file", "kind": "keymap_d", "name": "<file name without .toml>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
+      (and the other kinds of CONFIG_FILE_KINDS: one fixed name each, or a name in a .d folder)
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "...", "sha256": "<hex of text>"}  or, for a null text, "deleted": true
   {"cmd": "write_settings", "text": "<text>", "base_sha256": "<hex>" or null}
       -> the reply of write_config_file with kind settings, which it is under its older name
@@ -29,8 +31,9 @@ in the same framing to stdout and exits. It has nine verbs and no others:
   Any failure -> {"ok": false, "host_version": 1, "release_version": "0.1.22", "error": "..."}
 
 The host reads the config folder (default ~/.config/desertfox, DESERTFOX_CONFIG_DIR overrides it) and writes there:
-autoconfig.toml, and settings.toml, themes/<name>.toml, search_engines.d/zz-desertfox.toml and keymap.d/zz-desertfox.toml
-through `write_config_file`, which replaces or deletes a file only while it is still the text the extension edited and
+autoconfig.toml, and through `write_config_file` every config file but a snippet: settings.toml, keymap.toml,
+search_engines.toml, command_aliases.toml, quickmarks.toml, style.css, themes/<name>.toml and the files of the .d
+folders. It replaces or deletes a file only while it is still the text the extension edited and
 takes the lock file .settings.lock in the folder, which stays
 (see `write_config_file`). It parses no config of the extension: the extension owns that TOML and makes
 the edit. Only editor.toml, which the extension never sees, is parsed here.
@@ -248,20 +251,62 @@ def config_write_lock(directory):
 # The theme names the extension accepts (src/shared/theme/base16.ts `theme_name_shape_problem`). The host checks them
 # again, so a name never leaves the themes folder: no dot, slash, backslash, NUL or upper case gets through.
 THEME_NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}")
+THEME_NAME_RULE = "of at most 48 lowercase letters, digits, _ and -, which starts with a letter or digit"
+
+# The file names an import carries in a `.d` folder, without the extension: no slash, backslash or control character,
+# and no leading dot, so a name never leaves its folder and never makes a hidden file that read_config skips. The
+# extension's import accepts the same names (src/shared/zip.ts `check_path`). The byte cap keeps the longest hidden
+# name beside the file, `.<name>-<16 hex>.old` (see `aside_prefix`), within the 255 bytes of a file name, so a file
+# written once can be replaced and deleted too.
+D_FILE_NAME_PATTERN = re.compile(r"[^./\\\x00-\x1f\x7f][^/\\\x00-\x1f\x7f]*")
+D_FILE_NAME_MAX_BYTES = 233
+D_FILE_NAME_RULE = f"of at most {D_FILE_NAME_MAX_BYTES} bytes with no slash, backslash or control character, which starts with no dot"
 
 # The files `write_config_file` writes, by kind. `folder` is inside the config folder, None for the folder itself. A kind
-# with a `name_pattern` takes a name and writes `<name>.toml`; one without writes `fixed_name`. The host builds every
-# path from this table, so a request never carries one.
-ConfigFileKind = collections.namedtuple("ConfigFileKind", "folder name_pattern fixed_name")
+# with a `name_pattern` takes a name and writes `<name><ext>`; one without writes `fixed_name`. `reserved` holds the names
+# another kind owns. The host builds every path from this table, so a request never carries one.
+ConfigFileKind = collections.namedtuple("ConfigFileKind", "folder name_pattern fixed_name ext name_rule reserved", defaults=(".toml", None, ()))
+ENGINES_PAGE_NAME = "zz-desertfox"
+
+
+def fixed_kind(name, folder=None):
+    return ConfigFileKind(folder=folder, name_pattern=None, fixed_name=name)
+
+
+def d_folder_kind(folder, ext=".toml", reserved=()):
+    return ConfigFileKind(folder=folder, name_pattern=D_FILE_NAME_PATTERN, fixed_name=None, ext=ext, name_rule=D_FILE_NAME_RULE, reserved=reserved)
+
+
 CONFIG_FILE_KINDS = {
-    "settings": ConfigFileKind(folder=None, name_pattern=None, fixed_name=SETTINGS_NAME),
-    "theme": ConfigFileKind(folder="themes", name_pattern=THEME_NAME_PATTERN, fixed_name=None),
+    "settings": fixed_kind(SETTINGS_NAME),
+    "theme": ConfigFileKind(folder="themes", name_pattern=THEME_NAME_PATTERN, fixed_name=None, name_rule=THEME_NAME_RULE),
     # The Engines page's own file. The extension refuses a page engine that a hand file in search_engines.d defines, so the
     # sort order of the hand files does not matter.
-    "engines": ConfigFileKind(folder="search_engines.d", name_pattern=None, fixed_name="zz-desertfox.toml"),
+    "engines": fixed_kind(f"{ENGINES_PAGE_NAME}.toml", "search_engines.d"),
     # The Engines page's key letters, a `[search_keys]` table only. The key editor's own keys never come here.
-    "search_keys": ConfigFileKind(folder="keymap.d", name_pattern=None, fixed_name="zz-desertfox.toml"),
+    "search_keys": fixed_kind(f"{ENGINES_PAGE_NAME}.toml", "keymap.d"),
+    # The other config files, which a settings import writes. The two page files keep their own kinds, so each path has one kind.
+    "keymap": fixed_kind("keymap.toml"),
+    "search_engines": fixed_kind("search_engines.toml"),
+    "command_aliases": fixed_kind("command_aliases.toml"),
+    "quickmarks": fixed_kind("quickmarks.toml"),
+    "style": fixed_kind("style.css"),
+    "settings_d": d_folder_kind("settings.d"),
+    "keymap_d": d_folder_kind("keymap.d", reserved=(ENGINES_PAGE_NAME,)),
+    "search_engines_d": d_folder_kind("search_engines.d", reserved=(ENGINES_PAGE_NAME,)),
+    "command_aliases_d": d_folder_kind("command_aliases.d"),
+    "quickmarks_d": d_folder_kind("quickmarks.d"),
+    "style_d": d_folder_kind("style.d", ext=".css"),
 }
+
+
+def name_fits(kind, name):
+    if not isinstance(name, str) or not kind.name_pattern.fullmatch(name) or name in kind.reserved:
+        return False
+    try:
+        return len(name.encode("utf-8")) <= D_FILE_NAME_MAX_BYTES
+    except UnicodeEncodeError:
+        return False
 
 
 def config_file_path(directory, request):
@@ -276,9 +321,10 @@ def config_file_path(directory, request):
         file_name = kind.fixed_name
     else:
         name = request.get("name")
-        if not isinstance(name, str) or not kind.name_pattern.fullmatch(name):
-            raise HostError(f"write_config_file kind {kind_name} needs a name of at most 48 lowercase letters, digits, _ and -, which starts with a letter or digit")
-        file_name = f"{name}.toml"
+        if not name_fits(kind, name):
+            reserved = f", other than {', '.join(kind.reserved)}" if kind.reserved else ""
+            raise HostError(f"write_config_file kind {kind_name} needs a name {kind.name_rule}{reserved}")
+        file_name = f"{name}{kind.ext}"
     folder = directory if kind.folder is None else os.path.join(directory, kind.folder)
     return os.path.join(folder, file_name), folder
 
@@ -291,8 +337,8 @@ def write_config_file(request):
     for the file, or null when it read none. Another digest means a hand edit since, and the host refuses rather than
     overwrite or delete it, so a delete needs a base. A link is followed, so a file that links into a dotfiles repository
     stays a link, and the target keeps its mode. The config folder must exist: a write never creates a config folder that
-    read_config would then find with only this file in it. A kind's own folder (themes, search_engines.d, keymap.d) is
-    created for a new file.
+    read_config would then find with only this file in it. A kind's own folder (themes or a .d folder) is created for a
+    new file.
 
     Host writers take a lock. An editor takes none, so the old file is hard-linked aside before the rename and checked
     after it: an edit saved into it in the meantime puts it back and refuses as changed on disk. An old file that cannot

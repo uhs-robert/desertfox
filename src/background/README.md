@@ -27,7 +27,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `storage_keys.ts` and `config_load.ts` live in `shared/config/`, because the help, new tab and popup pages read them too.
 - `config_store.ts`: `get_config`, `publish` and the one change queue for every `set`, key edit and swap. `publish` keeps the edit layers on top of a swap.
 - `config_swap.ts`: `apply_files`, the one swap of a reload, import, editor save and setting write, with `import_config`, `remove_snippet` and `save_config_file`.
-- `config_file_writes.ts`: the host write pipeline: the per-path record, write loops, gate, replay of a refused write and `NAMING_PATHS` order.
+- `config_file_writes.ts`: the host write pipeline: the per-path record, write loops, gate, batch write order with its bridges, replay of a refused write and `NAMING_PATHS` order.
 - `config_setting_writes.ts`: the setting, site, theme and engine writes (`set_in_settings_file`, `commit_folder_files`, `change_engine_file`). Each plans a change and the pipeline sends it.
 - `config_start.ts`: `reload_config`, the start read with its three migrations, and `choose_host_start`.
 - `config_main.ts`: `create_config_service` wires the services, store, swap, write modules and start, and the file exports the production instances.

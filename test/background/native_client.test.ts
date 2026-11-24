@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { create_native_client, missing_host_as_undefined, NativeHostError } from "../../src/background/native_client.ts";
+import { create_native_client, host_file_of, missing_host_as_undefined, NativeHostError } from "../../src/background/native_client.ts";
 import type { NativeFailure } from "../../src/background/native_client.ts";
 import { text_sha256 } from "../../src/background/settings_file.ts";
 import { make_tmp_dir } from "../support/tmp_dir.ts";
@@ -128,10 +128,34 @@ test("write_config_file sends a theme by name and refuses a path the host has no
   const { client, sent } = client_with(async () => ({ ok: true }));
   await client.write_config_file("themes/nord_dark.toml", null, "0".repeat(64));
   assert.deepEqual(sent, [{ cmd: "write_config_file", kind: "theme", name: "nord_dark", text: null, base_sha256: "0".repeat(64) }]);
-  for (const path of ["keymap.toml", "themes/../settings.toml", "themes/a/b.toml", "themes/Nord.toml", "themes/.x.toml", "themes/x.css", "/etc/settings.toml"]) {
+  for (const path of ["snippets/a.js", "themes/../settings.toml", "themes/a/b.toml", "themes/Nord.toml", "themes/.x.toml", "themes/x.css", "/etc/settings.toml"]) {
     await assert.rejects(client.write_config_file(path, "a = 1\n", null), /writes no file/, path);
   }
   assert.equal(sent.length, 1);
+});
+
+test("host_file_of gives every config file but a snippet a kind, and a .d name only where the host takes it", () => {
+  assert.deepEqual(host_file_of("keymap.toml"), { kind: "keymap" });
+  assert.deepEqual(host_file_of("style.css"), { kind: "style" });
+  assert.deepEqual(host_file_of("keymap.d/zz-desertfox.toml"), { kind: "search_keys" });
+  assert.deepEqual(host_file_of("search_engines.d/zz-desertfox.toml"), { kind: "engines" });
+  assert.deepEqual(host_file_of("settings.d/10-Work.local caf\u00e9.toml"), { kind: "settings_d", name: "10-Work.local caf\u00e9" });
+  assert.deepEqual(host_file_of("style.d/10-x.css"), { kind: "style_d", name: "10-x" });
+  assert.deepEqual(host_file_of("command_aliases.d/zz-desertfox.toml"), { kind: "command_aliases_d", name: "zz-desertfox" });
+  for (const path of ["snippets/a.js", "autoconfig.toml", "settings.d/.hidden.toml", "settings.d/a/b.toml", "settings.d/a\\b.toml", "settings.d/a\u0001.toml", "settings.d/.toml", "style.d/x.toml", "settings.d/x.css", `settings.d/${"x".repeat(234)}.toml`, "other.d/x.toml"]) {
+    assert.equal(host_file_of(path), undefined, path);
+  }
+  assert.deepEqual(host_file_of(`settings.d/${"x".repeat(233)}.toml`), { kind: "settings_d", name: "x".repeat(233) });
+});
+
+test("the real host writes each import path where host_file_of names it, and read_config gives it back at that path", { skip: spawnSync("python3", ["--version"]).error !== undefined }, async (t) => {
+  const dir = make_tmp_dir("desertfox-host-", t);
+  const client = create_native_client({ has_permission: async () => true, send: async (message) => spawn_host(message, dir) });
+  const paths = ["keymap.toml", "search_engines.toml", "command_aliases.toml", "quickmarks.toml", "style.css", "settings.d/10-Work.local.toml", "keymap.d/10-a.toml", "search_engines.d/10-a.toml", "command_aliases.d/10-a.toml", "quickmarks.d/10-a.toml", "style.d/10-a.css"];
+  for (const path of paths) await client.write_config_file(path, `# ${path}\n`, null);
+  const files = (await client.read_config()).files;
+  assert.deepEqual(Object.keys(files).filter((path) => !path.endsWith("/")).sort(), [...paths].sort());
+  for (const path of paths) assert.equal(files[path], `# ${path}\n`);
 });
 
 test("the extension's digest of the text read_config sends is the one the real host checks", { skip: spawnSync("python3", ["--version"]).error !== undefined }, async (t) => {

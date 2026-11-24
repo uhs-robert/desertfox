@@ -41,15 +41,49 @@ export type EditorCollectReply = { pending: true } | { done: true; changed: fals
 
 // How the host's `write_config_file` names each file the extension writes: its kind table builds the path from these, so the request carries none.
 // The theme name pattern is the host's check and `theme_name_shape_problem`'s (src/shared/theme/base16.ts).
-export type HostFile = { kind: "settings" } | { kind: "engines" } | { kind: "search_keys" } | { kind: "theme"; name: string };
+type FixedFileKind = "settings" | "engines" | "search_keys" | "keymap" | "search_engines" | "command_aliases" | "quickmarks" | "style";
+type NamedFileKind = "theme" | "settings_d" | "keymap_d" | "search_engines_d" | "command_aliases_d" | "quickmarks_d" | "style_d";
+export type HostFile = { kind: FixedFileKind } | { kind: NamedFileKind; name: string };
 const THEME_FILE_PATTERN = /^themes\/([a-z0-9][a-z0-9_-]{0,47})\.toml$/;
 
+// The page's two files come first, so `zz-desertfox.toml` in keymap.d or search_engines.d keeps its own kind, which the host's `.d` kinds refuse.
+const FIXED_FILE_KINDS: Record<string, FixedFileKind> = {
+  "settings.toml": "settings",
+  [ENGINE_FILE]: "engines",
+  [KEYS_FILE]: "search_keys",
+  "keymap.toml": "keymap",
+  "search_engines.toml": "search_engines",
+  "command_aliases.toml": "command_aliases",
+  "quickmarks.toml": "quickmarks",
+  "style.css": "style",
+};
+const D_FOLDER_KINDS: Record<string, { kind: NamedFileKind; ext: string }> = {
+  "settings.d": { kind: "settings_d", ext: ".toml" },
+  "keymap.d": { kind: "keymap_d", ext: ".toml" },
+  "search_engines.d": { kind: "search_engines_d", ext: ".toml" },
+  "command_aliases.d": { kind: "command_aliases_d", ext: ".toml" },
+  "quickmarks.d": { kind: "quickmarks_d", ext: ".toml" },
+  "style.d": { kind: "style_d", ext: ".css" },
+};
+// The host's `.d` name check: no slash, backslash or control character, no leading dot, and room for its hidden temporary name.
+// eslint-disable-next-line no-control-regex
+const D_FILE_NAME_PATTERN = /^[^./\\\u0000-\u001f\u007f][^/\\\u0000-\u001f\u007f]*$/;
+const D_FILE_NAME_MAX_BYTES = 233;
+
+function d_folder_file_of(path: string): HostFile | undefined {
+  const slash = path.indexOf("/");
+  const folder = D_FOLDER_KINDS[path.slice(0, slash)];
+  if (slash < 0 || folder === undefined || !path.endsWith(folder.ext)) return undefined;
+  const name = path.slice(slash + 1, -folder.ext.length);
+  const fits = D_FILE_NAME_PATTERN.test(name) && new TextEncoder().encode(name).length <= D_FILE_NAME_MAX_BYTES;
+  return fits ? { kind: folder.kind, name } : undefined;
+}
+
 export function host_file_of(path: string): HostFile | undefined {
-  if (path === "settings.toml") return { kind: "settings" };
-  if (path === ENGINE_FILE) return { kind: "engines" };
-  if (path === KEYS_FILE) return { kind: "search_keys" };
+  const fixed = Object.hasOwn(FIXED_FILE_KINDS, path) ? FIXED_FILE_KINDS[path] : undefined;
+  if (fixed !== undefined) return { kind: fixed };
   const theme = THEME_FILE_PATTERN.exec(path);
-  return theme ? { kind: "theme", name: theme[1]! } : undefined;
+  return theme ? { kind: "theme", name: theme[1]! } : d_folder_file_of(path);
 }
 
 export type ConfigFilesReply = { config_dir: string; config_dir_exists: boolean; files: Record<string, string> };
@@ -167,7 +201,7 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     },
     // Replaces the file at `path` with `text`, or deletes it for null, while the file on disk still has the digest `base_sha256` (null: no file).
     // The request names the file by the host's kind and name, never by path. A host from before the verb answers `unknown cmd`: settings.toml then goes through its older `write_settings`, and any other file reads as outdated, so the caller waits for an update.
-    // A host from before a kind (engines, search_keys) reads as outdated too.
+    // A host from before a kind (engines, search_keys, the import's kinds) reads as outdated too.
     write_config_file: async (path: string, text: string | null, base_sha256: string | null): Promise<void> => {
       const file = host_file_of(path);
       if (file === undefined) throw new Error(`The native host writes no file at ${path}`);
