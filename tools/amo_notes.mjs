@@ -5,8 +5,8 @@
 
 import { readFileSync } from "node:fs";
 
-// AMO's API docs state no limit for version release_notes. This cap is ours: a note this long is not a release note, and a surprise at the API would come after the GitHub release is public.
-const MAX_LENGTH = 8000;
+// AMO counts code points, not UTF-16 units. AMO's API docs state no limit for version release_notes. 3000 is the limit the API itself answered with (400 "Ensure this field has no more than 3000 characters."), so the check runs before the GitHub release goes public.
+const MAX_LENGTH = 3000;
 const DROPPED_SECTIONS = new Set(["install", "links"]);
 
 const fail = (message) => {
@@ -65,6 +65,7 @@ if (process.argv[1] === import.meta.filename) {
   }
   const text = convert(input);
   if (text === "") fail("the release notes are empty after the conversion. Write a release intro or bullets outside the Install and Links sections.");
-  if (text.length > MAX_LENGTH) fail(`the converted notes are ${text.length} characters, over the limit of ${MAX_LENGTH}. Shorten the release notes.`);
-  console.log(text);
+  const length = [...text].length;
+  if (length > MAX_LENGTH) fail(`the converted notes are ${length} characters long, but AMO accepts at most ${MAX_LENGTH}. Shorten "# Next release" in RELEASE.md.`);
+  process.stdout.write(text);
 }

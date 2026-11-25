@@ -16,7 +16,7 @@ The source archive for the submit comes from `just source_archive`. Its `BUILD.m
 
 `just release` runs steps 1 to 4 on a clean release branch with the release text under "# Next release" in `RELEASE.md`. Only stable (three-number) versions go to the listing. Betas (four numbers) stay unlisted and self-hosted.
 
-1. Before anything changes, it checks that `RELEASE.md` is non-empty and converts to plain text (`tools/amo_notes.mjs` fails on an empty result or one over 8000 characters, a cap of ours: the AMO API docs state no limit), that `amo/metadata.json` lints and that the source archive builds within AMO's 200 MB limit.
+1. Before anything changes, it checks that `RELEASE.md` is non-empty and converts to plain text (`tools/amo_notes.mjs` fails on an empty result or one over 3000 characters, the limit the AMO API answers with: its docs state none), that `amo/metadata.json` lints and that the source archive builds within AMO's 200 MB limit. A text over the cap stops the run here, before anything is public. Shorten `# Next release` until the check passes.
 2. It bumps the patch version, stamps and hashes the hosts, builds, runs `web-ext lint` on `dist/`, and commits and pushes the bump.
 3. It publishes the GitHub release with the hosts only and the `RELEASE.md` text as the body. The add-on's install command points at this release, so it comes before the submit.
 4. It submits the listed version (`release_submit_listed`): stamp, build, source archive, then the converted notes in a temporary metadata copy. Last, it resets `RELEASE.md`. The reset waits for the submit on purpose: after a failed submit the text is still in `RELEASE.md` and in `release-assets/release-notes-<version>.md`.
