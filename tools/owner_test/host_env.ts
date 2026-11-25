@@ -1,8 +1,8 @@
 // The native host a test window runs. By default the window gets a private HOME holding a manifest that points at the worktree's own host, and a scratch copy of the config, so a host change is testable without touching the maintainer's installed host or config.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { WindowPaths } from "./paths.ts";
+import { is_strictly_inside, type WindowPaths } from "./paths.ts";
 
 // Firefox on Linux reads a user's native-messaging manifests only from $HOME/.mozilla/native-messaging-hosts (and fixed system folders), so a private HOME is the one per-process redirect.
 export const MANIFEST_RELATIVE = join(".mozilla", "native-messaging-hosts", "desertfox_host.json");
@@ -33,8 +33,23 @@ export function pinned_xdg(env: NodeJS.ProcessEnv, home: string): Record<string,
   };
 }
 
+// Removes the window's own private HOME and scratch config, so a leftover of an earlier run never merges into a new copy. Only the two fixed folders under the cache root can go.
+export function remove_own_host_dirs(paths: WindowPaths): void {
+  for (const dir of [paths.home_dir, paths.config_dir]) if (is_strictly_inside(paths.cache_root, dir)) rmSync(dir, { recursive: true, force: true });
+}
+
+// A failed prepare leaves a state that close treats as "no process recorded, keep everything", so close cannot clean it. This removes the half-written folders, the profile and the state file directly.
+export function discard_failed_prepare(paths: WindowPaths): void {
+  remove_own_host_dirs(paths);
+  if (is_strictly_inside(paths.cache_root, paths.profile_dir)) rmSync(paths.profile_dir, { recursive: true, force: true });
+  rmSync(paths.log_file, { force: true });
+  rmSync(paths.state_file, { force: true });
+  try { rmdirSync(paths.window_dir); } catch { /* not empty or gone */ }
+}
+
 // Writes the private HOME and the scratch config. The copy follows links (dereference), so a write by the host can never reach a file the real config only links to.
 export function prepare_host_dirs(paths: WindowPaths, worktree: string, real_config: string, choice: HostChoice): void {
+  remove_own_host_dirs(paths);
   const manifest_file = join(paths.home_dir, MANIFEST_RELATIVE);
   mkdirSync(dirname(manifest_file), { recursive: true, mode: 0o700 });
   writeFileSync(manifest_file, JSON.stringify(host_manifest(join(worktree, "host", "desertfox-host")), null, 2));
@@ -44,7 +59,8 @@ export function prepare_host_dirs(paths: WindowPaths, worktree: string, real_con
 
 // What start_unit sets on the window. Installed-host mode changes nothing, as before.
 export function window_env(paths: WindowPaths, choice: HostChoice, env: NodeJS.ProcessEnv, real_home: string): Record<string, string> {
-  if (choice.installed_host) return {};
+  // An empty value drops the caller's own DESERTFOX_CONFIG_DIR, so the installed host reads the real config.
+  if (choice.installed_host) return { DESERTFOX_CONFIG_DIR: "" };
   return { ...pinned_xdg(env, real_home), HOME: paths.home_dir, DESERTFOX_CONFIG_DIR: paths.config_dir };
 }
 

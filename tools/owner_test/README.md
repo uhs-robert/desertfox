@@ -17,7 +17,7 @@ By default a window runs the worktree's own `host/desertfox-host` against a scra
 
 - `--installed-host` runs the installed host and the real config, as the window did before.
 - `--empty-config` starts the scratch config empty, for clean-install tests. It has no meaning with `--installed-host`.
-- Each window gets a private `HOME` with its own native-messaging manifest. The XDG base folders stay the real ones, so GTK theme and fonts carry over. Other native hosts do not run in the window.
+- Each window gets a private `HOME` with its own native-messaging manifest. The XDG base folders stay the real ones, so GTK theme and fonts carry over. Other native hosts do not run in the window, and neither does the desktop bridge, so the `desertfox` command line does not reach it. Use `--installed-host` to test the bridge.
 
 ## How it works
 
