@@ -539,33 +539,19 @@ test("a held write says what clears it when it keeps waiting", async () => {
   assert.match(answer.message, /change the folder's files by hand, or press ,r to take the folder's files and drop the browser's change\.$/);
 });
 
-test("a write that lands between the gate's folder read and its check makes the gate read the folder again", async () => {
-  const { host, messages, startup, fake } = await started({ "settings.toml": "", [FILE]: MARK + '[keep]\nurl = "https://k.test/?q={query}"\n' });
+test("a page save made while a settings.toml write is out reads the folder for its gate only once that write landed", async () => {
+  const { host, messages, startup, fake, sent } = await started({ "settings.toml": "", [FILE]: MARK + '[keep]\nurl = "https://k.test/?q={query}"\n' });
   const held = hold_writes(fake);
-  // Holds the next folder read when the test arms it, and counts every read.
-  const send = fake.runtime.sendNativeMessage;
-  const held_reads: (() => void)[] = [];
-  let reads = 0;
-  let hold_next_read = false;
-  fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "read_config") return send(name, message);
-    reads += 1;
-    if (!hold_next_read) return send(name, message);
-    hold_next_read = false;
-    const answer = send(name, message);
-    return new Promise((resolve) => held_reads.push(() => resolve(answer)));
-  };
+  const reads = () => sent.filter((message) => message.cmd === "read_config").length;
   const picking = startup.set_in_settings_file("default_engine", "duck");
   await until(() => held.length === 1, "the settings.toml write did not go out");
-  hold_next_read = true;
+  const reads_before = reads();
   const saving = messages.change(set("wiki", "https://w.test/?q={query}"));
-  await until(() => held_reads.length === 1, "the gate did not read the folder");
-  const reads_before = reads;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(reads(), reads_before, "the gate read the folder while the settings.toml write was out");
   held.shift()!();
   assert.deepEqual(await picking, { kind: "written" });
-  held_reads.shift()!();
   await until(() => held.length === 1, "the page file write did not go out");
-  assert.equal(reads, reads_before + 1, "the gate sent the write on a read from before the settings.toml write landed");
   held.shift()!();
   assert.equal((await saving).ok, true);
   assert.match(host.files[FILE]!, /^\[wiki\]/m);
@@ -580,12 +566,14 @@ test("only a first line that is the whole marker makes the page's path the page'
 
 test("a save whose browser copy an import replaced does not say its key letter searches it", async () => {
   // The folder already holds the imported keymap.toml, so the import writes nothing of its own.
-  const { messages, startup, fake } = await started({ "settings.toml": "", "keymap.toml": "" });
+  const { messages, startup, fake, local } = await started({ "settings.toml": "", "keymap.toml": "" });
   const held = hold_writes(fake);
   const saving = messages.change(set("wiki", "https://w.test/?q={query}", { letter: "W" }));
   await until(() => held.length === 1, "the page's file write did not go out");
-  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  const imported = startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  await until(() => (local[FILES_SOURCE_STORAGE_KEY] as { imported?: boolean }).imported === true, "the import did not commit");
   held.shift()!();
+  await imported;
   const answer = await saving;
   assert.equal(answer.ok, true, answer.message);
   assert.match(answer.message, /A config import replaced the browser copy/);
@@ -691,13 +679,15 @@ test("a keys file at the page's path without the marker stays the user's: its le
   assert.deepEqual(kinds_sent(sent), [["engines"]]);
 });
 
-test("a keys file made by hand since the last read is never overwritten, and the question is asked", async () => {
+test("a keys file made by hand since the last read is never overwritten, and the engine file of its batch goes to the question with it", async () => {
   const { host, messages, local } = await started();
   host.files = { ...host.files, [KEYS]: '[search_keys]\nh = "duck"\n' };
   const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
   assert.ok(answer.ok);
   assert.match(answer.message, new RegExp(`Saved its key letter\\. ${KEYS.replace(".", "\\.")} changed on disk, so it stays as it is`));
-  assert.match(host.files[FILE]!, /^\[wiki\]/m);
+  assert.match(answer.message, new RegExp(`Saved the engine wiki\\. ${FILE.replace(".", "\\.")} changed on disk, so it stays as it is`));
+  assert.doesNotMatch(host.files[FILE] ?? "", /^\[wiki\]/m);
+  assert.equal(unsynced_of(local), undefined);
   assert.equal(host.files[KEYS], '[search_keys]\nh = "duck"\n');
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
@@ -734,15 +724,16 @@ test("a save whose gate cannot read the folder holds both files, and the reply s
   assert.deepEqual(unsynced_of(local), { [FILE]: null, [KEYS]: null });
 });
 
-test("a key letter whose engine's file went to the question is held by the gate, so the folder never names a missing engine", async () => {
+test("a key letter whose engine's file went to the question goes there with it, so the folder never names a missing engine", async () => {
   const { host, messages, local } = await started();
   host.files = { ...host.files, [FILE]: '[hand]\nurl = "https://h.test/?q={query}"\n' };
   const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
   assert.ok(answer.ok);
-  assert.match(answer.message, /zz-desertfox\.toml changed on disk, so it stays as it is/);
-  assert.match(answer.message, /keymap\.d\/zz-desertfox\.toml waits, because the config folder would not build with it \(.*unknown search engine "wiki"\)/);
+  assert.match(answer.message, /search_engines\.d\/zz-desertfox\.toml changed on disk, so it stays as it is/);
+  assert.match(answer.message, /keymap\.d\/zz-desertfox\.toml changed on disk, so it stays as it is/);
   assert.equal(host.files[KEYS], undefined);
-  assert.deepEqual(Object.keys(unsynced_of(local) as object), [KEYS]);
+  assert.equal(unsynced_of(local), undefined);
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
 test("a host without the search_keys kind writes neither page file, both wait for the update, and the updated host writes them", async () => {
