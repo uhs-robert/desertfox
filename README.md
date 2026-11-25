@@ -89,32 +89,32 @@ On a page where keys never reach DesertFox, such as an `about:` page or the PDF 
 
 Power without a manual to memorize, a new browser to learn, or your Firefox add-ons to give up. Keyboard drag is built in and is DesertFox's alone among the extensions compared.
 
-| Feature | DesertFox | Vimium | Vimium C | Tridactyl | qutebrowser (a whole browser, not an extension) |
-| --- | --- | --- | --- | --- | --- |
-| Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ |
-| Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ |
-| Built-in keyboard drag (`;Gg`, `;gg`) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Step through a page's items with `j` and `k` (item mode) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| [Works in frames from other sites (sign-in popups, embeds)](docs/compatibility.md) | ✅ | 🟡 | 🟡 | ❌ | not checked |
-| Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | ✅ | ✅ |
-| Key popup (which-key) | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ |
-| Command line with completion | ✅ | 🟡 | 🟡 | ✅ | ✅ |
-| Caret mode | ✅ | 🟡 | 🟡 | ❌ | ✅ |
-| Visual mode | ✅ | ✅ | ✅ | 🟡 | ✅ |
-| Page search | ✅ | ✅ | ✅ | 🟡 uses the Firefox find bar | ✅ |
-| Macros | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Per-site keys and settings | ✅ | keys only | 🟡 | ✅ | ✅ |
-| Containers | ✅ | ❌ | 🟡 | ✅ | ❌ |
-| Config file | ✅ | ❌ | ❌ | ✅ | ✅ |
-| Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs shell commands | n/a |
-| Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Script loaded on every page and frame | under 22 KB | 254 KB | 94 KB | 1.1 MB (top page only) | n/a |
+| Feature | DesertFox | Vimium | Vimium C | Surfingkeys | Tridactyl | qutebrowser (a whole browser, not an extension) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Hints with modifiers | ✅ | 🟡 | ✅ | ✅ | ✅ | ✅ |
+| Hint filters | ✅ | 🟡 | ✅ | ✅ | ✅ | ✅ |
+| Built-in keyboard drag (`;Gg`, `;gg`) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Step through a page's items with `j` and `k` (item mode) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| [Built-in key integrations for specific sites](docs/compatibility.md) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| [Works in frames from other sites (sign-in popups, embeds)](docs/compatibility.md) | ✅ | 🟡 | 🟡 | 🟡 | ❌ | not checked |
+| Hints for open menus and tooltips on very large pages | ✅ | ✅ | 🟡 skips them | not checked | ✅ | ✅ |
+| Key popup (which-key) | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Generated help | ✅ | 🟡 | 🟡 | ✅ | ✅ | ✅ |
+| Command line with completion | ✅ | 🟡 | 🟡 | 🟡 | ✅ | ✅ |
+| Caret mode | ✅ | 🟡 | 🟡 | ✅ | ❌ | ✅ |
+| Visual mode | ✅ | ✅ | ✅ | ✅ | 🟡 | ✅ |
+| Page search | ✅ | ✅ | ✅ | ✅ | 🟡 uses the Firefox find bar | ✅ |
+| Macros | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Per-site keys and settings | ✅ | keys only | 🟡 | keys and settings | ✅ | ✅ |
+| Containers | ✅ | ❌ | 🟡 | 🟡 source only, not the store build | ✅ | ❌ |
+| Config file | ✅ | ❌ | ❌ | 🟡 | ✅ | ✅ |
+| Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs Neovim | optional, runs shell commands | n/a |
+| Works with other Firefox add-ons | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Script loaded on every page and frame | under 22 KB | 254 KB | 94 KB | 140 KB | 1.1 MB (top page only) | n/a |
 
 ✅ yes · ❌ no · 🟡 partial
 
-Item mode. None of the four documents a command that steps through a page's list items, comments or sections. The closest keys are Vimium's `n` and `N` for find matches, Tridactyl's `hint -c` to hint chosen elements, and qutebrowser's caret moves by block of text. This comes from reading each project's docs and command source, not from running each one. See the [item mode guide](docs/item_mode.md).
+Item mode. None of the five documents a command that steps through a page's list items, comments or sections. The closest keys are the `n` and `N` keys of Vimium and Surfingkeys for find matches, Tridactyl's `hint -c` to hint chosen elements, and qutebrowser's caret moves by block of text. This comes from reading each project's docs and command source, not from running each one. See the [item mode guide](docs/item_mode.md).
 
 Keyboard drag keys. `;` starts the hint keys, and `;g` and `;G` are modifiers that turn the hint into a grab. The letter after the modifier picks which elements get hints.
 - `;Gg` grabs a draggable element and moves it with keys (grab and move). In grab mode, `h` `j` `k` `l` move it, `[` and `]` halve and double the step, `Enter` drops it and `Escape` cancels.
@@ -129,20 +129,21 @@ Sources, read in November 2026: each project's documentation, source code and sh
 
 - Vimium: [README](https://github.com/philc/vimium/blob/master/README.md) and its [command list](https://github.com/philc/vimium/blob/master/background_scripts/all_commands.js).
 - Vimium C: [README](https://github.com/gdh1995/vimium-c/blob/master/README.md), its [command descriptions](https://github.com/gdh1995/vimium-c/blob/master/i18n/en/help_dialog.json) and the 2.12.3 add-on.
+- Surfingkeys: [README](https://github.com/brookhong/Surfingkeys/blob/master/README.md), its [API](https://github.com/brookhong/Surfingkeys/blob/master/docs/API.md), its [default keys](https://github.com/brookhong/Surfingkeys/blob/master/src/content_scripts/common/default.js) and the 1.17.11 add-on from addons.mozilla.org. Its source (1.19.3) is newer than that add-on.
 - Tridactyl: [command source](https://github.com/tridactyl/tridactyl/blob/master/src/excmds.ts) (`bindurl`, `seturl`, `exclaim`).
 - Speed, coverage and drag checks: [performance comparison](tools/measure/rivals/README.md).
 - qutebrowser: [command reference](https://github.com/qutebrowser/qutebrowser/blob/main/doc/help/commands.asciidoc).
 
 > [!NOTE]
 > The last row shows size, not page speed. The sizes are as shipped.
-> DesertFox and Vimium C are minified, and Vimium and Tridactyl are not. DesertFox defers loading hint and caret code to first use.
+> DesertFox, Vimium C and Surfingkeys are minified, and Vimium and Tridactyl are not. DesertFox defers loading hint and caret code to first use.
 
 <details>
 <summary><b>🧭 Where another tool fits better</b></summary>
 
-- You use Chrome, Edge or Safari. DesertFox runs on desktop Firefox only. Vimium and Vimium C cover the other browsers.
+- You use Chrome, Edge or Safari. DesertFox runs on desktop Firefox only. Vimium, Vimium C and Surfingkeys cover the other browsers.
 - You want keys on every page, with no exception. Only a browser built for the keyboard, such as qutebrowser, gives that. An extension cannot run on Firefox's own pages.
-- You want to run shell commands or your own scripting language from the browser. Tridactyl allows both. DesertFox leaves them out on purpose.
+- You want to run shell commands or your own scripting language from the browser. Tridactyl allows both, and Surfingkeys maps keys to your own JavaScript. DesertFox leaves them out on purpose.
 - You want the smallest set of keys and nothing to configure. Vimium has the fewest commands, but you learn them from its help page. DesertFox shows the next keys in its which-key popup after a short pause.
 
 </details>
