@@ -661,12 +661,12 @@ class ReleaseStepTest(InstallCase):
         # Reads the recipe instead of running it: a run would bump, sign and push.
         body = self.just("--show", "release").stdout
         guard = body.index("release_notes.mjs next")
-        for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just sign_only", "just release_commit_push"):
+        for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just release_submit_listed", "just release_commit_push"):
             self.assertLess(guard, body.index(step), step)
         reset_line = body.index('then just release_notes_reset "$version"; fi')
         self.assertIn('[ "${RELEASE_DRY_RUN:-}" != "1" ]', body[reset_line - 60 : reset_line], "a dry run publishes nothing, so it must not reset")
         self.assertLess(body.index('cp "$notes_source" "$notes_snapshot"'), body.index('text "$notes_snapshot"'), "the notes come from the snapshot")
-        self.assertLess(body.index('\n    just release_publish "$version"'), reset_line, "RELEASE.md changes only after the publish")
+        self.assertLess(body.index('\n    just release_publish "$version"'), reset_line, "RELEASE.md changes only after the publish and the submit")
 
     def notes_tool(self, *args):
         return subprocess.run(["node", "tools/release_notes.mjs", *args], cwd=os.path.dirname(HOST_DIR), capture_output=True, text=True, timeout=30)

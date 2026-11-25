@@ -367,7 +367,7 @@ release_guard:
     fi
     # A bump left behind by a failed sign or install looks like this.
     if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
-        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset <version>' instead. They use the stamped files kept in $RELEASE_ASSETS_DIR." >&2
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed run. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If the build was fine, do not rerun: run 'just release_commit_push', then 'just release_publish <version> \"\" $RELEASE_ASSETS_DIR/release-notes-<version>.md', then 'just sign_listed' and 'just release_notes_reset <version>' instead. They use the stamped files and notes kept in $RELEASE_ASSETS_DIR." >&2
         exit 1
     fi
     echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
@@ -395,9 +395,9 @@ release_commit_push:
     git add package.json package-lock.json src/manifest.json
     # A rerun after a failed push finds the bump already committed.
     if ! git diff --cached --quiet; then
-        git commit -q -m "chore(release): bump version to $version" || { echo "The bump commit failed, so the bump is uncommitted. Fix git, then run 'just release_commit_push', 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset <version>'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+        git commit -q -m "chore(release): bump version to $version" || { echo "The bump commit failed, so the bump is uncommitted. Fix git, then run 'just release_commit_push', 'just release_publish <version> \"\" $RELEASE_ASSETS_DIR/release-notes-<version>.md', 'just sign_listed' and 'just release_notes_reset <version>'. Do not rerun 'just release': it bumps a second version." >&2; exit 1; }
     fi
-    git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push', 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset <version>'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+    git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push', 'just release_publish <version> \"\" $RELEASE_ASSETS_DIR/release-notes-<version>.md', 'just sign_listed' and 'just release_notes_reset <version>'. Do not rerun 'just release': it bumps a second version." >&2; exit 1; }
 
 # Folder of the stamped release files, kept between the recipes of one release so publish uploads the bytes the build hashed.
 export RELEASE_ASSETS_DIR := env("RELEASE_ASSETS_DIR", "release-assets")
@@ -505,48 +505,113 @@ release_notes_file:
 release_notes_reset version:
     node tools/release_notes.mjs reset "$(just release_notes_file)" "$RELEASE_ASSETS_DIR/release-notes-{{version}}.source.md"
 
-# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts. The matching beta comes after the release PR merges: the nightly builds it because main changed, or run `just beta` for it at once. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch and the release text under "# Next release" in RELEASE.md of the main checkout (git-ignored, see tools/release_notes.mjs), which must be non-empty before anything else runs. Once the release is published, the file is reset to an empty "# Next release" section.
+# Release the next stable version (x.y.z) to the AMO listing: bump the patch version, stamp and hash the hosts, commit and push the bump, create the GitHub release with the hosts only and the notes of RELEASE.md as its body, then submit the same build to the listed channel with the notes converted to plain text (tools/amo_notes.mjs) and the source archive (release_submit_listed). It signs nothing unlisted and installs nothing: Mozilla reviews the listed version for days, and the owner installs it from AMO after approval. Add the approved xpi to the release with `gh release upload` (amo/README.md). The matching beta comes after the release PR merges: the nightly builds it because main changed, or run `just beta` for it at once. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch and the release text under "# Next release" in RELEASE.md of the main checkout (git-ignored, see tools/release_notes.mjs), which must be non-empty and convertible before anything else runs. RELEASE.md is reset after the listed submit succeeds, not after the publish, so a failed submit keeps the text for the recovery: `just sign_listed` (it takes the notes kept in RELEASE_ASSETS_DIR), then `just release_notes_reset <version>`. RELEASE_DRY_RUN=1 also skips the listed submit.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
     # First, before any bump, sign, commit, push or gh call: the release body is hand-written, never a default.
     notes_source=$(just release_notes_file)
     node tools/release_notes.mjs next "$notes_source" >/dev/null
-    # The key lives in shell variables that are never exported, so the build and install steps cannot read it. Only the sign command gets it. A key already in the environment moves into those variables before any child command runs. Build code on this machine stays trusted: it can still reach node_modules and an unlocked rbw.
+    # The listed submit reads the same text, so a notes file AMO cannot take stops here and not after the GitHub release is public. The heading version does not reach the converter's output.
+    node tools/release_notes.mjs text "$notes_source" 0.0.0 | node tools/amo_notes.mjs >/dev/null
+    # The key lives in shell variables that are never exported, so the build and install steps cannot read it. Only the submit command gets it. A key already in the environment moves into those variables before any child command runs. Build code on this machine stays trusted: it can still reach node_modules and an unlocked rbw.
     amo_key="${WEB_EXT_API_KEY:-}"
     amo_secret="${WEB_EXT_API_SECRET:-}"
     unset WEB_EXT_API_KEY WEB_EXT_API_SECRET
     just release_guard
     # Before the bump, so a missing dependency never leaves a bump behind.
     just install_deps
-    # Fail before the bump and the signing, so a missing gh login does not leave a signed version with no host release.
+    # Fail before the bump, so a missing gh login does not leave a bump with no host release.
     command -v gh >/dev/null || { echo "release needs gh to create the GitHub release that carries the native host." >&2; exit 1; }
     gh auth status >/dev/null 2>&1 || { echo "release needs a logged-in gh. Run 'gh auth login', then retry." >&2; exit 1; }
+    # Before the bump too: the listed submit refuses anything but x.y.z, and a patch bump keeps that shape.
+    if ! [[ "$(jq -r .version package.json)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "release needs a three-number version in package.json, found '$(jq -r .version package.json)'. Four numbers are betas." >&2
+        exit 1
+    fi
+    just release_listed_lint
     source tools/amo_key.sh
     load_amo_key
     just release_bump
     version=$(jq -r .version src/manifest.json)
     just release_stamp "$version"
-    # Kept with the stamped files so a recovery run of release_publish sends the same text, even though RELEASE.md changes only after the publish.
+    # Kept with the stamped files so a recovery run of release_publish and sign_listed sends the same text, even though RELEASE.md changes only after the submit.
     notes_file="$RELEASE_ASSETS_DIR/release-notes-$version.md"
     # The copy comes first and the notes come from it, so an edit of RELEASE.md in between is in neither and the reset then keeps the file.
     notes_snapshot="$RELEASE_ASSETS_DIR/release-notes-$version.source.md"
     cp "$notes_source" "$notes_snapshot"
     node tools/release_notes.mjs text "$notes_snapshot" "$version" > "$notes_file"
-    # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
+    # Check before the push and the submit: AMO signs a version once, so a build without the hashes must never reach it.
     just build
     if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
-        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json, so its hosts could not update. Nothing was signed. Fix the build, undo the bump with 'git checkout -- package.json package-lock.json src/manifest.json', then rerun 'just release'." >&2
+        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json, so its hosts could not update. Nothing was published or submitted. Fix the build, undo the bump with 'git checkout -- package.json package-lock.json src/manifest.json', then rerun 'just release'." >&2
         exit 1
     fi
-    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just sign_only
-    just release_install
     just release_commit_push
-    xpi=$(ls web-ext-artifacts/*.xpi)
-    just release_publish "$version" "$xpi" "$notes_file" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi $notes_file', then 'just release_notes_reset <version>'. RELEASE.md is unchanged until then." >&2; exit 1; }
+    # The host release comes before the submit: the add-on's install command points at it, and Mozilla may approve fast. It has no xpi, which the nightly or the owner adds after approval.
+    just release_publish "$version" "" "$notes_file" || { echo "The bump is pushed, but the GitHub release failed and nothing was submitted to AMO. After fixing gh, run 'just release_publish $version \"\" $notes_file', then 'just sign_listed' and 'just release_notes_reset $version'. RELEASE.md is unchanged until then." >&2; exit 1; }
+    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just release_submit_listed "$version" "$notes_file" || { echo "The GitHub release v$version is published, but the listed submit failed. First look at the AMO developer hub: if it lists $version, the number is burned, so do not submit again. Otherwise fix the cause and run 'just sign_listed' (it submits $version with the notes in $notes_file). Then run 'just release_notes_reset $version'. RELEASE.md is unchanged until then. Do not rerun 'just release': it bumps a second version." >&2; exit 1; }
     # A dry run publishes nothing, so the notes are still unpublished.
     if [ "${RELEASE_DRY_RUN:-}" != "1" ]; then just release_notes_reset "$version"; fi
-    echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
+    echo "Submitted $(jq -r .version package.json) for review and published the GitHub release with the hosts. The bump is committed and pushed on this branch. Open a PR. After Mozilla approves, add the signed xpi to the release (amo/README.md)."
+
+# Check the listing metadata without a key: the license and the summary length that AMO requires.
+[private]
+release_listed_lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    jq -e '.version.license and (.summary["en-US"] | length <= 250)' amo/metadata.json >/dev/null || { echo "amo/metadata.json needs version.license and a summary of at most 250 characters." >&2; exit 1; }
+
+# The submit that `release` and `sign_listed` share: refuse a beta version or an update_url, stamp and build the version in src/manifest.json, check the build carries the host hashes, write the source archive and submit to the listed channel. The release notes come from the optional notes file (the GitHub release text): they are converted to plain text and written into a temporary copy of amo/metadata.json, which is deleted on exit, so the committed file keeps its neutral line. Without a notes file the committed line is submitted as it is. Needs the AMO key in WEB_EXT_API_KEY and WEB_EXT_API_SECRET: the recipe moves it into unexported shell variables before it runs any build step, and only sign_only gets it. RELEASE_DRY_RUN=1 stops before the submit and prints the notes.
+[private]
+release_submit_listed version notes_file="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version={{quote(version)}}
+    notes_file={{quote(notes_file)}}
+    amo_key="${WEB_EXT_API_KEY:-}"
+    amo_secret="${WEB_EXT_API_SECRET:-}"
+    unset WEB_EXT_API_KEY WEB_EXT_API_SECRET
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "A listed submit needs a three-number version, found '$version'. Four numbers are betas." >&2
+        exit 1
+    fi
+    if [ "$(jq -r .version src/manifest.json)" != "$version" ]; then
+        echo "src/manifest.json holds '$(jq -r .version src/manifest.json)', not $version." >&2
+        exit 1
+    fi
+    if [ -n "$(jq -r '.browser_specific_settings.gecko.update_url // empty' src/manifest.json)" ]; then
+        echo "A listed submit refuses a manifest with an update_url: AMO updates a listed add-on itself." >&2
+        exit 1
+    fi
+    if [ "${RELEASE_DRY_RUN:-}" != "1" ] && { [ -z "$amo_key" ] || [ -z "$amo_secret" ]; }; then
+        echo "release_submit_listed needs WEB_EXT_API_KEY and WEB_EXT_API_SECRET in its environment." >&2
+        exit 1
+    fi
+    just release_listed_lint
+    metadata_tmp=$(mktemp)
+    notes_tmp=$(mktemp)
+    trap 'rm -f "$metadata_tmp" "$notes_tmp"' EXIT
+    cp amo/metadata.json "$metadata_tmp"
+    if [ -n "$notes_file" ]; then
+        node tools/amo_notes.mjs "$notes_file" > "$notes_tmp"
+        jq --rawfile notes "$notes_tmp" '.version.release_notes["en-US"] = $notes' amo/metadata.json > "$metadata_tmp"
+    fi
+    just release_stamp "$version"
+    just build
+    # The stamp hashes the local hosts, not the published ones: a host change after the release is published needs a new version.
+    # Check before submitting: AMO signs a version once, so a build without the hashes must never reach it.
+    if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
+        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json. Nothing was submitted." >&2
+        exit 1
+    fi
+    archive=$(just source_archive)
+    if [ "${RELEASE_DRY_RUN:-}" = "1" ]; then
+        echo "dry run: would submit $version to the listed channel with $archive and these release notes:"
+        jq -r '.version.release_notes["en-US"]' "$metadata_tmp"
+        exit 0
+    fi
+    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just sign_only listed "$metadata_tmp" "$archive"
 
 # Write the source archive Mozilla reviewers rebuild from, to RELEASE_ASSETS_DIR/desertfox-<version>-source.zip: every tracked file of HEAD, with BUILD.md at the top. It holds no stamped hosts, since BUILD.md has the reviewer stamp them. Needs a clean tree, so the archive is the commit that gets signed.
 source_archive:
@@ -562,7 +627,7 @@ source_archive:
     git archive --format=zip -o "$archive" HEAD
     echo "$archive"
 
-# Submit dist/ to the listed channel on addons.mozilla.org with the listing text in amo/metadata.json and the source archive. PUBLIC and one-way: AMO signs a version number once, and the listing page exists afterwards. It stamps and builds the version in src/manifest.json itself so the build, the archive and the hosts agree, and refuses a beta version or an update_url, which only unlisted builds carry. Mozilla then reviews it. Publish the GitHub release with the hosts first (`just release_publish <version>`), because the install command of the add-on points at it. Needs a clean release branch with the version bump committed. CI never runs it.
+# Submit the version in src/manifest.json to the listed channel on addons.mozilla.org: the manual entry and the recovery after a failed submit of `release` (release_submit_listed does the work). PUBLIC and one-way: AMO signs a version number once, and the listing page exists afterwards. The release notes come from RELEASE_ASSETS_DIR/release-notes-<version>.md when `release` kept them there, and otherwise amo/metadata.json keeps its neutral line. Mozilla then reviews it. Publish the GitHub release with the hosts first (`just release_publish <version>`), because the install command of the add-on points at it. Needs a clean release branch with the version bump committed. CI never runs it.
 sign_listed:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -577,29 +642,13 @@ sign_listed:
     just release_guard
     just install_deps
     version=$(jq -r .version src/manifest.json)
-    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "sign_listed needs a three-number version, found '$version'. Four numbers are betas." >&2
-        exit 1
-    fi
-    if [ -n "$(jq -r '.browser_specific_settings.gecko.update_url // empty' src/manifest.json)" ]; then
-        echo "sign_listed refuses a manifest with an update_url: AMO updates a listed add-on itself." >&2
-        exit 1
-    fi
-    jq -e '.version.license and (.summary["en-US"] | length <= 250)' amo/metadata.json >/dev/null || { echo "amo/metadata.json needs version.license and a summary of at most 250 characters." >&2; exit 1; }
+    notes_file="$RELEASE_ASSETS_DIR/release-notes-$version.md"
+    if [ ! -s "$notes_file" ]; then notes_file=""; fi
     # Before the build, so a locked rbw vault fails at once and not after the build.
     source tools/amo_key.sh
     load_amo_key
-    just release_stamp "$version"
-    just build
-    # The stamp hashes the local hosts, not the published ones: a host change after the release is published needs a new version.
-    # Check before submitting: AMO signs a version once, so a build without the hashes must never reach it.
-    if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
-        echo "The build does not carry the host hashes in $RELEASE_ASSETS_DIR/host_sha256.json. Nothing was submitted." >&2
-        exit 1
-    fi
-    archive=$(just source_archive)
-    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just sign_only listed amo/metadata.json "$archive"
-    echo "Submitted $version for review. Publish the GitHub release with the hosts now if you have not: 'just release_publish $version' (push the commit first, since the tag targets HEAD). Paste docs/privacy.md into the privacy policy field and add the previews on the listing page (see amo/README.md)."
+    WEB_EXT_API_KEY="$amo_key" WEB_EXT_API_SECRET="$amo_secret" just release_submit_listed "$version" "$notes_file"
+    echo "Submitted $version for review. Publish the GitHub release with the hosts now if you have not: 'just release_publish $version' (push the commit first, since the tag targets HEAD). Paste docs/privacy.md into the privacy policy field and add the previews on the listing page (see amo/README.md). After a recovery of 'just release', run 'just release_notes_reset $version'."
 
 # Everything the beta does before signing, with no secret: check the stamped manifest, stamp and hash the hosts, build dist/ and check that it carries the hashes. CI runs it as its own job.
 [private]

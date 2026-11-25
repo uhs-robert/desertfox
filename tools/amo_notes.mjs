@@ -1,0 +1,65 @@
+// Converts the GitHub release text of tools/release_notes.mjs (`text`) into the plain text of the AMO "release notes" field. AMO shows that field as plain text, so markdown marks would show as typed.
+// Usage: node tools/amo_notes.mjs [file]    reads the file, or stdin without one, and prints the plain text. Fails when the result is empty or longer than MAX_LENGTH.
+// Rules: the "# " title goes. The "## Install" and "## Links" sections go, since they point at the GitHub release and not at the listing. Any other "## X" or "### X" becomes the line "X:". Bullets stay as "- ". Bold, code ticks and fences go. A link [text](url) becomes "text (url)". No HTML.
+// Node only, like release_notes.mjs. `just release_submit_listed` runs it.
+
+import { readFileSync } from "node:fs";
+
+// AMO's API docs state no limit for version release_notes. This cap is ours: a note this long is not a release note, and a surprise at the API would come after the GitHub release is public.
+const MAX_LENGTH = 8000;
+const DROPPED_SECTIONS = new Set(["install", "links"]);
+
+const fail = (message) => {
+  console.error(`amo_notes: ${message}`);
+  process.exit(1);
+};
+
+const strip_inline = (line) =>
+  line
+    .replace(/!?\[([^\]]*)\]\(([^)\s]+)\)/g, (_, text, url) => (text === "" || text === url ? url : `${text} (${url})`))
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/`([^`]*)`/g, "$1");
+
+// A fence closes only on the same character, at least as long as the opening, with nothing after it (CommonMark, as in release_notes.mjs).
+export const convert = (markdown) => {
+  const out = [];
+  let fence = null;
+  let skipping = false;
+  for (const line of markdown.split("\n")) {
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence === null && marker) {
+      fence = marker[1];
+      continue;
+    }
+    if (fence !== null && marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === "") {
+      fence = null;
+      continue;
+    }
+    if (fence === null) {
+      const heading = /^(#{1,6}) +(.*?) *#*$/.exec(line);
+      if (heading) {
+        skipping = DROPPED_SECTIONS.has(heading[2].trim().toLowerCase());
+        if (heading[1].length >= 2 && !skipping) out.push("", `${strip_inline(heading[2])}:`, "");
+        continue;
+      }
+    }
+    if (skipping) continue;
+    out.push(fence === null ? strip_inline(line.replace(/^(\s*)[*+] /, "$1- ")) : line);
+  }
+  return out.join("\n").replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+};
+
+if (process.argv[1] === import.meta.filename) {
+  const file = process.argv[2];
+  let input;
+  try {
+    input = readFileSync(file ?? 0, "utf8");
+  } catch {
+    fail(`cannot read ${file ?? "stdin"}.`);
+  }
+  const text = convert(input);
+  if (text === "") fail("the release notes are empty after the conversion. Write a release intro or bullets outside the Install and Links sections.");
+  if (text.length > MAX_LENGTH) fail(`the converted notes are ${text.length} characters, over the limit of ${MAX_LENGTH}. Shorten the release notes.`);
+  console.log(text);
+}
