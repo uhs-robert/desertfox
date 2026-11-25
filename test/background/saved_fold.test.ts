@@ -182,7 +182,7 @@ async function first_start() {
 
 const stored_files = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files;
 const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
-const settings_writes = (sent: { cmd: string; kind?: string }[]) => sent.filter((message) => message.cmd === "write_config_file" && message.kind === "settings").length;
+const settings_writes = (sent: { cmd: string; files?: { kind: string }[] }[]) => sent.filter((message) => message.cmd === "write_config_files" && (message.files ?? []).some((file) => file.kind === "settings")).length;
 const warnings_of = (local: Record<string, unknown>) => local[WARNINGS_STORAGE_KEY] as string[];
 
 test("the first start folds the saved settings into the folder's settings.toml in one storage write, says so once, and a second start writes nothing", async () => {

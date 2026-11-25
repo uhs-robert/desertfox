@@ -29,7 +29,7 @@ import type { ConfigFileWrites, PickMark } from "./config_file_writes.ts";
 
 declare const browser: MessagingBrowser;
 
-// A change of config files the host writes: the browser copy's files after it, the setting edits after it, and the paths it changed, in the order they are written.
+// A change of config files the host writes: the browser copy's files after it, the setting edits after it, and the paths it changed, which the host writes in one batch.
 // `engines_after` replaces the engines layer in the same storage write, for an Engines page change that moves an engine or a key letter out of the layer an older version kept.
 type FolderFilesPlan = { files: ConfigFiles; edits_after: SettingEdits; paths: string[]; engines_after?: EngineEdits };
 
@@ -38,8 +38,8 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   const { store, swap, file_writes } = parts;
   const { get_config, publish, built_in_commands, layered_build, in_change_queue, commit_change, mirror_key_edits, read_load_step } = store;
   const { apply_files } = swap;
-  const { mark_pick, write_waiting_file, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
-  // One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then the host writes of the files, in the plan's order unless `path_to_write_first` sends one first (a remove can send the keys file first).
+  const { mark_pick, write_files, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
+  // One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then one host write of both files.
   // `plan` runs in the change queue and gets a build of any files and layer over the aliases in force, so it refuses what a change breaks before anything is stored.
   // The answer has no `file` or `keys` for a file that stayed as it was.
   async function change_engine_file<R>(plan: (turn: EngineTurn) => EnginePlan | { done: R }): Promise<{ done: R } | EngineFileOutcomes> {
@@ -174,7 +174,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   }
 
   // One change of files the folder holds. `plan` runs in the change queue on the browser copy's files. The outcomes follow the plan's paths.
-  // Only the edit runs in the change queue. The host writes run outside it, one path after the other, so a slow host never holds up a `:set`.
+  // Only the edit runs in the change queue. The host write of every changed path runs outside it, in one batch, so a slow host never holds up a `:set`.
   async function change_folder_files<R>(plan: (files: ConfigFiles) => Promise<FolderFilesPlan | { done: R }>): Promise<{ done: R } | { outcomes: FileWriteOutcome[] }> {
     const committed = await in_change_queue(async () => {
       const current = await load_files_source();
@@ -183,9 +183,10 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
       return { paths: planned.paths, ...(await commit_folder_files(current, planned)) };
     });
     if ("done" in committed) return committed;
-    const outcomes: FileWriteOutcome[] = [];
+    const picks = committed.picks.filter((pick) => pick !== undefined);
+    const written = picks.length > 0 ? await write_files(in_change_queue, picks.map((pick) => ({ path: pick.path, pick }))) : new Map<string, FileWriteOutcome | undefined>();
     // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
-    for (const pick of committed.picks) outcomes.push(pick ? ((await write_waiting_file(in_change_queue, pick.path, pick)) ?? { kind: "written" }) : { kind: "browser_copy" });
+    const outcomes = committed.picks.map((pick): FileWriteOutcome => (pick ? (written.get(pick.path) ?? { kind: "written" }) : { kind: "browser_copy" }));
     // The question was made against the copy before the pick. The folder may still differ in other files, so it is asked again or settled.
     if (outcomes.every((outcome) => outcome.kind === "written") && committed.question_was_pending) {
       const folder = await read_folder_after_write();
@@ -237,7 +238,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
       const naming_file = settings_d_files_naming(files, "theme", name)[0];
       if (naming_file !== undefined) throw new RuntimeRefusal(`${naming_file} sets theme = "${name}". Change it there before you remove the theme.`);
       const edits_after = { saved: without_theme_named(edits.saved, name), temp: without_theme_named(edits.temp, name) };
-      // settings.toml goes first, so the folder never names a theme file it no longer has.
+      // Both files go in one batch, so the folder never names a theme file it no longer has.
       return settings_file_naming(files, "theme", name) ? { files: without_setting_in_files(others, "theme"), edits_after, paths: [SETTINGS_FILE, path] } : { files: others, edits_after, paths: [path] };
     });
     if ("done" in changed) return { kind: changed.done };

@@ -63,12 +63,12 @@ const remove = (name: string) => ({ type: "change_imported_themes", action: "rem
 const stored_files = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files;
 const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
 
-// A host whose `write_config_file` answers only when the test says so.
+// A host whose `write_config_files` answers only when the test says so.
 function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
   const send = fake.runtime.sendNativeMessage;
   const held: (() => void)[] = [];
   fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_config_file") return send(name, message);
+    if (message.cmd !== "write_config_files") return send(name, message);
     return new Promise((resolve) => held.push(() => resolve(send(name, message))));
   };
   return held;
@@ -110,7 +110,7 @@ test("a malformed, partial or misnamed scheme is refused, and nothing is stored 
   }
   assert.equal((await messages.change({ type: "change_imported_themes", action: "save", name: 5, text: SCHEME } as never)).ok, false);
   assert.deepEqual(stored_files(local), before);
-  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_files"));
 });
 
 test("saving over a name asks first and replaces only when told to", async () => {
@@ -302,7 +302,7 @@ test("the first start moves the stored imports into theme files and the saved pi
   sent.length = 0;
   const again = fresh_config_service();
   await again.reload_config_at_start();
-  assert.ok(!sent.some((message) => message.cmd === "write_config_file"), "a second start wrote again");
+  assert.ok(!sent.some((message) => message.cmd === "write_config_files"), "a second start wrote again");
 });
 
 test("with the host off the moved files wait in the record, and the next start with the host writes them", async () => {
@@ -429,13 +429,13 @@ test("a config stored with the single local_theme key still gives that theme", a
   assert.deepEqual(loaded.config.local_themes?.mine, theme);
 });
 
-// A host from before `write_config_file` writes settings.toml through `write_settings` but no theme file, so settings.toml waits for the theme file it names.
+// A host from before `write_config_files` writes no file, so every file waits for the update.
 const builds = async (startup: Startup) => {
   await startup.reload_config();
   return true;
 };
 
-test("a pick of a saved theme the folder lacks waits for the theme file, and the updated host writes both in order", async () => {
+test("a pick of a saved theme the folder lacks takes the waiting theme file into its batch, and the updated host writes both in one batch", async () => {
   const files = { "settings.toml": "" };
   const host: Host = { files };
   const { messages, startup, local } = await started(files, host);
@@ -457,7 +457,7 @@ test("a pick of a saved theme the folder lacks waits for the theme file, and the
   assert.ok(await builds(updated));
 });
 
-test("the moved imports and the moved pick reach the folder in an order that builds, while the host knows only write_settings", async () => {
+test("the moved imports and the moved pick wait while the host is from before write_config_files, and the updated host writes them in one batch", async () => {
   const files = { "settings.toml": "" };
   const host: Host = { files };
   const { local } = await with_stored_imports(files, { theme: "dusk_one" }, host);
@@ -475,11 +475,10 @@ test("the moved imports and the moved pick reach the folder in an order that bui
   assert.ok(await builds(updated));
 });
 
-test("a remove of the theme in use clears settings.toml before the delete, and a hand edit of settings.toml keeps the theme file", async () => {
+test("a remove of the theme in use clears settings.toml in the same batch as the delete, and a hand edit of settings.toml keeps the theme file", async () => {
   const { host, messages, startup, local } = await started();
   await messages.change(save("dusk_one", SCHEME));
   await startup.set_in_settings_file("theme", "dusk_one");
-  host.settings_only_host = true;
   // A browser change the folder lacks, so the refused settings.toml cannot take the folder's text and goes to the question.
   await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', null);
   host.files = { ...host.files, "settings.toml": '# mine\ntheme = "dusk_one"\n' };

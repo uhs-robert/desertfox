@@ -44,7 +44,8 @@ async function first_start() {
 
 const stored_files = (local: Record<string, unknown>) => (local[FILES_SOURCE_STORAGE_KEY] as { files: Files }).files;
 const unsynced_of = (local: Record<string, unknown>) => local[SETTINGS_FILE_UNSYNCED_STORAGE_KEY] ?? undefined;
-const kinds_sent = (sent: { cmd: string; kind?: string }[]) => sent.filter((message) => message.cmd === "write_config_file").map((message) => message.kind);
+// The kinds of each `write_config_files` request in `sent`, sorted, one list per request.
+const kinds_sent = (sent: { cmd: string; files?: { kind: string }[] }[]) => sent.filter((message) => message.cmd === "write_config_files").map((message) => (message.files ?? []).map((file) => file.kind).sort());
 
 // Every folder state the host leaves after a write, built as a `,r` would build it.
 function watch_folder_builds(fake: ReturnType<typeof install_fake_browser>["fake"], host: Host) {
@@ -52,7 +53,7 @@ function watch_folder_builds(fake: ReturnType<typeof install_fake_browser>["fake
   const send = fake.runtime.sendNativeMessage;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
     const reply = await send(name, message);
-    if (message.cmd === "write_config_file" && (reply as { ok: boolean }).ok) {
+    if (message.cmd === "write_config_files" && (reply as { ok: boolean }).ok) {
       try {
         build_files_config(host.files, "folder", [], "reload");
       } catch (error) {
@@ -73,7 +74,7 @@ function start_warnings() {
   };
 }
 
-test("the first start moves the layer into both files and the saved default engine into settings.toml after them, once", async () => {
+test("the first start moves the layer into both files and the saved default engine into settings.toml, writes them in one batch, once", async () => {
   const { host, local, sent, fake } = await old_profile(LAYER, { "settings.toml": "# mine\n" }, { default_engine: "wiki", newtab_ip_info: true });
   const broken = watch_folder_builds(fake, host);
   sent.length = 0;
@@ -84,7 +85,7 @@ test("the first start moves the layer into both files and the saved default engi
   assert.equal(host.files[FILE], MARK + '[wiki]\nurl = "https://w.test/?q={query}"\nlabel = "Wiki"\nkeyword = "w"\n\n[docs]\nurl = "https://d.test/?q={query}"\n');
   assert.equal(host.files[KEYS], KEYS_MARK + '[search_keys]\nw = "wiki"\n');
   assert.equal(host.files["settings.toml"], 'default_engine = "wiki"\n# mine\n');
-  assert.deepEqual(kinds_sent(sent), ["engines", "search_keys", "settings"]);
+  assert.deepEqual(kinds_sent(sent), [["engines", "search_keys", "settings"]]);
   assert.deepEqual(broken, []);
   assert.equal(local[ENGINE_EDITS_STORAGE_KEY], undefined);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { newtab_ip_info: true });
@@ -132,21 +133,21 @@ test("with no config folder ever read, the move changes only the browser copy", 
   assert.equal((await startup.get_config()).keymap.search_keys?.w, "wiki");
 });
 
-test("a host without the engines kind keeps the files waiting, and the updated host writes them in order", async () => {
+test("a host without the engines kind keeps the files waiting, and the updated host writes them in one batch", async () => {
   const files = { "settings.toml": "" };
   const host: Host = { files, no_engines_kind: true };
   const { local, sent, fake } = await old_profile(LAYER, files, { default_engine: "wiki" }, host);
   await first_start();
   assert.equal(local[ENGINE_EDITS_STORAGE_KEY], undefined);
   assert.equal(host.files[FILE], undefined);
-  assert.equal(host.files["settings.toml"], "", "settings.toml waits for the engine file");
+  assert.equal(host.files["settings.toml"], "", "settings.toml waits with the engine file");
   assert.deepEqual(Object.keys(unsynced_of(local) as object).sort(), [KEYS, FILE, "settings.toml"].sort());
 
   host.no_engines_kind = false;
   const broken = watch_folder_builds(fake, host);
   sent.length = 0;
   await first_start();
-  assert.deepEqual(kinds_sent(sent), ["engines", "search_keys", "settings"]);
+  assert.deepEqual(kinds_sent(sent), [["engines", "search_keys", "settings"]]);
   assert.deepEqual(broken, []);
   assert.equal(unsynced_of(local), undefined);
 });

@@ -291,7 +291,7 @@ test("a refused write whose folder cannot be read again keeps the record and say
   let write_sent = false;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
     if (message.cmd === "read_config" && write_sent) throw new Error("Native application exited");
-    if (message.cmd === "write_config_file") write_sent = true;
+    if (message.cmd === "write_config_files") write_sent = true;
     return send(name, message);
   };
   const outcome = await startup.set_in_settings_file("theme", "oasis_night");
@@ -333,7 +333,7 @@ test("a browser copy that did not come from the folder changes alone, and nothin
   await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }, { path: "snippets/one.js", text: snippet }] }, { "snippets/one.js": snippet });
   sent.length = 0;
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
-  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_files"));
   assert.equal(unsynced_of(local), undefined);
   assert.equal(host.files["settings.toml"], MINE);
 });
@@ -357,7 +357,7 @@ test("an edited import never reaches the folder: a pick after an editor save cha
   await startup.save_config_file("keymap.toml", '[normal]\n"zz" = "tab.next"\n', "");
   sent.length = 0;
   assert.deepEqual(await startup.set_in_settings_file("theme", "oasis_night"), { kind: "browser_copy" });
-  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_files"));
   assert.equal(host.files["settings.toml"], undefined);
   assert.equal(unsynced_of(local), undefined);
 
@@ -372,7 +372,7 @@ function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
   const send = fake.runtime.sendNativeMessage;
   const held: (() => void)[] = [];
   fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_config_file") return send(name, message);
+    if (message.cmd !== "write_config_files") return send(name, message);
     return new Promise((resolve) => held.push(() => resolve(send(name, message))));
   };
   return held;
@@ -531,7 +531,7 @@ test("an import that runs between a pick and its write: nothing is written, and 
   const outcome = await pick;
   assert.deepEqual(outcome, { kind: "replaced", by: "import", written: false });
   assert.equal(outcome_note(outcome), ". A config import replaced the browser copy before the write, so settings.toml was not written");
-  assert.ok(!sent.some((message) => message.cmd === "write_config_file"));
+  assert.ok(!sent.some((message) => message.cmd === "write_config_files"));
   assert.equal(host.files["settings.toml"], MINE);
   assert.equal(unsynced_of(local), undefined);
 });
@@ -617,7 +617,7 @@ test("a folder that changes on every write is merged three times, then the quest
   const send = fake.runtime.sendNativeMessage;
   let writes = 0;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
-    if (message.cmd === "write_config_file") {
+    if (message.cmd === "write_config_files") {
       writes += 1;
       host.files = { "settings.toml": `${host.files["settings.toml"]}# stamped ${writes}\n` };
     }
@@ -653,7 +653,7 @@ test("each write loop gets its own three merges, whatever an earlier loop used",
   const send = fake.runtime.sendNativeMessage;
   let writes = 0;
   fake.runtime.sendNativeMessage = async (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_config_file") return send(name, message);
+    if (message.cmd !== "write_config_files") return send(name, message);
     writes += 1;
     // The first loop merges twice and then meets an older host. The second loop merges three times and then writes.
     host.old_host = writes === 3;
