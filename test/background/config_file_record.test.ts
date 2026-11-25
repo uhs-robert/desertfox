@@ -437,3 +437,38 @@ test("a gate read taken while a batch is out is read again once its files land, 
   assert.deepEqual(batches_sent(lag.sent), [["themes/dusk.toml", "themes/dawn.toml"], ["settings.toml"]]);
   assert.equal(lag.host.files["settings.toml"], with_theme("dusk"));
 });
+
+test("a refused batch that left a file it could not put back makes a gate read taken before it stale", { timeout: 5000 }, async () => {
+  const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
+  const lag = await lagging(folder, { "settings.toml": MINE, [THEME]: EDITED, "keymap.toml": "" }, { [THEME]: FRAPPE, "keymap.toml": null }, folder, { refuse: ["keymap.toml"], unrestored: [THEME] });
+  const held = hold_writes(lag.fake);
+  const send = lag.fake.runtime.sendNativeMessage;
+  let reads = 0;
+  let hold_next_read = false;
+  const held_reads: (() => void)[] = [];
+  lag.fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
+    if (message.cmd !== "read_config") return send(name, message);
+    reads += 1;
+    if (!hold_next_read) return send(name, message);
+    hold_next_read = false;
+    const answer = send(name, message);
+    return new Promise((resolve) => held_reads.push(() => resolve(answer)));
+  };
+  const restarted = fresh_config_service();
+  await restarted.get_config();
+  const start = restarted.reload_config_at_start();
+  await until(() => held.length === 1, "the batch did not go out");
+  hold_next_read = true;
+  const pick = restarted.set_in_settings_file("hint_letters", "xyz");
+  await until(() => held_reads.length === 1, "the pick did not read the folder for its gate");
+  held.shift()!();
+  await start;
+  assert.equal(lag.host.files[THEME], EDITED);
+  const reads_before = reads;
+  held_reads[0]!();
+  await until(() => held.length === 1, "the pick's write did not go out");
+  // The theme file changed on disk though the batch failed, so the pick's gate reads the folder again.
+  assert.equal(reads, reads_before + 1);
+  held.shift()!();
+  assert.deepEqual(await pick, { kind: "written" });
+});
