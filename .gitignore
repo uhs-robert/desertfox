@@ -1,5 +1,6 @@
 /.plans/
 /.logs/
+/RELEASE.md
 node_modules/
 dist/
 web-ext-artifacts/
