@@ -73,7 +73,7 @@ export const area_rules = [
       "src/commands/{help,help_tab,issue,settings,native,firefox_page}.ts",
       "src/shared/site/site_rules_view.ts",
       "src/background/{open_help,issue_report,native_client,host_update,host_update_browser}.ts",
-      "src/shared/{settings_docs,settings_plan,settings_schema,settings_table,setting_list,config_file_path,table_constants,native_host,host_version,permission_grant}.ts",
+      "src/shared/{settings_docs,settings_plan,settings_schema,settings_table,setting_list,config_file_path,config_kinds,table_constants,native_host,host_version,permission_grant}.ts",
     ],
     areas: ["help"],
   },

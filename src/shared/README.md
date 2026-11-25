@@ -44,6 +44,7 @@ The detail of the long entries is in the "Shared files for ..." sections of thes
 - `index.ts`: the barrel of the types and the constants that every folder may import.
 - `anything_ref.ts`: the reference a finder row carries to the `anything` command, so the handler acts on the row the list showed and never ranks again.
 - `config_file_path.ts`: which paths the files editor may store. The page refuses early and the background decides.
+- `config_kinds.ts`: the data kinds of the config folder. It stays apart from `config_build/` so a page can name them without bundling the build.
 - `engine_fields.ts`: the checks of the engine form's fields. The page runs them while the user types and the background runs them again at Save.
 - `font_candidates.ts`: the built-in font names (`FONT_CANDIDATES`), `probe_fonts`, `canvas_measure` and `merge_font_names`. Extension pages only.
 - `host_version.ts`: release versions of the extension and the native hosts, and the check that a host is older than the extension.
