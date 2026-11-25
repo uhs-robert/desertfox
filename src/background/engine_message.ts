@@ -145,7 +145,7 @@ export function create_engine_messages(deps: EngineMessageDeps) {
     return `Saved the engine ${name}${change.file ? save_note(change.file) : ""}.${keys_sentence(change.keys, letter, keys_deleted)}${searches}`;
   }
 
-  // The engine's key letters go in the same change. The keys file reaches the folder first when the folder's keys file names the engine (`path_to_write_first`).
+  // The engine's key letters go in the same change, and both files reach the folder in one batch.
   async function remove(name: string): Promise<string> {
     let deleted = false;
     let keys_deleted = false;

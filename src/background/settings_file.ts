@@ -1,5 +1,5 @@
 // A setting written into, or removed from, settings.toml: the edit of the browser copy, and the record of the files the folder has not caught up with.
-// `config_setting_writes.ts` runs both in the change queue and `config_file_writes.ts` sends each file's text to the native host (`write_config_file`).
+// `config_setting_writes.ts` runs both in the change queue and `config_file_writes.ts` sends the files' texts to the native host in one batch (`write_config_files`).
 
 import { parse, TomlError } from "smol-toml";
 import { site_rule_rows } from "../shared/config_build/merge.ts";
