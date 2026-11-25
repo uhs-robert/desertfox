@@ -657,12 +657,49 @@ class ReleaseStepTest(InstallCase):
             self.assertIn("missing or empty", done.stderr)
         self.assertFalse(os.path.exists(self.gh_log))
 
-    def test_release_checks_its_notes_file_before_any_other_step(self):
+    def test_release_checks_its_notes_before_any_other_step(self):
         # Reads the recipe instead of running it: a run would bump, sign and push.
         body = self.just("--show", "release").stdout
-        guard = body.index('[ ! -s "$notes_file" ]')
+        guard = body.index("release_notes.mjs next")
         for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just sign_only", "just release_commit_push"):
             self.assertLess(guard, body.index(step), step)
+        self.assertLess(body.index("just release_commit_push"), body.index("just release_notes_reset"), "RELEASE.md changes only after the publish")
+
+    def notes_tool(self, *args):
+        return subprocess.run(["node", "tools/release_notes.mjs", *args], cwd=os.path.dirname(HOST_DIR), capture_output=True, text=True, timeout=30)
+
+    def notes_file(self, text):
+        path = os.path.join(self.tmp.name, "RELEASE.md")
+        with open(path, "w") as file:
+            file.write(text)
+        return path
+
+    def test_notes_tool_prints_the_next_release_section_under_the_version_heading(self):
+        path = self.notes_file("# Next release\n\nNew thing.\n\n```\n# not a heading\n```\n\n# DesertFox 1.0.0\n\nOld.\n")
+        done = self.notes_tool("text", path, "1.0.1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, "# DesertFox 1.0.1\n\nNew thing.\n\n```\n# not a heading\n```\n")
+
+    def test_notes_tool_refuses_a_missing_file_a_missing_section_and_an_empty_section(self):
+        for text in (None, "# DesertFox 1.0.0\n\nOld.\n", "# Next release\n\n  \n# DesertFox 1.0.0\n\nOld.\n"):
+            path = os.path.join(self.tmp.name, "none.md") if text is None else self.notes_file(text)
+            done = self.notes_tool("next", path)
+            self.assertNotEqual(done.returncode, 0, text)
+            self.assertEqual(done.stdout, "")
+
+    def test_notes_tool_reset_leaves_only_an_empty_next_release_section(self):
+        path = self.notes_file("# Next release\n\nNew thing.\n\n# DesertFox 1.0.0\n\nOld.\n")
+        self.assertEqual(self.notes_tool("reset", path).returncode, 0)
+        with open(path) as file:
+            self.assertEqual(file.read(), "# Next release\n\n")
+        self.assertNotEqual(self.notes_tool("reset", path).returncode, 0, "an empty section is not reset again")
+
+    def test_release_notes_reset_recipe_edits_the_file_named_by_the_environment(self):
+        path = self.notes_file("# Next release\n\nNew thing.\n")
+        done = self.just("release_notes_reset", RELEASE_NOTES_FILE=path)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(path) as file:
+            self.assertEqual(file.read(), "# Next release\n\n")
 
     def test_publish_refuses_without_a_stamp_of_this_version(self):
         done = self.just("release_publish", self.package_version(), self.xpi)
