@@ -4,7 +4,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { describe_host, type HostChoice, parse_environ, prepare_host_dirs, real_config_dir, window_env } from "./host_env.ts";
+import { describe_host, discard_failed_prepare, type HostChoice, parse_environ, prepare_host_dirs, real_config_dir, window_env } from "./host_env.ts";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { close_window } from "./close.ts";
@@ -131,7 +131,7 @@ async function open(worktree: string, paths: WindowPaths, hints: string[], choic
     try {
       prepare_host_dirs(paths, worktree, real_config_dir(process.env, homedir()), choice);
     } catch (error) {
-      await close(paths);
+      discard_failed_prepare(paths);
       fail(`could not prepare the private HOME and scratch config: ${(error as Error).message}`);
     }
   }
@@ -194,7 +194,12 @@ async function print_host(state: WindowState): Promise<void> {
   if (state.host_home === null) return console.log("host: the installed host and the real config (installed-host mode)");
   const pid = firefox_pid_for(state.profile);
   if (pid === null) return console.log("host: Firefox is not running, so its host cannot be read");
-  const report = describe_host(parse_environ(readFileSync(`/proc/${pid}/environ`, "utf8")), (file) => (existsSync(file) ? readFileSync(file, "utf8") : null));
+  let report;
+  try {
+    report = describe_host(parse_environ(readFileSync(`/proc/${pid}/environ`, "utf8")), (file) => (existsSync(file) ? readFileSync(file, "utf8") : null));
+  } catch (error) {
+    return console.log(`host: (not read: ${(error as Error).message})`);
+  }
   console.log(`host: ${report.host_path}`);
   console.log(`config folder: ${report.config_dir}`);
   const port = debug_port_of(state.profile);
@@ -202,7 +207,16 @@ async function print_host(state: WindowState): Promise<void> {
   console.log(`config folder the host reports: ${reported}`);
 }
 
-const { positionals, values: flags } = parseArgs({ allowPositionals: true, options: { "installed-host": { type: "boolean" }, "empty-config": { type: "boolean" } } });
+function parse_cli_args() {
+  try {
+    return parseArgs({ allowPositionals: true, options: { "installed-host": { type: "boolean" }, "empty-config": { type: "boolean" } } });
+  } catch (error) {
+    console.error(`owner-test: ${(error as Error).message}\nusage: owner-test [worktree] [':set name value']... [--installed-host] [--empty-config]`);
+    return process.exit(1);
+  }
+}
+
+const { positionals, values: flags } = parse_cli_args();
 const host_choice: HostChoice = { installed_host: flags["installed-host"] === true, empty_config: flags["empty-config"] === true };
 const [action = "open", worktree_arg = ".", ...raw_hints] = positionals;
 const hints = raw_hints.filter((hint) => hint.trim() !== "");

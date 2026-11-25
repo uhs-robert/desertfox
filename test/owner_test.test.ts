@@ -11,10 +11,10 @@ import { seed_user_js } from "../tools/owner_test/profile.ts";
 import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "../tools/owner_test/state.ts";
 import { is_confirmed_stopped, KEY_TEST_MARKER, real_close_deps, check_environment, start_unit } from "../tools/owner_test/system.ts";
 import { stamp_manifest, tail_lines, web_ext_args } from "../tools/owner_test/web_ext.ts";
-import { describe_host, host_manifest, parse_environ, pinned_xdg, prepare_host_dirs, real_config_dir, window_env, EXTENSION_ID, HOST_MANIFEST_DESCRIPTION, HOST_MANIFEST_NAME, MANIFEST_RELATIVE } from "../tools/owner_test/host_env.ts";
+import { describe_host, discard_failed_prepare, host_manifest, parse_environ, pinned_xdg, prepare_host_dirs, real_config_dir, window_env, EXTENSION_ID, HOST_MANIFEST_DESCRIPTION, HOST_MANIFEST_NAME, MANIFEST_RELATIVE } from "../tools/owner_test/host_env.ts";
 import { flock_argv, LOCK_BUSY_EXIT } from "../tools/owner_test/lock.ts";
 import { Refusal } from "../tools/owner_test/refusal.ts";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { probe_window, reload_window } from "../tools/owner_test/rdp_probe.ts";
 import net from "node:net";
 import { symlinkSync, readdirSync, rmSync } from "node:fs";
@@ -597,6 +597,11 @@ test("the host manifest matches what host/install.sh writes for the same host", 
   const install = readFileSync(join(import.meta.dirname, "..", "host", "install.sh"), "utf8");
   assert.ok(install.includes(`extension_id="${EXTENSION_ID}"`));
   assert.ok(install.includes(`install_manifest ${HOST_MANIFEST_NAME} desertfox-host "${HOST_MANIFEST_DESCRIPTION}" "$extension_id"`));
+  const dict = /manifest = \{([\s\S]*?)\n\}/.exec(install)?.[1] ?? "";
+  const install_keys = [...dict.matchAll(/^\s*"(\w+)":/gm)].map((match) => match[1]);
+  assert.deepEqual(Object.keys(host_manifest("/p")), install_keys);
+  assert.ok(dict.includes('"type": "stdio"'));
+  assert.ok(/"allowed_extensions": \[sys\.argv\[3\]\]/.test(dict));
   assert.deepEqual(host_manifest("/w/host/desertfox-host"), {
     name: "desertfox_host", description: "DesertFox config files and saved edits", path: "/w/host/desertfox-host", type: "stdio", allowed_extensions: ["desertfox@uhs-robert"],
   });
@@ -645,14 +650,14 @@ test("the real config folder resolves like the host: XDG_CONFIG_HOME when absolu
   assert.equal(real_config_dir({}, "/h"), "/h/.config/desertfox");
 });
 
-test("window env: private HOME and scratch config with the real XDG bases pinned, nothing in installed mode", () => {
+test("window env: private HOME and scratch config with the real XDG bases pinned, only an unset config dir in installed mode", () => {
   const paths = window_paths("/w/a", { state_home: "/s", cache_home: "/c" });
   const isolated = window_env(paths, { installed_host: false, empty_config: false }, {}, "/real");
   assert.deepEqual(isolated, {
     XDG_CONFIG_HOME: "/real/.config", XDG_DATA_HOME: "/real/.local/share", XDG_CACHE_HOME: "/real/.cache", HOME: paths.home_dir, DESERTFOX_CONFIG_DIR: paths.config_dir,
   });
   assert.deepEqual(pinned_xdg({ XDG_CONFIG_HOME: "/e/c" }, "/real").XDG_CONFIG_HOME, "/e/c");
-  assert.deepEqual(window_env(paths, { installed_host: true, empty_config: false }, {}, "/real"), {});
+  assert.deepEqual(window_env(paths, { installed_host: true, empty_config: false }, {}, "/real"), { DESERTFOX_CONFIG_DIR: "" });
 });
 
 test("start_unit passes the window env to a plain spawn, over the caller's own values", async (t) => {
@@ -702,4 +707,60 @@ test("status reads the host path from the manifest in the Firefox HOME and the c
   const report = describe_host(environ, (file) => (file === `/h/private/${MANIFEST_RELATIVE}` ? JSON.stringify({ path: "/w/host/desertfox-host" }) : null));
   assert.deepEqual(report, { host_path: "/w/host/desertfox-host", config_dir: "/h/scratch" });
   assert.match(describe_host({ HOME: "/x" }, () => null).host_path, /no manifest/);
+});
+
+test("a failed prepare leaves no state or folders, so the next open is not blocked", (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-fail-", t);
+  const roots = { state_home: join(base, "state"), cache_home: join(base, "cache") };
+  const { paths } = make_window("/w/a", roots);
+  const real = join(base, "real_config");
+  mkdirSync(real);
+  symlinkSync(join(base, "missing_target"), join(real, "dangling"));
+  assert.throws(() => prepare_host_dirs(paths, "/w/a", real, { installed_host: false, empty_config: false }));
+  discard_failed_prepare(paths);
+  assert.deepEqual([existsSync(paths.state_file), existsSync(paths.home_dir), existsSync(paths.config_dir), existsSync(paths.profile_dir), existsSync(paths.window_dir)], [false, false, false, false, false]);
+  assert.equal(read_state(paths.state_file).kind, "none");
+});
+
+test("prepare removes leftover private folders, so an empty config is really empty", (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-stale-", t);
+  const paths = window_paths("/w/a", { state_home: join(base, "state"), cache_home: join(base, "cache") });
+  mkdirSync(paths.config_dir, { recursive: true });
+  mkdirSync(join(paths.home_dir, ".mozilla"), { recursive: true });
+  writeFileSync(join(paths.config_dir, "stale.toml"), "x");
+  writeFileSync(join(paths.home_dir, ".mozilla", "stale"), "x");
+  prepare_host_dirs(paths, "/w/a", join(base, "none"), { installed_host: false, empty_config: true });
+  assert.deepEqual(readdirSync(paths.config_dir), []);
+  assert.equal(existsSync(join(paths.home_dir, ".mozilla", "stale")), false);
+});
+
+test("installed-host mode drops a caller's DESERTFOX_CONFIG_DIR from the window", async (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-inst-", t);
+  const out = join(base, "env.txt");
+  const script = join(base, "dump.sh");
+  writeFileSync(script, `#!/bin/sh\nprintf '[%s]' "$DESERTFOX_CONFIG_DIR" > "${out}"\n`, { mode: 0o755 });
+  const paths = window_paths("/w/a", { state_home: "/s", cache_home: "/c" });
+  const saved = { path: process.env.PATH, dir: process.env.DESERTFOX_CONFIG_DIR };
+  process.env.PATH = "/nonexistent";
+  process.env.DESERTFOX_CONFIG_DIR = "/caller/config";
+  try {
+    start_unit({ unit: "u", command: script, args: [], cwd: base, log_file: join(base, "log"), who: "test", env: window_env(paths, { installed_host: true, empty_config: false }, {}, "/real") });
+  } finally {
+    process.env.PATH = saved.path;
+    if (saved.dir === undefined) delete process.env.DESERTFOX_CONFIG_DIR;
+    else process.env.DESERTFOX_CONFIG_DIR = saved.dir;
+  }
+  for (let waited = 0; !existsSync(out) && waited < 50; waited++) await new Promise((done) => setTimeout(done, 100));
+  assert.equal(readFileSync(out, "utf8"), "[]");
+});
+
+test("a mistyped flag prints a usage line and no stack trace", () => {
+  const run = spawnSync(process.execPath, ["--no-warnings", join(import.meta.dirname, "..", "tools", "owner_test", "cli.ts"), "status", "--installed_host"], { encoding: "utf8" });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /^owner-test: .*\nusage: /);
+  assert.doesNotMatch(run.stderr, /\n\s+at /);
+});
+
+test("describe_host reports a bad manifest as an error the caller can catch", () => {
+  assert.throws(() => describe_host({ HOME: "/h" }, () => "{not json"), SyntaxError);
 });

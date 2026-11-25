@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { Refusal } from "./refusal.ts";
 import { keep_chain } from "../../src/shared/swallow.ts";
 import { judge_probe } from "./probe.ts";
+import { EXTENSION_ID } from "./host_env.ts";
 
-const EXTENSION_ID = "desertfox@uhs-robert";
 const RDP_MODULE = join(import.meta.dirname, "..", "..", "test", "key", "rdp.mjs");
 
 type Rdp = { request: (to: string, message: object) => Promise<any>; close: () => void };
