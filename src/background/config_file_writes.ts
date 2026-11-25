@@ -333,11 +333,12 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
   }
 
   // The gate of a batch: the folder after it, as far as the extension knows (the folder's files, every other write still out, then the batch's texts), must build with no problem the folder without it lacks.
-  // The folder without the writes out must too: the host lands two batches in either order, and one that is out can still fail, so a batch never counts on another landing. It goes once that one settled.
+  // The folder without the writes out must too, and with each batch out landed alone: the host lands two batches in either order, and one that is out can still fail, so a batch never counts on another landing. It goes once that one settled.
   // The first new problem, or undefined. One check covers every way the files can break the folder: a default engine or child they drop, a keyword they double, a settings.d file that names what they remove.
   function write_breaks_folder(writes: { path: string; text: string | null }[], folder: ConfigFilesReply): string | undefined {
     const out = writes_out();
-    for (const before of out.length > 0 ? [with_file_texts(folder.files, out), folder.files] : [folder.files]) {
+    const each_landed_alone = batches_out().map((batch) => with_file_texts(folder.files, batch.writes));
+    for (const before of out.length > 0 ? [with_file_texts(folder.files, out), folder.files, ...each_landed_alone] : [folder.files]) {
       const known = new Set(folder_build_problems(before, folder.config_dir));
       const problem = folder_build_problems(with_file_texts(before, writes), folder.config_dir).find((found) => !known.has(found));
       if (problem !== undefined) return problem;
