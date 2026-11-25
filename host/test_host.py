@@ -1401,6 +1401,49 @@ class WriteConfigFilesTest(WriteConfigFileTest):
         self.assertEqual(self.read("settings.toml"), b"a = 1\n")
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
 
+    def test_a_rolled_back_deleted_file_is_never_wider_than_its_old_mode(self):
+        files = self.seed()
+        path = os.path.join(self.config, "settings.toml")
+        os.chmod(path, 0o600)
+        files[0] = self.entry("settings", None, None, sha("a = 1\n"))
+        real_link = os.link
+        modes_at_link = []
+
+        def record_mode_then_link(source, destination, *args, **kwargs):
+            if destination == path:
+                modes_at_link.append(stat.S_IMODE(os.stat(source).st_mode))
+            return real_link(source, destination, *args, **kwargs)
+
+        real_replace_config_file = host.replace_config_file
+
+        def fail_on_theme(path, data, base):
+            if path.endswith("themes/mine.toml"):
+                raise host.HostError("cannot write mine.toml: Input/output error")
+            return real_replace_config_file(path, data, base)
+
+        with mock.patch.object(host, "replace_config_file", side_effect=fail_on_theme), mock.patch.object(host.os, "link", side_effect=record_mode_then_link):
+            reply = self.batch(*files)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(modes_at_link, [0o600])
+
+    def test_a_file_whose_mode_cannot_be_read_refuses_the_batch_and_rolls_back(self):
+        files = self.seed()
+        theme = os.path.join(self.config, "themes", "mine.toml")
+        real_stat = os.stat
+
+        def vanish_after_settings_landed(path, *args, **kwargs):
+            if path == theme and self.read("settings.toml") == b"a = 2\n":
+                raise FileNotFoundError(2, "No such file or directory")
+            return real_stat(path, *args, **kwargs)
+
+        with mock.patch.object(host.os, "stat", side_effect=vanish_after_settings_landed):
+            reply = self.batch(*files)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(reply["path"], theme)
+        self.assertIn("No such file or directory", reply["error"])
+        self.assertEqual(reply["unrestored"], [])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+
     def send_after(self, start, replies, name, files):
         start.wait(5)
         replies[name] = self.batch(*files)

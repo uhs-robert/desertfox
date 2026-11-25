@@ -472,3 +472,33 @@ test("a refused batch that left a file it could not put back makes a gate read t
   held.shift()!();
   assert.deepEqual(await pick, { kind: "written" });
 });
+
+test("a write that breaks the folder with only one of two batches out landed waits for both, as the host lands them in either order", { timeout: 5000 }, async () => {
+  // The start deletes the hand file that defines ghost, the Engines page defines ghost again, and a `:set` names it: the folder lacks ghost while only the delete has landed.
+  const HAND_GHOST_FILE = "search_engines.d/10-ghost.toml";
+  const HAND_GHOST = '[ghost]\nurl = "https://g.test/?q={query}"\n';
+  const folder = { "settings.toml": MINE, [HAND_GHOST_FILE]: HAND_GHOST };
+  const lag = await lagging(folder, { "settings.toml": MINE }, { [HAND_GHOST_FILE]: HAND_GHOST }, folder);
+  const held = hold_writes(lag.fake);
+  const restarted = fresh_config_service();
+  await restarted.get_config();
+  const start = restarted.reload_config_at_start();
+  await until(() => held.length === 1, "the start's delete did not go out");
+  const engine = restarted.change_engine_file((turn) => ({ files: { ...turn.files, [ENGINE_FILE]: GHOST_ENGINE }, layer: turn.layer }));
+  await until(() => held.length === 2, "the engine write did not go out");
+  const reads_before = lag.sent.filter((message) => message.cmd === "read_config").length;
+  const pick = restarted.set_in_settings_file("default_engine", "ghost");
+  await until(() => lag.sent.filter((message) => message.cmd === "read_config").length > reads_before, "the pick did not read the folder for its gate");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(held.length, 2);
+  held.shift()!();
+  held.shift()!();
+  await until(() => held.length === 1, "the pick's write did not follow both batches");
+  held.shift()!();
+  assert.deepEqual(await pick, { kind: "written" });
+  await start;
+  await engine;
+  assert.equal(lag.host.files["settings.toml"], `${MINE}default_engine = "ghost"\n`);
+  assert.equal(lag.host.files[HAND_GHOST_FILE], undefined);
+  assert.equal(lag.host.files[ENGINE_FILE], GHOST_ENGINE);
+});
