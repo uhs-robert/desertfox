@@ -19,5 +19,6 @@ Behavior is in `docs/design/config.md`, section "Config build files for the conf
 Rules across files:
 
 - The extension and `tools/build-config` both run it. `tools/build-config/README.md` lists what stays in the tool.
-- In the extension, only the background runs it. No other folder imports it at runtime, and a test fails when one does. The values a page needs live outside it: `KEYMAP_MODES` in `src/shared/keymap.ts` and `DATA_KINDS` in `src/shared/config_kinds.ts`.
+- In the extension, only the background runs it. No other folder imports it at runtime, and a test fails when one does.
+- A page takes `KEYMAP_MODES` from `src/shared/keymap.ts` and `DATA_KINDS` from `src/shared/config_kinds.ts`.
 - No file here imports a `node:` module. A test fails when one does.
