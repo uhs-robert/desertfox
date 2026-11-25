@@ -105,7 +105,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 | Visual mode | ✅ | ✅ | ✅ | ✅ | 🟡 | ✅ |
 | Page search | ✅ | ✅ | ✅ | ✅ | 🟡 uses the Firefox find bar | ✅ |
 | Macros | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Per-site keys and settings | ✅ | keys only | 🟡 | keys only | ✅ | ✅ |
+| Per-site keys and settings | ✅ | keys only | 🟡 | keys and settings | ✅ | ✅ |
 | Containers | ✅ | ❌ | 🟡 | 🟡 source only, not the store build | ✅ | ❌ |
 | Config file | ✅ | ❌ | ❌ | 🟡 | ✅ | ✅ |
 | Helper program outside the browser | optional, fixed requests | ❌ | ❌ | optional, runs Neovim | optional, runs shell commands | n/a |
