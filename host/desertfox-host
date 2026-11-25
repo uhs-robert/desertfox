@@ -2,7 +2,7 @@
 """Native-messaging host for the DesertFox Firefox extension.
 
 Firefox starts it for one request: a 4-byte native-endian length, then UTF-8 JSON, on stdin. The host writes one reply
-in the same framing to stdout and exits. It has nine verbs and no others:
+in the same framing to stdout and exits. It has ten verbs and no others:
 
   {"cmd": "read_config"}
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "config_dir": "...", "config_dir_exists": true, "files": {"keymap.toml": "<text>", ...}}
@@ -15,6 +15,9 @@ in the same framing to stdout and exits. It has nine verbs and no others:
   {"cmd": "write_config_file", "kind": "keymap_d", "name": "<file name without .toml>", "text": "<text>" or null, "base_sha256": "<hex>" or null}
       (and the other kinds of CONFIG_FILE_KINDS: one fixed name each, or a name in a .d folder)
       -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "path": "...", "sha256": "<hex of text>"}  or, for a null text, "deleted": true
+  {"cmd": "write_config_files", "files": [{"kind": "...", "name": "...", "text": "<text>" or null, "base_sha256": "<hex>" or null}, ...]}
+      -> {"ok": true, "host_version": 1, "release_version": "0.1.22", "files": [{"path": "...", "sha256": "<hex>"} or {"path": "...", "deleted": true}, ...]}
+         all or none; on a failure {"ok": false, ..., "error": "...", "path": "<failing file>", "unrestored": ["<path>", ...]} (see `write_config_files`)
   {"cmd": "write_settings", "text": "<text>", "base_sha256": "<hex>" or null}
       -> the reply of write_config_file with kind settings, which it is under its older name
   {"cmd": "self_update", "version": "0.1.23", "sha256": {"desertfox-host": "<hex>", "desertfox-bridge": "<hex>", "desertfox": "<hex>"}}
@@ -91,7 +94,9 @@ KNOWN_DIRS = {"keymap.d", "search_engines.d", "command_aliases.d", "quickmarks.d
 
 
 class HostError(Exception):
-    """A failure the extension should see as a message."""
+    """A failure the extension should see as a message. `fields` are extra keys of the error reply."""
+
+    fields = None
 
 
 def config_dir():
@@ -309,21 +314,21 @@ def name_fits(kind, name):
         return False
 
 
-def config_file_path(directory, request):
+def config_file_path(directory, request, verb="write_config_file"):
     """The path the request's kind and name give, and the kind's folder."""
     kind_name = request.get("kind")
     kind = CONFIG_FILE_KINDS.get(kind_name) if isinstance(kind_name, str) else None
     if kind is None:
-        raise HostError(f"write_config_file has no kind {kind_name!r}. It writes {', '.join(sorted(CONFIG_FILE_KINDS))}")
+        raise HostError(f"{verb} has no kind {kind_name!r}. It writes {', '.join(sorted(CONFIG_FILE_KINDS))}")
     if kind.name_pattern is None:
         if "name" in request:
-            raise HostError(f"write_config_file kind {kind_name} takes no name")
+            raise HostError(f"{verb} kind {kind_name} takes no name")
         file_name = kind.fixed_name
     else:
         name = request.get("name")
         if not name_fits(kind, name):
             reserved = f", other than {', '.join(kind.reserved)}" if kind.reserved else ""
-            raise HostError(f"write_config_file kind {kind_name} needs a name {kind.name_rule}{reserved}")
+            raise HostError(f"{verb} kind {kind_name} needs a name {kind.name_rule}{reserved}")
         file_name = f"{name}{kind.ext}"
     folder = directory if kind.folder is None else os.path.join(directory, kind.folder)
     return os.path.join(folder, file_name), folder
@@ -347,27 +352,128 @@ def write_config_file(request):
     still the one it renamed in: a save renamed over it since stays, the old file stays aside, and the write refuses.
     Two windows of microseconds stay open: an editor that renames a new file over the file between the last check
     and the rename is not caught, and neither is one that does so between that inode check and the put-back."""
-    checked_fields(request, {"kind", "name", "text", "base_sha256"}, "write_config_file")
-    directory = config_dir()
-    path, folder = config_file_path(directory, request)
-    text, base = request.get("text"), request.get("base_sha256")
-    if "text" not in request or not (text is None or isinstance(text, str)):
-        raise HostError("write_config_file needs text: a string, or null to delete the file")
-    if "base_sha256" not in request or not (base is None or (isinstance(base, str) and SHA256_PATTERN.fullmatch(base))):
-        raise HostError("write_config_file needs base_sha256: the hex SHA-256 of the text last read, or null for no file")
+    try:
+        return write_config_batch([request], "write_config_file")[0]
+    except BatchFailed as failure:
+        raise HostError(str(failure)) from None
+
+
+class BatchFailed(HostError):
+    """A batch write that wrote nothing in the end. `path` is the file that failed, `unrestored` the paths of files the
+    rollback could not put back."""
+
+    def __init__(self, message, path=None, unrestored=()):
+        super().__init__(message)
+        self.path = path
+        self.unrestored = list(unrestored)
+
+
+ConfigWrite = collections.namedtuple("ConfigWrite", "path folder data base")
+
+
+def checked_config_write(directory, entry, verb):
+    """One entry of a write, checked as far as the request alone shows: its path, text, base and size."""
+    if not isinstance(entry, dict):
+        raise HostError(f"{verb} needs each file as an object")
+    checked_fields(entry, {"kind", "name", "text", "base_sha256"}, verb)
+    path, folder = config_file_path(directory, entry, verb)
+    text, base = entry.get("text"), entry.get("base_sha256")
+    if "text" not in entry or not (text is None or isinstance(text, str)):
+        raise HostError(f"{verb} needs text: a string, or null to delete the file")
+    if "base_sha256" not in entry or not (base is None or (isinstance(base, str) and SHA256_PATTERN.fullmatch(base))):
+        raise HostError(f"{verb} needs base_sha256: the hex SHA-256 of the text last read, or null for no file")
     if text is None and base is None:
-        raise HostError("write_config_file deletes only a file DesertFox read: a null text needs base_sha256")
+        raise HostError(f"{verb} deletes only a file DesertFox read: a null text needs base_sha256")
     data = None if text is None else text.encode("utf-8")
     if data is not None and len(data) > MAX_CONFIG_FILE_BYTES:
         raise HostError(f"cannot write {path}: larger than 1 MiB")
+    return ConfigWrite(path, folder, data, base)
+
+
+def write_config_files(request):
+    """Writes several config files, all or none: `{"files": [{kind, name?, text, base_sha256}, ...]}`, each entry as in
+    `write_config_file`. The extension checks that the folder as a whole builds; the host parses no config and checks no
+    reference between files.
+
+    Under one lock every kind, name and base is checked before the first byte is written, so a hand edit to any file, a
+    duplicate target or a bad entry refuses the batch with the folder untouched. Each file then goes through the same
+    write as `write_config_file`. When one fails (an OS error, or an edit that landed meanwhile), every file already
+    written goes back to its old text, or is removed if it did not exist. The reply holds one `write_config_file` result
+    per entry, in request order. A crash of the host itself can still leave a mix."""
+    checked_fields(request, {"files"}, "write_config_files")
+    entries = request.get("files")
+    if not isinstance(entries, list) or not entries:
+        raise HostError("write_config_files needs files: a list of at least one file")
+    try:
+        return {"files": write_config_batch(entries, "write_config_files")}
+    except BatchFailed as failure:
+        raise failure_with_fields(failure) from None
+
+
+def failure_with_fields(failure):
+    """The refusal of a batch with the failing path and the unrestored paths beside the message."""
+    error = HostError(str(failure))
+    error.fields = {"path": failure.path, "unrestored": failure.unrestored}
+    return error
+
+
+def write_config_batch(entries, verb):
+    directory = config_dir()
+    writes = [checked_config_write(directory, entry, verb) for entry in entries]
+    targets = {}
+    for write in writes:
+        target = os.path.realpath(write.path)
+        if target in targets:
+            raise BatchFailed(f"{verb} names {write.path} twice, so nothing was written", write.path)
+        targets[target] = write.path
     if not os.path.isdir(directory):
-        raise HostError(f"cannot write {path}: the config folder {directory} does not exist")
+        raise BatchFailed(f"cannot write {writes[0].path}: the config folder {directory} does not exist", writes[0].path)
     with config_write_lock(directory):
-        if data is None:
-            return delete_config_file(path, base)
-        if base is None and folder != directory:
-            make_kind_folder(folder, path)
-        return replace_config_file(path, data, base)
+        # A batch of one leaves this to its own write, which words the refusal for a write or a delete.
+        for write in writes if len(writes) > 1 else ():
+            if file_digest(os.path.realpath(write.path), write.path)[0] != write.base:
+                raise BatchFailed(f"{write.path} {CHANGED_ON_DISK} since DesertFox last read it, so nothing was written", write.path)
+        done = []
+        try:
+            for write in writes:
+                target = os.path.realpath(write.path)
+                old = read_bytes(target) if os.path.lexists(target) else None
+                result = write_one_config_file(directory, write)
+                done.append((write, old, result))
+        except HostError as error:
+            unrestored = roll_back_config_writes(done)
+            message = str(error)
+            if unrestored:
+                message += f". Of the {len(done)} files written before it, {', '.join(unrestored)} could not be put back"
+            elif done:
+                message += f". The {len(done)} files written before it went back to their old text, so nothing was written"
+            raise BatchFailed(message, write.path, unrestored) from error
+        return [result for _, _, result in done]
+
+
+def write_one_config_file(directory, write):
+    if write.data is None:
+        return delete_config_file(write.path, write.base)
+    if write.base is None and write.folder != directory:
+        make_kind_folder(write.folder, write.path)
+    return replace_config_file(write.path, write.data, write.base)
+
+
+def roll_back_config_writes(done):
+    """Puts every written file of a failed batch back, newest first. Returns the paths it could not restore: a put-back
+    uses the same checked write, so a file edited since the batch wrote it stays as the edit left it."""
+    unrestored = []
+    for write, old, result in reversed(done):
+        try:
+            if "deleted" in result:
+                replace_config_file(write.path, old, None)
+            elif old is None:
+                delete_config_file(write.path, result["sha256"])
+            else:
+                replace_config_file(write.path, old, result["sha256"])
+        except HostError:
+            unrestored.append(write.path)
+    return unrestored
 
 
 def make_kind_folder(folder, path):
@@ -1531,6 +1637,8 @@ def handle(request):
         return write_autoconfig(request.get("toml"))
     if cmd == "write_config_file":
         return write_config_file(request)
+    if cmd == "write_config_files":
+        return write_config_files(request)
     if cmd == "write_settings":
         return write_settings(request)
     if cmd == "self_update":
@@ -1588,7 +1696,7 @@ def serve(channel):
             return 1
         reply = {"ok": True, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, **handle(request)}
     except HostError as error:
-        reply = {"ok": False, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, "error": str(error)}
+        reply = {"ok": False, "host_version": HOST_VERSION, "release_version": RELEASE_VERSION, "error": str(error), **(error.fields or {})}
     channel.send(reply)
     return 0
 
