@@ -114,7 +114,7 @@ Power without a manual to memorize, a new browser to learn, or your Firefox add-
 
 ✅ yes · ❌ no · 🟡 partial
 
-Item mode. None of the five documents a command that steps through a page's list items, comments or sections. The closest keys are Vimium's and Surfingkeys's `n` and `N` for find matches, Tridactyl's `hint -c` to hint chosen elements, and qutebrowser's caret moves by block of text. This comes from reading each project's docs and command source, not from running each one. See the [item mode guide](docs/item_mode.md).
+Item mode. None of the five documents a command that steps through a page's list items, comments or sections. The closest keys are the `n` and `N` keys of Vimium and Surfingkeys for find matches, Tridactyl's `hint -c` to hint chosen elements, and qutebrowser's caret moves by block of text. This comes from reading each project's docs and command source, not from running each one. See the [item mode guide](docs/item_mode.md).
 
 Keyboard drag keys. `;` starts the hint keys, and `;g` and `;G` are modifiers that turn the hint into a grab. The letter after the modifier picks which elements get hints.
 - `;Gg` grabs a draggable element and moves it with keys (grab and move). In grab mode, `h` `j` `k` `l` move it, `[` and `]` halve and double the step, `Enter` drops it and `Escape` cancels.
