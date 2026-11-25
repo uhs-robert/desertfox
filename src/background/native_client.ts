@@ -6,16 +6,21 @@ import { ENGINE_FILE } from "./engine_file.ts";
 import { KEYS_FILE } from "./engine_keys_file.ts";
 
 // "host_outdated": the host answered with an error and is older than the extension. The message says whether it is updating.
-// "file_changed": `write_config_file` found the file changed on disk since the extension read it, and wrote nothing.
-// "file_not_read_back": `write_config_file` could not read the old file back after its rename, so it put that file back and wrote nothing. No edit is known, so a later write can try again.
+// "file_changed": `write_config_files` found a file changed on disk since the extension read it, and wrote nothing.
+// "file_not_read_back": `write_config_files` could not read an old file back after its rename, so it put the files back and wrote nothing. No edit is known, so a later write can try again.
 export type NativeFailure = "no_permission" | "host_missing" | "host_failed" | "bad_reply" | "host_outdated" | "file_changed" | "file_not_read_back";
+
+// A refused batch write names the file that failed (`path`) and the files its rollback could not put back (`unrestored`), as config paths.
+export type RefusedFiles = { path?: string; unrestored: string[] };
 
 export class NativeHostError extends Error {
   readonly failure: NativeFailure;
-  constructor(failure: NativeFailure, message: string) {
+  readonly refused_files: RefusedFiles;
+  constructor(failure: NativeFailure, message: string, refused_files: RefusedFiles = { unrestored: [] }) {
     super(message);
     this.name = "NativeHostError";
     this.failure = failure;
+    this.refused_files = refused_files;
   }
 }
 
@@ -39,7 +44,7 @@ export type EditorStartRequest = { text: string; ext?: string; insert?: boolean;
 // `pending` while the editor runs. `done` with `changed` and, only when changed, the edited `text`.
 export type EditorCollectReply = { pending: true } | { done: true; changed: false } | { done: true; changed: true; text: string };
 
-// How the host's `write_config_file` names each file the extension writes: its kind table builds the path from these, so the request carries none.
+// How the host's `write_config_files` names each file the extension writes: its kind table builds the path from these, so the request carries none.
 // The theme name pattern is the host's check and `theme_name_shape_problem`'s (src/shared/theme/base16.ts).
 type FixedFileKind = "settings" | "engines" | "search_keys" | "keymap" | "search_engines" | "command_aliases" | "quickmarks" | "style";
 type NamedFileKind = "theme" | "settings_d" | "keymap_d" | "search_engines_d" | "command_aliases_d" | "quickmarks_d" | "style_d";
@@ -101,12 +106,20 @@ function describe_send_failure(error: unknown): NativeHostError {
 
 // Whether the host refused `cmd` itself as a verb it does not know. Its whole refusal ends the message, so a path in another error that holds the words does not count.
 const refuses_unknown_verb = (error: NativeHostError, cmd: string): boolean => error.message.endsWith(`refused: unknown cmd: '${cmd}'`);
-// Whether a host with `write_config_file` refused the request's kind as one its table lacks: a host from before that kind.
-const refuses_unknown_kind = (error: NativeHostError, kind: unknown): boolean => typeof kind === "string" && error.message.includes(`refused: write_config_file has no kind '${kind}'.`);
+// Whether the host refused one of the request's kinds as one its table lacks: a host from before that kind.
+const refuses_unknown_kind = (error: NativeHostError, kinds: string[]): boolean => kinds.some((kind) => error.message.includes(`refused: write_config_files has no kind '${kind}'.`));
+
+// The config path of an absolute path the host names: the longest of `paths` it ends with, so `keymap.d/settings.toml` wins over `settings.toml`.
+const config_path_of = (host_path: unknown, paths: string[]): string | undefined =>
+  typeof host_path === "string" ? paths.filter((path) => host_path === path || host_path.endsWith(`/${path}`)).sort((left, right) => right.length - left.length)[0] : undefined;
+
+// One file of a batch write: the text, or null to delete the file, and the digest of the text last read (null: no file).
+export type ConfigFileWrite = { path: string; text: string | null; base_sha256: string | null };
 
 export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
   // `watched: false` is the updater's own call: its reply must not start another update or wear the outdated label.
-  async function call(request: { cmd: string } & Record<string, unknown>, watched = true): Promise<Record<string, unknown>> {
+  // A refusal's other fields go to `refused` (a batch write's `path` and `unrestored`).
+  async function call(request: { cmd: string } & Record<string, unknown>, watched = true, refused?: (reply: Record<string, unknown>) => RefusedFiles): Promise<Record<string, unknown>> {
     if (!(await deps.has_permission())) {
       throw new NativeHostError("no_permission", `DesertFox has no permission to talk to its native host. ${INSTALL_HINT}`);
     }
@@ -123,8 +136,9 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     if (watched) watch?.seen(checked.release_version);
     if (checked.ok !== true) {
       const note = watched ? watch?.outdated_note() : undefined;
-      if (note !== undefined) throw new NativeHostError("host_outdated", `The DesertFox native host is older than the extension (${note}). It refused: ${String(checked.error ?? "no reason given")}`);
-      throw new NativeHostError("host_failed", `The DesertFox native host refused: ${String(checked.error ?? "no reason given")}`);
+      const refused_files = refused?.(checked);
+      if (note !== undefined) throw new NativeHostError("host_outdated", `The DesertFox native host is older than the extension (${note}). It refused: ${String(checked.error ?? "no reason given")}`, refused_files);
+      throw new NativeHostError("host_failed", `The DesertFox native host refused: ${String(checked.error ?? "no reason given")}`, refused_files);
     }
     return checked;
   }
@@ -138,17 +152,27 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     return { config_dir: String(reply.config_dir ?? ""), config_dir_exists: reply.config_dir_exists !== false, files: files as Record<string, string> };
   }
 
-  // A write's refusals by their words: a hand edit since the read, an old file the host could not read back, and a host from before the verb.
-  // `older_verb` sends the same write through a verb such a host knows. Without one, that host reads as outdated.
-  async function write_call(request: { cmd: string } & Record<string, unknown>, older_verb?: () => Promise<void>): Promise<void> {
+  // Writes every file of `writes` in one call, all or none. The request names each file by the host's kind and name, never by path.
+  // A refusal by its words: a hand edit since the read, an old file the host could not read back, and a host from before the verb or a kind, which reads as outdated, so the caller waits for an update.
+  async function write_config_files(writes: ConfigFileWrite[]): Promise<void> {
+    const files = writes.map(({ path, text, base_sha256 }) => {
+      const file = host_file_of(path);
+      if (file === undefined) throw new Error(`The native host writes no file at ${path}`);
+      return { ...file, text, base_sha256 };
+    });
+    const paths = writes.map(({ path }) => path);
+    const refused = (reply: Record<string, unknown>): RefusedFiles => {
+      const path = config_path_of(reply.path, paths);
+      return { ...(path !== undefined && { path }), unrestored: Array.isArray(reply.unrestored) ? reply.unrestored.flatMap((host_path) => config_path_of(host_path, paths) ?? []) : [] };
+    };
     try {
-      await call(request);
+      await call({ cmd: "write_config_files", files }, true, refused);
     } catch (error) {
       if (!(error instanceof NativeHostError)) throw error;
-      if (/changed on disk/.test(error.message)) throw new NativeHostError("file_changed", error.message);
-      if (/could not be read back/.test(error.message)) throw new NativeHostError("file_not_read_back", error.message);
-      if (refuses_unknown_verb(error, request.cmd) && older_verb) return older_verb();
-      if (refuses_unknown_verb(error, request.cmd) || refuses_unknown_kind(error, request.kind)) throw new NativeHostError("host_outdated", `${error.message}. Update the native host with :native.update.`);
+      const { message, refused_files } = error;
+      if (/changed on disk/.test(message)) throw new NativeHostError("file_changed", message, refused_files);
+      if (/could not be read back/.test(message)) throw new NativeHostError("file_not_read_back", message, refused_files);
+      if (refuses_unknown_verb(error, "write_config_files") || refuses_unknown_kind(error, files.map(({ kind }) => kind))) throw new NativeHostError("host_outdated", `${message}. Update the native host with :native.update.`, refused_files);
       throw error;
     }
   }
@@ -199,15 +223,8 @@ export function create_native_client(deps: NativeDeps, watch?: HostWatch) {
     write_autoconfig: async (toml: string): Promise<void> => {
       await call({ cmd: "write_autoconfig", toml });
     },
-    // Replaces the file at `path` with `text`, or deletes it for null, while the file on disk still has the digest `base_sha256` (null: no file).
-    // The request names the file by the host's kind and name, never by path. A host from before the verb answers `unknown cmd`: settings.toml then goes through its older `write_settings`, and any other file reads as outdated, so the caller waits for an update.
-    // A host from before a kind (engines, search_keys, the import's kinds) reads as outdated too.
-    write_config_file: async (path: string, text: string | null, base_sha256: string | null): Promise<void> => {
-      const file = host_file_of(path);
-      if (file === undefined) throw new Error(`The native host writes no file at ${path}`);
-      const older_verb = file.kind === "settings" && text !== null ? () => write_call({ cmd: "write_settings", text, base_sha256 }) : undefined;
-      await write_call({ cmd: "write_config_file", ...file, text, base_sha256 }, older_verb);
-    },
+    // Replaces or deletes each file while the file on disk still has its `base_sha256`, all or none.
+    write_config_files,
   };
 }
 

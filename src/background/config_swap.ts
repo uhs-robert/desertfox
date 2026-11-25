@@ -32,9 +32,9 @@ declare const browser: MessagingBrowser;
 
 // Swaps the config in place: the one commit path of a reload, an import, an editor save and a setting write.
 // The file-write pipeline calls `apply_files` of this module, so the caller passes in the parts of it an import uses.
-export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_pick" | "write_files_in_order" | "writes_of"> }) {
+export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_pick" | "write_files" | "writes_of"> }) {
   const { snippets, native_host } = deps;
-  const { note_record_dropped, mark_pick, write_files_in_order, writes_of } = deps.file_writes;
+  const { note_record_dropped, mark_pick, write_files, writes_of } = deps.file_writes;
   const { get_config, publish, built_in_commands, in_change_queue, read_load_step, set_load_step, read_current_config, set_current_config, count_swap } = store;
   // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
   // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
@@ -168,7 +168,7 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       return { warnings, replaces_config, snippets: snippet_count, picks: Object.keys(plan.record).map(mark_pick), kept_out: plan.kept_out, source_once_written };
     });
     if (!picks) return result;
-    const outcomes = await write_files_in_order(in_change_queue, picks.map((pick) => ({ path: pick.path, pick })));
+    const outcomes = await write_files(in_change_queue, picks.map((pick) => ({ path: pick.path, pick })));
     // A pick always stores a record, so the loop finds an outcome. The fallback only satisfies the type.
     const folder_writes: FolderWrite[] = picks.map(({ path }) => ({ path, outcome: outcomes.get(path) ?? { kind: "written" } }));
     if (source_once_written && folder_writes.every(({ outcome }) => outcome.kind === "written")) await end_import(source_once_written).catch(warn_and_go("end an import whose files all reached the folder"));

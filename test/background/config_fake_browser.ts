@@ -4,9 +4,11 @@ import { createHash } from "node:crypto";
 
 export type Files = Record<string, string>;
 
-type WriteMessage = { cmd: string; kind?: string; name?: string; text?: string | null; base_sha256?: string | null };
+// One file of a `write_config_files` request.
+export type FileEntry = { kind: string; name?: string; text: string | null; base_sha256: string | null };
+type WriteMessage = { cmd: string; files?: FileEntry[] };
 
-// The path the real host's kind table gives a write request.
+// The path the real host's kind table gives a file entry.
 const FIXED_KIND_PATHS: Record<string, string> = {
   settings: "settings.toml",
   engines: "search_engines.d/zz-desertfox.toml",
@@ -26,34 +28,61 @@ const NAMED_KIND_FOLDERS: Record<string, [string, string]> = {
   quickmarks_d: ["quickmarks.d", ".toml"],
   style_d: ["style.d", ".css"],
 };
-// The kinds of a host from before the import's kinds.
-const PAGE_HOST_KINDS = ["engines", "search_keys", "settings", "theme"];
+const CONFIG_DIR = "/home/u/.config/desertfox";
 
-function kind_path(message: WriteMessage): string {
-  if (message.cmd === "write_settings") return "settings.toml";
-  const fixed = FIXED_KIND_PATHS[message.kind ?? ""];
+export function kind_path(entry: { kind: string; name?: string }): string {
+  const fixed = FIXED_KIND_PATHS[entry.kind];
   if (fixed !== undefined) return fixed;
-  const [folder, ext] = NAMED_KIND_FOLDERS[message.kind ?? ""]!;
-  return `${folder}/${message.name}${ext}`;
+  const [folder, ext] = NAMED_KIND_FOLDERS[entry.kind]!;
+  return `${folder}/${entry.name}${ext}`;
 }
 
-// What the real host's `write_config_file` does to the folder: replace or delete the file the kind and name give, only while it still has the base digest.
-// `old_host` answers as a host from before the write verbs, `settings_only_host` as one that knows `write_settings` alone, `no_engines_kind` as one whose kind table lacks `engines`, `no_keys_kind` as one that lacks `search_keys` (the `engines` host), and `no_import_kinds` as one that knows only the page's kinds, settings and themes.
-// `refuse` refuses a write of the paths it names, as a host that cannot write that file.
-type FakeHostKinds = { old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; no_import_kinds?: boolean; refuse?: string[] };
-function write_config_file(host: { files: Files } & FakeHostKinds, message: WriteMessage) {
-  if (host.old_host || (host.settings_only_host && message.cmd === "write_config_file")) return { ok: false, error: `unknown cmd: '${message.cmd}'` };
-  if (host.no_engines_kind && message.kind === "engines") return { ok: false, error: "write_config_file has no kind 'engines'. It writes settings, theme" };
-  if ((host.no_engines_kind || host.no_keys_kind) && message.kind === "search_keys") return { ok: false, error: `write_config_file has no kind 'search_keys'. It writes ${host.no_engines_kind ? "settings, theme" : "engines, settings, theme"}` };
-  if (host.no_import_kinds && message.cmd === "write_config_file" && !PAGE_HOST_KINDS.includes(message.kind ?? "")) return { ok: false, error: `write_config_file has no kind '${message.kind}'. It writes ${PAGE_HOST_KINDS.join(", ")}` };
-  const path = kind_path(message);
-  if (host.refuse?.includes(path)) return { ok: false, error: `cannot write /home/u/.config/desertfox/${path}: Permission denied` };
-  const on_disk = host.files[path];
-  const digest = on_disk === undefined ? null : createHash("sha256").update(on_disk, "utf8").digest("hex");
-  if (digest !== message.base_sha256) return { ok: false, error: `/home/u/.config/desertfox/${path} changed on disk since DesertFox last read it, so it was not written` };
-  const { [path]: _old, ...others } = host.files;
-  host.files = message.text === null || message.text === undefined ? others : { ...host.files, [path]: message.text };
-  return { ok: true, path: `/home/u/.config/desertfox/${path}` };
+// The file entries of every `write_config_files` request in `sent`, in the order sent.
+export const files_sent = (sent: { cmd: string; files?: FileEntry[] }[]): FileEntry[] => sent.flatMap((message) => (message.cmd === "write_config_files" ? (message.files ?? []) : []));
+// The config paths of each `write_config_files` request in `sent`, one list per request.
+export const batches_sent = (sent: { cmd: string; files?: FileEntry[] }[]): string[][] => sent.flatMap((message) => (message.cmd === "write_config_files" ? [(message.files ?? []).map(kind_path)] : []));
+
+const digest_of = (text: string | undefined): string | null => (text === undefined ? null : createHash("sha256").update(text, "utf8").digest("hex"));
+
+// What the real host's `write_config_files` does to the folder: under one lock it checks every entry's kind and base, then replaces or deletes each file, all or none.
+// `old_host` and `settings_only_host` answer as a host from before the batch verb (one that knows no write verb, and one that knows only `write_settings`).
+// `no_engines_kind`, `no_keys_kind` and `no_import_kinds` answer as a host whose kind table lacks `engines`, lacks `search_keys`, or holds only the page's kinds, settings and themes.
+// `refuse` fails the write of the paths it names, as a host that cannot write that file, and puts back the files written before it, all but those `unrestored` names, which keep the batch's text.
+type FakeHostKinds = { old_host?: boolean; settings_only_host?: boolean; no_engines_kind?: boolean; no_keys_kind?: boolean; no_import_kinds?: boolean; refuse?: string[]; unrestored?: string[] };
+const PAGE_HOST_KINDS = ["engines", "search_keys", "settings", "theme"];
+function kinds_of(host: FakeHostKinds): string[] {
+  if (host.no_engines_kind) return ["settings", "theme"];
+  if (host.no_keys_kind) return ["engines", "settings", "theme"];
+  if (host.no_import_kinds) return PAGE_HOST_KINDS;
+  return [...Object.keys(FIXED_KIND_PATHS), ...Object.keys(NAMED_KIND_FOLDERS)];
+}
+function write_config_files(host: { files: Files } & FakeHostKinds, message: WriteMessage) {
+  if (host.old_host || host.settings_only_host) return { ok: false, error: `unknown cmd: '${message.cmd}'` };
+  const entries = message.files ?? [];
+  const kinds = kinds_of(host);
+  const unknown_kind = entries.find((entry) => !kinds.includes(entry.kind));
+  if (unknown_kind) return { ok: false, error: `write_config_files has no kind '${unknown_kind.kind}'. It writes ${[...kinds].sort().join(", ")}` };
+  const refused = (error: string, path: string, unrestored: string[] = []) => ({ ok: false, error, path: `${CONFIG_DIR}/${path}`, unrestored: unrestored.map((kept) => `${CONFIG_DIR}/${kept}`) });
+  const paths = entries.map(kind_path);
+  const twice = paths.find((path, index) => paths.indexOf(path) !== index);
+  if (twice !== undefined) return refused(`write_config_files names ${CONFIG_DIR}/${twice} twice, so nothing was written`, twice);
+  const stale = paths.find((path, index) => digest_of(host.files[path]) !== entries[index]!.base_sha256);
+  if (stale !== undefined) return refused(`${CONFIG_DIR}/${stale} changed on disk since DesertFox last read it, so nothing was written`, stale);
+  const failing = paths.findIndex((path) => host.refuse?.includes(path));
+  const written = failing < 0 ? entries.length : failing;
+  let files = host.files;
+  entries.slice(0, written).forEach((entry, index) => {
+    if (failing >= 0 && !host.unrestored?.includes(paths[index]!)) return;
+    const { [paths[index]!]: _old, ...others } = files;
+    files = entry.text === null ? others : { ...files, [paths[index]!]: entry.text };
+  });
+  host.files = files;
+  if (failing >= 0) {
+    const kept = paths.slice(0, failing).filter((path) => host.unrestored?.includes(path));
+    const rollback = kept.length > 0 ? `. Of the ${failing} files written before it, ${kept.map((path) => `${CONFIG_DIR}/${path}`).join(", ")} could not be put back` : failing > 0 ? `. The ${failing} files written before it went back to their old text, so nothing was written` : "";
+    return refused(`cannot write ${CONFIG_DIR}/${paths[failing]}: Permission denied${rollback}`, paths[failing]!, kept);
+  }
+  return { ok: true, files: entries.map((entry, index) => ({ path: `${CONFIG_DIR}/${paths[index]}`, ...(entry.text === null ? { deleted: true } : { sha256: digest_of(entry.text) }) })) };
 }
 
 // A browser that keeps storage in memory and answers the native host from `host`. A test rewrites `host.files` between reloads.
@@ -85,8 +114,8 @@ export function install_fake_browser(host: { files: Files; reply?: () => Promise
         sent.push(message);
         if (host.reply) return host.reply();
         if (message.cmd === "write_autoconfig") return host.autoconfig_fails ? { ok: false, error: "disk full" } : { ok: true };
-        if (message.cmd === "write_config_file" || message.cmd === "write_settings") return write_config_file(host, message);
-        return { ok: true, config_dir: "/home/u/.config/desertfox", config_dir_exists: host.no_folder !== true, files: host.no_folder ? {} : host.files };
+        if (message.cmd === "write_config_files") return write_config_files(host, message);
+        return { ok: true, config_dir: CONFIG_DIR, config_dir_exists: host.no_folder !== true, files: host.no_folder ? {} : host.files };
       },
     },
     permissions: { contains: async () => host.granted !== false },

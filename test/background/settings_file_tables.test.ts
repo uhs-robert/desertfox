@@ -62,7 +62,7 @@ function hold_writes(fake: ReturnType<typeof install_fake_browser>["fake"]) {
   const send = fake.runtime.sendNativeMessage;
   const held: (() => void)[] = [];
   fake.runtime.sendNativeMessage = (name: string, message: { cmd: string }) => {
-    if (message.cmd !== "write_config_file") return send(name, message);
+    if (message.cmd !== "write_config_files") return send(name, message);
     return new Promise((resolve) => held.push(() => resolve(send(name, message))));
   };
   return held;
@@ -97,7 +97,7 @@ test("Enable removes the popup's rows for the site and keeps the user's rows for
 
 const D_FILE = "settings.d/10-sites.toml";
 const d_row = (site: string, column: string) => `[[site_rules]]\nsite = "${site}"\n${column}\n`;
-const written = (sent: { cmd: string }[]) => sent.filter((message) => message.cmd === "write_config_file");
+const written = (sent: { cmd: string }[]) => sent.filter((message) => message.cmd === "write_config_files");
 
 test("a settings.d file that sets site_rules no longer blocks the popup: rows join the end of settings.toml and the file stays as it is", async () => {
   const other = d_row("*://*.other.test/*", 'pass = "q"');
@@ -245,7 +245,7 @@ test("a click a file rule still overrules once the saved list goes is refused, a
   await assert.rejects(off_startup.change_site_rule_in_file(NEWS_PAGE, "enable"), (error: unknown) => error instanceof RuntimeRefusal && /^Not enabled/.test(error.message));
   assert.equal(host.files["settings.toml"], keep_on);
   assert.deepEqual(local[SAVED_SETTINGS_STORAGE_KEY], { site_rules: [] });
-  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_file"), []);
+  assert.deepEqual(sent.filter((message) => message.cmd === "write_config_files"), []);
 });
 
 test("a bare row for the site already turns it off, so Disable changes nothing and says so truly", async () => {
@@ -288,7 +288,7 @@ test("two quick clicks on two sites and a disable then enable of one land in ord
   await writes_held(held, 1);
   held.shift()!();
   assert.deepEqual(await Promise.all([first, second, third]), [{ kind: "written" }, { kind: "written" }, { kind: "written" }]);
-  assert.equal(sent.filter((message) => message.cmd === "write_config_file").length, 2);
+  assert.equal(sent.filter((message) => message.cmd === "write_config_files").length, 2);
   assert.equal(host.files["settings.toml"], MINE.replace("pass = \"j k\" # their own keys\n", 'pass = "j k" # their own keys\n\n[[site_rules]]\nsite = "*://*.blog.test/*"\noff = true\n'));
 });
 

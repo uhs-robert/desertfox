@@ -96,40 +96,55 @@ test("the client and the real host agree on both requests", { skip: spawnSync("p
   }
 });
 
-test("write_config_file names the file by kind, reads a hand edit as file_changed, an old file it could not read back as its own failure, and a host from before the verb as outdated", async () => {
-  const changed = client_with(async () => ({ ok: false, error: "/c/settings.toml changed on disk since DesertFox last read it, so it was not written" }));
-  assert.equal(await failure_of(() => changed.client.write_config_file("settings.toml", "a = 1\n", null)), "file_changed");
-  assert.deepEqual(changed.sent, [{ cmd: "write_config_file", kind: "settings", text: "a = 1\n", base_sha256: null }]);
+const one = (path: string, text: string | null, base_sha256: string | null) => [{ path, text, base_sha256 }];
+
+test("write_config_files names each file by kind, reads a hand edit as file_changed, an old file it could not read back as its own failure, and a host from before the verb as outdated", async () => {
+  const changed = client_with(async () => ({ ok: false, error: "/c/settings.toml changed on disk since DesertFox last read it, so nothing was written", path: "/c/settings.toml", unrestored: [] }));
+  assert.equal(await failure_of(() => changed.client.write_config_files(one("settings.toml", "a = 1\n", null))), "file_changed");
+  assert.deepEqual(changed.sent, [{ cmd: "write_config_files", files: [{ kind: "settings", text: "a = 1\n", base_sha256: null }] }]);
   const unread = client_with(async () => ({ ok: false, error: "/c/settings.toml was not written: the old file could not be read back after the rename (Input/output error), so it is back in place" }));
-  assert.equal(await failure_of(() => unread.client.write_config_file("settings.toml", "a = 1\n", null)), "file_not_read_back");
-  const oldest = client_with(async (message) => ({ ok: false, error: `unknown cmd: '${(message as { cmd: string }).cmd}'` }));
-  assert.equal(await failure_of(() => oldest.client.write_config_file("settings.toml", "a = 1\n", null)), "host_outdated");
+  assert.equal(await failure_of(() => unread.client.write_config_files(one("settings.toml", "a = 1\n", null))), "file_not_read_back");
   const other = client_with(async () => ({ ok: false, error: "cannot write /c/settings.toml: Permission denied" }));
-  assert.equal(await failure_of(() => other.client.write_config_file("settings.toml", "a = 1\n", null)), "host_failed");
+  assert.equal(await failure_of(() => other.client.write_config_files(one("settings.toml", "a = 1\n", null))), "host_failed");
 });
 
-test("a host from before write_config_file writes settings.toml through write_settings, and any other file reads as outdated", async () => {
-  const older = client_with(async (message) => ((message as { cmd: string }).cmd === "write_settings" ? { ok: true } : { ok: false, error: "unknown cmd: 'write_config_file'" }));
-  await older.client.write_config_file("settings.toml", "a = 1\n", null);
-  assert.deepEqual(older.sent.at(-1), { cmd: "write_settings", text: "a = 1\n", base_sha256: null });
-  assert.equal(await failure_of(() => older.client.write_config_file("themes/nord.toml", "a = 1\n", null)), "host_outdated");
-  assert.equal(await failure_of(() => older.client.write_config_file("settings.toml", null, "0".repeat(64))), "host_outdated");
-  assert.deepEqual(older.sent.at(-1), { cmd: "write_config_file", kind: "settings", text: null, base_sha256: "0".repeat(64) });
+test("a host from before write_config_files reads as outdated for every file, settings.toml too, and nothing goes through an older verb", async () => {
+  const older = client_with(async (message) => ({ ok: false, error: `unknown cmd: '${(message as { cmd: string }).cmd}'` }));
+  assert.equal(await failure_of(() => older.client.write_config_files(one("settings.toml", "a = 1\n", null))), "host_outdated");
+  assert.equal(await failure_of(() => older.client.write_config_files(one("themes/nord.toml", "a = 1\n", null))), "host_outdated");
+  assert.deepEqual(older.sent.map((message) => (message as { cmd: string }).cmd), ["write_config_files", "write_config_files"]);
+  const no_kind = client_with(async () => ({ ok: false, error: "write_config_files has no kind 'quickmarks'. It writes settings, theme" }));
+  assert.equal(await failure_of(() => no_kind.client.write_config_files([...one("settings.toml", "a = 1\n", null), ...one("quickmarks.toml", "", null)])), "host_outdated");
+});
+
+test("a refused batch names its failing file and the files the rollback could not put back by their config paths", async () => {
+  const error = "/c/keymap.d/settings.toml changed on disk and could not be put back. Of the 2 files written before it, /c/settings.toml could not be put back";
+  const { client } = client_with(async () => ({ ok: false, error, path: "/c/keymap.d/settings.toml", unrestored: ["/c/settings.toml", "/c/elsewhere.toml"] }));
+  const writes = [...one("settings.toml", "a = 1\n", null), ...one("keymap.d/settings.toml", "", null), ...one("themes/nord.toml", "", null)];
+  await assert.rejects(client.write_config_files(writes), (thrown: unknown) => {
+    assert.ok(thrown instanceof NativeHostError);
+    assert.equal(thrown.failure, "file_changed");
+    assert.deepEqual(thrown.refused_files, { path: "keymap.d/settings.toml", unrestored: ["settings.toml"] });
+    return true;
+  });
+  // A refusal before the batch check names no file.
+  const bad = client_with(async () => ({ ok: false, error: "write_config_files needs files: a list of at least one file" }));
+  await assert.rejects(bad.client.write_config_files(writes), (thrown: unknown) => thrown instanceof NativeHostError && thrown.refused_files.path === undefined && thrown.refused_files.unrestored.length === 0);
 });
 
 test("an error that only holds the words of an unknown verb, such as a folder named so, stays the host's error and is not sent again", async () => {
-  const error = "cannot write /home/u/unknown cmd: 'write_config_file'/settings.toml: the config folder /home/u/unknown cmd: 'write_config_file' does not exist";
+  const error = "cannot write /home/u/unknown cmd: 'write_config_files'/settings.toml: the config folder /home/u/unknown cmd: 'write_config_files' does not exist";
   const { client, sent } = client_with(async () => ({ ok: false, error }));
-  assert.equal(await failure_of(() => client.write_config_file("settings.toml", "a = 1\n", null)), "host_failed");
+  assert.equal(await failure_of(() => client.write_config_files(one("settings.toml", "a = 1\n", null))), "host_failed");
   assert.equal(sent.length, 1);
 });
 
-test("write_config_file sends a theme by name and refuses a path the host has no kind for before sending", async () => {
-  const { client, sent } = client_with(async () => ({ ok: true }));
-  await client.write_config_file("themes/nord_dark.toml", null, "0".repeat(64));
-  assert.deepEqual(sent, [{ cmd: "write_config_file", kind: "theme", name: "nord_dark", text: null, base_sha256: "0".repeat(64) }]);
+test("write_config_files sends a theme by name and refuses a path the host has no kind for before sending", async () => {
+  const { client, sent } = client_with(async () => ({ ok: true, files: [{ path: "/c/themes/nord_dark.toml", deleted: true }] }));
+  await client.write_config_files(one("themes/nord_dark.toml", null, "0".repeat(64)));
+  assert.deepEqual(sent, [{ cmd: "write_config_files", files: [{ kind: "theme", name: "nord_dark", text: null, base_sha256: "0".repeat(64) }] }]);
   for (const path of ["snippets/a.js", "themes/../settings.toml", "themes/a/b.toml", "themes/Nord.toml", "themes/.x.toml", "themes/x.css", "/etc/settings.toml"]) {
-    await assert.rejects(client.write_config_file(path, "a = 1\n", null), /writes no file/, path);
+    await assert.rejects(client.write_config_files([...one("settings.toml", "a = 1\n", null), ...one(path, "a = 1\n", null)]), /writes no file/, path);
   }
   assert.equal(sent.length, 1);
 });
@@ -152,7 +167,7 @@ test("the real host writes each import path where host_file_of names it, and rea
   const dir = make_tmp_dir("desertfox-host-", t);
   const client = create_native_client({ has_permission: async () => true, send: async (message) => spawn_host(message, dir) });
   const paths = ["keymap.toml", "search_engines.toml", "command_aliases.toml", "quickmarks.toml", "style.css", "settings.d/10-Work.local.toml", "keymap.d/10-a.toml", "search_engines.d/10-a.toml", "command_aliases.d/10-a.toml", "quickmarks.d/10-a.toml", "style.d/10-a.css"];
-  for (const path of paths) await client.write_config_file(path, `# ${path}\n`, null);
+  await client.write_config_files(paths.map((path) => ({ path, text: `# ${path}\n`, base_sha256: null })));
   const files = (await client.read_config()).files;
   assert.deepEqual(Object.keys(files).filter((path) => !path.endsWith("/")).sort(), [...paths].sort());
   for (const path of paths) assert.equal(files[path], `# ${path}\n`);
@@ -167,11 +182,26 @@ test("the extension's digest of the text read_config sends is the one the real h
   assert.equal(read, mine);
   const next = mine.replace("nord", "dracula");
   const base = await text_sha256(read);
-  await client.write_config_file("settings.toml", next, base);
+  await client.write_config_files(one("settings.toml", next, base));
   assert.equal(readFileSync(join(dir, "settings.toml"), "utf8"), next);
   // The same base again is stale: the file now holds `next`.
-  assert.equal(await failure_of(() => client.write_config_file("settings.toml", mine, base)), "file_changed");
+  assert.equal(await failure_of(() => client.write_config_files(one("settings.toml", mine, base))), "file_changed");
   assert.equal(readFileSync(join(dir, "settings.toml"), "utf8"), next);
+});
+
+test("the real host refuses a whole batch over a stale base on one file, and the client names that file by its config path", { skip: spawnSync("python3", ["--version"]).error !== undefined }, async (t) => {
+  const dir = make_tmp_dir("desertfox-host-", t);
+  mkdirSync(join(dir, "keymap.d"));
+  writeFileSync(join(dir, "settings.toml"), "a = 1\n");
+  writeFileSync(join(dir, "keymap.d/settings.toml"), "# hand\n");
+  const client = create_native_client({ has_permission: async () => true, send: async (message) => spawn_host(message, dir) });
+  const writes = [
+    { path: "settings.toml", text: "a = 2\n", base_sha256: await text_sha256("a = 1\n") },
+    { path: "keymap.d/settings.toml", text: "# mine\n", base_sha256: await text_sha256("# read before the hand edit\n") },
+  ];
+  await assert.rejects(client.write_config_files(writes), (thrown: unknown) => thrown instanceof NativeHostError && thrown.failure === "file_changed" && thrown.refused_files.path === "keymap.d/settings.toml" && thrown.refused_files.unrestored.length === 0);
+  assert.equal(readFileSync(join(dir, "settings.toml"), "utf8"), "a = 1\n");
+  assert.equal(readFileSync(join(dir, "keymap.d/settings.toml"), "utf8"), "# hand\n");
 });
 
 test("editor_start sends the text with only the fields given and answers the job", async () => {
