@@ -439,7 +439,11 @@ def write_config_batch(entries, verb):
     with config_write_lock(directory):
         # A batch of one leaves this to its own write, which words the refusal for a write or a delete.
         for write in writes if len(writes) > 1 else ():
-            if file_digest(os.path.realpath(write.path), write.path)[0] != write.base:
+            try:
+                stale = file_digest(os.path.realpath(write.path), write.path)[0] != write.base
+            except HostError as error:
+                raise BatchFailed(str(error), write.path) from None
+            if stale:
                 raise BatchFailed(f"{write.path} {CHANGED_ON_DISK} since DesertFox last read it, so nothing was written", write.path)
         done = []
         attempted = False
@@ -447,12 +451,13 @@ def write_config_batch(entries, verb):
             for write in writes:
                 target = os.path.realpath(write.path)
                 old, attempted = (read_bytes(target) if os.path.lexists(target) else None), True
+                mode = stat.S_IMODE(os.stat(target).st_mode) if old is not None else None
                 result = write_one_config_file(directory, write)
-                done.append((write, old, result))
+                done.append((write, old, result, mode))
                 attempted = False
         except HostError as error:
             unrestored = roll_back_config_writes(done)
-            if attempted and left_changed(write, old):
+            if attempted and holds_batch_text(write):
                 unrestored.append(write.path)
             message = str(error)
             if unrestored:
@@ -460,14 +465,15 @@ def write_config_batch(entries, verb):
             elif done:
                 message += f". The {len(done)} files written before it went back to their old text, so nothing was written"
             raise BatchFailed(message, write.path, unrestored) from error
-        return [result for _, _, result in done]
+        return [result for _, _, result, _ in done]
 
 
-def left_changed(write, old):
-    """Whether a write that raised left its file other than `old`: it failed after the rename and could not undo it."""
+def holds_batch_text(write):
+    """Whether a write that raised left its file at the batch's own text (a delete: gone): it failed after the rename and
+    could not undo it. A file that holds anything else is an editor's save, which the write's own refusal already covers."""
     target = os.path.realpath(write.path)
     try:
-        return (read_bytes(target) if os.path.lexists(target) else None) != old
+        return (read_bytes(target) if os.path.lexists(target) else None) == write.data
     except HostError:
         return False
 
@@ -484,15 +490,16 @@ def roll_back_config_writes(done):
     """Puts every written file of a failed batch back, newest first. Returns the paths it could not restore: a put-back
     uses the same checked write, so a file edited since the batch wrote it stays as the edit left it."""
     unrestored = []
-    for write, old, result in reversed(done):
+    for write, old, result, mode in reversed(done):
         try:
             if "deleted" in result:
                 replace_config_file(write.path, old, None)
+                os.chmod(os.path.realpath(write.path), mode)
             elif old is None:
                 delete_config_file(write.path, result["sha256"])
             else:
                 replace_config_file(write.path, old, result["sha256"])
-        except HostError:
+        except (HostError, OSError):
             unrestored.append(write.path)
     return unrestored
 

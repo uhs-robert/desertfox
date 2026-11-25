@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import os
+import stat
 import struct
 import subprocess
 import sys
@@ -1259,8 +1260,20 @@ class WriteConfigFilesTest(WriteConfigFileTest):
         held.wait(5)
         replies = []
         files = self.seed()
+        real_flock = host.fcntl.flock
+        attempted = threading.Event()
+
+        def flock(descriptor, operation):
+            if threading.current_thread() is not holder:
+                attempted.set()
+            return real_flock(descriptor, operation)
+
+        flock_patch = mock.patch.object(host.fcntl, "flock", side_effect=flock)
+        flock_patch.start()
+        self.addCleanup(flock_patch.stop)
         writer = threading.Thread(target=lambda: replies.append(self.batch(*files)))
         writer.start()
+        self.assertTrue(attempted.wait(5), "the batch never asked for the lock")
         writer.join(0.3)
         self.assertTrue(writer.is_alive(), "the batch did not wait for the lock")
         self.assertEqual(self.read("settings.toml"), b"a = 1\n")
@@ -1296,8 +1309,18 @@ class WriteConfigFilesTest(WriteConfigFileTest):
             writer.start()
             self.assertTrue(entered.wait(5))
             reader = threading.Thread(target=read)
-            reader.start()
-            reader.join(0.3)
+            reader_asked = threading.Event()
+            real_flock = host.fcntl.flock
+
+            def flock(descriptor, operation):
+                if threading.current_thread() is reader:
+                    reader_asked.set()
+                return real_flock(descriptor, operation)
+
+            with mock.patch.object(host.fcntl, "flock", side_effect=flock):
+                reader.start()
+                self.assertTrue(reader_asked.wait(5), "the read never asked for the lock")
+                reader.join(0.3)
             self.assertTrue(reader.is_alive(), "the read did not wait for the batch")
             release.set()
             writer.join(5)
@@ -1331,6 +1354,52 @@ class WriteConfigFilesTest(WriteConfigFileTest):
             reply = self.batch(*files)
         self.assertEqual(reply["error"], "cannot write x: Input/output error")
         self.assertEqual(reply["unrestored"], [])
+
+    def test_a_file_that_is_not_utf8_refuses_the_batch_and_names_it(self):
+        files = self.seed()
+        path = os.path.join(self.config, "themes", "mine.toml")
+        with open(path, "wb") as file:
+            file.write(b"b = \xe9\n")
+        reply = self.batch(*files)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(reply["path"], path)
+        self.assertEqual(reply["unrestored"], [])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+
+    def test_an_edit_saved_during_the_rename_is_kept_and_is_not_unrestored(self):
+        files = self.seed()
+        path = os.path.join(self.config, "settings.toml")
+        real_replace = os.replace
+
+        def edit_then_replace(source, destination):
+            if destination == path:
+                with open(path, "r+b") as file:
+                    file.write(b"a = 9\n")
+            return real_replace(source, destination)
+
+        with mock.patch.object(host.os, "replace", side_effect=edit_then_replace):
+            reply = self.batch(*files)
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(reply["unrestored"], [])
+        self.assertEqual(self.read("settings.toml"), b"a = 9\n")
+
+    def test_a_rolled_back_deleted_file_keeps_its_old_mode(self):
+        files = self.seed()
+        path = os.path.join(self.config, "settings.toml")
+        os.chmod(path, 0o600)
+        files[0] = self.entry("settings", None, None, sha("a = 1\n"))
+        real_replace_config_file = host.replace_config_file
+
+        def fail_on_theme(path, data, base):
+            if path.endswith("themes/mine.toml"):
+                raise host.HostError("cannot write mine.toml: Input/output error")
+            return real_replace_config_file(path, data, base)
+
+        with mock.patch.object(host, "replace_config_file", side_effect=fail_on_theme):
+            reply = self.batch(*files)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
 
     def send_after(self, start, replies, name, files):
         start.wait(5)
