@@ -66,6 +66,6 @@ if (process.argv[1] === import.meta.filename) {
   const text = convert(input);
   if (text === "") fail("the release notes are empty after the conversion. Write a release intro or bullets outside the Install and Links sections.");
   const length = [...text].length;
-  if (length > MAX_LENGTH) fail(`the converted notes are ${length} characters long, but AMO accepts at most ${MAX_LENGTH}. Shorten "# Next release" in RELEASE.md (for a recovery, shorten release-assets/release-notes-<version>.md). A short summary with a link to the GitHub release notes works.`);
+  if (length > MAX_LENGTH) fail(`the converted notes are ${length} characters long, but AMO accepts at most ${MAX_LENGTH}. Shorten "# Next release" in RELEASE.md.`);
   process.stdout.write(text);
 }
