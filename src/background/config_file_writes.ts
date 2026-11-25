@@ -91,7 +91,18 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     return writes;
   }
 
+  // The pick groups of a path whose record ended, on every path of each group, so a later record on another of their paths is never carried as part of them.
+  function forget_pick_groups(path: string): void {
+    for (const group of writes_of(path).pick_groups.values()) {
+      for (const member of group) {
+        const groups = writes_of(member).pick_groups;
+        for (const [seq, other] of groups) if (other === group) groups.delete(seq);
+      }
+    }
+  }
+
   function note_record_dropped(path: string, by: CopyReplacedBy): void {
+    forget_pick_groups(path);
     const writes = writes_of(path);
     writes.drop_causes[writes.drops] = by;
     writes.drops += 1;
@@ -196,7 +207,6 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       });
       if (started === "stale") continue;
       if ("carried" in started) {
-        for (const path of started.carried) picks_seen.set(path, writes_of(path).picks_made);
         pending = [...pending, ...started.carried.map((path) => ({ path }))];
         continue;
       }
@@ -295,6 +305,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
           // Neither side has the file, so there is nothing to write.
           unsynced = without_unsynced_path(unsynced, path);
           await store_unsynced(unsynced);
+          forget_pick_groups(path);
           done.set(path, (writes_now.end = { kind: "written" }));
         }
       }
@@ -451,6 +462,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
         const asked = changed_outcome.kind === "conflict" || changed_outcome.kind === "conflict_kept";
         if (asked && write.batch.asks_as_one) {
           await store_unsynced(without_unsynced_path(unsynced, path));
+          forget_pick_groups(path);
           return (writes.end = changed_outcome);
         }
         return asked || changed_outcome.kind === "superseded" ? { kind: "superseded" } : { kind: "failed", reason: error.message };
@@ -475,10 +487,12 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
           for (const other of Object.keys(kept ?? {})) {
             if (!drops_what_is_named(other, path, folder.files[path] ?? null, files)) continue;
             kept = without_unsynced_path(kept, other);
+            forget_pick_groups(other);
             writes_of(other).end = end;
           }
         }
         await store_unsynced(kept);
+        forget_pick_groups(path);
         return (writes.end = end);
       }
       if (error.failure === "host_outdated") return { kind: "waiting", host_outdated: true };
@@ -495,6 +509,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       return { kind: "written" };
     }
     await store_unsynced(without_unsynced_path(unsynced, path));
+    forget_pick_groups(path);
     return (writes.end = { kind: "written" });
   }
 

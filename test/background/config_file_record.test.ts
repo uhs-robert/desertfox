@@ -7,6 +7,12 @@ import { PAGE_FILE_MARKER } from "../../src/background/engine_file.ts";
 import { files_before_unsynced, text_sha256, unsynced_of_stored } from "../../src/background/settings_file.ts";
 import { batches_sent, files_sent, install_fake_browser, until, type Files } from "./config_fake_browser.ts";
 import { fresh_config_service, type ConfigService } from "./fresh_config_service.ts";
+import { create_config_store } from "../../src/background/config_store.ts";
+import { create_config_file_writes } from "../../src/background/config_file_writes.ts";
+import { create_config_swap } from "../../src/background/config_swap.ts";
+import { create_config_setting_writes } from "../../src/background/config_setting_writes.ts";
+import { create_services } from "../../src/background/services.ts";
+import { load_edits, load_files_source } from "../../src/shared/config/config_load.ts";
 
 // The record of files the folder lags, by path, with more than settings.toml in it.
 
@@ -647,4 +653,75 @@ test("`,r` settles both batches out before it writes a `:set` that names what on
   assert.equal(lag.host.files["settings.toml"], `${MINE}default_engine = "ghost"\n`);
   assert.equal(lag.host.files[HAND_GHOST_FILE], undefined);
   assert.equal(lag.host.files[ENGINE_FILE], GHOST_ENGINE);
+});
+
+// The config modules with a commit of any paths in one pick group, as a save on a settings page commits its files and queues their write.
+function modules_with_commit() {
+  const services = create_services({ get_config: () => store.get_config() });
+  const store = create_config_store(services);
+  const file_writes = create_config_file_writes({ store, services, swap: () => swap });
+  const swap = create_config_swap(store, { snippets: services.snippets, native_host: services.native_host, file_writes });
+  const setting_writes = create_config_setting_writes({ store, swap, file_writes });
+  const commit = async (changes: Files) => {
+    const { writing } = await store.in_change_queue(async () => {
+      const current = await load_files_source();
+      const { picks } = await setting_writes.commit_folder_files(current, { files: { ...current.files, ...changes }, edits_after: await load_edits(), paths: Object.keys(changes) });
+      return { writing: { outcomes: file_writes.write_in_hold(picks.flatMap((pick) => (pick ? [{ path: pick.path, pick }] : []))) } };
+    });
+    return writing.outcomes;
+  };
+  return { store, swap, setting_writes, commit };
+}
+
+// Answers each held write as it goes out until `done` settles.
+async function release_until(held: (() => void)[], done: Promise<unknown>): Promise<void> {
+  let settled = false;
+  void done.finally(() => (settled = true));
+  while (!settled) {
+    held.shift()?.();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+const Q_THEME = "themes/q.toml";
+const R_THEME = "themes/r.toml";
+
+test("a write that carries a later commit's file also carries the earlier commit on that file, so three overlapping commits never split one", { timeout: 5000 }, async () => {
+  const folder = { "settings.toml": MINE, [THEME]: FRAPPE, [Q_THEME]: FRAPPE, [R_THEME]: FRAPPE };
+  const lag = await lagging(folder, folder, {}, folder);
+  const held = hold_writes(lag.fake);
+  const { store, setting_writes, commit } = modules_with_commit();
+  await store.get_config();
+  const theme = setting_writes.set_theme_file("frappe", EDITED, true);
+  await until(() => held.length === 1, "the theme write did not go out");
+  const pick = setting_writes.set_in_settings_file("hint_letters", "xyz");
+  const earlier = commit({ [Q_THEME]: EDITED, [R_THEME]: EDITED });
+  const later = commit({ "settings.toml": MINE.replace('"abc"', '"xyz"').replace("# My", "# Our"), [Q_THEME]: HAND_THEME });
+  await until(() => Object.keys(unsynced_of(lag.local) ?? {}).length === 4, "the commits did not store their records");
+  lag.host.files = { ...lag.host.files, [R_THEME]: HAND_THEME.replace("#202020", "#303030") };
+  await release_until(held, Promise.all([pick, earlier, later, theme]));
+  assert.deepEqual(batches_sent(lag.sent).map((paths) => [...paths].sort()), [[THEME], [Q_THEME, R_THEME, "settings.toml"].sort()]);
+  assert.equal(lag.host.files["settings.toml"], MINE);
+  assert.equal(lag.host.files[Q_THEME], FRAPPE);
+});
+
+test("a pick whose record a swap dropped carries nothing: a later record on its other file goes out in its own write", { timeout: 5000 }, async () => {
+  const folder = { "settings.toml": MINE, [THEME]: FRAPPE, [Q_THEME]: FRAPPE };
+  const lag = await lagging(folder, folder, {}, folder);
+  const held = hold_writes(lag.fake);
+  const { store, swap, setting_writes, commit } = modules_with_commit();
+  await store.get_config();
+  const theme = setting_writes.set_theme_file("frappe", EDITED, true);
+  await until(() => held.length === 1, "the theme write did not go out");
+  const pick = setting_writes.set_in_settings_file("hint_letters", "xyz");
+  const grouped = commit({ "settings.toml": MINE.replace('"abc"', '"xyz"').replace("# My", "# Our"), [Q_THEME]: EDITED });
+  await until(() => Object.hasOwn((unsynced_of(lag.local) ?? {}) as object, Q_THEME), "the grouped commit did not store its record");
+  // An editor save of the theme drops its record, and a theme save after it starts a new one of its own.
+  await swap.save_config_file(Q_THEME, HAND_THEME, EDITED);
+  const unrelated = setting_writes.set_theme_file("q", FRAPPE.replace("#303446", "#404040"), true);
+  await until(() => Object.hasOwn((unsynced_of(lag.local) ?? {}) as object, Q_THEME), "the theme save did not store its record");
+  lag.host.files = { ...lag.host.files, [Q_THEME]: HAND_THEME.replace("#202020", "#303030") };
+  await release_until(held, Promise.all([pick, grouped, unrelated, theme]));
+  assert.deepEqual(batches_sent(lag.sent), [[THEME], ["settings.toml"], [Q_THEME]]);
+  assert.equal(lag.host.files["settings.toml"], MINE.replace('"abc"', '"xyz"').replace("# My", "# Our"));
 });
