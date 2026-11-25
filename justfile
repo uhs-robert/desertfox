@@ -408,13 +408,18 @@ release_stamp version:
     # Callers pass the version from src/manifest.json, not package.json: npm refuses x.y.z.N, so a beta lives in the manifest only and package.json keeps the last stable version. A script, not recipe code, so BUILD.md can give a reviewer the same step without just.
     node tools/release_stamp.mjs {{quote(version)}}
 
-# Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. With no xpi argument the release carries the hosts only, for a listed version whose xpi AMO signs later (add it with `gh release upload`). A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
+# Create the GitHub release v<version> from the files release_stamp wrote: the stamped hosts, the command line, their checksums, the install script and the signed xpi as desertfox-<version>.xpi, so a release build installs the host of its own version and a beta can update through updates.json. The xpi is the given file, and a missing one fails unless RELEASE_DRY_RUN=1. With no xpi argument the release carries the hosts only, for a listed version whose xpi AMO signs later (add it with `gh release upload`). With a notes file the release body is that file, and an empty or missing file fails. Without one the body is a one-line note, for the beta workflow and the listed submit. A four-number version (x.y.z.N) is a prerelease. The tag targets HEAD, so push it first (release does). RELEASE_DRY_RUN=1 prints the gh command and creates nothing, and accepts a missing xpi.
 [private]
-release_publish version xpi="":
+release_publish version xpi="" notes_file="":
     #!/usr/bin/env bash
     set -euo pipefail
     version={{quote(version)}}
     xpi={{quote(xpi)}}
+    notes_file={{quote(notes_file)}}
+    if [ -n "$notes_file" ] && [ ! -s "$notes_file" ]; then
+        echo "release_publish: the notes file $notes_file is missing or empty." >&2
+        exit 1
+    fi
     assets="$RELEASE_ASSETS_DIR"
     xpi_asset="$assets/desertfox-$version.xpi"
     # Publish only the bytes the extension build hashed. Restamping here would upload files the signed build does not know.
@@ -452,7 +457,13 @@ release_publish version xpi="":
         echo "release_publish: the xpi $xpi does not exist. Run 'just sign' first." >&2
         exit 1
     fi
-    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" "${xpi_args[@]}" --target "$(git rev-parse HEAD)" --title "v$version" --notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
+    gh_command=(gh release create "v$version" "$assets/desertfox-host" "$assets/desertfox-host.sha256" "$assets/desertfox-bridge" "$assets/desertfox-bridge.sha256" "$assets/desertfox" "$assets/desertfox.sha256" "$assets/install.sh" "${xpi_args[@]}" --target "$(git rev-parse HEAD)" --title "v$version")
+    # Only `just release` passes a notes file. The beta workflow and the listed submit keep the one-line note, because their releases have no hand-written notes.
+    if [ -n "$notes_file" ]; then
+        gh_command+=(--notes-file "$notes_file")
+    else
+        gh_command+=(--notes "Native hosts $version. The extension's :native.install page shows the command that installs it.")
+    fi
     if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         gh_command+=(--prerelease)
     fi
@@ -480,10 +491,16 @@ release_install:
     fi
     just install
 
-# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts. The matching beta comes after the release PR merges: the nightly builds it because main changed, or run `just beta` for it at once. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch.
-release:
+# Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts. The matching beta comes after the release PR merges: the nightly builds it because main changed, or run `just beta` for it at once. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch and a notes file (`just release <notes_file>`) with the text of the release, which must exist and be non-empty before anything else runs.
+release notes_file:
     #!/usr/bin/env bash
     set -euo pipefail
+    notes_file={{quote(notes_file)}}
+    # First, before any bump, signing, commit, push or gh call: the release body is hand-written, never a default.
+    if [ ! -s "$notes_file" ]; then
+        echo "release needs a notes file with the release text: $notes_file is missing or empty. Write the notes, then run 'just release <notes_file>'." >&2
+        exit 1
+    fi
     # The key lives in shell variables that are never exported, so the build and install steps cannot read it. Only the sign command gets it. A key already in the environment moves into those variables before any child command runs. Build code on this machine stays trusted: it can still reach node_modules and an unlocked rbw.
     amo_key="${WEB_EXT_API_KEY:-}"
     amo_secret="${WEB_EXT_API_SECRET:-}"
@@ -509,7 +526,7 @@ release:
     just release_install
     just release_commit_push
     xpi=$(ls web-ext-artifacts/*.xpi)
-    just release_publish "$version" "$xpi" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi'." >&2; exit 1; }
+    just release_publish "$version" "$xpi" "$notes_file" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi $notes_file'." >&2; exit 1; }
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
 
 # Write the source archive Mozilla reviewers rebuild from, to RELEASE_ASSETS_DIR/desertfox-<version>-source.zip: every tracked file of HEAD, with BUILD.md at the top. It holds no stamped hosts, since BUILD.md has the reviewer stamp them. Needs a clean tree, so the archive is the commit that gets signed.

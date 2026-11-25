@@ -635,6 +635,35 @@ class ReleaseStepTest(InstallCase):
         self.assertIn("install.sh", logged)
         self.assertNotIn(".xpi", logged)
 
+    def test_publish_passes_the_notes_file_to_gh(self):
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
+        notes = os.path.join(self.tmp.name, "notes.md")
+        with open(notes, "w") as file:
+            file.write("What changed.\n")
+        done = self.just("release_publish", self.package_version(), self.xpi, notes)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(self.gh_log) as file:
+            logged = file.read()
+        self.assertIn(f"--notes-file {notes}", logged)
+        self.assertNotIn("Native hosts", logged)
+
+    def test_publish_refuses_a_missing_or_empty_notes_file_before_gh(self):
+        self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
+        empty = os.path.join(self.tmp.name, "empty.md")
+        open(empty, "w").close()
+        for notes in (empty, os.path.join(self.tmp.name, "none.md")):
+            done = self.just("release_publish", self.package_version(), self.xpi, notes)
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn("missing or empty", done.stderr)
+        self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_release_checks_its_notes_file_before_any_other_step(self):
+        # Reads the recipe instead of running it: a run would bump, sign and push.
+        body = self.just("--show", "release").stdout
+        guard = body.index('[ ! -s "$notes_file" ]')
+        for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just sign_only", "just release_commit_push"):
+            self.assertLess(guard, body.index(step), step)
+
     def test_publish_refuses_without_a_stamp_of_this_version(self):
         done = self.just("release_publish", self.package_version(), self.xpi)
         self.assertNotEqual(done.returncode, 0)
