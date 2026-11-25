@@ -691,3 +691,48 @@ test("an editor save between the import's last write and the end of the import k
   assert.equal(imported_flag(local), true);
   assert.equal(slot_of(local).source.files["keymap.toml"], '[normal]\n"zz" = "tab.next"\n');
 });
+
+const IMPORTED_KEYMAP = '[normal]\n"zz" = "tab.next"\n';
+
+test("a :set made while an import reads the folder for its gate writes nothing alone: the import's batch carries it, and every file lands at once", async () => {
+  const { startup, host, local, fake, sent } = await started("set_during_import_gate", { "settings.toml": 'hint_letters = "ab"\n', "keymap.toml": "" });
+  sent.length = 0;
+  // The import reads the folder twice: once to plan its writes, once for the gate. The test holds the second read.
+  const send = fake.runtime.sendNativeMessage;
+  let reads = 0;
+  const held_reads: (() => void)[] = [];
+  fake.runtime.sendNativeMessage = async (name, message) => {
+    if (message.cmd !== "read_config" || ++reads !== 2) return send(name, message);
+    const answer = send(name, message);
+    return new Promise((resolve) => held_reads.push(() => resolve(answer)));
+  };
+  const imported = startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "keymap.toml": IMPORTED_KEYMAP }), {});
+  await until(() => held_reads.length === 1, "the import did not read the folder for its gate");
+  const set = startup.set_in_settings_file("which_key_delay_ms", 7);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  held_reads[0]!();
+  await imported;
+  assert.deepEqual(await set, { kind: "written" });
+  assert.deepEqual(sorted_batches(sent), [["keymap.toml", "settings.toml"]]);
+  assert.equal(host.files["settings.toml"], `${IMPORTED_SETTINGS}which_key_delay_ms = 7\n`);
+  assert.equal(host.files["keymap.toml"], IMPORTED_KEYMAP);
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a hand edit to one file of an import batch sends every file of the batch to the question, and none goes out alone", async () => {
+  const { startup, host, local, fake, sent } = await started("hand_edit_in_import_batch", { "settings.toml": 'hint_letters = "ab"\n', "keymap.toml": "" });
+  sent.length = 0;
+  const send = fake.runtime.sendNativeMessage;
+  fake.runtime.sendNativeMessage = async (name, message) => {
+    if (message.cmd === "write_config_files") host.files = { ...host.files, "keymap.toml": '[normal]\n"yy" = "tab.prev"\n' };
+    return send(name, message);
+  };
+  const result = await startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "keymap.toml": IMPORTED_KEYMAP }), {});
+  assert.deepEqual(result.folder_writes?.map(({ outcome }) => outcome.kind), ["conflict", "conflict"]);
+  assert.deepEqual(sorted_batches(sent), [["keymap.toml", "settings.toml"]]);
+  assert.equal(host.files["settings.toml"], 'hint_letters = "ab"\n');
+  assert.equal(unsynced_of(local), undefined);
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+  // The question settled the batch inside its hold, so the queue is free for the next change.
+  assert.equal((await startup.set_in_settings_file("which_key_delay_ms", 7)).kind, "browser_copy");
+});

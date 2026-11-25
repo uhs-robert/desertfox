@@ -509,12 +509,15 @@ test("a refused write keeps the record of a pick made after Use the folder, and 
 test("an import during a write: the pick reached the file, and the reply says the import replaced the browser copy", async () => {
   // The folder already holds the imported keymap.toml, so the import writes nothing of its own.
   const host = { files: { "settings.toml": MINE, "keymap.toml": "" } };
-  const { fake, startup } = await reloaded(host);
+  const { local, fake, startup } = await reloaded(host);
   const held = hold_writes(fake);
   const pick = startup.set_in_settings_file("theme", "oasis_night");
   await until(() => held.length === 1, "the first write did not go out");
-  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  // The import commits at once, and its own write waits for the pick's.
+  const imported = startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  await until(() => (local[FILES_SOURCE_STORAGE_KEY] as { imported?: boolean }).imported === true, "the import did not commit");
   held.shift()!();
+  await imported;
   const outcome = await pick;
   assert.deepEqual(outcome, { kind: "replaced", by: "import", written: true });
   assert.equal(outcome_note(outcome), ", saved to settings.toml. A config import replaced the browser copy during the write");
@@ -577,8 +580,10 @@ test("each pick a swap dropped names the swap that dropped it", async () => {
   await startup.save_config_file("settings.toml", MINE, with_theme("nord"));
   const imported_over = startup.set_in_settings_file("theme", "oasis_night");
   await until(() => stored_settings(local)?.includes('theme = "oasis_night"') === true, "the pick did not store its record");
-  await startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  const imported = startup.import_config({ kind: "folder", entries: [{ path: "keymap.toml", text: "" }] }, {});
+  await until(() => (local[FILES_SOURCE_STORAGE_KEY] as { imported?: boolean }).imported === true, "the import did not commit");
   held.shift()!();
+  await imported;
   assert.deepEqual(await saved_over, { kind: "replaced", by: "edit", written: true });
   assert.deepEqual(await imported_over, { kind: "replaced", by: "import", written: false });
 });

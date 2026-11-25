@@ -1,4 +1,4 @@
-import { warn_and_go } from "../shared/swallow.ts";
+import { keep_chain, warn_and_go } from "../shared/swallow.ts";
 import { DESKTOP_THEME } from "../shared/theme/roles.ts";
 import { built_in_theme_names } from "../shared/theme/load.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
@@ -23,7 +23,8 @@ type SettledWrite = FileWriteOutcome | { kind: "superseded" };
 
 // One `write_config_files` call: the writes of its files, which land all or none, and the host's reply. The change queue starts it and settles its reply once, and the host call runs between the two, outside the queue.
 // `settled` holds each path's outcome from the first settle, so every caller that waited on one of its paths gets the same outcomes.
-type HostBatch = { writes: HostWrite[]; reply: Promise<HostWriteReply>; settled?: Promise<Map<string, SettledWrite>> };
+// `asks_as_one`: a hand edit to one of its files sends them all to the copies-differ question. Only the start's waiting files, which wait for unrelated reasons, settle one by one.
+type HostBatch = { writes: HostWrite[]; reply: Promise<HostWriteReply>; asks_as_one: boolean; settled?: Promise<Map<string, SettledWrite>> };
 
 // The write of the file at `path` in a batch (`text` null deletes it).
 // `covers` and `drops` are the path's `picks_made` and `drops` at the start: the text holds every pick of the path up to `covers` made since that many drops.
@@ -103,6 +104,16 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
 
   const already_in_queue: QueueRunner = (work) => work();
 
+  // The write of one import or pick at a time, from its gate's read of the folder until the host's reply settles. A pick made meanwhile is in the browser copy at once and its write waits here, so it never sends a file of the batch alone.
+  // Apart from the change queue, so a slow or hung host holds up only the next folder write, never a commit, a key edit or `,r`.
+  // Join it in the queue turn that commits, so writes go out in commit order, but never await it in a turn: the write needs later turns, and `,r` holds the queue and settles a batch that is out itself.
+  let write_hold: Promise<unknown> = Promise.resolve();
+  function in_write_hold<T>(work: () => Promise<T>): Promise<T> {
+    const queued = write_hold.then(work);
+    write_hold = keep_chain(queued);
+    return queued;
+  }
+
   // Writes every file the folder lags, in one batch. The files wait for unrelated reasons, so one the host fails or the gate holds goes out of the batch once and the others land without it.
   async function write_waiting_files(in_queue: QueueRunner): Promise<void> {
     const unsynced = await in_queue(read_unsynced);
@@ -146,7 +157,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
         for (const item of pending) outcomes.set(item.path, replaced(item) ?? gate_read);
         break;
       }
-      const started = await in_queue(() => start_batch(pending, gate_read, replaced));
+      const started = await in_queue(() => start_batch(pending, gate_read, replaced, !set_bad_file_aside));
       if (started === "stale") continue;
       for (const [path, outcome] of started.done) finish(path, outcome ?? outcomes.get(path) ?? (pending.find((item) => item.path === path)?.pick && writes_of(path).end));
       // It settles those writes itself rather than wait for their owners: under `,r` this loop holds the change queue, and an owner settles only in a later turn of it.
@@ -221,7 +232,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
 
   // In the change queue. Sends the browser copy of every file of `items` that the folder lags, in one batch with one base check each.
   // A file the copy no longer has is deleted from the folder. With `folder`, a batch that breaks the folder build sends nothing and answers `held` (`write_breaks_folder`).
-  async function start_batch(items: WriteItem[], folder: GateFolder | undefined, replaced: (item: WriteItem) => FileWriteOutcome | undefined): Promise<BatchStart> {
+  async function start_batch(items: WriteItem[], folder: GateFolder | undefined, replaced: (item: WriteItem) => FileWriteOutcome | undefined, asks_as_one: boolean): Promise<BatchStart> {
     if (is_stale(folder)) return "stale";
     const done = new Map<string, FileWriteOutcome | undefined>();
     const wait = new Set<HostBatch>();
@@ -256,7 +267,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       (): HostWriteReply => ({ ok: true }),
       (error: unknown): HostWriteReply => ({ ok: false, error }),
     );
-    const batch: HostBatch = { writes: [], reply };
+    const batch: HostBatch = { writes: [], reply, asks_as_one };
     for (const write of writes) {
       const out: HostWrite = { ...write, batch };
       batch.writes.push(out);
@@ -356,7 +367,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
   const read_folder_after_write = () => native_host.read_config().catch(warn_and_go("read the folder after a config file write"));
 
   // In the change queue. Applies the host's reply to the record of every file of the batch, once however many callers waited on it. `folder` is undefined when it could not be read.
-  // A hand edit to one file refuses the whole batch, so that file settles first: the others wrote nothing, and they go again once its settle moved the record on.
+  // A hand edit to one file refuses the whole batch, so that file settles first: the others wrote nothing. They go again once its settle moved the record on, or follow it to the question (`asks_as_one`).
   async function settle_batch_reply(batch: HostBatch, reply: HostWriteReply, folder: FolderAfterRefusal | undefined): Promise<Map<string, SettledWrite>> {
     for (const write of batch.writes) {
       const writes = writes_of(write.path);
@@ -394,7 +405,14 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       const error = reply.error as NativeHostError;
       // The rollback could not put this file back, so the folder holds the batch's text or an edit saved since. The record stays, and the next write's base check finds out which.
       if (error.refused_files.unrestored.includes(path)) return { kind: "failed", reason: error.message };
-      if (changed_outcome) return changed_outcome.kind === "superseded" || changed_outcome.kind === "conflict" || changed_outcome.kind === "conflict_kept" ? { kind: "superseded" } : { kind: "failed", reason: error.message };
+      if (changed_outcome) {
+        const asked = changed_outcome.kind === "conflict" || changed_outcome.kind === "conflict_kept";
+        if (asked && write.batch.asks_as_one) {
+          await store_unsynced(without_unsynced_path(unsynced, path));
+          return (writes.end = changed_outcome);
+        }
+        return asked || changed_outcome.kind === "superseded" ? { kind: "superseded" } : { kind: "failed", reason: error.message };
+      }
       if (error.failure === "file_changed") {
         // Both sides changed. The record stays for a retry when the folder cannot be read.
         if (!folder) return { kind: "failed", reason: `${path} changed on disk, and the config folder could not be read again` };
@@ -405,7 +423,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
           return { kind: "superseded" };
         }
         writes.replays_in_a_row = 0;
-        // Only the user can choose. The path goes once the folder is classified, and the other paths keep their writes.
+        // Only the user can choose. The path goes once the folder is classified. The other paths keep their writes, but for the rest of a batch that asks as one.
         const asked = await ask_when_folder_differs(folder, { clear_when_settled: false });
         const end: FileWriteOutcome = { kind: asked === "asked" ? "conflict" : "conflict_kept" };
         let kept = without_unsynced_path(unsynced, path);
@@ -484,7 +502,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     return "ignored";
   }
 
-  return { writes_of, note_record_dropped, mark_pick, already_in_queue, write_waiting_files, write_files, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
+  return { writes_of, note_record_dropped, mark_pick, already_in_queue, in_write_hold, write_waiting_files, write_files, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
 }
 
 export type ConfigFileWrites = ReturnType<typeof create_config_file_writes>;

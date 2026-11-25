@@ -332,7 +332,7 @@ test("a `:set` made during `,r` runs after it and reaches the folder", { timeout
   assert.equal(unsynced_of(local), undefined);
 });
 
-test("`,r` settles two other batches one after the other, so the record loses neither path", { timeout: 5000 }, async () => {
+test("`,r` settles a batch that is out and writes the one waiting behind it, so the record loses neither path", { timeout: 5000 }, async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const lag = await lagging(folder, folder, {}, folder);
   const held = hold_writes(lag.fake);
@@ -341,9 +341,10 @@ test("`,r` settles two other batches one after the other, so the record loses ne
   const frappe = restarted.set_theme_file("frappe", EDITED, true);
   await until(() => held.length === 1, "the frappe theme write did not go out");
   const dusk = restarted.set_theme_file("dusk", FRAPPE, false);
-  await until(() => held.length === 2, "the dusk theme write did not go out");
+  await until(() => Object.hasOwn((unsynced_of(lag.local) ?? {}) as object, "themes/dusk.toml"), "the dusk theme save did not commit");
   const { reload } = await reload_at_gate(lag.sent, restarted);
   held.shift()!();
+  await until(() => held.length === 1, "`,r` did not write the dusk theme after the frappe batch settled");
   held.shift()!();
   await reload;
   assert.deepEqual(batches_sent(lag.sent), [[THEME], ["themes/dusk.toml"]]);
@@ -473,7 +474,7 @@ test("a refused batch that left a file it could not put back makes a gate read t
   assert.deepEqual(await pick, { kind: "written" });
 });
 
-test("a write that breaks the folder with only one of two batches out landed waits for both, as the host lands them in either order", { timeout: 5000 }, async () => {
+test("a pick behind an engine save writes once that batch settles, while the start's batch is still out", { timeout: 5000 }, async () => {
   // The start deletes the hand file that defines ghost, the Engines page defines ghost again, and a `:set` names it: the folder lacks ghost while only the delete has landed.
   const HAND_GHOST_FILE = "search_engines.d/10-ghost.toml";
   const HAND_GHOST = '[ghost]\nurl = "https://g.test/?q={query}"\n';
@@ -486,14 +487,13 @@ test("a write that breaks the folder with only one of two batches out landed wai
   await until(() => held.length === 1, "the start's delete did not go out");
   const engine = restarted.change_engine_file((turn) => ({ files: { ...turn.files, [ENGINE_FILE]: GHOST_ENGINE }, layer: turn.layer }));
   await until(() => held.length === 2, "the engine write did not go out");
-  const reads_before = lag.sent.filter((message) => message.cmd === "read_config").length;
   const pick = restarted.set_in_settings_file("default_engine", "ghost");
-  await until(() => lag.sent.filter((message) => message.cmd === "read_config").length > reads_before, "the pick did not read the folder for its gate");
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(held.length, 2);
-  held.shift()!();
-  held.shift()!();
-  await until(() => held.length === 1, "the pick's write did not follow both batches");
+  // The engine save holds the writes, and once its file landed the folder defines ghost whichever way the start's delete goes.
+  held.pop()!();
+  await until(() => held.length === 2, "the pick's write did not follow the engine save");
+  held.pop()!();
   held.shift()!();
   assert.deepEqual(await pick, { kind: "written" });
   await start;
@@ -501,4 +501,93 @@ test("a write that breaks the folder with only one of two batches out landed wai
   assert.equal(lag.host.files["settings.toml"], `${MINE}default_engine = "ghost"\n`);
   assert.equal(lag.host.files[HAND_GHOST_FILE], undefined);
   assert.equal(lag.host.files[ENGINE_FILE], GHOST_ENGINE);
+});
+
+// A theme save whose write the host holds, on a folder the copy came from, so a `:set` after it writes settings.toml too.
+async function theme_save_held() {
+  const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
+  const lag = await lagging(folder, folder, {}, folder);
+  const held = hold_writes(lag.fake);
+  const restarted = fresh_config_service();
+  await restarted.get_config();
+  const theme = restarted.set_theme_file("frappe", EDITED, true);
+  await until(() => held.length === 1, "the theme write did not go out");
+  return { ...lag, held, restarted, theme };
+}
+
+const reads_in = (sent: { cmd: string }[]) => sent.filter((message) => message.cmd === "read_config").length;
+
+test("a `:set` while a theme save's write is out waits for the whole batch, then writes on top of it", { timeout: 5000 }, async () => {
+  const { held, host, local, restarted, theme, sent } = await theme_save_held();
+  const reads_before = reads_in(sent);
+  const pick = restarted.set_in_settings_file("hint_letters", "xyz");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The pick is in the browser copy, but its write has not even read the folder for its gate: it waits for the batch to settle.
+  assert.equal(copy_of(local)["settings.toml"], MINE.replace('"abc"', '"xyz"'));
+  assert.equal(held.length, 1);
+  assert.equal(reads_in(sent), reads_before);
+  held.shift()!();
+  await until(() => held.length === 1, "the pick's write did not follow the batch");
+  held.shift()!();
+  assert.deepEqual(await pick, { kind: "written" });
+  assert.equal((await theme).kind, "changed");
+  assert.deepEqual(batches_sent(sent), [[THEME], ["settings.toml"]]);
+  assert.deepEqual(host.files, { "settings.toml": MINE.replace('"abc"', '"xyz"'), [THEME]: EDITED });
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("writes queued behind a held batch go out one at a time in the order they were made, and two picks of one file share one write", { timeout: 5000 }, async () => {
+  const { held, host, local, restarted, theme, sent } = await theme_save_held();
+  const first = restarted.set_in_settings_file("hint_letters", "xyz");
+  const second = restarted.set_in_settings_file("theme", "frappe");
+  const third = restarted.set_theme_file("dusk", FRAPPE, false);
+  for (let released = 0; released < 3; released += 1) {
+    await until(() => held.length === 1, `write ${released + 1} did not go out`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(held.length, 1, "two writes were out at once");
+    held.shift()!();
+  }
+  assert.deepEqual(await first, { kind: "written" });
+  assert.deepEqual(await second, { kind: "written" });
+  assert.equal((await third).kind, "changed");
+  await theme;
+  const picked = MINE.replace('"abc"', '"xyz"');
+  assert.deepEqual(batches_sent(sent), [[THEME], ["settings.toml"], ["themes/dusk.toml"]]);
+  assert.equal(files_sent(sent)[1]!.text, `${picked}theme = "frappe"\n`);
+  assert.deepEqual(host.files, { "settings.toml": `${picked}theme = "frappe"\n`, [THEME]: EDITED, "themes/dusk.toml": FRAPPE });
+  assert.equal(unsynced_of(local), undefined);
+});
+
+test("a batch the host refuses, or whose settle throws, frees the queue for the next write", { timeout: 5000 }, async () => {
+  const { held, host, fake, restarted, theme } = await theme_save_held();
+  host.refuse = [THEME];
+  held.shift()!();
+  const refused = await theme;
+  assert.equal(refused.kind === "changed" && refused.file.kind, "failed");
+  host.refuse = [];
+  const after_refusal = restarted.set_in_settings_file("hint_letters", "xyz");
+  await until(() => held.length === 1, "the write after the refusal did not go out");
+  held.shift()!();
+  assert.deepEqual(await after_refusal, { kind: "written" });
+
+  // The settle's store of the record fails once, so the batch's caller gets the error.
+  const set = fake.storage.local.set;
+  let fail_next_record_store = false;
+  fake.storage.local.set = async (values: Record<string, unknown>) => {
+    if (fail_next_record_store && Object.hasOwn(values, SETTINGS_FILE_UNSYNCED_STORAGE_KEY)) {
+      fail_next_record_store = false;
+      throw new Error("storage full");
+    }
+    return set(values);
+  };
+  const thrown = restarted.set_in_settings_file("hint_letters", "abc");
+  await until(() => held.length === 1, "the write that throws did not go out");
+  fail_next_record_store = true;
+  held.shift()!();
+  await assert.rejects(thrown, /storage full/);
+  const after_throw = restarted.set_in_settings_file("which_key_delay_ms", 7);
+  await until(() => held.length === 1, "the write after the throw did not go out");
+  held.shift()!();
+  // The thrown settle left the record behind the folder, so the outcome is the question's. What counts is that the write went out at all.
+  assert.equal((await after_throw).kind, "conflict");
 });
