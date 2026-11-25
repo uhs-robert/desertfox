@@ -16,8 +16,8 @@ The source archive for the submit comes from `just source_archive`. Its `BUILD.m
 
 `just release` runs steps 1 to 4 on a clean release branch with the release text under "# Next release" in `RELEASE.md`. Only stable (three-number) versions go to the listing. Betas (four numbers) stay unlisted and self-hosted.
 
-1. Before anything changes, it checks that `RELEASE.md` is non-empty and converts to plain text (`tools/amo_notes.mjs` fails on an empty result or one over 8000 characters, a cap of ours: the AMO API docs state no limit) and that `amo/metadata.json` lints.
-2. It bumps the patch version, stamps and hashes the hosts, builds, and commits and pushes the bump.
+1. Before anything changes, it checks that `RELEASE.md` is non-empty and converts to plain text (`tools/amo_notes.mjs` fails on an empty result or one over 8000 characters, a cap of ours: the AMO API docs state no limit), that `amo/metadata.json` lints and that the source archive builds within AMO's 200 MB limit.
+2. It bumps the patch version, stamps and hashes the hosts, builds, runs `web-ext lint` on `dist/`, and commits and pushes the bump.
 3. It publishes the GitHub release with the hosts only and the `RELEASE.md` text as the body. The add-on's install command points at this release, so it comes before the submit.
 4. It submits the listed version (`release_submit_listed`): stamp, build, source archive, then the converted notes in a temporary metadata copy. Last, it resets `RELEASE.md`. The reset waits for the submit on purpose: after a failed submit the text is still in `RELEASE.md` and in `release-assets/release-notes-<version>.md`.
 
@@ -33,13 +33,17 @@ Mozilla reviews the version, which takes days or weeks. No unlisted xpi is signe
 6. After approval, add the signed xpi to the GitHub release: download it from the version page on AMO, check that its manifest has no `update_url`, then `gh release upload v<version> desertfox-<version>.xpi`. A scheduled job for this is planned and not built yet.
 7. Point the README at the listing.
 
+## Dry run
+
+`RELEASE_DRY_RUN=1 just release` rehearses the flow. It still bumps the version and commits the bump locally (undo with `git reset --hard HEAD~1`), and it builds, lints and makes the source archive. It pushes nothing, creates no GitHub release, submits nothing to AMO, needs no AMO key and leaves `RELEASE.md` alone.
+
 ## Recovery
 
 AMO signs a version number once, so never run `just release` again after it bumped: it bumps a second version. Find the failed step and resume from it.
 
 - The push or the GitHub release failed: the bump is committed or local, and nothing is on AMO. Fix the cause, then `just release_commit_push`, `just release_publish <version> "" release-assets/release-notes-<version>.md`, `just sign_listed` and `just release_notes_reset <version>`.
-- The submit failed after the GitHub release: open the AMO developer hub first. If it lists the version, the number is burned and the submit went through, so only run `just release_notes_reset <version>`. If it does not, fix the cause and run `just sign_listed`, which takes the notes kept in `release-assets/` for the version in `src/manifest.json`, then `just release_notes_reset <version>`.
-- Mozilla rejects the version: the number stays burned. Fix the cause and run `just release` again for the next patch version.
+- The submit failed after the GitHub release: open the AMO developer hub first. If it lists the version, the number is burned. Open the version page and check that it has the source archive: the upload creates the version first and attaches the archive in a later request. If the archive is missing, upload `release-assets/desertfox-<version>-source.zip` there by hand, because a reviewer cannot rebuild without it. Then run `just release_notes_reset <version>`. If it does not, fix the cause and run `just sign_listed`, which takes the notes kept in `release-assets/` for the version in `src/manifest.json`, then `just release_notes_reset <version>`.
+- Mozilla rejects the version: the number stays burned, and `just release` already reset `RELEASE.md`. Put the notes back before the next run: open `release-assets/release-notes-<version>.md`, copy its text without the `# DesertFox <version>` title line, and paste it under `# Next release` in `RELEASE.md`, above or merged with anything written since. Fix the cause, then run `just release` for the next patch version.
 - `just release_notes_reset <version>` leaves `RELEASE.md` alone when it changed since the release took its text, and says so.
 
 The AMO key stays in unexported shell variables, as in `just release`. `just sign_listed` refuses to run in CI.

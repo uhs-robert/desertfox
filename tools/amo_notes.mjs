@@ -25,7 +25,8 @@ const strip_inline = (line) =>
 export const convert = (markdown) => {
   const out = [];
   let fence = null;
-  let skipping = false;
+  // The level of the dropped heading while one is open: its nested headings are dropped too, and a heading of the same or a higher level ends it.
+  let skipping_level = null;
   for (const line of markdown.split("\n")) {
     const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (fence === null && marker) {
@@ -39,12 +40,16 @@ export const convert = (markdown) => {
     if (fence === null) {
       const heading = /^(#{1,6}) +(.*?) *#*$/.exec(line);
       if (heading) {
-        skipping = DROPPED_SECTIONS.has(heading[2].trim().toLowerCase());
-        if (heading[1].length >= 2 && !skipping) out.push("", `${strip_inline(heading[2])}:`, "");
+        const level = heading[1].length;
+        if (skipping_level !== null && level > skipping_level) continue;
+        // Release headings carry a leading emoji ("## 📦 Install"), so the name starts at the first letter or digit, and the emoji stays out of the plain text.
+        const name = heading[2].replace(/^[^\p{L}\p{N}]+/u, "").trim();
+        skipping_level = DROPPED_SECTIONS.has(name.toLowerCase()) ? level : null;
+        if (level >= 2 && skipping_level === null) out.push("", `${strip_inline(name)}:`, "");
         continue;
       }
     }
-    if (skipping) continue;
+    if (skipping_level !== null) continue;
     out.push(fence === null ? strip_inline(line.replace(/^(\s*)[*+] /, "$1- ")) : line);
   }
   return out.join("\n").replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();

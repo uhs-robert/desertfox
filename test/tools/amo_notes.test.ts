@@ -41,3 +41,33 @@ test("fails over the length limit", () => {
   assert.equal(done.status, 1);
   assert.match(done.stderr, /over the limit/);
 });
+
+test("drops Install and Links sections whose headings start with an emoji, as the 1.0.1 release did", () => {
+  const body = [
+    "# DesertFox 1.0.1",
+    "",
+    "Vim keys for Firefox. See [the guide](https://example.com/guide) for `:help`.",
+    "",
+    "## \u2728 What changed",
+    "",
+    "- **Faster** hints",
+    "",
+    "## \u{1F4E6} Install",
+    "",
+    "```sh",
+    "sh -c 'curl https://example.com/install.sh'",
+    "```",
+    "",
+    "## \u{1F517} Links",
+    "",
+    "- [Docs](https://example.com/docs)",
+    "",
+  ].join("\n");
+  const done = run(body);
+  assert.equal(done.stdout, "Vim keys for Firefox. See the guide (https://example.com/guide) for :help.\n\nWhat changed:\n\n- Faster hints\n");
+});
+
+test("drops the subsections of a dropped section and resumes at the next section of the same level", () => {
+  const done = run("Intro.\n\n## Install\n\nRun it.\n\n### Linux\n\nLinux steps.\n\n#### Arch\n\nArch steps.\n\n## Fixes\n\n- A fix\n");
+  assert.equal(done.stdout, "Intro.\n\nFixes:\n\n- A fix\n");
+});
