@@ -242,7 +242,7 @@ Builds the merged config from the user's config files. It takes raw file text an
 - `schemas.ts`: the editor schemas for the data files. Only the tool and tests call it.
 - `errors.ts`: `ConfigErrors`, which collects every problem of one run.
 
-`smol-toml` parses the TOML. A test fails when a file here imports a `node:` module. In the extension, only the background runs the build, because it pulls in `smol-toml` and `themes.ts`. Two files import one module from it. `src/help/keys_page.ts` takes `KEYMAP_MODES` from `merge.ts`. `src/shared/config_file_path.ts` takes `DATA_KINDS` from `source_files.ts`, which pulls in `smol-toml` and so reaches the help page.
+`smol-toml` parses the TOML. A test fails when a file here imports a `node:` module. In the extension, only the background runs the build, because it pulls in `smol-toml` and `themes.ts`. No other folder imports it at runtime, and a test fails when one does. A page takes `KEYMAP_MODES` from `src/shared/keymap.ts` and `DATA_KINDS` from `src/shared/config_kinds.ts`.
 
 ### Engine files for the config
 

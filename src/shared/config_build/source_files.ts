@@ -5,8 +5,10 @@
 
 import { parse, TomlError } from "smol-toml";
 
-export const DATA_KINDS = ["keymap", "search_engines", "command_aliases", "quickmarks", "settings"] as const;
-export type DataKind = (typeof DATA_KINDS)[number];
+import { DATA_KINDS, type DataKind } from "../config_kinds.ts";
+
+// Re-exported so the background writers and tools/build-config keep one import for the kinds and the layers.
+export { DATA_KINDS, type DataKind };
 
 export type DataLayer = { file: string; data: Record<string, unknown> };
 

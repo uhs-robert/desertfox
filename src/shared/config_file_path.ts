@@ -1,7 +1,7 @@
 // Which paths the files editor may store, shared by the page (to refuse early) and the background (which decides).
 // A path outside these shapes is never read by the build, so storing it would only hide a typo.
 
-import { DATA_KINDS } from "./config_build/source_files.ts";
+import { DATA_KINDS } from "./config_kinds.ts";
 import { check_path, DEFAULT_ZIP_LIMITS, ZipError } from "./zip.ts";
 
 const utf8 = new TextEncoder();

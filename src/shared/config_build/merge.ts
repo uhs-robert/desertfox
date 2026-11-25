@@ -3,18 +3,15 @@
 // A later layer wins per key, except `site_rules`, whose layers add up. Nothing here knows the command list, so binding
 // strings stay strings until `resolve_bindings` in check.ts parses them.
 
-import { MODES } from "../command.ts";
 import type { SearchEngine, Settings } from "../config.ts";
 import { nodes_of_file, resolve_engines } from "../engines/index.ts";
 import type { EngineNode } from "../engines/index.ts";
-import type { KeymapConfig } from "../keymap.ts";
+import { KEYMAP_MODES, type KeymapConfig } from "../keymap.ts";
 import type { SiteRuleRow } from "../match_pattern.ts";
 import { MAX_QUICKMARK_URL_CHARS, QUICKMARK_KEY } from "../quickmark_names.ts";
 import { is_plain_object } from "./errors.ts";
 import { is_setting_name, SETTING_NAMES, SETTING_SPECS } from "../settings_schema.ts";
 import type { DataLayer } from "./source_files.ts";
-
-export const KEYMAP_MODES = [...MODES, "browser"] as const;
 
 // Where each merged entry came from, so a later check can name the file and key.
 export type Origins = Map<string, string>;

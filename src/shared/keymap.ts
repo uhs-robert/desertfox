@@ -1,10 +1,12 @@
 // Keymap data as the user writes it and as the default keymap ships.
 
-import type { Mode } from "./command.ts";
+import { MODES, type Mode } from "./command.ts";
 import type { KeyBinding } from "./invocation.ts";
 
 // `browser` holds the chords assigned to the Firefox shortcut slots.
 export type KeymapMode = Mode | "browser";
+// The sections a keymap file may bind: every mode plus `browser`.
+export const KEYMAP_MODES = [...MODES, "browser"] as const;
 
 // Vim-style key sequence, for example `J`, `sa`, `<A-j>`, `<S-Escape>`.
 // `null` removes a default binding when a user keymap overrides it.

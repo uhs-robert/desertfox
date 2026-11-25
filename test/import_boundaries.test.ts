@@ -110,6 +110,51 @@ test("every content exception is permanent", () => {
   assert.ok(permanent.every(([edge]) => edge.startsWith("content/media/") && edge.includes("-> content/quality/")), "only media to quality is permanent");
 });
 
+// Type-only imports are erased, so only a runtime import carries config_build code into a bundle.
+export function runtime_relative_specifiers(source: string): string[] {
+  const found: string[] = [];
+  const add = (specifier: ts.Node | undefined) => {
+    if (specifier && ts.isStringLiteralLike(specifier) && specifier.text.startsWith(".")) found.push(specifier.text);
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isImportDeclaration(node)) {
+      const clause = node.importClause;
+      const bindings = clause?.namedBindings;
+      const all_type_names = bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly);
+      if (!(clause?.isTypeOnly || (all_type_names && clause?.name === undefined))) add(node.moduleSpecifier);
+    } else if (ts.isExportDeclaration(node)) {
+      if (!node.isTypeOnly) add(node.moduleSpecifier);
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      add(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile("scan.ts", source, ts.ScriptTarget.Latest, true));
+  return found;
+}
+
+test("only the background and config_build itself import config_build at runtime", () => {
+  const offenders: string[] = [];
+  for (const file of sources) {
+    if (file.startsWith("background/") || file.startsWith("shared/config_build/")) continue;
+    for (const specifier of runtime_relative_specifiers(readFileSync(new URL(`src/${file}`, root), "utf8"))) {
+      const target = posix.normalize(posix.join(dirname(file), specifier));
+      if (target.startsWith("shared/config_build/")) offenders.push(`${file} -> ${target}`);
+    }
+  }
+  assert.deepEqual(offenders, [], `These files bundle config_build code outside the background. Move the value they need into src/shared:\n${offenders.join("\n")}`);
+});
+
+test("the runtime scan skips type-only imports and keeps value imports", () => {
+  const found = (source: string) => runtime_relative_specifiers(source);
+  assert.deepEqual(found('import type { T } from "./t.ts";'), []);
+  assert.deepEqual(found('import { type T } from "./t.ts";'), []);
+  assert.deepEqual(found('export type { U } from "./u.ts";'), []);
+  assert.deepEqual(found('import { a, type T } from "./a.ts";'), ["./a.ts"]);
+  assert.deepEqual(found('export { b } from "./b.ts";\nimport "./side.ts";'), ["./b.ts", "./side.ts"]);
+  assert.deepEqual(found('const m = await import("./dyn.ts");'), ["./dyn.ts"]);
+});
+
 test("every exception names the cluster that removes it", () => {
   const unnamed = Object.entries(EXCEPTIONS).filter(([, cluster]) => !/^C([1-9]|10)$/.test(cluster));
   assert.deepEqual(unnamed, []);
