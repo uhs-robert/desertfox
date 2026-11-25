@@ -362,6 +362,8 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       if (writes.out === write) delete writes.out;
       if (reply.ok) writes.replays_in_a_row = 0;
     }
+    // A refused batch whose rollback could not put a file back still changed the folder, so a gate read from before it is stale.
+    if (!reply.ok && reply.error instanceof NativeHostError && reply.error.refused_files.unrestored.length > 0) writes_landed += 1;
     const outcomes = new Map<string, SettledWrite>();
     const changed_path = changed_on_disk(reply) && !reply.ok ? (reply.error as NativeHostError).refused_files.path : undefined;
     const changed = batch.writes.find((write) => write.path === changed_path);
