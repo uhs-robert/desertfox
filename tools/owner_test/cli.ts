@@ -1,9 +1,10 @@
-// usage: node tools/owner_test/cli.ts <open|reload|status|close> [worktree] [':set name value']...
+// usage: node tools/owner_test/cli.ts <open|reload|status|close> [worktree] [':set name value']... [--installed-host] [--empty-config]
 // Opens a real Firefox window with a worktree's build for the maintainer's hands-on test. See README.md.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { describe_host, type HostChoice, parse_environ, prepare_host_dirs, real_config_dir, window_env } from "./host_env.ts";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { close_window } from "./close.ts";
@@ -13,7 +14,7 @@ import { canonical_worktree, default_roots, unit_name, window_paths, type Window
 import { is_same_process, parse_debug_port, read_start_ticks } from "./process_guard.ts";
 import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "./lock.ts";
 import { Refusal } from "./refusal.ts";
-import { probe_window, reload_window, type ProbeOutcome } from "./rdp_probe.ts";
+import { probe_window, read_host_config_dir, reload_window, type ProbeOutcome } from "./rdp_probe.ts";
 import { seed_user_js } from "./profile.ts";
 import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "./state.ts";
 import { stamp_label, stamp_manifest, tail_lines, web_ext_args } from "./web_ext.ts";
@@ -105,9 +106,10 @@ function print_report(state: WindowState, hints: string[], permissions: string, 
   console.log(`Close with: just owner-test-close ${state.worktree}`);
 }
 
-async function open(worktree: string, paths: WindowPaths, hints: string[]): Promise<void> {
+async function open(worktree: string, paths: WindowPaths, hints: string[], choice: HostChoice): Promise<void> {
   check_environment("owner-test");
   check_worktree(worktree);
+  if (choice.installed_host && choice.empty_config) fail("--empty-config has no effect with --installed-host, which uses the real config");
   for (const hint of hints) {
     const checked = check_hint(hint);
     if (!checked.ok) fail(checked.error);
@@ -120,13 +122,22 @@ async function open(worktree: string, paths: WindowPaths, hints: string[]): Prom
   writeFileSync(join(paths.profile_dir, "user.js"), seed_user_js(readFileSync(join(worktree, "test", "key", "user.js"), "utf8")));
   rmSync(paths.log_file, { force: true });
   const state: WindowState = {
-    worktree, profile: paths.profile_dir, log: paths.log_file, stamp: label, started: new Date().toISOString(), unit: null,
+    worktree, profile: paths.profile_dir, host_home: choice.installed_host ? null : paths.home_dir, scratch_config: choice.installed_host ? null : paths.config_dir,
+    log: paths.log_file, stamp: label, started: new Date().toISOString(), unit: null,
     web_ext_pid: 0, web_ext_start_ticks: 0, firefox_pid: 0, firefox_start_ticks: 0,
   };
   write_state(paths.state_file, state);
+  if (!choice.installed_host) {
+    try {
+      prepare_host_dirs(paths, worktree, real_config_dir(process.env, homedir()), choice);
+    } catch (error) {
+      await close(paths);
+      fail(`could not prepare the private HOME and scratch config: ${(error as Error).message}`);
+    }
+  }
   const started = start_unit({
     unit: unit_name(paths.key), command: join(worktree, "node_modules", ".bin", "web-ext"), args: web_ext_args({ dist: join(worktree, "dist"), profile: paths.profile_dir }),
-    cwd: worktree, log_file: paths.log_file, who: "owner-test",
+    cwd: worktree, log_file: paths.log_file, who: "owner-test", env: window_env(paths, choice, process.env, homedir()),
   });
   if (discard_state_of_failed_spawn(started, paths.state_file)) fail("the plain spawn of web-ext returned no process id, so no window started. Its state file is removed. Run again.");
   state.unit = started.unit;
@@ -172,12 +183,27 @@ async function status(paths: WindowPaths): Promise<void> {
   const { state } = read;
   if (!is_same_process(state.web_ext_pid, state.web_ext_start_ticks)) return console.log("stale: its processes are gone. Close cleans it.");
   console.log(`profile: ${state.profile}`);
+  await print_host(state);
   const result = await probe_once(state, state.stamp, 10_000).catch((error: Error) => ({ ok: false, message: `the test window did not answer: ${error.message}`, permissions: "" }));
   console.log(result.ok ? `open, loaded build matches: ${state.stamp}` : result.message);
   if (!result.ok) process.exitCode = 1;
 }
 
-const { positionals } = parseArgs({ allowPositionals: true });
+// Where the window's native host and config come from, read from the running Firefox and not from the state file.
+async function print_host(state: WindowState): Promise<void> {
+  if (state.host_home === null) return console.log("host: the installed host and the real config (installed-host mode)");
+  const pid = firefox_pid_for(state.profile);
+  if (pid === null) return console.log("host: Firefox is not running, so its host cannot be read");
+  const report = describe_host(parse_environ(readFileSync(`/proc/${pid}/environ`, "utf8")), (file) => (existsSync(file) ? readFileSync(file, "utf8") : null));
+  console.log(`host: ${report.host_path}`);
+  console.log(`config folder: ${report.config_dir}`);
+  const port = debug_port_of(state.profile);
+  const reported = port === null ? "(no debugger port)" : await read_host_config_dir(port, 10_000).catch((error: Error) => `(not read: ${error.message})`);
+  console.log(`config folder the host reports: ${reported}`);
+}
+
+const { positionals, values: flags } = parseArgs({ allowPositionals: true, options: { "installed-host": { type: "boolean" }, "empty-config": { type: "boolean" } } });
+const host_choice: HostChoice = { installed_host: flags["installed-host"] === true, empty_config: flags["empty-config"] === true };
 const [action = "open", worktree_arg = ".", ...raw_hints] = positionals;
 const hints = raw_hints.filter((hint) => hint.trim() !== "");
 const roots = default_roots(process.env, homedir());
@@ -198,7 +224,7 @@ try {
   const paths = window_paths(worktree, roots);
   const locked = action === "open" || action === "reload" || action === "close";
   if (locked && process.env[LOCK_HELD_ENV] !== "1") rerun_under_lock(paths.lock_file);
-  if (action === "open") await open(worktree, paths, hints);
+  if (action === "open") await open(worktree, paths, hints, host_choice);
   else if (action === "reload") await reload(worktree, paths);
   else if (action === "status") await status(paths);
   else if (action === "close") process.exitCode = (await close(paths)) ? 0 : 1;
