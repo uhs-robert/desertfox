@@ -1,7 +1,7 @@
 // Reads and resets RELEASE.md, the local release notes file. It holds one "# Next release" section. Past notes live on the GitHub releases, so the file keeps no versioned sections.
 // Usage: node tools/release_notes.mjs next <file>              print the body of "# Next release"; fail when the file or the body is missing or empty.
 //        node tools/release_notes.mjs text <file> <version>    print that body under the heading "# DesertFox <version>", the text of the GitHub release.
-//        node tools/release_notes.mjs reset <file>             after the publish, replace the file with an empty "# Next release" section; fail when that section is already empty.
+//        node tools/release_notes.mjs reset <file> <snapshot>  after the publish, replace the file with an empty "# Next release" section, but only when the file still equals the snapshot taken with the notes. A changed file stays as it is.
 // Node only, like release_stamp.mjs. `just release` runs it.
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -13,13 +13,15 @@ const fail = (message) => {
   process.exit(1);
 };
 
-// A "# " line inside a code fence is body text, not a heading.
+// A "# " line inside a code fence is body text, not a heading. As in CommonMark, a fence closes only on the same character, at least as long as the opening, with nothing after it.
 const heading_line_indexes = (lines) => {
   const indexes = [];
-  let in_fence = false;
+  let fence = null;
   lines.forEach((line, index) => {
-    if (/^\s*(```|~~~)/.test(line)) in_fence = !in_fence;
-    else if (!in_fence && /^# /.test(line)) indexes.push(index);
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence === null && marker) fence = marker[1];
+    else if (fence !== null && marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === "") fence = null;
+    else if (fence === null && /^# /.test(line)) indexes.push(index);
   });
   return indexes;
 };
@@ -52,7 +54,8 @@ const next_body = (lines, file) => {
 
 const VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$/;
 const [command, file, version] = process.argv.slice(2);
-if (!file) fail("usage: release_notes.mjs next|text|reset <file> [version]");
+const snapshot = version;
+if (!file) fail("usage: release_notes.mjs next|text|reset <file> [version|snapshot]");
 if (command === "text" && !VERSION_PATTERN.test(version ?? "")) fail(`'${version}' is not a version.`);
 const lines = read_lines(file);
 
@@ -61,8 +64,12 @@ if (command === "next") {
 } else if (command === "text") {
   console.log(`# DesertFox ${version}\n\n${next_body(lines, file)}`);
 } else if (command === "reset") {
-  next_body(lines, file);
-  writeFileSync(file, `${NEXT_HEADING}\n\n`);
+  if (!snapshot) fail("reset needs the snapshot file.");
+  if (readFileSync(file, "utf8") !== readFileSync(snapshot, "utf8")) {
+    console.log(`release_notes: ${file} changed after the release took its notes, so it is left as it is. Remove the published notes from it by hand.`);
+  } else {
+    writeFileSync(file, `${NEXT_HEADING}\n\n`);
+  }
 } else {
   fail(`unknown command '${command}'.`);
 }

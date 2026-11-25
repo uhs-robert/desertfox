@@ -663,7 +663,8 @@ class ReleaseStepTest(InstallCase):
         guard = body.index("release_notes.mjs next")
         for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just sign_only", "just release_commit_push"):
             self.assertLess(guard, body.index(step), step)
-        self.assertLess(body.index("just release_commit_push"), body.index("just release_notes_reset"), "RELEASE.md changes only after the publish")
+        reset_line = body.index('\n    just release_notes_reset "$version"\n')
+        self.assertLess(body.index('\n    just release_publish "$version"'), reset_line, "RELEASE.md changes only after the publish")
 
     def notes_tool(self, *args):
         return subprocess.run(["node", "tools/release_notes.mjs", *args], cwd=os.path.dirname(HOST_DIR), capture_output=True, text=True, timeout=30)
@@ -687,19 +688,47 @@ class ReleaseStepTest(InstallCase):
             self.assertNotEqual(done.returncode, 0, text)
             self.assertEqual(done.stdout, "")
 
+    def test_notes_tool_fences_close_only_on_a_matching_marker(self):
+        path = self.notes_file("# Next release\n\nA\n\n````\n```\n# x\n````\n\n```\n~~~\n# y\n```\n\n# DesertFox 1.0.0\n\nOld.\n")
+        done = self.notes_tool("next", path)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, "A\n\n````\n```\n# x\n````\n\n```\n~~~\n# y\n```\n")
+
+    def snapshot_of(self, path):
+        snapshot = os.path.join(self.tmp.name, "snapshot.md")
+        shutil.copy(path, snapshot)
+        return snapshot
+
     def test_notes_tool_reset_leaves_only_an_empty_next_release_section(self):
         path = self.notes_file("# Next release\n\nNew thing.\n\n# DesertFox 1.0.0\n\nOld.\n")
-        self.assertEqual(self.notes_tool("reset", path).returncode, 0)
+        self.assertEqual(self.notes_tool("reset", path, self.snapshot_of(path)).returncode, 0)
         with open(path) as file:
             self.assertEqual(file.read(), "# Next release\n\n")
-        self.assertNotEqual(self.notes_tool("reset", path).returncode, 0, "an empty section is not reset again")
 
-    def test_release_notes_reset_recipe_edits_the_file_named_by_the_environment(self):
+    def test_notes_tool_reset_keeps_a_file_that_changed_after_the_snapshot(self):
         path = self.notes_file("# Next release\n\nNew thing.\n")
-        done = self.just("release_notes_reset", RELEASE_NOTES_FILE=path)
+        snapshot = self.snapshot_of(path)
+        with open(path, "a") as file:
+            file.write("Added later.\n")
+        done = self.notes_tool("reset", path, snapshot)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("changed after", done.stdout)
+        with open(path) as file:
+            self.assertEqual(file.read(), "# Next release\n\nNew thing.\nAdded later.\n")
+
+    def test_release_notes_reset_recipe_follows_the_snapshot_of_its_version(self):
+        path = self.notes_file("# Next release\n\nNew thing.\n")
+        os.makedirs(self.assets, exist_ok=True)
+        shutil.copy(path, os.path.join(self.assets, "release-notes-1.0.1.source.md"))
+        done = self.just("release_notes_reset", "1.0.1", RELEASE_NOTES_FILE=path)
         self.assertEqual(done.returncode, 0, done.stderr)
         with open(path) as file:
             self.assertEqual(file.read(), "# Next release\n\n")
+        self.notes_file("# Next release\n\nEdited.\n")
+        done = self.just("release_notes_reset", "1.0.1", RELEASE_NOTES_FILE=path)
+        self.assertIn("changed after", done.stdout)
+        with open(path) as file:
+            self.assertEqual(file.read(), "# Next release\n\nEdited.\n")
 
     def test_publish_refuses_without_a_stamp_of_this_version(self):
         done = self.just("release_publish", self.package_version(), self.xpi)

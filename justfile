@@ -367,7 +367,7 @@ release_guard:
     fi
     # A bump left behind by a failed sign or install looks like this.
     if [ -z "$(git status --porcelain -- . ':!package.json' ':!package-lock.json' ':!src/manifest.json')" ]; then
-        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset' instead. They use the stamped files kept in $RELEASE_ASSETS_DIR." >&2
+        echo "release found changes only in package.json, package-lock.json and src/manifest.json. That may be a bump left by a failed sign or install. Run 'git diff HEAD -- package.json package-lock.json src/manifest.json'. If it shows only the version line, run 'git checkout -- package.json package-lock.json src/manifest.json' and rerun. Otherwise commit or keep your edits. If signing succeeded, do not rerun: run 'just release_commit_push' and then 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset <version>' instead. They use the stamped files kept in $RELEASE_ASSETS_DIR." >&2
         exit 1
     fi
     echo "release refuses to run with uncommitted changes. Commit or stash them first." >&2
@@ -395,9 +395,9 @@ release_commit_push:
     git add package.json package-lock.json src/manifest.json
     # A rerun after a failed push finds the bump already committed.
     if ! git diff --cached --quiet; then
-        git commit -q -m "chore(release): bump version to $version" || { echo "The bump commit failed, so the bump is uncommitted. Fix git, then run 'just release_commit_push', 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+        git commit -q -m "chore(release): bump version to $version" || { echo "The bump commit failed, so the bump is uncommitted. Fix git, then run 'just release_commit_push', 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset <version>'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
     fi
-    git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push', 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
+    git push -u origin "$(git branch --show-current)" || { echo "The push failed. The bump commit is local. Fix the push, then run 'just release_commit_push', 'just release_publish <version> <xpi> $RELEASE_ASSETS_DIR/release-notes-<version>.md' and 'just release_notes_reset <version>'. Do not rerun 'just release': it signs a second version." >&2; exit 1; }
 
 # Folder of the stamped release files, kept between the recipes of one release so publish uploads the bytes the build hashed.
 export RELEASE_ASSETS_DIR := env("RELEASE_ASSETS_DIR", "release-assets")
@@ -500,10 +500,10 @@ release_notes_file:
     # The common git dir is <main checkout>/.git for the main checkout and for every worktree of it.
     echo "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/RELEASE.md"
 
-# Reset RELEASE.md to an empty "# Next release" section, since the published notes live on the GitHub release. `release` runs it after the publish. Run it by hand after a recovery `release_publish`, which never touches RELEASE.md.
+# Reset RELEASE.md to an empty "# Next release" section, since the published notes live on the GitHub release. `release` runs it after the publish, unless RELEASE.md changed since the notes were taken (the snapshot kept beside the notes file). Run it by hand after a recovery `release_publish`, which never touches RELEASE.md.
 [private]
-release_notes_reset:
-    node tools/release_notes.mjs reset "$(just release_notes_file)"
+release_notes_reset version:
+    node tools/release_notes.mjs reset "$(just release_notes_file)" "$RELEASE_ASSETS_DIR/release-notes-{{version}}.source.md"
 
 # Bump the patch version, stamp and hash the hosts, sign dist/ with those hashes, install it for every profile (skipped on a machine whose policy follows the beta) and create the GitHub release with the same stamped hosts. The matching beta comes after the release PR merges: the nightly builds it because main changed, or run `just beta` for it at once. Fills the AMO key from rbw when either variable is empty. Needs a clean release branch and the release text under "# Next release" in RELEASE.md of the main checkout (git-ignored, see tools/release_notes.mjs), which must be non-empty before anything else runs. Once the release is published, the file is reset to an empty "# Next release" section.
 release:
@@ -530,6 +530,7 @@ release:
     # Kept with the stamped files so a recovery run of release_publish sends the same text, even though RELEASE.md changes only after the publish.
     notes_file="$RELEASE_ASSETS_DIR/release-notes-$version.md"
     node tools/release_notes.mjs text "$notes_source" "$version" > "$notes_file"
+    cp "$notes_source" "$RELEASE_ASSETS_DIR/release-notes-$version.source.md"
     # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
     just build
     if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
@@ -540,8 +541,8 @@ release:
     just release_install
     just release_commit_push
     xpi=$(ls web-ext-artifacts/*.xpi)
-    just release_publish "$version" "$xpi" "$notes_file" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi $notes_file', then 'just release_notes_reset'. RELEASE.md is unchanged until then." >&2; exit 1; }
-    just release_notes_reset
+    just release_publish "$version" "$xpi" "$notes_file" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi $notes_file', then 'just release_notes_reset <version>'. RELEASE.md is unchanged until then." >&2; exit 1; }
+    just release_notes_reset "$version"
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
 
 # Write the source archive Mozilla reviewers rebuild from, to RELEASE_ASSETS_DIR/desertfox-<version>-source.zip: every tracked file of HEAD, with BUILD.md at the top. It holds no stamped hosts, since BUILD.md has the reviewer stamp them. Needs a clean tree, so the archive is the commit that gets signed.
