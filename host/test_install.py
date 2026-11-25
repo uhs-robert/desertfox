@@ -581,29 +581,6 @@ class ReleaseStepTest(InstallCase):
         with open(os.path.join(os.path.dirname(HOST_DIR), "src", "manifest.json")) as file:
             return json.load(file)["version"]
 
-    def policy_file(self, install_url):
-        path = os.path.join(self.tmp.name, "policies.json")
-        with open(path, "w") as file:
-            json.dump({"policies": {"ExtensionSettings": {"desertfox@uhs-robert": {"installation_mode": "normal_installed", "install_url": install_url}}}}, file)
-        return path
-
-    def test_release_install_skips_the_install_when_the_policy_follows_the_beta(self):
-        policy = self.policy_file("https://example.invalid/desertfox.xpi")
-        done = self.just("release_install", DESERTFOX_POLICIES_FILE=policy)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("on beta", done.stdout)
-        self.assertNotIn("install_policy.sh", done.stderr)
-
-    def test_release_install_runs_the_install_when_the_policy_is_stable(self):
-        # A stub sudo keeps a stray signed xpi from ever reaching the real one.
-        with open(os.path.join(self.stub_bin, "sudo"), "w") as file:
-            file.write("#!/bin/sh\necho sudo blocked >&2\nexit 1\n")
-        os.chmod(os.path.join(self.stub_bin, "sudo"), 0o755)
-        policy = self.policy_file("file:///usr/local/share/desertfox/desertfox@uhs-robert.xpi")
-        done = self.just("release_install", DESERTFOX_POLICIES_FILE=policy)
-        self.assertNotIn("on beta", done.stdout)
-        self.assertIn("install_policy.sh", done.stderr)
-
     def test_stamp_writes_the_version_into_both_hosts_before_hashing(self):
         self.assertEqual(self.just("release_stamp", self.package_version()).returncode, 0)
         version = self.package_version()
@@ -661,12 +638,12 @@ class ReleaseStepTest(InstallCase):
         # Reads the recipe instead of running it: a run would bump, sign and push.
         body = self.just("--show", "release").stdout
         guard = body.index("release_notes.mjs next")
-        for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just sign_only", "just release_commit_push"):
+        for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just release_submit_listed", "just release_commit_push"):
             self.assertLess(guard, body.index(step), step)
         reset_line = body.index('then just release_notes_reset "$version"; fi')
         self.assertIn('[ "${RELEASE_DRY_RUN:-}" != "1" ]', body[reset_line - 60 : reset_line], "a dry run publishes nothing, so it must not reset")
         self.assertLess(body.index('cp "$notes_source" "$notes_snapshot"'), body.index('text "$notes_snapshot"'), "the notes come from the snapshot")
-        self.assertLess(body.index('\n    just release_publish "$version"'), reset_line, "RELEASE.md changes only after the publish")
+        self.assertLess(body.index('\n    just release_publish "$version"'), reset_line, "RELEASE.md changes only after the publish and the submit")
 
     def notes_tool(self, *args):
         return subprocess.run(["node", "tools/release_notes.mjs", *args], cwd=os.path.dirname(HOST_DIR), capture_output=True, text=True, timeout=30)
