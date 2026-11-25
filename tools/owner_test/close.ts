@@ -10,6 +10,8 @@ export type CloseDeps = {
   // Stops the unit and says whether it is gone now.
   stop_unit: (unit: string) => boolean;
   remove_profile: (profile: string) => void;
+  // Deletes a private HOME or scratch config folder, recursively, never following a link out of it.
+  remove_scratch: (dir: string) => void;
   remove_window_files: (log: string, window_dir: string) => void;
   grace_ms?: number;
   // How long to wait for the process to be gone after SIGKILL.
@@ -53,6 +55,12 @@ export function own_profile(state: WindowState, paths: WindowPaths): string | nu
   return named === paths.profile_dir && is_strictly_inside(paths.cache_root, named) ? named : null;
 }
 
+// The private HOME and scratch config a state may name are the two folders this worktree's window maps to, below the owner-test cache root. Anything else the file names is left alone, as for the profile.
+export function own_scratch_dirs(state: WindowState, paths: WindowPaths): string[] {
+  const own = [[state.host_home, paths.home_dir], [state.scratch_config, paths.config_dir]] as const;
+  return own.flatMap(([named, expected]) => (named !== null && resolve(named) === expected && is_strictly_inside(paths.cache_root, expected) ? [expected] : []));
+}
+
 // A record belongs to the caller only when its worktree and profile are the ones the caller's key maps to.
 function is_own_record(state: WindowState, paths: WindowPaths): boolean {
   return resolve(state.worktree) === paths.worktree && resolve(state.profile) === paths.profile_dir;
@@ -90,6 +98,10 @@ export async function close_window(paths: WindowPaths, deps: CloseDeps): Promise
     lines.push(`profile: ${state.profile} is not this worktree's profile under the owner-test cache, left alone`);
   } else {
     deps.remove_profile(profile);
+    for (const dir of own_scratch_dirs(state, paths)) {
+      deps.remove_scratch(dir);
+      lines.push(`scratch: deleted ${dir}`);
+    }
     deps.remove_window_files(paths.log_file, paths.window_dir);
     lines.push(`profile: deleted ${profile}`);
   }

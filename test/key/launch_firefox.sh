@@ -6,6 +6,8 @@ run_dir=$1 profile_dir=$2 debug_port=$3 mode=${4:-plain}
 echo "$HOME" > "$run_dir/session_home"
 # The native host reads the config through this link, so a case can point it at another folder.
 export DESERTFOX_CONFIG_DIR="$run_dir/active_config"
+# owner-test refuses to run when it sees this marker.
+export DESERTFOX_KEY_TEST=1
 if [ "$mode" = gdb ]; then
   exec gdb -q -nx -batch -iex 'set debuginfod enabled off' -ex 'set startup-with-shell off' -ex 'set pagination off' \
     -ex 'set print thread-events off' -ex 'set print inferior-events off' -ex 'handle all nostop noprint pass' -ex 'handle SIGINT stop print nopass' \

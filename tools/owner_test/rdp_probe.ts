@@ -87,3 +87,15 @@ export function reload_window(port: number, deadline_ms: number): Promise<void> 
     await rdp.request(addon.actor, { type: "reload" });
   });
 }
+
+// The config folder the host reports to the add-on. Needs the optional native messaging grant, so a window without it answers with the reason.
+export function read_host_config_dir(port: number, deadline_ms: number): Promise<string> {
+  return with_rdp(port, deadline_ms, async (rdp) => {
+    const { evaluate_in_background } = await import(RDP_MODULE);
+    return evaluate_in_background(rdp, EXTENSION_ID, `(async () => {
+      if (!(await browser.permissions.contains({ permissions: ["nativeMessaging"] }))) return "(native messaging is not granted in this window)";
+      const reply = await browser.runtime.sendNativeMessage("desertfox_host", { cmd: "read_config" });
+      return reply.ok ? reply.config_dir : "(host error: " + reply.error + ")";
+    })()`);
+  });
+}

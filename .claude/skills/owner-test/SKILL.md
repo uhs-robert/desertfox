@@ -7,9 +7,9 @@ description: Open a real Firefox window with a worktree's build so the maintaine
 
 The window shows on the maintainer's desktop, not in the nested key-test session. Each worktree has its own window and profile, so parallel agents do not collide.
 
-1. Run `just owner-test <worktree> ':set name value' ...` once per test round. Pass one quoted `:set` argument for each command the maintainer must type. A typo in a hint fails at once. Never run it from the nested key-test session.
+1. Run `just owner-test <worktree> ':set name value' ...` once per test round. The window runs the worktree's host against a scratch copy of the config. Add `--installed-host` for the installed host and real config, or `--empty-config` for a clean-install scratch config. Pass one quoted `:set` argument for each command the maintainer must type. A typo in a hint fails at once. Never run it from the nested key-test session.
 2. If it prints `WRONG BUILD` or fails, stop and report. Do not hand over a window that shows the signed beta.
-3. Run `just owner-test-status <worktree>` right before the hand-over. It says `WRONG BUILD` if the signed beta took over. Then stop and report.
+3. Run `just owner-test-status <worktree>` right before the hand-over. It says `WRONG BUILD` if the signed beta took over, and prints the host path and config folder the window uses. Then stop and report.
 4. Give the maintainer what to look at, the exact keys, the printed `:set` commands and which setting needs a first-use grant. A fresh profile has no optional grant, so the maintainer grants once per `just owner-test`, not per reload.
 5. After each fix run `just owner-test-reload <worktree>`. The window reloads in place and keeps its profile. Tell the maintainer it reloaded. The command prints the permissions now granted, so check that a grant survived.
 6. When the maintainer says done, run `just owner-test-close <worktree>` and check that it printed `closed`. Never end a session with the window open.

@@ -2,21 +2,22 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { close_window, type CloseDeps } from "../tools/owner_test/close.ts";
+import { close_window, own_scratch_dirs, type CloseDeps } from "../tools/owner_test/close.ts";
 import { check_hint } from "../tools/owner_test/hints.ts";
 import { canonical_worktree, is_strictly_inside, unit_name, window_paths, worktree_key, type Roots } from "../tools/owner_test/paths.ts";
 import { judge_probe } from "../tools/owner_test/probe.ts";
 import { is_same_process, parse_debug_port, parse_start_ticks, read_start_ticks } from "../tools/owner_test/process_guard.ts";
 import { seed_user_js } from "../tools/owner_test/profile.ts";
 import { discard_state_of_failed_spawn, read_state, write_state, type WindowState } from "../tools/owner_test/state.ts";
-import { is_confirmed_stopped, real_close_deps } from "../tools/owner_test/system.ts";
+import { is_confirmed_stopped, KEY_TEST_MARKER, real_close_deps, check_environment, start_unit } from "../tools/owner_test/system.ts";
 import { stamp_manifest, tail_lines, web_ext_args } from "../tools/owner_test/web_ext.ts";
+import { describe_host, host_manifest, parse_environ, pinned_xdg, prepare_host_dirs, real_config_dir, window_env, EXTENSION_ID, HOST_MANIFEST_DESCRIPTION, HOST_MANIFEST_NAME, MANIFEST_RELATIVE } from "../tools/owner_test/host_env.ts";
 import { flock_argv, LOCK_BUSY_EXIT } from "../tools/owner_test/lock.ts";
 import { Refusal } from "../tools/owner_test/refusal.ts";
 import { spawn } from "node:child_process";
 import { probe_window, reload_window } from "../tools/owner_test/rdp_probe.ts";
 import net from "node:net";
-import { symlinkSync } from "node:fs";
+import { symlinkSync, readdirSync, rmSync } from "node:fs";
 import { make_tmp_dir } from "./support/tmp_dir.ts";
 
 function make_roots(t: test.TestContext): Roots {
@@ -31,7 +32,7 @@ function make_window(worktree: string, roots: Roots, patch: Partial<WindowState>
   writeFileSync(join(paths.profile_dir, "prefs.js"), "x");
   writeFileSync(paths.log_file, "log");
   const state: WindowState = {
-    worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", started: "now", unit: null,
+    worktree, profile: paths.profile_dir, host_home: null, scratch_config: null, log: paths.log_file, stamp: "s", started: "now", unit: null,
     web_ext_pid: 4001, web_ext_start_ticks: 111, firefox_pid: 4002, firefox_start_ticks: 222, ...patch,
   };
   write_state(paths.state_file, state);
@@ -42,6 +43,7 @@ function make_window(worktree: string, roots: Roots, patch: Partial<WindowState>
 function fake_system(ticks: Map<number, number>, ignore_term = new Set<number>()) {
   const signals: string[] = [];
   const removed: string[] = [];
+  const scratched: string[] = [];
   const stopped_units: string[] = [];
   const deps: CloseDeps = {
     read_start_ticks: (pid) => ticks.get(pid) ?? null,
@@ -55,10 +57,11 @@ function fake_system(ticks: Map<number, number>, ignore_term = new Set<number>()
       return true;
     },
     remove_profile: (profile) => void removed.push(profile),
+    remove_scratch: (dir) => void scratched.push(dir),
     remove_window_files: () => {},
     grace_ms: 300,
   };
-  return { deps, signals, removed, stopped_units };
+  return { deps, signals, removed, scratched, stopped_units };
 }
 
 test("close signals a process whose start ticks match", async (t) => {
@@ -504,4 +507,199 @@ test("close without systemctl on PATH reports the unit as not confirmed stopped 
 test("a stop is confirmed only by inactive or failed, never by empty or transitional output", () => {
   for (const stopped of ["inactive\n", "failed\n"]) assert.equal(is_confirmed_stopped(stopped), true, stopped);
   for (const unconfirmed of ["", "\n", "active\n", "activating\n", "deactivating\n", "reloading\n", "unknown\n"]) assert.equal(is_confirmed_stopped(unconfirmed), false, JSON.stringify(unconfirmed));
+});
+
+// An isolated window on disk: private HOME and scratch config folders next to the profile, named in the state.
+function make_isolated_window(worktree: string, roots: Roots) {
+  const window = make_window(worktree, roots);
+  mkdirSync(join(window.paths.home_dir, ".mozilla"), { recursive: true });
+  mkdirSync(window.paths.config_dir, { recursive: true });
+  const patched = { ...window.state, host_home: window.paths.home_dir, scratch_config: window.paths.config_dir };
+  write_state(window.paths.state_file, patched);
+  return { ...window, state: patched };
+}
+
+test("close deletes the private HOME and scratch config of its own window, after the profile", async (t) => {
+  const roots = make_roots(t);
+  const { paths } = make_isolated_window("/w/a", roots);
+  const system = fake_system(new Map());
+  const result = await close_window(paths, system.deps);
+  assert.equal(result.closed, true);
+  assert.deepEqual(system.removed, [paths.profile_dir]);
+  assert.deepEqual(system.scratched, [paths.home_dir, paths.config_dir]);
+});
+
+test("close never deletes a scratch folder outside its own window's cache dir", async (t) => {
+  const roots = make_roots(t);
+  const outside = make_tmp_dir("desertfox-owner-test-outside-", t);
+  const own = window_paths("/w/a", roots);
+  const other = window_paths("/w/b", roots);
+  const bad = [outside, roots.cache_home, own.cache_root, own.window_dir, other.home_dir, other.config_dir, join(own.home_dir, ".."), join(own.cache_root, "..", "x"), "/", "/home", own.profile_dir];
+  for (const named of bad) {
+    const { state } = make_window("/w/a", roots);
+    for (const field of ["host_home", "scratch_config"] as const) {
+      const system = fake_system(new Map());
+      write_state(own.state_file, { ...state, [field]: named });
+      await close_window(own, system.deps);
+      assert.deepEqual(system.scratched, [], `deleted for ${field}=${named}`);
+    }
+  }
+  // Only the exact own folders pass, and installed-host mode names none.
+  const { state } = make_window("/w/a", roots);
+  assert.deepEqual(own_scratch_dirs({ ...state, host_home: own.home_dir, scratch_config: null }, own), [own.home_dir]);
+  assert.deepEqual(own_scratch_dirs(state, own), []);
+});
+
+test("a close that leaves a process running keeps the private HOME and scratch config", async (t) => {
+  const roots = make_roots(t);
+  const { paths } = make_isolated_window("/w/a", roots);
+  const stuck = fake_system(new Map([[4001, 111], [4002, 222]]));
+  stuck.deps.signal = () => {};
+  stuck.deps.kill_wait_ms = 300;
+  assert.equal((await close_window(paths, stuck.deps)).closed, false);
+  assert.deepEqual(stuck.scratched, []);
+});
+
+test("an installed-host window closes cleanly and removes no scratch folder", async (t) => {
+  const roots = make_roots(t);
+  const { paths } = make_window("/w/a", roots);
+  const system = fake_system(new Map());
+  const result = await close_window(paths, system.deps);
+  assert.equal(result.closed, true);
+  assert.deepEqual(system.scratched, []);
+});
+
+test("a state file from before the host fields still reads, as installed-host mode", (t) => {
+  const roots = make_roots(t);
+  const { paths, state } = make_window("/w/a", roots);
+  const { host_home: _home, scratch_config: _config, ...old } = state;
+  writeFileSync(paths.state_file, JSON.stringify(old));
+  const read = read_state(paths.state_file);
+  assert.equal(read.kind === "ok" && read.state.host_home, null);
+  writeFileSync(paths.state_file, JSON.stringify({ ...old, host_home: 5 }));
+  assert.equal(read_state(paths.state_file).kind, "corrupt");
+});
+
+test("real close deps remove a scratch folder without following a link out of it", (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-rm-", t);
+  const keep = join(base, "keep");
+  const scratch = join(base, "scratch");
+  mkdirSync(keep);
+  writeFileSync(join(keep, "file"), "x");
+  mkdirSync(scratch);
+  symlinkSync(keep, join(scratch, "link"));
+  real_close_deps().remove_scratch(scratch);
+  assert.equal(existsSync(scratch), false);
+  assert.equal(readFileSync(join(keep, "file"), "utf8"), "x");
+});
+
+test("the host manifest matches what host/install.sh writes for the same host", () => {
+  const install = readFileSync(join(import.meta.dirname, "..", "host", "install.sh"), "utf8");
+  assert.ok(install.includes(`extension_id="${EXTENSION_ID}"`));
+  assert.ok(install.includes(`install_manifest ${HOST_MANIFEST_NAME} desertfox-host "${HOST_MANIFEST_DESCRIPTION}" "$extension_id"`));
+  assert.deepEqual(host_manifest("/w/host/desertfox-host"), {
+    name: "desertfox_host", description: "DesertFox config files and saved edits", path: "/w/host/desertfox-host", type: "stdio", allowed_extensions: ["desertfox@uhs-robert"],
+  });
+});
+
+test("prepare writes the manifest at the worktree host and seeds the scratch config with copies", (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-prep-", t);
+  const roots = { state_home: join(base, "state"), cache_home: join(base, "cache") };
+  const paths = window_paths("/w/a", roots);
+  const real = join(base, "real_config");
+  mkdirSync(join(real, "keymap.d"), { recursive: true });
+  writeFileSync(join(real, "settings.toml"), "a = 1");
+  writeFileSync(join(real, "keymap.d", "x.toml"), "b");
+  const outside = join(base, "dotfiles_target");
+  writeFileSync(outside, "linked");
+  symlinkSync(outside, join(real, "snippet.js"));
+  prepare_host_dirs(paths, "/w/a", real, { installed_host: false, empty_config: false });
+  const manifest = JSON.parse(readFileSync(join(paths.home_dir, MANIFEST_RELATIVE), "utf8"));
+  assert.equal(manifest.path, "/w/a/host/desertfox-host");
+  assert.equal(manifest.name, "desertfox_host");
+  assert.deepEqual(manifest.allowed_extensions, ["desertfox@uhs-robert"]);
+  assert.equal(readFileSync(join(paths.config_dir, "keymap.d", "x.toml"), "utf8"), "b");
+  // A write to the copy of a linked file must not reach the real target.
+  writeFileSync(join(paths.config_dir, "snippet.js"), "changed");
+  assert.equal(readFileSync(outside, "utf8"), "linked");
+  assert.equal(readFileSync(join(real, "settings.toml"), "utf8"), "a = 1");
+});
+
+test("prepare starts the scratch config empty on request, and when the real folder is missing", (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-empty-", t);
+  const roots = { state_home: join(base, "state"), cache_home: join(base, "cache") };
+  const real = join(base, "real_config");
+  mkdirSync(real);
+  writeFileSync(join(real, "settings.toml"), "a = 1");
+  const empty = window_paths("/w/a", roots);
+  prepare_host_dirs(empty, "/w/a", real, { installed_host: false, empty_config: true });
+  assert.deepEqual(readdirSync(empty.config_dir), []);
+  const missing = window_paths("/w/b", roots);
+  prepare_host_dirs(missing, "/w/b", join(base, "nope"), { installed_host: false, empty_config: false });
+  assert.deepEqual(readdirSync(missing.config_dir), []);
+});
+
+test("the real config folder resolves like the host: XDG_CONFIG_HOME when absolute, else ~/.config", () => {
+  assert.equal(real_config_dir({ XDG_CONFIG_HOME: "/x/cfg" }, "/h"), "/x/cfg/desertfox");
+  assert.equal(real_config_dir({ XDG_CONFIG_HOME: "rel" }, "/h"), "/h/.config/desertfox");
+  assert.equal(real_config_dir({}, "/h"), "/h/.config/desertfox");
+});
+
+test("window env: private HOME and scratch config with the real XDG bases pinned, nothing in installed mode", () => {
+  const paths = window_paths("/w/a", { state_home: "/s", cache_home: "/c" });
+  const isolated = window_env(paths, { installed_host: false, empty_config: false }, {}, "/real");
+  assert.deepEqual(isolated, {
+    XDG_CONFIG_HOME: "/real/.config", XDG_DATA_HOME: "/real/.local/share", XDG_CACHE_HOME: "/real/.cache", HOME: paths.home_dir, DESERTFOX_CONFIG_DIR: paths.config_dir,
+  });
+  assert.deepEqual(pinned_xdg({ XDG_CONFIG_HOME: "/e/c" }, "/real").XDG_CONFIG_HOME, "/e/c");
+  assert.deepEqual(window_env(paths, { installed_host: true, empty_config: false }, {}, "/real"), {});
+});
+
+test("start_unit passes the window env to a plain spawn, over the caller's own values", async (t) => {
+  const base = make_tmp_dir("desertfox-owner-test-spawn-", t);
+  const out = join(base, "env.txt");
+  const script = join(base, "dump.sh");
+  writeFileSync(script, `#!/bin/sh\nprintf '%s|%s' "$HOME" "$DESERTFOX_CONFIG_DIR" > "${out}"\n`, { mode: 0o755 });
+  const original_path = process.env.PATH;
+  process.env.PATH = "/nonexistent";
+  try {
+    start_unit({ unit: "u", command: script, args: [], cwd: base, log_file: join(base, "log"), who: "test", env: { HOME: "/private", DESERTFOX_CONFIG_DIR: "/scratch" } });
+  } finally {
+    process.env.PATH = original_path;
+  }
+  for (let waited = 0; !existsSync(out) && waited < 50; waited++) await new Promise((done) => setTimeout(done, 100));
+  assert.equal(readFileSync(out, "utf8"), "/private|/scratch");
+});
+
+test("check_environment refuses on the key-test marker and the /tmp runtime dir, and no longer on DESERTFOX_CONFIG_DIR", () => {
+  const saved = { ...process.env };
+  try {
+    process.env.WAYLAND_DISPLAY = "wayland-1";
+    process.env.XDG_RUNTIME_DIR = "/run/user/1000";
+    delete process.env[KEY_TEST_MARKER];
+    process.env.DESERTFOX_CONFIG_DIR = "/scratch";
+    assert.doesNotThrow(() => check_environment("owner-test"));
+    process.env[KEY_TEST_MARKER] = "1";
+    assert.throws(() => check_environment("owner-test"), /nested key-test session/);
+    delete process.env[KEY_TEST_MARKER];
+    process.env.XDG_RUNTIME_DIR = "/tmp/hypr";
+    assert.throws(() => check_environment("owner-test"), /nested key-test session/);
+  } finally {
+    for (const name of ["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DESERTFOX_CONFIG_DIR", KEY_TEST_MARKER]) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
+test("the key-test launch script exports the marker owner-test refuses on", () => {
+  const script = readFileSync(join(import.meta.dirname, "key", "launch_firefox.sh"), "utf8");
+  assert.match(script, new RegExp(`^export ${KEY_TEST_MARKER}=1$`, "m"));
+});
+
+test("status reads the host path from the manifest in the Firefox HOME and the config from its environ", () => {
+  const environ = parse_environ("HOME=/h/private\0DESERTFOX_CONFIG_DIR=/h/scratch\0PATH=/bin\0");
+  const report = describe_host(environ, (file) => (file === `/h/private/${MANIFEST_RELATIVE}` ? JSON.stringify({ path: "/w/host/desertfox-host" }) : null));
+  assert.deepEqual(report, { host_path: "/w/host/desertfox-host", config_dir: "/h/scratch" });
+  assert.match(describe_host({ HOME: "/x" }, () => null).host_path, /no manifest/);
 });

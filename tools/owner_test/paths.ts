@@ -23,7 +23,7 @@ export function worktree_key(worktree: string): string {
   return `${readable}-${createHash("sha256").update(path).digest("hex").slice(0, 10)}`;
 }
 
-export type WindowPaths = { worktree: string; key: string; lock_file: string; state_file: string; cache_root: string; window_dir: string; profile_dir: string; log_file: string };
+export type WindowPaths = { worktree: string; key: string; lock_file: string; state_file: string; cache_root: string; window_dir: string; profile_dir: string; home_dir: string; config_dir: string; log_file: string };
 
 export function window_paths(worktree: string, roots: Roots): WindowPaths {
   const key = worktree_key(worktree);
@@ -37,6 +37,8 @@ export function window_paths(worktree: string, roots: Roots): WindowPaths {
     cache_root,
     window_dir,
     profile_dir: join(window_dir, "profile"),
+    home_dir: join(window_dir, "home"),
+    config_dir: join(window_dir, "config"),
     log_file: join(window_dir, "web-ext.log"),
   };
 }

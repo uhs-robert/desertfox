@@ -5,6 +5,9 @@ import { dirname } from "node:path";
 export type WindowState = {
   worktree: string;
   profile: string;
+  // The private HOME and scratch config of an isolated window. Null in installed-host mode, and in a state file written before these existed.
+  host_home: string | null;
+  scratch_config: string | null;
   log: string;
   stamp: string;
   started: string;
@@ -20,6 +23,8 @@ export type ReadState = { kind: "none" } | { kind: "corrupt"; reason: string } |
 const STRING_FIELDS = ["worktree", "profile", "log", "stamp", "started"] as const;
 const NUMBER_FIELDS = ["web_ext_pid", "web_ext_start_ticks", "firefox_pid", "firefox_start_ticks"] as const;
 
+const OPTIONAL_PATH_FIELDS = ["host_home", "scratch_config"] as const;
+
 export function read_state(state_file: string): ReadState {
   if (!existsSync(state_file)) return { kind: "none" };
   let parsed: Record<string, unknown>;
@@ -32,6 +37,10 @@ export function read_state(state_file: string): ReadState {
   for (const field of STRING_FIELDS) if (typeof parsed[field] !== "string") return { kind: "corrupt", reason: `${field} is not a string` };
   for (const field of NUMBER_FIELDS) if (!Number.isInteger(parsed[field])) return { kind: "corrupt", reason: `${field} is not an integer` };
   if (parsed.unit !== null && typeof parsed.unit !== "string") return { kind: "corrupt", reason: "unit is neither null nor a string" };
+  for (const field of OPTIONAL_PATH_FIELDS) {
+    if (parsed[field] === undefined) parsed[field] = null;
+    else if (parsed[field] !== null && typeof parsed[field] !== "string") return { kind: "corrupt", reason: `${field} is neither null nor a string` };
+  }
   return { kind: "ok", state: parsed as unknown as WindowState };
 }
 
