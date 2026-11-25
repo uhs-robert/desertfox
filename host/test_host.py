@@ -1270,6 +1270,68 @@ class WriteConfigFilesTest(WriteConfigFileTest):
         self.assertTrue(replies[0]["ok"], replies)
         self.assertEqual(self.read("themes/mine.toml"), b"b = 2\n")
 
+    def test_a_read_during_a_batch_waits_and_sees_the_whole_batch(self):
+        import threading
+
+        files = self.seed()
+        entered = threading.Event()
+        release = threading.Event()
+        real_write = host.write_one_config_file
+
+        def pause_after_first(directory, write):
+            result = real_write(directory, write)
+            if write.path.endswith("settings.toml"):
+                entered.set()
+                release.wait(5)
+            return result
+
+        reads = []
+
+        def read():
+            _, raw = run_in_process(frame({"cmd": "read_config"}))
+            reads.append(unframe(raw)["files"])
+
+        with mock.patch.object(host, "write_one_config_file", side_effect=pause_after_first):
+            writer = threading.Thread(target=lambda: self.batch(*files))
+            writer.start()
+            self.assertTrue(entered.wait(5))
+            reader = threading.Thread(target=read)
+            reader.start()
+            reader.join(0.3)
+            self.assertTrue(reader.is_alive(), "the read did not wait for the batch")
+            release.set()
+            writer.join(5)
+            reader.join(5)
+        self.assertEqual(reads[0]["settings.toml"], "a = 2\n")
+        self.assertEqual(reads[0]["themes/mine.toml"], "b = 2\n")
+
+    def test_a_read_leaves_no_lock_file_behind(self):
+        run_in_process(frame({"cmd": "read_config"}))
+        self.assertFalse(os.path.exists(os.path.join(self.config, host.CONFIG_WRITE_LOCK_NAME)))
+
+    def test_a_failing_file_whose_own_restore_fails_is_listed_as_unrestored(self):
+        files = self.seed()
+        real_replace = host.replace_config_file
+
+        def land_then_fail(path, data, base):
+            result = real_replace(path, data, base)
+            if path.endswith("themes/mine.toml"):
+                raise host.HostError(f"cannot write {path}: Input/output error")
+            return result
+
+        with mock.patch.object(host, "replace_config_file", side_effect=land_then_fail):
+            reply = self.batch(*files)
+        self.assertEqual(reply["unrestored"], [os.path.join(self.config, "themes", "mine.toml")])
+        self.assertIn("could not be put back", reply["error"])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+
+    def test_a_failure_of_the_first_file_has_no_rollback_ending(self):
+        files = self.seed()
+        with mock.patch.object(host, "replace_config_file", side_effect=host.HostError("cannot write x: Input/output error")):
+            reply = self.batch(*files)
+        self.assertEqual(reply["error"], "cannot write x: Input/output error")
+        self.assertEqual(reply["unrestored"], [])
+
     def send_after(self, start, replies, name, files):
         start.wait(5)
         replies[name] = self.batch(*files)

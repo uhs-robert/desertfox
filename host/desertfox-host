@@ -165,7 +165,8 @@ def read_config():
     if not os.path.isdir(directory):
         return {"config_dir": directory, "config_dir_exists": False, "files": {}}
     try:
-        files = read_files(directory)
+        with config_write_lock(directory, shared=True):
+            files = read_files(directory)
     except OSError as error:
         raise HostError(f"cannot list {directory}: {error.strerror or error}") from error
     return {"config_dir": directory, "config_dir_exists": True, "files": files}
@@ -237,17 +238,24 @@ CONFIG_WRITE_LOCK_NAME = ".settings.lock"
 
 
 @contextlib.contextmanager
-def config_write_lock(directory):
-    """Serializes config file writes across host processes, so two writers never both pass the check against one base."""
+def config_write_lock(directory, shared=False):
+    """Serializes config file writes across host processes, so two writers never both pass the check against one base.
+    A reader takes it `shared`: it waits for a batch in flight, so it never sees a batch half applied. A reader that
+    cannot lock (no lock file yet, a read-only folder, a filesystem without locks) reads on without one. It never creates
+    the lock file."""
     try:
-        descriptor = os.open(os.path.join(directory, CONFIG_WRITE_LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
+        descriptor = os.open(os.path.join(directory, CONFIG_WRITE_LOCK_NAME), os.O_RDWR if shared else os.O_RDWR | os.O_CREAT, 0o600)
     except OSError as error:
+        if shared:
+            yield
+            return
         raise HostError(f"cannot lock {directory}: {error.strerror or error}") from error
     try:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            fcntl.flock(descriptor, fcntl.LOCK_SH if shared else fcntl.LOCK_EX)
         except OSError as error:
-            raise HostError(f"cannot lock {directory}, so nothing was written: {error.strerror or error}") from error
+            if not shared:
+                raise HostError(f"cannot lock {directory}, so nothing was written: {error.strerror or error}") from error
         yield
     finally:
         os.close(descriptor)
@@ -434,21 +442,34 @@ def write_config_batch(entries, verb):
             if file_digest(os.path.realpath(write.path), write.path)[0] != write.base:
                 raise BatchFailed(f"{write.path} {CHANGED_ON_DISK} since DesertFox last read it, so nothing was written", write.path)
         done = []
+        attempted = False
         try:
             for write in writes:
                 target = os.path.realpath(write.path)
-                old = read_bytes(target) if os.path.lexists(target) else None
+                old, attempted = (read_bytes(target) if os.path.lexists(target) else None), True
                 result = write_one_config_file(directory, write)
                 done.append((write, old, result))
+                attempted = False
         except HostError as error:
             unrestored = roll_back_config_writes(done)
+            if attempted and left_changed(write, old):
+                unrestored.append(write.path)
             message = str(error)
             if unrestored:
-                message += f". Of the {len(done)} files written before it, {', '.join(unrestored)} could not be put back"
+                message += f". {', '.join(unrestored)} could not be put back"
             elif done:
                 message += f". The {len(done)} files written before it went back to their old text, so nothing was written"
             raise BatchFailed(message, write.path, unrestored) from error
         return [result for _, _, result in done]
+
+
+def left_changed(write, old):
+    """Whether a write that raised left its file other than `old`: it failed after the rename and could not undo it."""
+    target = os.path.realpath(write.path)
+    try:
+        return (read_bytes(target) if os.path.lexists(target) else None) != old
+    except HostError:
+        return False
 
 
 def write_one_config_file(directory, write):
