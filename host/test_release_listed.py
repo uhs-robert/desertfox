@@ -38,6 +38,11 @@ if [ "$1" = "sign" ]; then
 fi
 exit 0
 """
+# A call to rbw would read the real vault on a machine that has one, so the stub fails and logs it.
+RBW_STUB = """#!/bin/sh
+echo "rbw $*" >> "$CALL_LOG"
+exit 1
+"""
 PRE_RECEIVE = """#!/bin/sh
 echo "git push" >> "%s"
 """
@@ -63,6 +68,7 @@ class ReleaseFlowCase(unittest.TestCase):
         self.stubs = os.path.join(self.tmp.name, "stubs")
         os.makedirs(self.stubs)
         write_executable(os.path.join(self.stubs, "gh"), GH_STUB)
+        write_executable(os.path.join(self.stubs, "rbw"), RBW_STUB)
         self.work = self.make_work_dir()
 
     def git(self, *args, cwd=None):
@@ -79,7 +85,7 @@ class ReleaseFlowCase(unittest.TestCase):
         for name in ("desertfox-host", "desertfox-bridge", "desertfox", "install.sh"):
             shutil.copy(os.path.join(HOST_DIR, name), os.path.join(work, "host"))
         files = {
-            "package.json": {"version": "1.0.1", "devDependencies": {"web-ext": "10.0.0"}, "scripts": {"build": 'mkdir -p dist && cp "$RELEASE_ASSETS_DIR/host_sha256.json" dist/ && echo \'{"version": "x"}\' > dist/manifest.json'}},
+            "package.json": {"version": "1.0.1", "devDependencies": {"web-ext": "10.0.0"}, "scripts": {"build": 'echo "build key vars: $(env | grep -c "^WEB_EXT_API")" >> "$CALL_LOG.build_env"; mkdir -p dist && cp "$RELEASE_ASSETS_DIR/host_sha256.json" dist/ && echo \'{"version": "x"}\' > dist/manifest.json'}},
             "package-lock.json": {"version": "1.0.1", "packages": {"": {"version": "1.0.1"}}},
             "src/manifest.json": {"version": "1.0.1"},
             "node_modules/web-ext/package.json": {"version": "10.0.0"},
@@ -126,7 +132,8 @@ class ReleaseFlowCase(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         calls = self.calls()
         index = lambda prefix: next(i for i, call in enumerate(calls) if call.startswith(prefix))
-        push, publish, submit = index("git push"), index("gh release create v1.0.2"), index("web-ext sign")
+        lint, push, publish, submit = index("web-ext lint"), index("git push"), index("gh release create v1.0.2"), index("web-ext sign")
+        self.assertLess(lint, push, "validation errors show before anything is public")
         self.assertLess(push, publish)
         self.assertLess(publish, submit)
         self.assertIn("--channel=listed", calls[submit])
@@ -134,6 +141,9 @@ class ReleaseFlowCase(unittest.TestCase):
         self.assertNotIn(".xpi", calls[publish], "the host release carries no xpi")
         self.assertEqual(self.read(self.log + ".release_md_at_submit"), NOTES, "RELEASE.md is intact when the submit runs")
         self.assertEqual(self.read(self.release_md), RESET_NOTES, "RELEASE.md is reset after the submit")
+        builds = self.read(self.log + ".build_env").splitlines()
+        self.assertEqual(builds, ["build key vars: 0"] * len(builds), "the AMO key never reaches the build")
+        self.assertTrue(builds, "the stub build ran")
 
     def test_the_submit_carries_the_converted_notes_and_the_committed_metadata_stays(self):
         before = self.read(os.path.join(self.work, "amo", "metadata.json"))
@@ -156,6 +166,7 @@ class ReleaseFlowCase(unittest.TestCase):
         calls = self.calls()
         self.assertEqual([call for call in calls if call.startswith("git push") or call.startswith("gh release") or call.startswith("web-ext sign")], [])
         self.assertEqual(self.read(self.release_md), NOTES)
+        self.assertEqual([call for call in calls if call.startswith("rbw")], [], "a dry run never reads the vault")
         self.assertEqual(self.git("log", "-1", "--format=%s").stdout.strip(), "chore(release): bump version to 1.0.2", "the bump is committed locally")
 
     def test_an_unconvertible_text_stops_everything_before_the_bump(self):
