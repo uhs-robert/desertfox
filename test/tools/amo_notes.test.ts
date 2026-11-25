@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -12,22 +14,22 @@ function run(input: string) {
 test("keeps the intro and the bullets, and drops the title", () => {
   const done = run("# DesertFox 1.0.2\n\nA short intro.\n\n## Features\n\n- One thing\n- Another thing\n\n## Fixes\n\n- A fix\n");
   assert.equal(done.status, 0);
-  assert.equal(done.stdout, "A short intro.\n\nFeatures:\n\n- One thing\n- Another thing\n\nFixes:\n\n- A fix\n");
+  assert.equal(done.stdout, "A short intro.\n\nFeatures:\n\n- One thing\n- Another thing\n\nFixes:\n\n- A fix");
 });
 
 test("drops the Install and Links sections up to the next section", () => {
   const done = run("# DesertFox 1.0.2\n\nIntro.\n\n## Install\n\nRun the command.\n\n## Fixes\n\n- A fix\n\n## Links\n\n- [Docs](https://example.com)\n");
-  assert.equal(done.stdout, "Intro.\n\nFixes:\n\n- A fix\n");
+  assert.equal(done.stdout, "Intro.\n\nFixes:\n\n- A fix");
 });
 
 test("turns links into text and url, and strips bold and code ticks", () => {
   const done = run("See [the docs](https://example.com/a) and https://x.example.\n\n- **Bold** and `code` and [https://y.example](https://y.example)\n* star bullet\n");
-  assert.equal(done.stdout, "See the docs (https://example.com/a) and https://x.example.\n\n- Bold and code and https://y.example\n- star bullet\n");
+  assert.equal(done.stdout, "See the docs (https://example.com/a) and https://x.example.\n\n- Bold and code and https://y.example\n- star bullet");
 });
 
 test("removes fence lines and keeps the code, and a # line in a fence is not a heading", () => {
   const done = run("Intro.\n\n```sh\n# a comment\njust test\n```\n\nAfter.\n");
-  assert.equal(done.stdout, "Intro.\n\n# a comment\njust test\n\nAfter.\n");
+  assert.equal(done.stdout, "Intro.\n\n# a comment\njust test\n\nAfter.");
 });
 
 test("fails when nothing is left", () => {
@@ -70,10 +72,31 @@ test("drops Install and Links sections whose headings start with an emoji, as th
     "",
   ].join("\n");
   const done = run(body);
-  assert.equal(done.stdout, "Vim keys for Firefox. See the guide (https://example.com/guide) for :help.\n\nWhat changed:\n\n- Faster hints\n");
+  assert.equal(done.stdout, "Vim keys for Firefox. See the guide (https://example.com/guide) for :help.\n\nWhat changed:\n\n- Faster hints");
 });
 
 test("drops the subsections of a dropped section and resumes at the next section of the same level", () => {
   const done = run("Intro.\n\n## Install\n\nRun it.\n\n### Linux\n\nLinux steps.\n\n#### Arch\n\nArch steps.\n\n## Fixes\n\n- A fix\n");
-  assert.equal(done.stdout, "Intro.\n\nFixes:\n\n- A fix\n");
+  assert.equal(done.stdout, "Intro.\n\nFixes:\n\n- A fix");
+});
+
+test("prints no trailing newline, so the sent text is the counted text", () => {
+  assert.equal(run("a".repeat(3000)).stdout, "a".repeat(3000));
+});
+
+test("counts code points, not UTF-16 units", () => {
+  assert.equal(run("\u{1F98A}".repeat(3000)).status, 0);
+  const done = run("\u{1F98A}".repeat(3001));
+  assert.equal(done.status, 1);
+  assert.match(done.stderr, /3001 characters long/);
+});
+
+test("3000 characters reach jq as 3000 characters", () => {
+  const converted = run("a".repeat(3000)).stdout;
+  const dir = mkdtempSync(join(tmpdir(), "amo-notes-"));
+  const file = join(dir, "notes.txt");
+  writeFileSync(file, converted);
+  const sent = spawnSync("jq", ["-n", "--rawfile", "notes", file, "$notes | length"], { encoding: "utf8" });
+  rmSync(dir, { recursive: true });
+  assert.equal(sent.stdout.trim(), "3000");
 });
