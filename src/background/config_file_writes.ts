@@ -44,6 +44,8 @@ type PathWrites = {
   end?: FileWriteOutcome;
   // Refused writes in a row whose edits went onto the folder's new text, counted per write loop. A tool that rewrites the file all the time would otherwise keep the loop going.
   replays_in_a_row: number;
+  // The paths each pick of this path changed in the same commit, by pick number, until a write that holds the pick lands.
+  pick_groups: Map<number, string[]>;
 };
 
 // What a pick's reply needs to say what became of it.
@@ -71,6 +73,7 @@ type BatchStart = "stale" | { done: Map<string, FileWriteOutcome | undefined>; w
 // `swap` is read late because the swap itself takes `note_record_dropped` from this pipeline when it is created.
 export function create_config_file_writes(parts: { store: ConfigStore; services: Services; swap: () => ConfigSwap }) {
   const { store, services } = parts;
+  const { in_change_queue } = store;
   const { native_host } = services;
   const { built_in_commands } = store;
   const apply_files: ConfigSwap["apply_files"] = (...args) => parts.swap().apply_files(...args);
@@ -84,7 +87,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
 
   function writes_of(path: string): PathWrites {
     let writes = path_writes.get(path);
-    if (!writes) path_writes.set(path, (writes = { picks_made: 0, drops: 0, drop_causes: [], replays_in_a_row: 0 }));
+    if (!writes) path_writes.set(path, (writes = { picks_made: 0, drops: 0, drop_causes: [], replays_in_a_row: 0, pick_groups: new Map() }));
     return writes;
   }
 
@@ -95,21 +98,38 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     writes.end = { kind: "replaced", by, written: false };
   }
 
-  // Numbers a pick of the file at `path` once a swap stored it in the record. In the change queue, after that swap.
-  function mark_pick(path: string): PickMark {
-    const writes = writes_of(path);
-    writes.picks_made += 1;
-    return { path, seq: writes.picks_made, drops: writes.drops };
+  // Numbers a pick of each file at `paths`, one commit's files, once a swap stored them in the record. In the change queue, after that swap.
+  function mark_picks(paths: string[]): PickMark[] {
+    return paths.map((path) => {
+      const writes = writes_of(path);
+      writes.picks_made += 1;
+      writes.pick_groups.set(writes.picks_made, paths);
+      return { path, seq: writes.picks_made, drops: writes.drops };
+    });
   }
 
   const already_in_queue: QueueRunner = (work) => work();
 
   // The write of one import or pick at a time, from its gate's read of the folder until the host's reply settles. A pick made meanwhile is in the browser copy at once and its write waits here, so it never sends a file of the batch alone.
   // Apart from the change queue, so a slow or hung host holds up only the next folder write, never a commit, a key edit or `,r`.
-  // Join it in the queue turn that commits, so writes go out in commit order, but never await it in a turn: the write needs later turns, and `,r` holds the queue and settles a batch that is out itself.
   let write_hold: Promise<unknown> = Promise.resolve();
-  function in_write_hold<T>(work: () => Promise<T>): Promise<T> {
-    const queued = write_hold.then(work);
+  // How many imports and picks, queued in the hold or writing, own each path. The start's and `,r`'s waiting files send these too, so `,r` keeps a pick, but whole: never set aside, and a hand edit asks for the batch as one.
+  const owners_of_path = new Map<string, number>();
+
+  // Writes the files of one import or pick in the write hold. Call it in the queue turn that commits, so writes go out in commit order and the paths are owned from the commit, but never await it in a turn: the write needs later turns.
+  function write_in_hold(items: WriteItem[]): Promise<Map<string, FileWriteOutcome | undefined>> {
+    for (const { path } of items) owners_of_path.set(path, (owners_of_path.get(path) ?? 0) + 1);
+    const queued = write_hold.then(async () => {
+      try {
+        return await write_files(in_change_queue, items);
+      } finally {
+        for (const { path } of items) {
+          const owners = owners_of_path.get(path)! - 1;
+          if (owners > 0) owners_of_path.set(path, owners);
+          else owners_of_path.delete(path);
+        }
+      }
+    });
     write_hold = keep_chain(queued);
     return queued;
   }
@@ -132,7 +152,18 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       return pick && writes.drops !== pick.drops ? { kind: "replaced", by: writes.drop_causes[pick.drops]!, written: picks_written.has(path) } : undefined;
     };
     for (const { path } of items) writes_of(path).replays_in_a_row = 0;
+    // The picks of each path this loop has seen. A later pick's text rides in this loop's batch, so the loop takes the other files of that pick's commit too.
+    const picks_seen = new Map(items.map(({ path, pick }) => [path, pick?.seq ?? writes_of(path).picks_made]));
+    const paths_of_later_picks = (): string[] =>
+      pending.flatMap(({ path }) => {
+        const writes = writes_of(path);
+        const seen = picks_seen.get(path) ?? 0;
+        return [...writes.pick_groups].flatMap(([seq, group]) => (seq > seen ? group : []));
+      });
     let pending = items;
+    // An import's or pick's batch, or waiting files that hold a path one owns: it lands or asks as one.
+    const kept_whole = () => !set_bad_file_aside || pending.some(({ path }) => owners_of_path.has(path));
+    const owned_by_none = (paths: string[]) => paths.filter((path) => !owners_of_path.has(path));
     let widened = false;
     let set_aside = !set_bad_file_aside;
     const finish = (path: string, outcome: FileWriteOutcome | undefined) => {
@@ -157,8 +188,18 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
         for (const item of pending) outcomes.set(item.path, replaced(item) ?? gate_read);
         break;
       }
-      const started = await in_queue(() => start_batch(pending, gate_read, replaced, !set_bad_file_aside));
+      const started = await in_queue(async (): Promise<BatchStart | { carried: string[] }> => {
+        const unsynced = await read_unsynced();
+        const carried = [...new Set(paths_of_later_picks())].filter((path) => !pending.some((item) => item.path === path) && unsynced !== undefined && Object.hasOwn(unsynced, path));
+        for (const { path } of pending) picks_seen.set(path, writes_of(path).picks_made);
+        return carried.length > 0 ? { carried } : start_batch(pending, gate_read, replaced, kept_whole());
+      });
       if (started === "stale") continue;
+      if ("carried" in started) {
+        for (const path of started.carried) picks_seen.set(path, writes_of(path).picks_made);
+        pending = [...pending, ...started.carried.map((path) => ({ path }))];
+        continue;
+      }
       for (const [path, outcome] of started.done) finish(path, outcome ?? outcomes.get(path) ?? (pending.find((item) => item.path === path)?.pick && writes_of(path).end));
       // It settles those writes itself rather than wait for their owners: under `,r` this loop holds the change queue, and an owner settles only in a later turn of it.
       if (started.wait) {
@@ -172,7 +213,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
           for (const batch of others_out) await settle_noting_picks(batch);
           continue;
         }
-        const breaking = started.breaking ?? [];
+        const breaking = owned_by_none(started.breaking ?? []);
         if (!set_aside && breaking.length > 0 && breaking.length < pending.length) {
           set_aside = true;
           for (const path of breaking) finish(path, started.held);
@@ -193,7 +234,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       let bad_files: string[] = [];
       const settled = await settle_batch(in_queue, started.batch, (shared, reply) => {
         note_picks_written(writes, reply);
-        bad_files = set_aside ? [] : files_to_set_aside(reply);
+        bad_files = set_aside ? [] : owned_by_none(files_to_set_aside(reply));
         const mine = new Map<string, SettledWrite>();
         for (const write of writes) {
           const pick = pending.find((item) => item.path === write.path)?.pick;
@@ -376,6 +417,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     }
     // A refused batch whose rollback could not put a file back still changed the folder, so a gate read from before it is stale.
     if (!reply.ok && reply.error instanceof NativeHostError && reply.error.refused_files.unrestored.length > 0) writes_landed += 1;
+    if (reply.ok) for (const write of batch.writes) for (const seq of writes_of(write.path).pick_groups.keys()) if (seq <= write.covers) writes_of(write.path).pick_groups.delete(seq);
     const outcomes = new Map<string, SettledWrite>();
     const changed_path = changed_on_disk(reply) && !reply.ok ? (reply.error as NativeHostError).refused_files.path : undefined;
     const changed = batch.writes.find((write) => write.path === changed_path);
@@ -502,7 +544,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     return "ignored";
   }
 
-  return { writes_of, note_record_dropped, mark_pick, already_in_queue, in_write_hold, write_waiting_files, write_files, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
+  return { writes_of, note_record_dropped, mark_picks, already_in_queue, write_in_hold, write_waiting_files, write_files, ask_when_folder_differs, read_folder_after_write, folder_build_problems, theme_resolves_without_file };
 }
 
 export type ConfigFileWrites = ReturnType<typeof create_config_file_writes>;

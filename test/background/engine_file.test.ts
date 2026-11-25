@@ -804,3 +804,41 @@ test("a remove whose keys write goes to the question takes the engine file's rem
   assert.deepEqual(broken, []);
   assert.equal(unsynced_of(local), undefined);
 });
+
+test("a start whose engine file goes to the question holds the waiting key letter at the gate, so the folder never names a missing engine", async () => {
+  const { host, messages, local } = await started();
+  // No permission, so both files of the save wait in the record for the next start.
+  host.granted = false;
+  const answer = await messages.change(set("wiki", "https://w.test/?q={query}", { letter: "w" }));
+  assert.ok(answer.ok, answer.message);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object).sort(), [FILE, KEYS].sort());
+  host.granted = true;
+  host.files = { ...host.files, [FILE]: '[hand]\nurl = "https://h.test/?q={query}"\n' };
+  await fresh_config_service().reload_config_at_start();
+  assert.equal(host.files[FILE], '[hand]\nurl = "https://h.test/?q={query}"\n');
+  assert.equal(host.files[KEYS], undefined);
+  assert.deepEqual(Object.keys(unsynced_of(local) as object), [KEYS]);
+  assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
+});
+
+test("a save queued behind another save of the same engine carries its key letter with it, so a hand-made keys file sends both to the question", { timeout: 5000 }, async () => {
+  const { host, messages, startup, fake, local, sent } = await started();
+  const held = hold_writes(fake);
+  const unrelated = startup.set_in_settings_file("hint_letters", "xyz");
+  await until(() => held.length === 1, "the settings.toml write did not go out");
+  const engine_only = messages.change(set("wiki", "https://a.test/?q={query}"));
+  const with_letter = messages.change(set("wiki", "https://b.test/?q={query}", { letter: "w" }));
+  await until(() => Object.hasOwn((unsynced_of(local) ?? {}) as object, KEYS), "the second save did not commit");
+  host.files = { ...host.files, [KEYS]: '[search_keys]\nh = "duck"\n' };
+  held.shift()!();
+  await until(() => held.length === 1, "the engine save did not go out");
+  held.shift()!();
+  assert.equal((await engine_only).ok, true);
+  assert.equal((await with_letter).ok, true);
+  await unrelated;
+  const engine_batches = (sent.filter((message) => message.cmd === "write_config_files") as { files?: FileEntry[] }[]).slice(1).map((message) => (message.files ?? []).map((entry) => entry.kind).sort());
+  assert.deepEqual(engine_batches, [["engines", "search_keys"]]);
+  assert.equal(host.files[FILE], undefined);
+  assert.equal(host.files[KEYS], '[search_keys]\nh = "duck"\n');
+  assert.equal(unsynced_of(local), undefined);
+});

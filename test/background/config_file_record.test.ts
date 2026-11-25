@@ -591,3 +591,60 @@ test("a batch the host refuses, or whose settle throws, frees the queue for the 
   // The thrown settle left the record behind the folder, so the outcome is the question's. What counts is that the write went out at all.
   assert.equal((await after_throw).kind, "conflict");
 });
+
+test("a theme removal committed while a `:set` waits rides in the `:set`'s write whole, so a hand edit to the theme file keeps settings.toml too", { timeout: 5000 }, async () => {
+  const DUSK = "themes/dusk.toml";
+  const folder = { "settings.toml": with_theme("dusk"), [THEME]: FRAPPE, [DUSK]: FRAPPE };
+  const lag = await lagging(folder, folder, {}, folder);
+  const held = hold_writes(lag.fake);
+  const restarted = fresh_config_service();
+  await restarted.get_config();
+  const theme = restarted.set_theme_file("frappe", EDITED, true);
+  await until(() => held.length === 1, "the theme write did not go out");
+  const pick = restarted.set_in_settings_file("hint_letters", "xyz");
+  const removed = restarted.set_theme_file("dusk", null, false);
+  await until(() => Object.hasOwn((unsynced_of(lag.local) ?? {}) as object, DUSK), "the removal did not commit");
+  lag.host.files = { ...lag.host.files, [DUSK]: HAND_THEME };
+  held.shift()!();
+  await until(() => held.length === 1, "the `:set` write did not go out");
+  held.shift()!();
+  assert.equal((await pick).kind, "conflict");
+  const outcome = await removed;
+  assert.equal(outcome.kind === "changed" && outcome.file.kind, "conflict");
+  await theme;
+  assert.deepEqual(batches_sent(lag.sent).map((paths) => [...paths].sort()), [[THEME], [DUSK, "settings.toml"].sort()]);
+  assert.equal(lag.host.files["settings.toml"], with_theme("dusk"));
+  assert.equal(lag.host.files[DUSK], HAND_THEME);
+  assert.equal(unsynced_of(lag.local), undefined);
+});
+
+test("`,r` settles both batches out before it writes a `:set` that names what one of them adds", { timeout: 5000 }, async () => {
+  // The start deletes the hand file that defines ghost, the Engines page defines ghost again, and a `:set` names it: the folder lacks ghost while only the delete has landed.
+  const HAND_GHOST_FILE = "search_engines.d/10-ghost.toml";
+  const HAND_GHOST = '[ghost]\nurl = "https://g.test/?q={query}"\n';
+  const folder = { "settings.toml": MINE, [HAND_GHOST_FILE]: HAND_GHOST };
+  const lag = await lagging(folder, { "settings.toml": MINE }, { [HAND_GHOST_FILE]: HAND_GHOST }, folder);
+  const held = hold_writes(lag.fake);
+  const restarted = fresh_config_service();
+  await restarted.get_config();
+  const start = restarted.reload_config_at_start();
+  await until(() => held.length === 1, "the start's delete did not go out");
+  const engine = restarted.change_engine_file((turn) => ({ files: { ...turn.files, [ENGINE_FILE]: GHOST_ENGINE }, layer: turn.layer }));
+  await until(() => held.length === 2, "the engine write did not go out");
+  const pick = restarted.set_in_settings_file("default_engine", "ghost");
+  await until(() => Object.hasOwn((unsynced_of(lag.local) ?? {}) as object, "settings.toml"), "the pick did not commit");
+  const { reload } = await reload_at_gate(lag.sent, restarted);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(held.length, 2, "`,r` sent settings.toml while the folder could lack ghost");
+  held.shift()!();
+  held.shift()!();
+  await until(() => held.length === 1, "`,r` did not write settings.toml after both batches");
+  held.shift()!();
+  await reload;
+  assert.deepEqual(await pick, { kind: "written" });
+  await start;
+  await engine;
+  assert.equal(lag.host.files["settings.toml"], `${MINE}default_engine = "ghost"\n`);
+  assert.equal(lag.host.files[HAND_GHOST_FILE], undefined);
+  assert.equal(lag.host.files[ENGINE_FILE], GHOST_ENGINE);
+});

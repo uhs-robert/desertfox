@@ -32,9 +32,9 @@ declare const browser: MessagingBrowser;
 
 // Swaps the config in place: the one commit path of a reload, an import, an editor save and a setting write.
 // The file-write pipeline calls `apply_files` of this module, so the caller passes in the parts of it an import uses.
-export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_pick" | "write_files" | "writes_of" | "in_write_hold"> }) {
+export function create_config_swap(store: ConfigStore, deps: Pick<Services, "snippets" | "native_host"> & { file_writes: Pick<ConfigFileWrites, "note_record_dropped" | "mark_picks" | "writes_of" | "write_in_hold"> }) {
   const { snippets, native_host } = deps;
-  const { note_record_dropped, mark_pick, write_files, writes_of, in_write_hold } = deps.file_writes;
+  const { note_record_dropped, mark_picks, writes_of, write_in_hold } = deps.file_writes;
   const { get_config, publish, built_in_commands, in_change_queue, read_load_step, set_load_step, read_current_config, set_current_config, count_swap } = store;
   // The one swap path of `config.reload` and of an import: builds the raw files and swaps the config, snippets and stored files in place.
   // Nothing restarts, so the edits and the modes stay. Runs only inside the change queue, so a swap, a `:set` and another swap never publish over each other.
@@ -165,9 +165,8 @@ export function create_config_swap(store: ConfigStore, deps: Pick<Services, "sni
       // The source the copy takes once every write lands: one the folder holds whole but for the files the import lacks.
       const folder_can_hold_copy = Object.keys(plan.kept_out).length === 0 && Object.entries(plan.files).every(([path, text]) => !is_snippet_file(path) || folder.files[path] === text);
       const source_once_written = folder_can_hold_copy ? { files: plan.files, dir_label: folder.config_dir, imported: false } : undefined;
-      const picks = Object.keys(plan.record).map(mark_pick);
-      // Joins the write hold in the turn that committed, so a `:set` after the import writes after it.
-      const outcomes = in_write_hold(() => write_files(in_change_queue, picks.map((pick) => ({ path: pick.path, pick }))));
+      const picks = mark_picks(Object.keys(plan.record));
+      const outcomes = write_in_hold(picks.map((pick) => ({ path: pick.path, pick })));
       return { warnings, replaces_config, snippets: snippet_count, picks, writing: { outcomes }, kept_out: plan.kept_out, source_once_written };
     });
     if (!picks || !writing) return result;

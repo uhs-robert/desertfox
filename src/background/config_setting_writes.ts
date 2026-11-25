@@ -38,7 +38,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   const { store, swap, file_writes } = parts;
   const { get_config, publish, built_in_commands, layered_build, in_change_queue, commit_change, mirror_key_edits, read_load_step } = store;
   const { apply_files } = swap;
-  const { mark_pick, write_files, in_write_hold, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
+  const { mark_picks, write_in_hold, ask_when_folder_differs, read_folder_after_write, theme_resolves_without_file } = file_writes;
   // One change of the Engines page: its engine file, its key letters file and the old browser layer in one storage write, then one host write of both files.
   // `plan` runs in the change queue and gets a build of any files and layer over the aliases in force, so it refuses what a change breaks before anything is stored.
   // The answer has no `file` or `keys` for a file that stayed as it was.
@@ -174,7 +174,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
   }
 
   // One change of files the folder holds. `plan` runs in the change queue on the browser copy's files. The outcomes follow the plan's paths.
-  // Only the edit runs in the change queue. The host write of every changed path runs outside it, in one batch, so a slow host never holds up a `:set`, only the next write (`in_write_hold`).
+  // Only the edit runs in the change queue. The host write of every changed path runs outside it, in one batch, so a slow host never holds up a `:set`, only the next write (`write_in_hold`).
   async function change_folder_files<R>(plan: (files: ConfigFiles) => Promise<FolderFilesPlan | { done: R }>): Promise<{ done: R } | { outcomes: FileWriteOutcome[] }> {
     const committed = await in_change_queue(async () => {
       const current = await load_files_source();
@@ -182,8 +182,7 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
       if ("done" in planned) return planned;
       const { question_was_pending, picks } = await commit_folder_files(current, planned);
       const picked = picks.filter((pick) => pick !== undefined);
-      // Joins the write hold in the turn that committed, so the writes go out in commit order.
-      const writing = picked.length > 0 ? in_write_hold(() => write_files(in_change_queue, picked.map((pick) => ({ path: pick.path, pick })))) : undefined;
+      const writing = picked.length > 0 ? write_in_hold(picked.map((pick) => ({ path: pick.path, pick }))) : undefined;
       return { question_was_pending, picks, writing: { outcomes: writing } };
     });
     if ("done" in committed) return committed;
@@ -216,7 +215,8 @@ export function create_config_setting_writes(parts: { store: ConfigStore; swap: 
     }
     if (JSON.stringify(planned.edits_after.saved) !== JSON.stringify(edits.saved)) await mirror_key_edits();
     const in_record = (path: string) => unsynced !== undefined && Object.hasOwn(unsynced, path);
-    return { question_was_pending, picks: planned.paths.map((path) => (from_folder || in_record(path) ? mark_pick(path) : undefined)) };
+    const picks = mark_picks(planned.paths.filter((path) => from_folder || in_record(path)));
+    return { question_was_pending, picks: planned.paths.map((path) => picks.find((pick) => pick.path === path)) };
   }
 
   // Saves the theme file `themes/<name>.toml` with `text`, or removes it with `text` null, in the browser copy and then through the host, as `set_in_settings_file` writes settings.toml.

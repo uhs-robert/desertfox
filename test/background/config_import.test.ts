@@ -736,3 +736,25 @@ test("a hand edit to one file of an import batch sends every file of the batch t
   // The question settled the batch inside its hold, so the queue is free for the next change.
   assert.equal((await startup.set_in_settings_file("which_key_delay_ms", 7)).kind, "browser_copy");
 });
+
+test("`,r` while an import reads the folder for its gate leaves the import's files to it, so a hand edit to one never lands the other alone", async () => {
+  const { startup, host, fake, sent } = await started("reload_during_import_gate", { "settings.toml": 'hint_letters = "ab"\n', "keymap.toml": "" });
+  sent.length = 0;
+  const send = fake.runtime.sendNativeMessage;
+  let reads = 0;
+  const held_reads: (() => void)[] = [];
+  fake.runtime.sendNativeMessage = async (name, message) => {
+    if (message.cmd !== "read_config" || ++reads !== 2) return send(name, message);
+    const answer = send(name, message);
+    return new Promise((resolve) => held_reads.push(() => resolve(answer)));
+  };
+  const imported = startup.import_config(zip_in_d({ "settings.toml": IMPORTED_SETTINGS, "keymap.toml": IMPORTED_KEYMAP }), {});
+  await until(() => held_reads.length === 1, "the import did not read the folder for its gate");
+  host.files = { ...host.files, "keymap.toml": '[normal]\n"yy" = "tab.prev"\n' };
+  await startup.reload_config();
+  held_reads[0]!();
+  const result = await imported;
+  assert.ok(result.folder_writes?.every(({ outcome }) => outcome.kind !== "written"));
+  assert.equal(host.files["settings.toml"], 'hint_letters = "ab"\n');
+  assert.equal((await startup.get_config()).settings.hint_letters, "ab");
+});
