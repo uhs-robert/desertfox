@@ -47,7 +47,11 @@ const read_lines = (file) => {
 
 const next_body = (lines, file) => {
   const { start, end } = next_section(lines, file);
-  const body = lines.slice(start + 1, end).join("\n").trim();
+  // Only blank boundary lines go, so the indentation of the first content line survives.
+  const section = lines.slice(start + 1, end);
+  while (section.length > 0 && section[0].trim() === "") section.shift();
+  while (section.length > 0 && section[section.length - 1].trim() === "") section.pop();
+  const body = section.join("\n");
   if (body === "") fail(`the "${NEXT_HEADING}" section of ${file} is empty. Write the release notes first.`);
   return body;
 };

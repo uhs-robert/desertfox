@@ -529,8 +529,10 @@ release:
     just release_stamp "$version"
     # Kept with the stamped files so a recovery run of release_publish sends the same text, even though RELEASE.md changes only after the publish.
     notes_file="$RELEASE_ASSETS_DIR/release-notes-$version.md"
-    node tools/release_notes.mjs text "$notes_source" "$version" > "$notes_file"
-    cp "$notes_source" "$RELEASE_ASSETS_DIR/release-notes-$version.source.md"
+    # The copy comes first and the notes come from it, so an edit of RELEASE.md in between is in neither and the reset then keeps the file.
+    notes_snapshot="$RELEASE_ASSETS_DIR/release-notes-$version.source.md"
+    cp "$notes_source" "$notes_snapshot"
+    node tools/release_notes.mjs text "$notes_snapshot" "$version" > "$notes_file"
     # Check before signing: AMO signs a version once, so a build without the hashes must never reach it.
     just build
     if ! cmp -s "$RELEASE_ASSETS_DIR/host_sha256.json" dist/host_sha256.json; then
@@ -542,7 +544,8 @@ release:
     just release_commit_push
     xpi=$(ls web-ext-artifacts/*.xpi)
     just release_publish "$version" "$xpi" "$notes_file" || { echo "The add-on is signed and installed and the bump is pushed, but the GitHub release failed. After fixing gh, run 'just release_publish $version $xpi $notes_file', then 'just release_notes_reset <version>'. RELEASE.md is unchanged until then." >&2; exit 1; }
-    just release_notes_reset "$version"
+    # A dry run publishes nothing, so the notes are still unpublished.
+    if [ "${RELEASE_DRY_RUN:-}" != "1" ]; then just release_notes_reset "$version"; fi
     echo "Released $(jq -r .version package.json). The bump is committed and pushed on this branch. Open a PR."
 
 # Write the source archive Mozilla reviewers rebuild from, to RELEASE_ASSETS_DIR/desertfox-<version>-source.zip: every tracked file of HEAD, with BUILD.md at the top. It holds no stamped hosts, since BUILD.md has the reviewer stamp them. Needs a clean tree, so the archive is the commit that gets signed.

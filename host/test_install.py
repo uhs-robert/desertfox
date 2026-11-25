@@ -663,7 +663,9 @@ class ReleaseStepTest(InstallCase):
         guard = body.index("release_notes.mjs next")
         for step in ("just release_guard", "just install_deps", "just release_bump", "gh auth", "just sign_only", "just release_commit_push"):
             self.assertLess(guard, body.index(step), step)
-        reset_line = body.index('\n    just release_notes_reset "$version"\n')
+        reset_line = body.index('then just release_notes_reset "$version"; fi')
+        self.assertIn('[ "${RELEASE_DRY_RUN:-}" != "1" ]', body[reset_line - 60 : reset_line], "a dry run publishes nothing, so it must not reset")
+        self.assertLess(body.index('cp "$notes_source" "$notes_snapshot"'), body.index('text "$notes_snapshot"'), "the notes come from the snapshot")
         self.assertLess(body.index('\n    just release_publish "$version"'), reset_line, "RELEASE.md changes only after the publish")
 
     def notes_tool(self, *args):
@@ -680,6 +682,10 @@ class ReleaseStepTest(InstallCase):
         done = self.notes_tool("text", path, "1.0.1")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout, "# DesertFox 1.0.1\n\nNew thing.\n\n```\n# not a heading\n```\n")
+
+    def test_notes_tool_keeps_the_indentation_of_the_first_line(self):
+        path = self.notes_file("# Next release\n\n\n    code\n  tail  \n\n# DesertFox 1.0.0\n")
+        self.assertEqual(self.notes_tool("next", path).stdout, "    code\n  tail  \n")
 
     def test_notes_tool_refuses_a_missing_file_a_missing_section_and_an_empty_section(self):
         for text in (None, "# DesertFox 1.0.0\n\nOld.\n", "# Next release\n\n  \n# DesertFox 1.0.0\n\nOld.\n"):
