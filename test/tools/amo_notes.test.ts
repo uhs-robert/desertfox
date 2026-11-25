@@ -36,10 +36,16 @@ test("fails when nothing is left", () => {
   assert.match(done.stderr, /empty/);
 });
 
-test("fails over the length limit", () => {
-  const done = run(`Intro.\n\n${"- a line of notes\n".repeat(600)}`);
+test("fails over the 3000 character AMO limit and names the length", () => {
+  const done = run("a".repeat(3001));
   assert.equal(done.status, 1);
-  assert.match(done.stderr, /over the limit/);
+  assert.match(done.stderr, /3001 characters long, but AMO accepts at most 3000/);
+  assert.match(done.stderr, /RELEASE\.md/);
+});
+
+test("passes at exactly 3000 characters", () => {
+  const done = run("a".repeat(3000));
+  assert.equal(done.status, 0);
 });
 
 test("drops Install and Links sections whose headings start with an emoji, as the 1.0.1 release did", () => {
