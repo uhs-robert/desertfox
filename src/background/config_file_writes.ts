@@ -63,7 +63,8 @@ type FolderAfterRefusal = ConfigFilesReply & { current: boolean };
 
 // What one queue turn of `start_batch` did. `done` holds the paths that need no write (undefined: not in the record).
 // `stale`: a file landed since the gate's read. `wait`: another batch has a write out on one of the paths. `held`: the folder would not build after the batch, so nothing was sent.
-type BatchStart = "stale" | { done: Map<string, FileWriteOutcome | undefined>; wait?: HostBatch[]; held?: FileWriteOutcome; batch?: HostBatch };
+// `breaking`: the paths whose write alone breaks the folder, given when the batch is held.
+type BatchStart = "stale" | { done: Map<string, FileWriteOutcome | undefined>; wait?: HostBatch[]; held?: FileWriteOutcome; breaking?: string[]; batch?: HostBatch };
 
 // The host write pipeline: the record of each path's writes, the write loop, the gate and the replay of a refused write.
 // `swap` is read late because the swap itself takes `note_record_dropped` from this pipeline when it is created.
@@ -102,15 +103,16 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
 
   const already_in_queue: QueueRunner = (work) => work();
 
-  // Writes every file the folder lags, in one batch.
+  // Writes every file the folder lags, in one batch. The files wait for unrelated reasons, so one the host fails or the gate holds goes out of the batch once and the others land without it.
   async function write_waiting_files(in_queue: QueueRunner): Promise<void> {
     const unsynced = await in_queue(read_unsynced);
-    await write_files(in_queue, Object.keys(unsynced ?? {}).map((path) => ({ path })));
+    await write_files(in_queue, Object.keys(unsynced ?? {}).map((path) => ({ path })), { set_bad_file_aside: true });
   }
 
   // Writes the browser copy of each file of `items` while the folder lags it, all in one host call, and again for a pick made during a write. Gives each path's outcome (that of its pick, when it has one), undefined for a path that never waited.
   // The gate builds the folder as it would be after the whole batch, and the host lands the files all or none, so no order between them matters: a settings.toml can name an engine its batch adds while the batch drops the old one.
-  async function write_files(in_queue: QueueRunner, items: WriteItem[]): Promise<Map<string, FileWriteOutcome | undefined>> {
+  // `set_bad_file_aside`: once, a batch the host refuses over one named file, or that the gate holds, goes again without that file, which keeps its own outcome.
+  async function write_files(in_queue: QueueRunner, items: WriteItem[], { set_bad_file_aside = false } = {}): Promise<Map<string, FileWriteOutcome | undefined>> {
     const outcomes = new Map<string, FileWriteOutcome | undefined>();
     // The paths whose pick a write held that reached the folder before a swap replaced the copy.
     const picks_written = new Set<string>();
@@ -121,10 +123,23 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     for (const { path } of items) writes_of(path).replays_in_a_row = 0;
     let pending = items;
     let widened = false;
+    let set_aside = !set_bad_file_aside;
     const finish = (path: string, outcome: FileWriteOutcome | undefined) => {
       outcomes.set(path, outcome);
       pending = pending.filter((item) => item.path !== path);
     };
+    // A batch another caller started can hold a pick of this loop.
+    const note_picks_written = (writes: HostWrite[], reply: HostWriteReply) => {
+      for (const write of writes) {
+        const pick = pending.find((item) => item.path === write.path)?.pick;
+        if (reply.ok && pick && write.covers >= pick.seq && write.drops === pick.drops) picks_written.add(write.path);
+      }
+    };
+    const settle_noting_picks = (batch: HostBatch) =>
+      settle_batch(in_queue, batch, (shared, reply) => {
+        note_picks_written(batch.writes, reply);
+        return shared;
+      });
     while (pending.length > 0) {
       const gate_read = await folder_for_gate(in_queue, pending);
       if (gate_read !== undefined && !is_gate_folder(gate_read)) {
@@ -136,14 +151,20 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       for (const [path, outcome] of started.done) finish(path, outcome ?? outcomes.get(path) ?? (pending.find((item) => item.path === path)?.pick && writes_of(path).end));
       // It settles those writes itself rather than wait for their owners: under `,r` this loop holds the change queue, and an owner settles only in a later turn of it.
       if (started.wait) {
-        for (const batch of started.wait) await settle_batch(in_queue, batch);
+        for (const batch of started.wait) await settle_noting_picks(batch);
         continue;
       }
       if (started.held) {
         // A write of another file that is out can make the folder build again once it lands, so the batch tries again after it.
         const others_out = batches_out();
         if (others_out.length > 0) {
-          for (const batch of others_out) await settle_batch(in_queue, batch);
+          for (const batch of others_out) await settle_noting_picks(batch);
+          continue;
+        }
+        const breaking = started.breaking ?? [];
+        if (!set_aside && breaking.length > 0 && breaking.length < pending.length) {
+          set_aside = true;
+          for (const path of breaking) finish(path, started.held);
           continue;
         }
         // A pick can name what only another waiting file holds, such as an engine an old host could not write yet, so the batch takes every waiting file once and tries again.
@@ -158,15 +179,25 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       }
       if (!started.batch) continue;
       const { writes } = started.batch;
+      let bad_files: string[] = [];
       const settled = await settle_batch(in_queue, started.batch, (shared, reply) => {
+        note_picks_written(writes, reply);
+        bad_files = set_aside ? [] : files_to_set_aside(reply);
         const mine = new Map<string, SettledWrite>();
         for (const write of writes) {
           const pick = pending.find((item) => item.path === write.path)?.pick;
-          if (reply.ok && pick && write.covers >= pick.seq && write.drops === pick.drops) picks_written.add(write.path);
           mine.set(write.path, replaced({ path: write.path, ...(pick && { pick }) }) ?? shared.get(write.path)!);
         }
         return mine;
       });
+      if (bad_files.length > 0 && bad_files.length < writes.length) {
+        set_aside = true;
+        for (const path of bad_files) {
+          const outcome = settled.get(path)!;
+          if (outcome.kind !== "superseded") finish(path, outcome);
+        }
+        continue;
+      }
       for (const write of writes) {
         const outcome = settled.get(write.path)!;
         if (outcome.kind === "superseded") continue;
@@ -176,6 +207,13 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
       }
     }
     return outcomes;
+  }
+
+  // The files a refusal names as its own fault: the one that failed and those the rollback could not put back. None for a hand edit, which settles through the replay or the question, or for a refusal of the whole host.
+  function files_to_set_aside(reply: HostWriteReply): string[] {
+    if (reply.ok || !(reply.error instanceof NativeHostError) || reply.error.failure === "file_changed") return [];
+    const { path, unrestored } = reply.error.refused_files;
+    return path === undefined ? [] : [...new Set([path, ...unrestored])];
   }
 
   // The paths of the record that `items` lacks.
@@ -212,7 +250,7 @@ export function create_config_file_writes(parts: { store: ConfigStore; services:
     if (wait.size > 0) return { done, wait: [...wait] };
     if (writes.length === 0) return { done };
     const problem = folder && write_breaks_folder(writes, folder);
-    if (problem !== undefined) return { done, held: { kind: "held", problem } };
+    if (folder && problem !== undefined) return { done, held: { kind: "held", problem }, breaking: writes.filter((write) => write_breaks_folder([write], folder) !== undefined).map(({ path }) => path) };
     const base_digests = await Promise.all(writes.map(({ base }) => (base === null ? null : text_sha256(base))));
     const reply = native_host.write_config_files(writes.map(({ path, text }, index) => ({ path, text, base_sha256: base_digests[index]! }))).then(
       (): HostWriteReply => ({ ok: true }),

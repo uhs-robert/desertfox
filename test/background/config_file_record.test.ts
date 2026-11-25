@@ -51,15 +51,15 @@ test("two waiting files, the first refused as changed on disk: the batch writes 
   assert.notEqual(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
-test("a batch the host fails on one file writes neither file and keeps both waiting, and a pick meanwhile is written alone and leaves the other path alone", async () => {
+test("a start whose batch the host fails on one file sends the others again without it, and a pick meanwhile is written alone and leaves that path alone", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const { local, host, sent } = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { [THEME]: FRAPPE, "settings.toml": MINE }, folder, { refuse: [THEME] });
   const restarted = fresh_config_service();
   await restarted.reload_config_at_start();
-  assert.equal(host.files["settings.toml"], MINE);
+  assert.equal(host.files["settings.toml"], with_theme("nord"));
   assert.equal(host.files[THEME], FRAPPE);
-  assert.deepEqual(unsynced_of(local), { [THEME]: FRAPPE, "settings.toml": MINE });
-  assert.deepEqual(batches_sent(sent), [[THEME, "settings.toml"]]);
+  assert.deepEqual(unsynced_of(local), { [THEME]: FRAPPE });
+  assert.deepEqual(batches_sent(sent), [[THEME, "settings.toml"], ["settings.toml"]]);
 
   assert.deepEqual(await restarted.set_in_settings_file("theme", "dracula"), { kind: "written" });
   assert.equal(host.files["settings.toml"], with_theme("dracula"));
@@ -116,19 +116,29 @@ test("a file the copy no longer has is deleted only while the folder still holds
   assert.notEqual(kept.local[HOST_START_PENDING_STORAGE_KEY], undefined);
 });
 
-test("a refused settings.toml write is put onto the folder's text, and the batch waits whole while the host cannot write the theme file beside it", async () => {
+test("a refused settings.toml write is put onto the folder's text, and the start writes it without the theme file the host cannot write", async () => {
   const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
   const { local, host } = await lagging(folder, { "settings.toml": with_theme("nord"), [THEME]: EDITED }, { "settings.toml": MINE, [THEME]: FRAPPE }, { ...folder, "settings.toml": HAND }, { refuse: [THEME] });
   await (fresh_config_service()).reload_config_at_start();
-  assert.deepEqual(host.files, { "settings.toml": HAND, [THEME]: FRAPPE });
+  assert.deepEqual(host.files, { "settings.toml": `${HAND}theme = "nord"\n`, [THEME]: FRAPPE });
   assert.deepEqual(copy_of(local), { "settings.toml": `${HAND}theme = "nord"\n`, [THEME]: EDITED });
-  assert.deepEqual(unsynced_of(local), { "settings.toml": HAND, [THEME]: FRAPPE });
+  assert.deepEqual(unsynced_of(local), { [THEME]: FRAPPE });
   assert.equal(local[HOST_START_PENDING_STORAGE_KEY], undefined);
 
   host.refuse = [];
   await (fresh_config_service()).reload_config_at_start();
   assert.deepEqual(host.files, { "settings.toml": `${HAND}theme = "nord"\n`, [THEME]: EDITED });
   assert.equal(unsynced_of(local), undefined);
+});
+
+test("a start whose batch the gate holds over one file sends the others without it, and that file stays waiting", async () => {
+  const folder = { "settings.toml": MINE, [THEME]: FRAPPE };
+  const ghost = `${MINE}default_engine = "ghost"\n`;
+  const { local, host, sent } = await lagging(folder, { "settings.toml": ghost, [THEME]: EDITED }, { "settings.toml": MINE, [THEME]: FRAPPE }, folder);
+  await (fresh_config_service()).reload_config_at_start();
+  assert.deepEqual(batches_sent(sent), [[THEME]]);
+  assert.deepEqual(host.files, { "settings.toml": MINE, [THEME]: EDITED });
+  assert.deepEqual(unsynced_of(local), { "settings.toml": MINE });
 });
 
 test("a batch whose rollback could not put a file back keeps every path waiting, and the next start finds that file changed on disk", async () => {
