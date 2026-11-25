@@ -1042,6 +1042,262 @@ class WriteConfigFileTest(ConfigDirCase):
         self.assertEqual(self.tree(), ["themes/", "themes/mine.toml"])
 
 
+class WriteConfigFilesTest(WriteConfigFileTest):
+    def batch(self, *files):
+        _, raw = run_in_process(frame({"cmd": "write_config_files", "files": list(files)}))
+        return unframe(raw)
+
+    def entry(self, kind, name, text, base):
+        entry = {"kind": kind, "text": text, "base_sha256": base}
+        if name is not None:
+            entry["name"] = name
+        return entry
+
+    def seed(self):
+        """Two files the extension read, and the two entries that rewrite them."""
+        self.put("settings.toml", "a = 1\n")
+        self.put("themes/mine.toml", "b = 1\n")
+        return [self.entry("settings", None, "a = 2\n", sha("a = 1\n")), self.entry("theme", "mine", "b = 2\n", sha("b = 1\n"))]
+
+    def test_every_file_lands_and_the_reply_lists_the_single_verb_results_in_order(self):
+        files = self.seed() + [self.entry("keymap_d", "10-new", "c = 1\n", None)]
+        reply = self.batch(*files)
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(
+            reply["files"],
+            [
+                {"path": os.path.join(self.config, "settings.toml"), "sha256": sha("a = 2\n")},
+                {"path": os.path.join(self.config, "themes", "mine.toml"), "sha256": sha("b = 2\n")},
+                {"path": os.path.join(self.config, "keymap.d", "10-new.toml"), "sha256": sha("c = 1\n")},
+            ],
+        )
+        self.assertEqual(self.read("settings.toml"), b"a = 2\n")
+        self.assertEqual(self.read("themes/mine.toml"), b"b = 2\n")
+        self.assertEqual(self.read("keymap.d/10-new.toml"), b"c = 1\n")
+
+    def test_a_delete_lands_in_a_batch_with_a_deleted_result(self):
+        files = self.seed()
+        files[1] = self.entry("theme", "mine", None, sha("b = 1\n"))
+        reply = self.batch(*files)
+        self.assertEqual(reply["files"][1], {"path": os.path.join(self.config, "themes", "mine.toml"), "deleted": True})
+        self.assertEqual(self.tree(), ["settings.toml", "themes/"])
+
+    def test_one_stale_base_refuses_the_whole_batch_and_writes_nothing(self):
+        files = self.seed()
+        self.put("themes/mine.toml", "hand = 1\n")
+        reply = self.batch(*files, self.entry("keymap_d", "10-new", "c = 1\n", None))
+        self.assertFalse(reply["ok"])
+        self.assertIn(host.CHANGED_ON_DISK, reply["error"])
+        self.assertEqual(reply["path"], os.path.join(self.config, "themes", "mine.toml"))
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        self.assertEqual(self.read("themes/mine.toml"), b"hand = 1\n")
+        self.assertEqual(self.tree(), ["settings.toml", "themes/", "themes/mine.toml"])
+
+    def test_a_new_file_that_a_hand_made_file_took_refuses_the_batch(self):
+        files = self.seed() + [self.entry("keymap_d", "10-new", "c = 1\n", None)]
+        self.put("keymap.d/10-new.toml", "hand = 1\n")
+        self.assertIn(host.CHANGED_ON_DISK, self.batch(*files)["error"])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+
+    def test_a_bad_entry_refuses_the_batch_before_any_write(self):
+        files = self.seed()
+        bad_entries = [
+            self.entry("nope", None, "a = 1\n", None),
+            self.entry("theme", "../x", "a = 1\n", None),
+            self.entry("settings", "x", "a = 1\n", None),
+            self.entry("theme", "ok", None, None),
+            self.entry("theme", "ok", "a = 1\n", "abc"),
+            self.entry("theme", "ok", "a" * (1024 * 1024 + 1), None),
+            {**self.entry("theme", "ok", "a = 1\n", None), "path": "/tmp/x"},
+            "settings",
+        ]
+        for bad in bad_entries:
+            self.assertFalse(self.batch(*files, bad)["ok"], bad)
+            self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        self.assertEqual(self.tree(), ["settings.toml", "themes/", "themes/mine.toml"])
+
+    def test_a_bad_list_is_refused(self):
+        for message in ({"cmd": "write_config_files"}, {"cmd": "write_config_files", "files": []}, {"cmd": "write_config_files", "files": "x"}, {"cmd": "write_config_files", "files": [], "extra": 1}):
+            _, raw = run_in_process(frame(message))
+            self.assertFalse(unframe(raw)["ok"], message)
+
+    def test_a_duplicate_target_path_refuses_the_batch(self):
+        files = self.seed()
+        reply = self.batch(*files, self.entry("settings", None, "a = 3\n", sha("a = 1\n")))
+        self.assertFalse(reply["ok"])
+        self.assertIn("twice", reply["error"])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        self.assertEqual(self.read("themes/mine.toml"), b"b = 1\n")
+
+    def test_two_names_that_link_to_one_file_count_as_one_target(self):
+        self.put("themes/real.toml", "b = 1\n")
+        os.symlink(os.path.join(self.config, "themes", "real.toml"), os.path.join(self.config, "themes", "alias.toml"))
+        reply = self.batch(self.entry("theme", "real", "b = 2\n", sha("b = 1\n")), self.entry("theme", "alias", "b = 3\n", sha("b = 1\n")))
+        self.assertIn("twice", reply["error"])
+        self.assertEqual(self.read("themes/real.toml"), b"b = 1\n")
+
+    def test_an_os_error_on_a_later_file_rolls_back_the_files_before_it(self):
+        files = self.seed() + [self.entry("keymap_d", "10-new", "c = 1\n", None), self.entry("quickmarks", None, "q = 1\n", None)]
+        real_replace_config_file = host.replace_config_file
+
+        def fail_on_quickmarks(path, data, base):
+            if path.endswith("quickmarks.toml"):
+                raise host.HostError(f"cannot write {path}: No space left on device")
+            return real_replace_config_file(path, data, base)
+
+        with mock.patch.object(host, "replace_config_file", side_effect=fail_on_quickmarks):
+            reply = self.batch(*files)
+        self.assertFalse(reply["ok"])
+        self.assertIn("No space left", reply["error"])
+        self.assertEqual(reply["path"], os.path.join(self.config, "quickmarks.toml"))
+        self.assertEqual(reply["unrestored"], [])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        self.assertEqual(self.read("themes/mine.toml"), b"b = 1\n")
+        self.assertFalse(os.path.exists(os.path.join(self.config, "keymap.d", "10-new.toml")))
+        self.assertEqual([name for name in self.tree() if name.endswith((".tmp", ".old"))], [])
+
+    def test_a_real_os_error_in_the_rename_rolls_back_and_leaves_no_leftovers(self):
+        files = self.seed()
+        real_replace = os.replace
+        calls = []
+
+        def second_rename_fails(source, destination):
+            calls.append(destination)
+            if len(calls) == 2:
+                raise OSError(5, "Input/output error")
+            return real_replace(source, destination)
+
+        with mock.patch.object(host.os, "replace", side_effect=second_rename_fails):
+            reply = self.batch(*files)
+        self.assertIn("Input/output error", reply["error"])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        self.assertEqual(self.read("themes/mine.toml"), b"b = 1\n")
+        self.assertEqual(sorted(name for name in self.tree() if not name.endswith("/")), ["settings.toml", "themes/mine.toml"])
+
+    def test_a_rollback_restores_a_deleted_file_and_removes_a_created_one(self):
+        self.put("settings.toml", "a = 1\n")
+        files = [self.entry("settings", None, None, sha("a = 1\n")), self.entry("keymap", None, "k = 1\n", None), self.entry("style", None, "s\n", None)]
+        real_replace_config_file = host.replace_config_file
+
+        def fail_on_style(path, data, base):
+            if path.endswith("style.css"):
+                raise host.HostError("cannot write style.css: Input/output error")
+            return real_replace_config_file(path, data, base)
+
+        with mock.patch.object(host, "replace_config_file", side_effect=fail_on_style):
+            reply = self.batch(*files)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(self.tree(), ["settings.toml"])
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+
+    def test_a_rollback_that_cannot_put_a_file_back_names_it(self):
+        files = self.seed() + [self.entry("style", None, "s\n", None)]
+        real_replace_config_file = host.replace_config_file
+
+        def fail(path, data, base):
+            if path.endswith("style.css") or (path.endswith("settings.toml") and base is not None and base == sha("a = 2\n")):
+                raise host.HostError(f"cannot write {path}: Input/output error")
+            return real_replace_config_file(path, data, base)
+
+        with mock.patch.object(host, "replace_config_file", side_effect=fail):
+            reply = self.batch(*files)
+        self.assertEqual(reply["unrestored"], [os.path.join(self.config, "settings.toml")])
+        self.assertIn("could not be put back", reply["error"])
+        self.assertEqual(self.read("themes/mine.toml"), b"b = 1\n")
+
+    def test_a_batch_over_the_request_cap_is_refused_and_writes_nothing(self):
+        files = [self.entry("theme", f"t{number}", "x" * (900 * 1024), None) for number in range(5)]
+        message = frame({"cmd": "write_config_files", "files": files})
+        self.assertGreater(len(message) - 4, host.MAX_REQUEST_BYTES)
+        _, raw = run_in_process(message)
+        self.assertIn("byte limit", unframe(raw)["error"])
+        self.assertEqual(self.tree(), [])
+
+    def test_a_batch_under_the_cap_with_several_large_files_lands(self):
+        files = [self.entry("theme", f"t{number}", "x" * (900 * 1024), None) for number in range(3)]
+        self.assertTrue(self.batch(*files)["ok"])
+        self.assertEqual(len(self.tree()), 4)
+
+    def test_a_batch_of_one_answers_what_the_single_verb_answers(self):
+        created = self.write("theme", "one", "a = 1\n", None)
+        self.assertTrue(created["ok"])
+        self.assertTrue(self.write("theme", "one", None, sha("a = 1\n"))["ok"])
+        batched = self.batch(self.entry("theme", "one", "a = 1\n", None))
+        self.assertEqual(batched["files"], [{"path": created["path"], "sha256": created["sha256"]}])
+        self.assertEqual(self.batch(self.entry("theme", "one", None, sha("a = 1\n")))["files"], [{"path": created["path"], "deleted": True}])
+
+    def test_a_batch_of_one_refuses_a_stale_base_in_the_words_of_the_single_verb(self):
+        self.put("themes/one.toml", "hand = 1\n")
+        single = self.write("theme", "one", "a = 2\n", sha("a = 1\n"))
+        batched = self.batch(self.entry("theme", "one", "a = 2\n", sha("a = 1\n")))
+        self.assertEqual(batched["error"], single["error"])
+        single = self.write("theme", "one", None, sha("a = 1\n"))
+        batched = self.batch(self.entry("theme", "one", None, sha("a = 1\n")))
+        self.assertEqual(batched["error"], single["error"])
+        self.assertEqual(self.read("themes/one.toml"), b"hand = 1\n")
+
+    def test_the_single_verb_reply_keeps_its_shape_and_has_no_batch_fields(self):
+        self.put("settings.toml", "a = 1\n")
+        reply = self.write("settings", None, "a = 2\n", sha("a = 1\n"))
+        self.assertEqual(sorted(reply), ["host_version", "ok", "path", "release_version", "sha256"])
+        stale = self.write("settings", None, "a = 3\n", sha("a = 1\n"))
+        self.assertEqual(sorted(stale), ["error", "host_version", "ok", "release_version"])
+
+    def test_a_batch_waits_for_the_lock_and_writes_nothing_before_it(self):
+        import threading
+
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold():
+            with host.config_write_lock(self.config):
+                held.set()
+                release.wait(5)
+
+        holder = threading.Thread(target=hold)
+        holder.start()
+        held.wait(5)
+        replies = []
+        files = self.seed()
+        writer = threading.Thread(target=lambda: replies.append(self.batch(*files)))
+        writer.start()
+        writer.join(0.3)
+        self.assertTrue(writer.is_alive(), "the batch did not wait for the lock")
+        self.assertEqual(self.read("settings.toml"), b"a = 1\n")
+        release.set()
+        holder.join(5)
+        writer.join(5)
+        self.assertTrue(replies[0]["ok"], replies)
+        self.assertEqual(self.read("themes/mine.toml"), b"b = 2\n")
+
+    def send_after(self, start, replies, name, files):
+        start.wait(5)
+        replies[name] = self.batch(*files)
+
+    def test_two_batches_racing_for_one_base_land_one_whole_and_refuse_the_other(self):
+        import threading
+
+        self.put("settings.toml", "a = 1\n")
+        self.put("themes/mine.toml", "b = 1\n")
+        winner_text = {name: [self.entry("settings", None, f"a = {name}\n", sha("a = 1\n")), self.entry("theme", "mine", f"b = {name}\n", sha("b = 1\n"))] for name in ("x", "y")}
+        for _ in range(10):
+            self.put("settings.toml", "a = 1\n")
+            self.put("themes/mine.toml", "b = 1\n")
+            start = threading.Barrier(2)
+            replies = {}
+            threads = [threading.Thread(target=self.send_after, args=(start, replies, name, winner_text[name])) for name in winner_text]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(10)
+            landed = [name for name, reply in replies.items() if reply["ok"]]
+            self.assertEqual(len(landed), 1, replies)
+            [loser] = [name for name in replies if name not in landed]
+            self.assertIn(host.CHANGED_ON_DISK, replies[loser]["error"])
+            self.assertEqual(self.read("settings.toml"), f"a = {landed[0]}\n".encode())
+            self.assertEqual(self.read("themes/mine.toml"), f"b = {landed[0]}\n".encode())
+
+
 class ThunderbirdManifestTest(unittest.TestCase):
     def test_the_desertbird_host_manifest_names_the_thunderbird_id_and_this_script(self):
         script, _, extension_id = host.MANIFESTS["desertbird_host"]
