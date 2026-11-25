@@ -2,8 +2,7 @@
 // Saved settings are not in this table: they have their own temp layer, schema and host mirror (`shared/config/config_load.ts`). They share only the change queue and the publish.
 
 import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
-import type { KeymapMode } from "../shared/keymap.ts";
-import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
+import { KEYMAP_MODES, type KeymapMode } from "../shared/keymap.ts";
 import { ALIAS_EDITS_STORAGE_KEY, ENGINE_EDITS_STORAGE_KEY, KEYMAP_EDITS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 // Mode to key sequence to the command text, as keymap.toml writes it. `""` unbinds a default or file binding.

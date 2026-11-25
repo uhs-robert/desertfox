@@ -2,12 +2,11 @@
 
 import type { MergedConfig } from "../shared/config.ts";
 import type { KeyBinding, BoundInvocation } from "../shared/invocation.ts";
-import type { KeymapConfig, KeymapMode } from "../shared/keymap.ts";
+import { KEYMAP_MODES, type KeymapConfig, type KeymapMode } from "../shared/keymap.ts";
 import { STALE_MOVE_REFUSAL } from "../shared/messages/page.ts";
 import type { BindingRow, ChangeKeymap, ChangeKeymapAnswer, CheckBinding, CheckBindingAnswer, ListBindingsAnswer } from "../shared/messages/page.ts";
 import { ANY_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, CompiledModeParent, TreeBranch, TreeLeaf, TreeNode } from "../shared/prefix_tree.ts";
-import { KEYMAP_MODES } from "../shared/config_build/merge.ts";
 import { parse_sequence, to_firefox_shortcut } from "../shared/keys/index.ts";
 import { plan_slots, SLOT_COUNT } from "./slots.ts";
 import { resolve_mode_parents, shown_steps, with_resolved_modes } from "../shared/keys/mode_parents.ts";

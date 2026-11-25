@@ -36,7 +36,7 @@ The detail of the long entries is in the "Shared files for ..." sections of thes
 - `engines/`: search engines as URL templates with slots, and the tree resolver. Outside the barrel. See its README.
 - `keys/`: key notation, the prefix tree compiler and the matcher. See its README.
 - `theme/`: the theme roles, the base16 reader, the theme lookup (`load.ts`, never imported by a page or content bundle) and the stored theme as CSS. See its README.
-- `config_build/`: the pure config build over raw file text. The background runs it. Two files import single modules from it: `help/keys_page.ts` and `config_file_path.ts`. See its README.
+- `config_build/`: the pure config build over raw file text. The background runs it. Nothing outside the background imports it at runtime. See its README.
 - `page_base.css`: the base sheet of the help and new tab pages: the fallback palette, the type and spacing tokens and the key cap styles, at zero specificity.
 - `key_caps.ts`: `key_caps(text)` draws a key sequence as a row of `kbd.desertfox-keycap` caps.
 - `icons.ts`: the inline SVG icons the extension pages draw (`chevron_icon`, `menu_icon`, `heart_icon`). The brand mark stays the file `icons/desertfox.svg`.

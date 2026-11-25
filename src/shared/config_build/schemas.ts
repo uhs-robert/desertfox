@@ -11,8 +11,8 @@ import { PER_SITE_SETTING_NAMES } from "../settings_schema.ts";
 import { MAX_BIND_CHOICES, MAX_BIND_STEPS } from "../table_constants.ts";
 import { SETTINGS_TABLE, SITE_KEYMAP_MODES, type SettingName, type SettingRow } from "../settings_table.ts";
 import { ENGINE_KEYWORD } from "../engines/resolve.ts";
-import { KEYMAP_MODES } from "./merge.ts";
-import type { DataKind } from "./source_files.ts";
+import { KEYMAP_MODES } from "../keymap.ts";
+import type { DataKind } from "../config_kinds.ts";
 
 type Schema = Record<string, unknown>;
 
