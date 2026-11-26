@@ -287,7 +287,7 @@ It is off by default and safe by design:
 
 - It needs `bridge = true` and the `nativeMessaging` permission. Tab verbs such as `tabs`, `capture` and `close` also need `bridge_share_tabs`.
 - Each command carries a `bridge` flag. A program can run a command only when the flag is true, and DesertFox checks every argument with the same validator as the keys.
-- A fixed never-list wins over the flag. It covers config, settings, sessions, the clipboard, debugging, the native host, permissions, page reload and save, hints, and replaying macros or repeats. Snippets never run from outside.
+- A fixed never-list wins over the flag. It covers config, settings, sessions, the clipboard, debugging, the native host, permissions, page reload and save, the hint picker and replaying macros or repeats, among others. Snippets never run from outside.
 - Private tabs and their ids are never shared. A private window shows only its mode.
 - The bridge has no shell verb. Its socket is readable only by your user.
 
