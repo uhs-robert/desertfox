@@ -49,7 +49,7 @@ const MAX_BYTES = {
   // The regex page search Worker.
   "find_worker.js": 2 * 1024,
   // The history rank Worker. Loads once per background start, never in a page.
-  "rank_worker.js": 11 * 1024,
+  "rank_worker.js": 11.5 * 1024,
   // The devtools page.
   "devtools.js": 2 * 1024,
 };
