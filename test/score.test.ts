@@ -139,7 +139,8 @@ test("name coverage is off by default and ranks a short name first when on: tg f
   assert.equal(ranked("tc", ["tracing", "window.close", "tab.next", "tab.close_others", "tab.close"], true), "tab.close");
 });
 
-test("a family word that matches through a dotted id keeps first place with coverage on", () => {
-  const items = [{ name: "tab", also_named: ["tab.goto"] }, { name: "tab.goto" }];
-  assert.deepEqual(rank("tab.", items, undefined, true).map((item) => item.name), ["tab", "tab.goto"]);
+test("a family word that matches through a dotted id gains exactly the full coverage bonus", () => {
+  const row = { name: "tab", also_named: ["tab.goto"] };
+  const gain = score_candidate("tab.", row, undefined, true)!.score - score_candidate("tab.", row)!.score;
+  assert.equal(gain, 30);
 });
