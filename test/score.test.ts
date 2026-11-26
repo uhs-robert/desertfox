@@ -130,3 +130,11 @@ test("the order of a varied list holds for every query", () => {
     assert.deepEqual(rank(query, varied_rows, (row) => row.group ?? 0).map((row) => row.name), order, JSON.stringify(query));
   }
 });
+
+test("name coverage is off by default and ranks a short name first when on: tg finds tag, pt and tc keep their word-start hits", () => {
+  const ranked = (query: string, list: string[], coverage: boolean) => rank(query, list.map((name) => ({ name })), undefined, coverage).map((item) => item.name)[0];
+  assert.equal(ranked("tg", ["tab.goto", "tag"], false), "tab.goto");
+  assert.equal(ranked("tg", ["tab.goto", "tag"], true), "tag");
+  assert.equal(ranked("pt", ["paint", "print.tab", "pane.toggle"], true), "pane.toggle");
+  assert.equal(ranked("tc", ["tracing", "window.close", "tab.next", "tab.close_others", "tab.close"], true), "tab.close");
+});

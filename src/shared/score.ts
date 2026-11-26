@@ -12,6 +12,10 @@ const BONUS_CONSECUTIVE = 4;
 const FIRST_CHAR_MULTIPLIER = 2;
 // A hit in the name beats the same hit in the description or a keyword.
 const NAME_HIT_BONUS = 8;
+// With `name_coverage` on, a name hit also earns points for the share of the name the term covers, so `tg` finds `tag`
+// before `tab.goto`. It stays below the word-start bonus per letter, which keeps `pt` on `pane.toggle`. Off by default:
+// it breaks the ties that folder picking and the history ranking rely on, so only the command line turns it on.
+const NAME_COVERAGE_WEIGHT = 30;
 const DESCRIPTION_WEIGHT = 0.6;
 const KEYWORD_WEIGHT = 0.5;
 const EXACT_NAME_BONUS = 1000;
@@ -90,19 +94,26 @@ function match_term(term: string, text: string): Hit | null {
   return { score, positions };
 }
 
+// The share is taken against the shown name, so a family word such as `tab` that matches through a dotted id still counts as full cover.
+function name_hit(term: string, name: string, shown_name: string, name_coverage: boolean): Hit | null {
+  const hit = match_term(term, name);
+  if (!hit || !name_coverage) return hit;
+  return { ...hit, score: hit.score + NAME_COVERAGE_WEIGHT * Math.min(1, term.length / shown_name.length) };
+}
+
 const query_terms = (query: string): string[] => query.toLowerCase().split(/\s+/).filter(Boolean);
 
 // Every space-separated term must hit the name, the description or a keyword. Only the name hits get positions.
 // A list passes `terms` so the query is split once; a single row leaves it out.
-export function score_candidate(query: string, candidate: Candidate, terms: string[] = query_terms(query)): Hit | null {
+export function score_candidate(query: string, candidate: Candidate, terms: string[] = query_terms(query), name_coverage = false): Hit | null {
   // A final period ends the sentence and is not a letter to match, or `tab.` would find every "...the tab."
   const description = candidate.description?.replace(/\.$/, "");
   const keywords = (candidate.keywords ?? []).join(" ");
   let score = 0;
   const positions: number[] = [];
   for (const term of terms) {
-    const in_name = match_term(term, candidate.name);
-    const in_other_name = (candidate.also_named ?? []).map((other) => match_term(term, other)).reduce<Hit | null>((best, hit) => (hit && (!best || hit.score > best.score) ? hit : best), null);
+    const in_name = name_hit(term, candidate.name, candidate.name, name_coverage);
+    const in_other_name = (candidate.also_named ?? []).map((other) => name_hit(term, other, candidate.name, name_coverage)).reduce<Hit | null>((best, hit) => (hit && (!best || hit.score > best.score) ? hit : best), null);
     const in_description = description ? match_term(term, description) : null;
     const in_keywords = keywords ? match_term(term, keywords) : null;
     const name_score = Math.max(in_name ? in_name.score : -Infinity, in_other_name ? in_other_name.score : -Infinity) + NAME_HIT_BONUS;
@@ -118,26 +129,26 @@ export function score_candidate(query: string, candidate: Candidate, terms: stri
   return { score, positions };
 }
 
-function sorted_hits<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number): { item: Item; hit: Hit; order: number }[] {
+function sorted_hits<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number, name_coverage: boolean): { item: Item; hit: Hit; order: number }[] {
   const terms = query_terms(query);
   const hits: { item: Item; hit: Hit; order: number }[] = [];
   items.forEach((item, order) => {
-    const hit = score_candidate(query, item, terms);
+    const hit = score_candidate(query, item, terms, name_coverage);
     if (hit) hits.push({ item, hit, order });
   });
   return hits.sort((left, right) => right.hit.score - left.hit.score || group_of(left.item) - group_of(right.item) || left.item.name.length - right.item.name.length || left.order - right.order);
 }
 
 // Best first. A tie goes to the lower `group_of` when the caller ranks several groups as one list, then to the shorter name, then to the order of the source. An empty query keeps the source order.
-export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0): Ranked<Item>[] {
+export function rank<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number = () => 0, name_coverage = false): Ranked<Item>[] {
   if (query.trim() === "") return items.map((item) => ({ ...item, positions: [] }));
-  return sorted_hits(query, items, group_of).map(({ item, hit }) => ({ ...item, positions: hit.positions }));
+  return sorted_hits(query, items, group_of, name_coverage).map(({ item, hit }) => ({ ...item, positions: hit.positions }));
 }
 
 // `rank(...).slice(0, limit)` with each row's score, copying only the rows it keeps.
 export function rank_top<Item extends Candidate>(query: string, items: readonly Item[], group_of: (item: Item) => number, limit: number): (Ranked<Item> & { score: number })[] {
   if (query.trim() === "") return items.slice(0, limit).map((item) => ({ ...item, positions: [], score: 0 }));
-  return sorted_hits(query, items, group_of).slice(0, limit).map(({ item, hit }) => ({ ...item, positions: hit.positions, score: hit.score }));
+  return sorted_hits(query, items, group_of, false).slice(0, limit).map(({ item, hit }) => ({ ...item, positions: hit.positions, score: hit.score }));
 }
 
 export type BestMatch<Item> = { found: "none" } | { found: "one"; item: Item } | { found: "tie"; first: Item; second: Item };
