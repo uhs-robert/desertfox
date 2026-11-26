@@ -71,6 +71,8 @@ Firefox does not let extensions read files or start programs, so the host adds t
 
 To install it, run `:native.install` in DesertFox and paste the command it shows in a terminal. Then grant the `nativeMessaging` permission with the button on that page. See [host/README.md](host/README.md) for what the host can and cannot do, the config folder rule and the bridge setup.
 
+The host also installs a `desertfox` shell command. See [The desertfox shell command](#-the-desertfox-shell-command).
+
 ### From source
 
 See [AGENTS.md](AGENTS.md) for the build and install commands.
@@ -265,6 +267,31 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Use the new tab page for a clock, links, recent tabs and bookmarks.
 
 </details>
+
+## 💻 The `desertfox` shell command
+
+`desertfox` is a command-line program that the native host installs. Scripts, other programs and agents use it to drive Firefox through DesertFox.
+
+```sh
+desertfox run tab.next          # run one DesertFox command in the focused window
+desertfox tabs --json           # list the open tabs
+desertfox capture               # save tab thumbnails and print their paths
+desertfox state --json          # print the current mode and window
+desertfox events                # stream mode and tab events, one JSON line each
+desertfox theme oasis_moonlight # set the theme (with theme = "desktop")
+```
+
+Run `desertfox list` for the commands a program may run, and `desertfox --help` for every verb.
+
+It is off by default and safe by design:
+
+- It needs `bridge = true` and the `nativeMessaging` permission. Tab verbs such as `tabs`, `capture` and `close` also need `bridge_share_tabs`.
+- Each command carries a `bridge` flag. A program can run a command only when the flag is true, and DesertFox checks every argument with the same validator as the keys.
+- A fixed never-list wins over the flag. It covers config, settings, sessions, the clipboard, debugging, the native host, permissions, page reload and save, the hint picker and replaying macros or repeats, among others. Snippets never run from outside.
+- Private tabs and their ids are never shared. A private window shows only its mode.
+- The bridge has no shell verb. Its socket is readable only by your user.
+
+It works on Linux only and needs the native host and the bridge setup. See [host/README.md](host/README.md) for setup.
 
 ## 🏜️ Known limits
 
