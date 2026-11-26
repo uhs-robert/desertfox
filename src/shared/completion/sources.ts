@@ -369,7 +369,7 @@ export function create_completer(
     const context = cursor_context(text, caret, lookup.find);
     if (context.kind === "none") return NO_COMPLETION;
     const span = { start: context.start, end: context.end };
-    if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands), listing: true };
+    if (context.kind === "command") return { ...span, rows: rank(context.word, all_commands, undefined, true), listing: true };
     const usage = usage_line(context.command);
     if (context.kind === "flag") return { ...span, usage, rows: rank(context.word, flag_rows(context.command, context.typed)), listing: true };
     const settings = context.kind === "subject" ? setting_rows(context, text, usage, theme_names, font_names) : undefined;
