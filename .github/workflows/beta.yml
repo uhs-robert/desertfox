@@ -318,6 +318,8 @@ jobs:
             gh release delete-asset "$UPDATES_TAG" "$temp_name" --repo "$REPOSITORY" --yes || true
             exit 1
           fi
+          # A fixed name that always holds the newest beta xpi, so tools/install_policy.sh beta can pin a URL that the prune never deletes. A failed upload fails the step, and the next run repairs it.
+          gh release upload "$UPDATES_TAG" "$(ls web-ext-artifacts/*.xpi)#desertfox-beta.xpi" --repo "$REPOSITORY" --clobber
       # Keeps the 20 highest versions, by version and not by date, and never the one updates.json names. A failed read of updates.json stops the prune.
       - name: Prune old beta prereleases
         continue-on-error: true

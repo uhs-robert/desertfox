@@ -3,7 +3,7 @@
 #
 # Usage: install_policy.sh [--dry-run] [stable | beta [xpi_url]]
 #   stable (default, what `just install` runs): copies the one signed xpi in web-ext-artifacts/ (`just sign`) to /usr/local/share/desertfox and pins a file:// URL to it.
-#   beta: pins the https URL of the latest beta xpi. It copies no local xpi. xpi_url defaults to the update_link in the beta-channel release's updates.json.
+#   beta: pins the https URL of desertfox-beta.xpi on the beta-channel release, an asset the beta workflow replaces on each build and the prune never deletes. It copies no local xpi. xpi_url overrides the URL.
 #   --dry-run: prints the merged policy and writes nothing, and runs no sudo.
 # Run `stable` to go back from beta. DESERTFOX_POLICIES_FILE overrides the policy path that is read, for tests.
 # Both modes keep every other policy entry, and block the id before the rename.
@@ -15,7 +15,7 @@ previous_extension_id="oasis""fox@uhs-robert"
 shared_dir="/usr/local/share/desertfox"
 policies_file="${DESERTFOX_POLICIES_FILE:-/etc/firefox/policies/policies.json}"
 distribution_file="/usr/lib/firefox/distribution/policies.json"
-beta_updates_url="https://github.com/uhs-robert/desertfox/releases/download/beta-channel/updates.json"
+beta_default_xpi_url="https://github.com/uhs-robert/desertfox/releases/download/beta-channel/desertfox-beta.xpi"
 
 dry_run=0
 if [ "${1:-}" = "--dry-run" ]; then
@@ -23,7 +23,7 @@ if [ "${1:-}" = "--dry-run" ]; then
     shift
 fi
 mode="${1:-stable}"
-beta_xpi_url="${2:-}"
+beta_xpi_url="${2:-$beta_default_xpi_url}"
 case "$mode" in
     stable | beta) ;;
     *) echo "usage: install_policy.sh [--dry-run] [stable | beta [xpi_url]]" >&2; exit 1 ;;
@@ -37,9 +37,6 @@ if [ -e "$distribution_file" ]; then
 fi
 
 if [ "$mode" = "beta" ]; then
-    if [ -z "$beta_xpi_url" ]; then
-        beta_xpi_url=$(curl -fsSL "$beta_updates_url" | jq -r --arg id "$extension_id" '.addons[$id].updates[0].update_link')
-    fi
     case "$beta_xpi_url" in
         https://*) ;;
         *) echo "beta needs an https xpi URL, got '$beta_xpi_url'." >&2; exit 1 ;;

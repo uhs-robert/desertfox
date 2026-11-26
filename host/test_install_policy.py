@@ -43,6 +43,10 @@ class InstallPolicyCase(unittest.TestCase):
         self.assertEqual(entries["other@x"], OTHER_ENTRY)
         self.assertIs(policies["DisableTelemetry"], True)
 
+    def test_beta_defaults_to_the_fixed_channel_asset(self):
+        entry = self.settings("beta")["ExtensionSettings"]["desertfox@uhs-robert"]
+        self.assertEqual(entry["install_url"], "https://github.com/uhs-robert/desertfox/releases/download/beta-channel/desertfox-beta.xpi")
+
     def test_beta_needs_no_local_xpi(self):
         self.assertEqual(self.dry_run("beta", BETA_URL).returncode, 0)
 
