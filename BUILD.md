@@ -4,7 +4,7 @@ These steps build the extension files from this source archive, with Node and np
 
 ## Needs
 
-- Node 24 and npm (npm 11 comes with it).
+- Node 26 and npm (npm 11 comes with it).
 - Linux or macOS. The build was made on Linux.
 
 ## Steps
