@@ -222,3 +222,9 @@ test("the first word of a command with a fixed-list positional param lists the v
 test("the word after the action offers no action values", () => {
   assert.deepEqual(media_names("media speed "), []);
 });
+
+test("the command list ranks tg as tag first, above tab.goto", () => {
+  const commands: CommandMeta[] = [{ id: "tab.goto", label: "Go to tab", intent: "Go to a tab." }, { id: "tag", label: "Tag", intent: "Tag the page." }];
+  const complete_tags = create_completer(create_word_lookup(commands, {}), commands, {}, {});
+  assert.equal(complete_tags("tg", 2).rows[0]?.name, "tag");
+});

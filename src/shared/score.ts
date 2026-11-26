@@ -94,7 +94,7 @@ function match_term(term: string, text: string): Hit | null {
   return { score, positions };
 }
 
-// The share is taken against the shown name, so a family word such as `tab` that matches through a dotted id still counts as full cover.
+// The share is taken against the shown name, so a family word such as `tab` that matches through a dotted id still counts as full cover. The cap gives an id hit full coverage.
 function name_hit(term: string, name: string, shown_name: string, name_coverage: boolean): Hit | null {
   const hit = match_term(term, name);
   if (!hit || !name_coverage) return hit;
