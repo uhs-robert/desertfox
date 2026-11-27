@@ -80,11 +80,17 @@ export async function run_cases(context) {
 
   await run_case("the bar in a private window with private access", async () => {
     const EXTENSION_ID = "desertfox@uhs-robert";
-    await chrome(`(async () => {
-      const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
-      const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
-      await ExtensionPermissions.add("${EXTENSION_ID}", { permissions: ["internal:privateBrowsingAllowed"], origins: [] }, extension);
-    })()`);
+    // The grant is the add-on manager's own switch. The restore is registered first, so a failure after the grant still puts it back.
+    const set_access = (allowed) =>
+      chrome(`(async () => {
+        const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
+        const { extension } = WebExtensionPolicy.getByID("${EXTENSION_ID}");
+        const change = { permissions: ["internal:privateBrowsingAllowed"], origins: [] };
+        await (${allowed} ? ExtensionPermissions.add("${EXTENSION_ID}", change, extension) : ExtensionPermissions.remove("${EXTENSION_ID}", change, extension));
+      })()`);
+    const access_before = await chrome(`(async () => WebExtensionPolicy.getByID("${EXTENSION_ID}").privateBrowsingAllowed)()`);
+    on_teardown(() => set_access(access_before));
+    await set_access(true);
     on_teardown(() =>
       chrome(`(async () => {
         const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");

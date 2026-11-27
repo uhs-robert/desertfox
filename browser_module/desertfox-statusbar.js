@@ -152,6 +152,9 @@
       }
     };
     const core_on = () => typeof Services.desertfox_browser_module === "object" && Services.desertfox_browser_module !== null;
+    // One bar that fails to draw ends every bar of the process for the session, so the hello and the windows agree and the page's corner badge comes back.
+    const BROKEN_FLAG = "desertfox_statusbar_broken";
+    const broken = () => Services[BROKEN_FLAG] === true;
     const can_run = () => core_on() && pref_on(ENABLED_PREF, false) && pref_on(BAR_PREF, true);
 
     function tab_id_of(tab) {
@@ -162,10 +165,11 @@
       }
     }
 
-    // ---- The scroll place of a page the extension cannot reach, from a frame script. The reports of every window share one listener.
+    // ---- The scroll place of a page the extension cannot reach, from a frame script. Each window listens for its own tabs, so no listener the process keeps holds a closed window.
 
-    const SHARED = "desertfox_statusbar";
     const FRAME_FLAG = "desertfox_statusbar_frame";
+    // The newest report of each of this window's tabs, by <browser>.
+    const scrolls = new WeakMap();
 
     // Runs in each tab. It reports only where DesertFox's page code is absent (about: pages, add-on pages, the PDF viewer, Reader View), so a web page costs no message.
     function scroll_frame_script() {
@@ -207,40 +211,22 @@
       soon();
     }
 
-    function join_shared(on_scroll) {
-      let shared = Services[SHARED];
-      if (!shared) {
-        shared = { users: new Set(), scrolls: new WeakMap() };
-        const on_message = (message) => {
-          try {
-            const data = message.data;
-            if (!is_record(data) || typeof data.inner !== "number" || typeof data.top !== "number" || typeof data.max !== "number") return;
-            shared.scrolls.set(message.target, { inner: data.inner, top: data.top, max: data.max });
-            for (const user of [...shared.users]) user();
-          } catch (error) {
-            log_once(`a scroll report was dropped after an error: ${error}`);
-          }
-        };
-        shared.on_message = on_message;
-        Services.mm.addMessageListener(SCROLL_MESSAGE, on_message);
-        Services[SHARED] = shared;
+    function on_scroll_message(message) {
+      try {
+        const data = message.data;
+        if (message.target?.ownerGlobal !== win || !is_record(data) || typeof data.inner !== "number" || typeof data.top !== "number" || typeof data.max !== "number") return;
+        scrolls.set(message.target, { inner: data.inner, top: data.top, max: data.max });
+        schedule();
+      } catch (error) {
+        log_once(`a scroll report was dropped after an error: ${error}`);
       }
-      shared.users.add(on_scroll);
-      return {
-        scrolls: shared.scrolls,
-        // The frame script stays loaded for the session, as the core's do. It checks the prefs itself.
-        load_frame_script() {
-          if (Services[FRAME_FLAG]) return;
-          Services[FRAME_FLAG] = true;
-          Services.mm.loadFrameScript("data:application/javascript;charset=utf-8," + encodeURIComponent(`(${scroll_frame_script})();`), true);
-        },
-        leave() {
-          shared.users.delete(on_scroll);
-          if (shared.users.size > 0) return;
-          Services.mm.removeMessageListener(SCROLL_MESSAGE, shared.on_message);
-          delete Services[SHARED];
-        },
-      };
+    }
+
+    // The frame script stays loaded for the session, as the core's do. It checks the prefs itself.
+    function load_frame_script() {
+      if (Services[FRAME_FLAG]) return;
+      Services[FRAME_FLAG] = true;
+      Services.mm.loadFrameScript("data:application/javascript;charset=utf-8," + encodeURIComponent(`(${scroll_frame_script})();`), true);
     }
 
     // ---- The model: what each widget says now. No DOM and no layout read.
@@ -369,8 +355,8 @@
 #${BAR_ID} .dfx-dot[data-color="red"] { background: var(--identity-icon-color-red, #ff613d); }
 #${BAR_ID} .dfx-dot[data-color="pink"] { background: var(--identity-icon-color-pink, #ff4bda); }
 #${BAR_ID} .dfx-dot[data-color="purple"] { background: var(--identity-icon-color-purple, #af51f5); }
-#${BAR_ID} .dfx-probe, #${BAR_ID} .dfx-live { position: absolute; visibility: hidden; pointer-events: none; }
-#${BAR_ID} .dfx-live { width: 1px; height: 1px; overflow: hidden; }
+#${BAR_ID} .dfx-probe { position: absolute; visibility: hidden; pointer-events: none; }
+#${BAR_ID} .dfx-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
 `;
 
     // ---- The DOM.
@@ -411,7 +397,6 @@
 
     let extension_for_listening;
     let stop_listening = () => undefined;
-    let scroll_share;
     let state;
     let columns;
     let char_px = 0;
@@ -421,11 +406,12 @@
     let announced = "";
     let frame_pending = false;
     let closed = false;
+    let was_running = false;
     const color_scheme = win.matchMedia("(prefers-color-scheme: dark)");
 
     function current_state() {
       const extension = extension_now();
-      if (!extension || !can_run() || (is_private() && !extension.privateBrowsingAllowed)) return undefined;
+      if (!extension || !can_run() || broken() || (is_private() && !extension.privateBrowsingAllowed)) return undefined;
       const holder = state_holder(extension);
       return holder === undefined ? undefined : read_state(deserialized(holder));
     }
@@ -435,7 +421,7 @@
       const browser = win.gBrowser.selectedBrowser;
       const id = tab_id_of(tab);
       const record = id !== undefined && Object.hasOwn(view_state.tabs, id) ? view_state.tabs[id] : undefined;
-      const scroll = scroll_share?.scrolls.get(browser);
+      const scroll = scrolls.get(browser);
       return {
         enabled: view_state.enabled,
         view: tab_view(record),
@@ -534,7 +520,15 @@
           live.textContent = spoken;
         }
       } catch (error) {
-        log_once(`a draw failed: ${error}`);
+        log_once(`a draw failed, so the bar is off for this session: ${error}`);
+        Services[BROKEN_FLAG] = true;
+        bar.removeAttribute("data-on");
+        root.style.setProperty(HEIGHT_TOKEN, "0px");
+        try {
+          if (extension_for_listening) say_bar_in_hello(extension_for_listening);
+        } catch (_) {
+          // The hello is retracted by the next window that sees the flag.
+        }
       }
     }
 
@@ -573,19 +567,21 @@
     // ---- The hello: the bar says it is built, so DesertFox hides its corner badge. It rewrites the core's hello and never writes one of its own.
 
     function say_bar_in_hello(extension) {
-      const capable = core_on() && pref_on(BAR_PREF, true) && !closed;
+      const capable = core_on() && pref_on(BAR_PREF, true) && !broken() && !closed;
       const holder = extensionStorageSession.get(extension, [HELLO_KEY])[HELLO_KEY];
       if (holder === undefined) return;
       const hello = deserialized(holder);
       if (!is_record(hello) || hello.v !== PROTOCOL_VERSION || typeof hello.module_version !== "string" || hello.module_version.length > MAX_HELLO_VERSION_CHARS) return;
       if ((hello.bar === true) === capable) return;
-      const next = { v: hello.v, module_version: hello.module_version, ...(capable && { bar: true }) };
+      const next = { ...hello };
+      if (capable) next.bar = true;
+      else delete next.bar;
       extensionStorageSession.set(extension, { [HELLO_KEY]: ExtensionStorage.serialize(HELLO_KEY, HELLO_KEY, next) });
     }
 
     function on_storage(changes) {
       try {
-        if (Object.hasOwn(changes, HELLO_KEY)) say_bar_in_hello(extension_for_listening);
+        if (Object.hasOwn(changes, HELLO_KEY)) (say_bar_in_hello(extension_for_listening), schedule());
         if (Object.hasOwn(changes, STATE_KEY)) schedule();
       } catch (error) {
         log_once(`a storage change was dropped after an error: ${error}`);
@@ -607,7 +603,11 @@
         if (closed) return;
         listen_to_extension();
         if (extension_for_listening) say_bar_in_hello(extension_for_listening);
-        if (can_run()) scroll_share.load_frame_script();
+        const running = can_run();
+        if (running) load_frame_script();
+        // A page that scrolled while the bar was off has no report of its own to send, so the tabs are asked again.
+        if (running && !was_running) Services.mm.broadcastAsyncMessage("desertfox-statusbar:report-now");
+        was_running = running;
         schedule();
       } catch (error) {
         log_once(`the switch change failed: ${error}`);
@@ -617,8 +617,8 @@
     // ---- Wiring. Each registration is undone at unload, and a start that fails halfway undoes what it did.
 
     undo.push(() => stop_listening());
-    scroll_share = join_shared(schedule);
-    undo.push(() => scroll_share.leave());
+    Services.mm.addMessageListener(SCROLL_MESSAGE, on_scroll_message);
+    undo.push(() => Services.mm.removeMessageListener(SCROLL_MESSAGE, on_scroll_message));
     const tab_events = ["TabSelect", "TabOpen", "TabClose", "TabMove", "TabAttrModified", "TabShow", "TabHide", "SSTabRestoring"];
     for (const type of tab_events) {
       win.gBrowser.tabContainer.addEventListener(type, schedule);

@@ -1,4 +1,5 @@
 // A browser window with a small DOM, so the status bar runs as it does in Firefox: the module's files load into it, the bar draws on a frame, and a test reads the bar's text.
+import vm from "node:vm";
 import { create_firefox, source_of } from "./fake_firefox.ts";
 
 export const STATUSBAR_FILE = "desertfox-statusbar.js";
@@ -85,6 +86,8 @@ export function create_bar_fixture(options: BarOptions = {}) {
   const listener_counts = new Map<string, number>();
   const scheme = { matches: options.scheme_dark ?? true, listeners: new Set<() => void>() };
   const tabs = Array.from({ length: options.tab_count ?? 1 }, () => window.add_tab());
+  // A page's browser names the window that holds it, as the global the module's code runs as.
+  for (const each of tabs) Object.defineProperty(each.browser, "ownerGlobal", { get: () => vm.runInContext("globalThis", window.win.context!) });
   let selected = 0;
   const progress_listeners = new Set<unknown>();
   const gBrowser = win.gBrowser as Record<string, unknown>;
