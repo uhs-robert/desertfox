@@ -21,7 +21,7 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
-  // The stub tab is no article.
+  // The stub's toggleReaderMode rejects, as Firefox does for a tab that is no article.
   "page.reader": [/cannot show this page in Reader View/],
   "help.key": [/has no normal-mode binding/],
   // The stub config knows no theme or engine of that name, in the files or in the browser.
@@ -146,7 +146,7 @@ function stub_browser(): unknown {
   const namespace = (path: string): unknown =>
     new Proxy(function () {}, {
       get: (_target, key) => (typeof key === "symbol" || key === "then" ? undefined : key === "id" ? "stub@desertfox" : namespace(`${path}${path === "" ? "" : "."}${key}`)),
-      apply: () => (path.startsWith("runtime.getURL") ? STUB_ANSWERS["runtime.getURL"] : Promise.resolve(STUB_ANSWERS[path])),
+      apply: () => (path === "tabs.toggleReaderMode" ? Promise.reject(new Error("The specified tab cannot be placed into reader mode.")) : path.startsWith("runtime.getURL") ? STUB_ANSWERS["runtime.getURL"] : Promise.resolve(STUB_ANSWERS[path])),
     });
   return namespace("");
 }
