@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Node } from "./chrome_dom.ts";
+import { IME_ENABLED } from "./fake_firefox.ts";
 import { box, browser_with_dialog, button, chrome_window, settle, started } from "./chrome_windows.ts";
 import type { Firefox } from "./chrome_windows.ts";
 
@@ -261,6 +262,41 @@ test("a synthetic gB does not count as the user's key", async () => {
 test("a held-down B does not count, nor a key of no binding", async () => {
   expect_refused(await doorhanger_collect((chrome) => [chrome.press("g"), chrome.press("B", { repeat: true })]), "a held-down B");
   expect_refused(await doorhanger_collect((chrome) => [chrome.press("g"), chrome.press("b")]), "a key of no binding");
+});
+
+test("a lone B does not count: it is a binding of its own, and only the whole gB is the hint key", async () => {
+  expect_refused(await doorhanger_collect((chrome) => chrome.press("B")), "a lone B");
+  expect_refused(await doorhanger_collect((chrome) => [chrome.press("g"), chrome.press("x"), chrome.press("B")]), "g, another key, then B");
+  expect_refused(
+    await doorhanger_collect((chrome) => {
+      chrome.press("g");
+      chrome.clock.now += 3001;
+      chrome.press("B");
+    }),
+    "g, then B long after",
+  );
+});
+
+test("gB typed in a text field does not count, and gB typed outside one does", async () => {
+  expect_refused(
+    await doorhanger_collect((chrome, run) => {
+      chrome.win.windowUtils.IMEStatus = IME_ENABLED;
+      run.type_binding();
+      chrome.win.windowUtils.IMEStatus = 0;
+    }),
+    "gB in a field",
+  );
+  expect_refused(
+    await doorhanger_collect((chrome) => {
+      chrome.win.windowUtils.IMEStatus = IME_ENABLED;
+      chrome.press("g");
+      chrome.win.windowUtils.IMEStatus = 0;
+      chrome.press("B");
+    }),
+    "g in a field, then B outside it",
+  );
+  const outside = await doorhanger_collect((_chrome, run) => run.type_binding());
+  assert.equal(outside.reply?.ok, true, "gB outside a field did not start");
 });
 
 test("a gB more than a second old does not count, and one just before does", async () => {
