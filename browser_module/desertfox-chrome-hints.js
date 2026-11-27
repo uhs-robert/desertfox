@@ -700,13 +700,16 @@
       if (!notification) return true;
       const action = has_class(element, "popup-notification-primary-button") ? notification.mainAction : has_class(element, "popup-notification-secondary-button") ? notification.secondaryActions?.[0] : undefined;
       if (!action || action.disableSecurityDelay) return false;
-      let delay_ms;
+      return !(ChromeUtils.now() - (notification.timeShown ?? Infinity) >= security_delay_ms());
+    }
+
+    // How long Firefox ignores a new doorhanger's buttons. A grant's mark is a new prompt too, so an Enter counts only once it has shown that long.
+    function security_delay_ms() {
       try {
-        delay_ms = Services.prefs.getIntPref(SECURITY_DELAY_PREF, 500);
+        return Services.prefs.getIntPref(SECURITY_DELAY_PREF, 500);
       } catch (_) {
-        delay_ms = 500;
+        return 500;
       }
-      return !(ChromeUtils.now() - (notification.timeShown ?? Infinity) >= delay_ms);
     }
 
     // ---- Confirm: a grant waits for the user's Enter in its window.
@@ -742,7 +745,7 @@
     const GONE = "gone";
     function confirm_state({ win, target, identity }) {
       const { element, drawn } = target;
-      if (win.closed || Services.focus.activeWindow !== win || !enabled_by_pref() || !core.may_act(win)) return GONE;
+      if (win.closed || Services.focus.activeWindow !== win || !enabled_by_pref() || !core.may_act(win) || core.keys_held_by(win) !== KEY_OWNER) return GONE;
       if (!element.isConnected || element.hidden || !element.checkVisibility()) return GONE;
       const now = identity_of(win, element);
       if (now.notification !== identity.notification || now.download !== identity.download || now.text !== identity.text || moved(win, element, drawn)) return GONE;
@@ -758,7 +761,8 @@
     // Marks the control with a frame and a note, and holds the window's keys until Enter, another key or any end.
     function begin_confirm(win, target, look) {
       end_confirm();
-      confirming = { win, target, identity: identity_of(win, target.element), shown_at: time_now(win), undo: [] };
+      const shown_at = time_now(win);
+      confirming = { win, target, identity: identity_of(win, target.element), shown_at, counts_at: shown_at + security_delay_ms(), undo: [] };
       core.hold_keys(win, KEY_OWNER);
       confirming.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
@@ -815,12 +819,14 @@
 
     // While a grant waits, each key in its window is the confirm's: Enter confirms, any other key cancels, and none goes on to Firefox or the page.
     // Only the user's own key counts. A key a script made is not trusted. A key pressed before the mark showed, or held down since, does nothing.
+    // A key while the mark is new cancels: the user may have meant it for what was there before, as when tapping Enter through a page.
     function on_confirm_key(event) {
       if (!event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (event.repeat || time_of(event, confirming.win) < confirming.shown_at) return;
-      if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return end_confirm();
+      const pressed_at = time_of(event, confirming.win);
+      if (event.repeat || pressed_at < confirming.shown_at) return;
+      if (pressed_at < confirming.counts_at || event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return end_confirm();
       const asked = confirming;
       const state = confirm_state(asked);
       if (state === WAITS) return;
