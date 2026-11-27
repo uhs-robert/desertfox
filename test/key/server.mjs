@@ -205,7 +205,8 @@ export function start_server() {
       response.writeHead(200, { "content-type": "video/webm" });
       return response.end(Buffer.from(CLIP_WEBM_BASE64, "base64"));
     }
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    // A `cacheable` page may enter the back-forward cache, which Firefox keeps a no-store page out of.
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": url.searchParams.has("cacheable") ? "no-cache" : "no-store" });
     const id = url.searchParams.get("id") ?? "none";
     if (url.pathname === "/drag") return response.end(page(`drag ${id}`, DRAG_PAGES[id.split("_")[0]] ?? ""));
     if (url.pathname === "/popup_frames" || url.pathname === "/popup_frame") {
@@ -218,6 +219,23 @@ export function start_server() {
     }
     if (url.pathname === "/field") {
       return response.end(page(`field ${id}`, '<input id="field" autofocus>', "<script>addEventListener('load', () => document.getElementById('field').focus())</script>"));
+    }
+    if (url.pathname === "/switch_field") {
+      // A field the page focuses as it loads and each time its tab is shown, as a chat page focuses its prompt. F2 focuses it too, as a page shortcut would.
+      // The show listener sits on the document after DesertFox's, so it runs second. With `_early` in the id it is a window capture listener, which runs first. `_delay` focuses 300 ms after the show and `_late` 1500 ms after.
+      // An `_outer` id focuses nothing itself and holds a same-origin frame of this page with `_inner` in place of `_outer`, which focuses its own field. The page reports each focus, and where the focus is after each show focus.
+      const delay_ms = id.includes("_late") ? 1500 : id.includes("_delay") ? 300 : 0;
+      const frame = id.includes("_outer") ? `<iframe id="inner" src="/switch_field?id=${id.replace("_outer", "_inner")}" style="display:block;width:300px;height:200px"></iframe>` : "";
+      const script = `<script>
+        const focus_field = () => ${id.includes("_outer") ? "undefined" : 'document.getElementById("field").focus()'};
+        const show_focus = () => (focus_field(), send("show_focused", { id: document.activeElement?.id }));
+        const on_show = () => document.hidden || (${delay_ms} ? setTimeout(show_focus, ${delay_ms}) : show_focus());
+        ${id.includes("_early") ? 'addEventListener("visibilitychange", on_show, true)' : 'document.addEventListener("visibilitychange", on_show)'};
+        addEventListener("load", focus_field);
+        addEventListener("keydown", (event) => event.key === "F2" && focus_field());
+        addEventListener("focusin", (event) => send("focused", { id: event.target.id }));
+      </script>`;
+      return response.end(page(`switch_field ${id}`, `<input id="field">${frame}${tall_filler}${script}`));
     }
     if (url.pathname === "/aligned") {
       return response.end(page(`aligned ${id}`, `${tall_filler}<input id="field">${tall_filler}`));
