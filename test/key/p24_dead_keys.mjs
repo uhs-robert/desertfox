@@ -1,5 +1,5 @@
 // blur_on_load with pages that fight for their field's focus: a held Shift+J and Shift+K over such tabs must leave every DesertFox key working.
-// The pages refocus their field on load, on each show, on window focus, in the field's blur handler or in a loop after a blur (`/refocus` in server.mjs).
+// The pages refocus their field on load, on each show, on window focus or in the field's blur handler (`/refocus` in server.mjs).
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { evaluate_in_chrome } from "./rdp.mjs";
