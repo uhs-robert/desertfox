@@ -893,7 +893,6 @@
 
     // ---- Pick.
 
-    // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
     // The drawn target a pick names in `owner`, the session the caller holds, or the refusal.
     function drawn_target(owner, tag, id) {
       if (!owner || owner.tag !== tag) return { error: "The hints have ended" };
@@ -901,6 +900,7 @@
       return target?.drawn ? { target } : { error: "No such hint" };
     }
 
+    // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
     function pick({ session: tag, id }) {
       const { target, error } = drawn_target(session, tag, id);
       if (error) return { ok: false, error };
