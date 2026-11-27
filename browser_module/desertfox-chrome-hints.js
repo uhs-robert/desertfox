@@ -61,6 +61,8 @@
     const CONTROLS = "button, toolbarbutton, checkbox, radio, menulist:not([editable]), menu, label.text-link, moz-button, moz-checkbox, moz-toggle, moz-radio, input[type=checkbox], input[type=radio], input[type=button], input[type=submit]";
     // Left to a later confirm key, as the permission prompts are: the Library's download rows can unblock a download, and Page Info's permission rows grant a permission at once.
     const LEFT_OUT = "#downloadsListBox, #permList";
+    // The dialogs in a `dialogFrame` that get labels. Others are left out until a confirm key exists: the external protocol prompt opens an application with a URL the page chose, and the client certificate prompt sends the user's certificate to the site.
+    const LABELLED_DIALOG = (url) => url === "chrome://global/content/commonDialog.xhtml" || url.startsWith("chrome://browser/content/preferences/dialogs/");
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
     const WINDOW_GROUPS = [
@@ -191,7 +193,8 @@
       const found = [...root.querySelectorAll(selector)];
       for (const element of root.querySelectorAll("*")) {
         const shadow = shadow_of(element);
-        if (shadow) found.push(...deep_all(shadow, selector));
+        // A control that matched holds its own button or input in its shadow root, which would get a second label.
+        if (shadow && !element.matches(selector)) found.push(...deep_all(shadow, selector));
       }
       return found;
     }
@@ -238,7 +241,7 @@
       const focused = core.focused_element(win);
       const doc = focused?.ownerDocument;
       if (!doc) return undefined;
-      if (doc !== win.document && doc.defaultView?.browsingContext?.embedderElement?.classList?.contains("dialogFrame")) return { doc, frame_win: doc.defaultView };
+      if (doc !== win.document && doc.defaultView?.browsingContext?.embedderElement?.classList?.contains("dialogFrame")) return LABELLED_DIALOG(String(doc.documentURI)) ? { doc, frame_win: doc.defaultView } : undefined;
       const opened = open_panel(win.document);
       if (opened?.panel.contains(focused)) return { opened };
       return undefined;
@@ -380,12 +383,14 @@
     }
 
     // The window's keys are held from the binding's last key on, so the labels' letters never reach the popup walk or the dialog.
-    function begin_start(win) {
+    // `frame_win`: the dialog the binding was typed in, whose clicks stay in its own document.
+    function begin_start(win, frame_win) {
       end_start();
       starting = { win, token: 1 + Math.floor(Math.random() * 0x7ffffffe), made_at: Date.now(), early_keys: [], undo: [] };
       core.hold_keys(win, KEY_OWNER);
       starting.undo.push(() => core.release_keys(win, KEY_OWNER));
       for (const type of ["mousedown", "deactivate", "unload"]) listen(starting, win, type, end_start);
+      if (frame_win) for (const type of ["mousedown", "unload"]) listen(starting, frame_win, type, end_start);
       const timer = win.setTimeout(end_start, START_TOKEN_MS);
       starting.undo.push(() => win.clearTimeout(timer));
       if (!send("chrome_hints.want", { start: starting.token })) end_start();
@@ -405,7 +410,8 @@
       const holder = core.keys_held_by(win);
       const bindings = core.chrome_hint_keys(win);
       // The menu test reads every menu of the window, so it goes last: most keys are typed in a page, which `chrome_place` turns away cheaply.
-      const free = (holder === undefined || holder === PREFIX_OWNER) && bindings.length > 0 && chrome_place(win) && !field_focused(win) && !menu_open(win.document);
+      const place = (holder === undefined || holder === PREFIX_OWNER) && bindings.length > 0 ? chrome_place(win) : undefined;
+      const free = place && !field_focused(win) && !menu_open(win.document);
       const step = free ? match_binding(bindings, record.held, event) : { take: false, held: [] };
       record.held = step.held;
       if (step.held.length > 0) core.hold_keys(win, PREFIX_OWNER);
@@ -413,7 +419,7 @@
       if (!step.take) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (step.done) begin_start(win);
+      if (step.done) begin_start(win, place.frame_win);
     }
 
     function listen(owner, target, type, handler, capture = true) {
