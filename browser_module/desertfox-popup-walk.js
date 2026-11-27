@@ -66,6 +66,13 @@
     // Another extension's popup is that extension's page: its keys are its own.
     const in_extension_popup = (node) => node?.localName === "browser" && node.isRemoteBrowser && !!node.closest?.("panel");
 
+    // As chrome hints' `chrome_place` reads a panel: the focus can sit in a shadow root inside it, and a subview that slid in can leave nothing focused.
+    function holds(root, node) {
+      for (let at = node; at; at = at.parentNode ?? at.host) if (at === root) return true;
+      return false;
+    }
+    const nothing_focused = (win, focused) => focused === win.document.documentElement || focused === win.document.body;
+
     // A list, tree or radio group with the focus in a dialog that Firefox shows inside the browser window (a settings sub-dialog).
     function dialog_list(win, focused) {
       if (!DIALOG_LISTS.has(focused?.localName)) return undefined;
@@ -89,7 +96,7 @@
       const focused = core.focused_element(win);
       if (in_field(win, event.originalTarget) || in_extension_popup(event.target) || in_extension_popup(focused)) return undefined;
       const panel = popups.find(walking_panel);
-      if (panel) return { still_holds: () => is_open(panel) && !field_focused(win), in_hint_place: !!panel.contains?.(focused) };
+      if (panel) return { still_holds: () => is_open(panel) && !field_focused(win), in_hint_place: nothing_focused(win, focused) || holds(panel, focused) };
       if (WALK_WINDOWS.has(record.type)) return { still_holds: () => !field_focused(win), in_hint_place: HINT_WINDOWS.has(record.type) };
       const list = dialog_list(win, focused);
       if (list) return { still_holds: () => core.focused_element(win) === list, in_hint_place: true };
