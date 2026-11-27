@@ -521,6 +521,9 @@
     // True while this file dispatches a key into a CodeMirror editor. Chrome makes it, so it comes back to the core's listener as a trusted key, and the mode lets it through.
     let dispatching = false;
 
+    // A field types, so it never belongs to the mode, even inside a code area's editor: the Debugger's breakpoint condition is an editor inside the source with a checkbox beside it. `content` is the code area's editor, which DevTools keeps read-only.
+    const is_field = (target, content) => in_editable(target) && (target.closest(".cm-content") !== content || target.matches("input, textarea, select"));
+
     const root_of_focused_document = (doc, target, selector) => (target === doc.body || target === doc.documentElement ? doc.querySelector(selector) : null);
 
     // The area that holds `target`: the row of its document whose root holds it, or, when the document itself has the focus, the row's root in it.
@@ -532,8 +535,8 @@
         if (!url.startsWith(row.url)) continue;
         const root = target.closest(row.root) ?? root_of_focused_document(doc, target, row.root);
         const content = root?.querySelector(".cm-content");
-        // The root also holds fields: the Debugger's breakpoint condition is an editor inside the source with a checkbox beside it, and the response has a filter box.
-        if (in_editable(target) && (target.closest(".cm-content") !== content || target.matches("input, textarea, select"))) continue;
+        // The root also holds fields, such as the response's filter box.
+        if (is_field(target, content)) continue;
         if (content) return { doc, root, content, code: true };
       }
       if (in_editable(target)) return null;
@@ -667,7 +670,7 @@
       if (dispatching) return false;
       // DevTools can move the focus into a field by itself. A key there ends the mode and types, Escape too.
       const target = event.originalTarget ?? event.target;
-      if (in_editable(target) && !mode.content?.contains(target)) {
+      if (is_field(target, mode.content)) {
         end(false);
         return false;
       }

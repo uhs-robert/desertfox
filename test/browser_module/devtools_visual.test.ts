@@ -409,7 +409,7 @@ test("a copy over the cap copies nothing, in a text area and in a code area", as
   assert.equal(debugger_doc.cleared, 1);
 });
 
-test("a key in a field outside the mode's area ends the mode and types there, Escape too", async () => {
+test("a key in a field ends the mode and types there, Escape too, also a field inside the source editor", async () => {
   for (const key of ["w", "Escape"]) {
     const { ready, press, output, input, console_doc } = started();
     await ready();
@@ -418,6 +418,19 @@ test("a key in a field outside the mode's area ends the mode and types there, Es
     assert.equal(press(key, input).prevented, false, key);
     assert.deepEqual(console_doc.selection.calls, [], `${key} moved or dropped the selection`);
     assert.equal(press("w", output).prevented, false, `${key} left the mode on`);
+  }
+  // In the Debugger the condition editor and its checkbox sit inside the source's own content.
+  for (const key of ["w", "Escape"]) {
+    for (const field of ["condition", "stacktrace"] as const) {
+      const fixture = started();
+      const { ready, press, source } = fixture;
+      await ready();
+      press("v", source);
+      const sent = source.dispatched.length;
+      assert.equal(press(key, fixture[field]).prevented, false, `${key} in the ${field}`);
+      assert.equal(source.dispatched.length, sent, `${key} in the ${field} moved or dropped the selection`);
+      assert.equal(press("w", source).prevented, false, `${key} in the ${field} left the mode on`);
+    }
   }
 });
 
