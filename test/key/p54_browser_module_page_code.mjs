@@ -51,6 +51,11 @@ const PAGE_SEES = `(win) => {
   return { names: Object.getOwnPropertyNames(page).filter((name) => /desertfox|^browser$|locked_transport/.test(name)), host: typeof page.desertfox_host, transport: typeof page.desertfox_locked_transport, browser: typeof page.browser };
 }`;
 const MODE = `(win) => win.document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? [...win.document.documentElement.children].map((child) => child.getAttribute("data-desertfox-mode")).find(Boolean) ?? null`;
+// The mode the status bar shows first on its left, or null while the bar is hidden or absent.
+const BAR_MODE = `(async () => {
+  const bar = ${W}.document.getElementById("desertfox-statusbar");
+  return bar?.hasAttribute("data-on") ? (bar.querySelector(".dfx-left")?.firstElementChild?.textContent ?? null) : null;
+})()`;
 
 // A PDF with a text line and a link annotation to `href`, which pdf.js draws as a link in its annotation layer.
 function make_linked_pdf(href) {
@@ -98,6 +103,8 @@ export async function run_cases(context) {
   };
 
   const page_code_ran = () => in_selected_page(`(win) => win.document.documentElement?.hasAttribute("data-desertfox-tree-read-ms") ?? false`);
+  // The browser module's status bar is on by default and takes the corner badge's place, so the mode is read from the bar while it is up.
+  const mode_now = async () => (await chrome(BAR_MODE)) ?? in_selected_page(MODE);
   const hint_labels = () => in_selected_page(HINT_LABELS);
   const listeners = () => in_selected_page(PAGE_CODE_LISTENERS);
   // The page code's realms in every process, after a collection, so a realm that is only waiting for one does not count.
@@ -153,9 +160,9 @@ export async function run_cases(context) {
       await chrome(set_clipboard("before the yank"));
       // v starts caret mode, and v there starts visual mode.
       await press_keys("v");
-      await poll_until(`caret mode on ${name}`, async () => /caret/i.test(String(await in_selected_page(MODE))), { timeout_ms: 5000 });
+      await poll_until(`caret mode on ${name}`, async () => /caret/i.test(String(await mode_now())), { timeout_ms: 5000 });
       await press_keys("v");
-      await poll_until(`visual mode on ${name}`, async () => /visual/i.test(String(await in_selected_page(MODE))), { timeout_ms: 5000 });
+      await poll_until(`visual mode on ${name}`, async () => /visual/i.test(String(await mode_now())), { timeout_ms: 5000 });
       await press_keys("w");
       await sleep(150);
       await press_keys("y");
