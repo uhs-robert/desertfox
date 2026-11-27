@@ -6,7 +6,7 @@ import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
 import type { ContentRequests } from "./messages/map.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
-import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./settings_table.ts";
+import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
