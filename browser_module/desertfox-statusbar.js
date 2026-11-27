@@ -214,7 +214,7 @@
     function on_scroll_message(message) {
       try {
         const data = message.data;
-        if (message.target?.ownerGlobal !== win || !is_record(data) || typeof data.inner !== "number" || typeof data.top !== "number" || typeof data.max !== "number") return;
+        if (!win.gBrowser.getTabForBrowser(message.target) || !is_record(data) || typeof data.inner !== "number" || typeof data.top !== "number" || typeof data.max !== "number") return;
         scrolls.set(message.target, { inner: data.inner, top: data.top, max: data.max });
         schedule();
       } catch (error) {
