@@ -26,8 +26,8 @@ export async function pages_setting_on(storage: Pick<typeof browser.storage.loca
 export type BrowserModuleRpcDeps = {
   session: SessionStorage;
   is_on: () => Promise<boolean>;
-  // The base channel's `send`. `on_id` hears the request id before the module can see the request.
-  send: (kind: string, args: ModuleArgs, on_id?: (id: string) => void) => Promise<Sent>;
+  // The base channel's `send`. `on_id` hears the request id before the module can see the request, and returns false to leave it unwritten.
+  send: (kind: string, args: ModuleArgs, on_id?: (id: string) => boolean | void) => Promise<Sent>;
   get_tab: (tab_id: number) => Promise<browser.tabs.Tab | undefined>;
   // The message table's `dispatch`, with no sender counted as an extension page.
   dispatch: (message: unknown, sender: Sender) => Promise<unknown> | undefined | void;
@@ -179,15 +179,16 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     const epoch_at_start = epoch;
     const page_left = () => (loads.get(tab_id) ?? 0) !== load_at_start || epoch !== epoch_at_start;
     let answer: Promise<unknown> | undefined;
-    // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none.
+    // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none and leaves the push unwritten, so the next document never gets it.
     const sent = await deps.send("page_push", { tab_id, message: JSON.stringify(message) }, (id) => {
-      if (page_left()) return;
+      if (page_left()) return false;
       answer = new Promise<unknown>((resolve, reject) => waiting.set(id, { tab_id, resolve, reject }));
       // A load can reject it before this function hands it back. The caller still gets the rejection.
       void best_effort(answer);
+      return true;
     });
-    if (!sent.ok) throw new Error(sent.problem);
-    if (answer === undefined) throw new Error(epoch === epoch_at_start ? "the page went away" : "the browser_module_pages setting is off");
+    if (answer === undefined && page_left()) throw new Error(epoch === epoch_at_start ? "the page went away" : "the browser_module_pages setting is off");
+    if (!sent.ok || answer === undefined) throw new Error(sent.ok ? "the push was not sent" : sent.problem);
     return answer;
   };
 

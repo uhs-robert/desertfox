@@ -369,14 +369,19 @@ test("a reply that comes before the send returns settles the push", async () => 
   assert.equal(await rpc.send_to_locked_tab(7, { type: "get_selection" }), "fast");
 });
 
-test("a load or a setting off while a push is being sent rejects it and leaves no wait behind", async () => {
+test("a load or a setting off while a push is being sent rejects it, leaves no wait behind and never writes the push", async () => {
   const { rpc, from_module, config, pushes, answer_push } = setup();
   await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
-  config.before_send = () => void rpc.tab_loading(7);
+  let cut_id = "";
+  config.before_send = (id) => {
+    cut_id = id;
+    void rpc.tab_loading(7);
+  };
   await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
   config.before_send = undefined;
+  assert.deepEqual(pushes(), [], "the push for the document that went away is not written, so the next document never gets it");
   // A reply to the push that was cut off settles nothing and throws nothing.
-  await answer_push(pushes().at(-1)!.id, { value: JSON.stringify({ value: "late" }) });
+  await answer_push(cut_id, { value: JSON.stringify({ value: "late" }) });
   await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 2 })]);
   config.before_send = () => {
     config.on = false;

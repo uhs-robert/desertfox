@@ -14,7 +14,9 @@
 //   add_frame_script(fn)       In the sandbox: load `fn` as a frame script into every tab, once, when the module turns on. The script stays loaded for the session, so it checks the pref itself.
 //   register_kind(kind, fn)    In the sandbox: answer the extension's requests of `kind`, a kind on the copy of EXTENSION_TO_MODULE_KINDS below.
 //                              fn(args) gets checked args and returns { ok, error?, value? } or a promise of it. `value` is text, copied into the reply. A throw or a rejection replies with a fixed error.
-//   send(kind, args)           In the sandbox: start a call to the extension, a kind on the copy of MODULE_TO_EXTENSION_KINDS. Returns { ok: true, id } or { ok: false, problem }.
+//   send(kind, args, on_reply) In the sandbox: start a call to the extension, a kind on the copy of MODULE_TO_EXTENSION_KINDS. Returns { ok: true, id } or { ok: false, problem }.
+//                              on_reply(reply), optional, hears the extension's checked reply { reply_to, ok, error?, value? } once. A reply that never comes is forgotten after MAX_AWAITED_REPLIES newer calls.
+//   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
@@ -85,7 +87,7 @@
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
     const EXTENSION_TO_MODULE_KINDS = {
-      page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: 65536 },
+      page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
       "pane.split_next_tab": { args: {}, reply: true, max_bytes: 256 },
       "pane.unsplit": { args: {}, reply: true, max_bytes: 256 },
@@ -95,7 +97,7 @@
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
     };
-    const MODULE_TO_EXTENSION_KINDS = { page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
+    const MODULE_TO_EXTENSION_KINDS = { page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 } };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
     const ENABLED_PREF = "desertfox.browser_module.enabled";
@@ -458,6 +460,10 @@
     const handled_ids = new WeakMap();
     const own_lists = new WeakMap();
     let sent = 0;
+    // The on_reply of each call the module started, by request id, oldest first.
+    const MAX_AWAITED_REPLIES = 256;
+    const awaited_replies = new Map();
+    const session_watchers = new Map();
 
     // As the extension's reader does, an error loses control and bidi characters before anyone shows it.
     const printable = (text) => text.replace(/[\p{Cc}\p{Cf}]/gu, "");
@@ -579,7 +585,9 @@
     // Each change carries the whole list, so the reader takes `newValue` and never reads the list again.
     function on_storage_change(extension, changes) {
       try {
-        if (!Object.hasOwn(changes, FROM_EXTENSION_STORAGE_KEY) || !enabled_by_pref() || shut || desertfox() !== extension) return;
+        if (!enabled_by_pref() || shut || desertfox() !== extension) return;
+        for (const [key, watcher] of session_watchers) if (Object.hasOwn(changes, key)) tell_watcher(watcher, key, changes[key].newValue);
+        if (!Object.hasOwn(changes, FROM_EXTENSION_STORAGE_KEY)) return;
         const holder = changes[FROM_EXTENSION_STORAGE_KEY].newValue;
         if (holder === undefined) return;
         const list = checked_list(deserialized(holder), EXTENSION_TO_MODULE_KINDS, Date.now());
@@ -587,12 +595,31 @@
         const refusals = list.refused.filter(({ id }) => first_time(extension, id)).map(({ id, error }) => reply_to(id, false, error));
         if (refusals.length > 0) append_own(extension, refusals);
         for (const message of list.messages) {
-          // A reply to a request of the module. No kind of the module expects one yet, so the reader only marks it seen.
-          if (message.reply_to !== undefined) first_time(extension, `reply:${message.reply_to}`);
-          else if (first_time(extension, message.id)) run_request(extension, message);
+          if (message.reply_to !== undefined) {
+            if (first_time(extension, `reply:${message.reply_to}`)) hand_reply(message);
+          } else if (first_time(extension, message.id)) run_request(extension, message);
         }
       } catch (error) {
         log_once(`a message list from DesertFox was dropped after an error: ${error}`);
+      }
+    }
+
+    function tell_watcher(watcher, key, holder) {
+      try {
+        watcher(key, holder === undefined ? undefined : deserialized(holder));
+      } catch (error) {
+        log_once(`the watcher of ${key} failed: ${error}`);
+      }
+    }
+
+    function hand_reply(reply) {
+      const on_reply = awaited_replies.get(reply.reply_to);
+      if (!on_reply) return;
+      awaited_replies.delete(reply.reply_to);
+      try {
+        on_reply(reply);
+      } catch (error) {
+        log_once(`the reply handler of a call failed: ${error}`);
       }
     }
 
@@ -693,13 +720,25 @@
         else if (kind_handlers.has(kind)) log_once(`two feature files answer ${kind}, the first one does`);
         else kind_handlers.set(kind, handler);
       },
-      send(kind, args = {}) {
+      send(kind, args = {}, on_reply = undefined) {
         const now = Date.now();
         const { message, problem } = checked_message({ v: PROTOCOL_VERSION, id: `m${now.toString(36)}-${sent++}`, kind, args, sent_at: now }, MODULE_TO_EXTENSION_KINDS);
         if (!message) return { ok: false, problem };
         const extension = desertfox();
-        if (!extension || !append_own(extension, [message])) return { ok: false, problem: "the module or DesertFox is off" };
+        // Set before the write, so a reply the extension writes at once finds it.
+        if (typeof on_reply === "function") awaited_replies.set(message.id, on_reply);
+        if (!extension || !append_own(extension, [message])) {
+          awaited_replies.delete(message.id);
+          return { ok: false, problem: "the module or DesertFox is off" };
+        }
+        for (const id of awaited_replies.keys()) if (awaited_replies.size > MAX_AWAITED_REPLIES) awaited_replies.delete(id);
         return { ok: true, id: message.id };
+      },
+      watch_session(keys, watcher) {
+        for (const key of keys) {
+          if (session_watchers.has(key)) log_once(`two feature files watch ${key}, the first one hears it`);
+          else session_watchers.set(key, watcher);
+        }
       },
       log_once,
       may_act: (win) => state_for(win) !== undefined,

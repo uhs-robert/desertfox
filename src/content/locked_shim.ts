@@ -7,6 +7,7 @@ import type { KeymapPageState } from "../shared/messages/content.ts";
 import { current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { page_keymap_of } from "../shared/site/page_keymap_resolve.ts";
+import { site_rules_matching } from "../shared/site/site_columns.ts";
 import { EXTENSION_TO_MODULE_KINDS, json_bytes, locked_route_of, MESSAGE_ENVELOPE_BYTES, MODULE_TO_EXTENSION_KINDS, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -39,6 +40,8 @@ function locked_browser(transport: Transport) {
   const message_listeners = new Set<Listener>();
   const change_listeners = new Set<Listener>();
   let refused = false;
+  // The which-key snapshot is the panel with no site rule, so it serves only a page that no rule names. Until the keymap read knows the address, the background answers.
+  let root_panel_from_snapshot = false;
   const alive = (): boolean => !refused && transport.alive();
 
   const snapshot_value = (part: SnapshotPart): unknown => {
@@ -67,6 +70,7 @@ function locked_browser(transport: Transport) {
       const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
       if (!is_record(state) || typeof state.address !== "string") return refuse();
       const { address, recording, join, bar } = state;
+      root_panel_from_snapshot = site_rules_matching(keymap, [address]).length === 0;
       const page = page_keymap_of(keymap, [address], { recording: typeof recording === "string" ? recording : undefined, join: join === "insert" ? join : undefined, bar: bar === true });
       return page && JSON.stringify(page);
     } catch {
@@ -94,7 +98,7 @@ function locked_browser(transport: Transport) {
     const route = locked_route_of(type);
     if (route === "module") return loaded_bundle(await transport.load_bundle(String((message as { name?: unknown }).name)));
     if (route === "snapshot") return read_keymap(message);
-    if (type === "list_keys" && is_root_panel(message as Record<string, unknown>)) {
+    if (type === "list_keys" && root_panel_from_snapshot && is_root_panel(message as Record<string, unknown>)) {
       const panel = snapshot_value("which_key");
       if (panel !== undefined) return panel;
     }

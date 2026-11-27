@@ -62,7 +62,7 @@ export function key_event(key: string, patch: Partial<FakeEvent> = {}): FakeEven
 }
 
 type StorageChanges = Record<string, { oldValue?: unknown; newValue?: unknown }>;
-export type FakeExtension = { id: string; privateBrowsingAllowed: boolean; bucket: Map<string, unknown>; listeners: Set<(changes: StorageChanges) => void> };
+export type FakeExtension = { id: string; privateBrowsingAllowed: boolean; bucket: Map<string, unknown>; listeners: Set<(changes: StorageChanges) => void>; baseURI: { spec: string } };
 // The holder the extension's storage keeps: the module must deserialize it.
 const holder_of = (value: unknown) => ({ deserialize: () => structuredClone(value) });
 
@@ -78,6 +78,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   const sent_to_frames: { browser: unknown; name: string; data: unknown }[] = [];
   const broadcasts: string[] = [];
   const tab_ids = new Map<unknown, number>();
+  const tab_of_browser = new Map<unknown, unknown>();
   let next_tab_id = 1;
   const firefox = {
     extension: undefined as FakeExtension | undefined,
@@ -178,6 +179,13 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
                   if (!tab_ids.has(tab)) tab_ids.set(tab, next_tab_id++);
                   return tab_ids.get(tab);
                 },
+                getBrowserData(browser: unknown) {
+                  const tab = tab_of_browser.get(browser);
+                  return { tabId: tab === undefined ? -1 : this.getId(tab), windowId: 1 };
+                },
+                getTab(tab_id: number, fallback: unknown) {
+                  return [...tab_ids].find(([, id]) => id === tab_id)?.[0] ?? fallback;
+                },
               },
             },
           },
@@ -202,7 +210,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
           on: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.add(listener),
           off: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.delete(listener),
         },
-        PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true },
+        PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true, isBrowserPrivate: (browser: { private_browser?: boolean }) => browser.private_browser === true },
         ...firefox.module_exports,
       };
     },
@@ -268,8 +276,9 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     };
     const add_tab = () => {
       const browser = { localName: "browser", innerWindowID: 10, messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) } };
-      const tab = { browser };
+      const tab = { browser, linkedBrowser: browser };
       tabs.set(tab, tab);
+      tab_of_browser.set(browser, tab);
       return { tab, browser };
     };
     const press = (event: FakeEvent) => {
@@ -282,9 +291,11 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     return { win, load, add_tab, press, close, tab_moves, listener_count: (type: string) => listeners.get(type)?.size ?? 0 };
   };
 
-  const report = (browser: unknown, data: unknown) => {
-    for (const listener of message_listeners.get("desertfox-browser-module:report") ?? []) listener({ target: browser, data });
+  // A frame script's `sendAsyncMessage` as the parent hears it.
+  const from_frame = (name: string, browser: unknown, data: unknown) => {
+    for (const listener of message_listeners.get(name) ?? []) listener({ target: browser, data });
   };
+  const report = (browser: unknown, data: unknown) => from_frame("desertfox-browser-module:report", browser, data);
 
   const set_pref = (value: boolean | string | undefined) => {
     if (value === undefined) prefs.delete("desertfox.browser_module.enabled");
@@ -293,7 +304,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   };
 
   const start_extension = ({ private_access = false } = {}) => {
-    firefox.extension = { id: "desertfox@uhs-robert", privateBrowsingAllowed: private_access, bucket: new Map(), listeners: new Set() };
+    firefox.extension = { id: "desertfox@uhs-robert", privateBrowsingAllowed: private_access, bucket: new Map(), listeners: new Set(), baseURI: { spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/" } };
     [...ready_listeners].forEach((listener) => listener("ready", firefox.extension!));
     return firefox.extension;
   };
@@ -309,6 +320,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     Components,
     make_window,
     report,
+    from_frame,
     set_pref,
     start_extension,
     write_state,
