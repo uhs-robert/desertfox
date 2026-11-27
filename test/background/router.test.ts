@@ -970,9 +970,9 @@ test("repeated tab.next from one sender tab advance from the active tab, and a p
 });
 
 // A tab switch that settles after the next repeat arrives: `active` moves only when the switch finishes.
-function slow_switch() {
+function slow_switch(overrides: Partial<Parameters<typeof make_fake>[1]> = {}) {
   const window_of = (tab_id: number) => (tab_id > 10 ? 2 : 1);
-  const state = { active: new Map<number, number>([[1, 1], [2, 11]]), calls: 0, fail_on: -1 };
+  const state = { active: new Map<number, number>([[1, 1], [2, 11]]), calls: 0, fail_on: -1, focused: 1 };
   const { deps } = make_fake(
     {
       "tab.next": {
@@ -988,8 +988,9 @@ function slow_switch() {
       },
     },
     {
-      active_tab: async () => ({ tab_id: state.active.get(1)!, window_id: 1, url: "https://example.org/" }),
+      active_tab: async (window_id = state.focused) => ({ tab_id: state.active.get(window_id)!, window_id, url: "https://example.org/" }),
       get_tab: async (tab_id) => ({ tab_id, window_id: window_of(tab_id), url: "https://example.org/" }),
+      ...overrides,
     },
   );
   return { state, router: create_router(deps) };
@@ -1037,4 +1038,23 @@ test("repeats in two windows have a queue each", async () => {
   await Promise.all([held(router), held(router), held(router), in_window_2(), in_window_2()]);
   // Window 1 ran two and dropped the third. Window 2's own limit let both of its repeats run.
   assert.equal(state.calls, 4);
+});
+
+test("a queued repeat stays in its window when the focus moves to another one", async () => {
+  const { state, router } = slow_switch();
+  const both = Promise.all([held(router), held(router)]);
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  state.focused = 2;
+  await both;
+  assert.equal(state.active.get(1), 3);
+  assert.equal(state.active.get(2), 11);
+});
+
+test("a dep that rejects fails its repeat and leaves the chain alive for the next", async () => {
+  let asked = 0;
+  const { state, router } = slow_switch({ is_disabled: async () => (asked++ === 0 ? Promise.reject(new Error("storage failed")) : false) });
+  const [first, second] = await Promise.allSettled([held(router), held(router)]);
+  assert.equal(first.status, "rejected");
+  assert.equal(second.status, "fulfilled");
+  assert.equal(state.calls, 1);
 });
