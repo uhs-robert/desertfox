@@ -182,10 +182,13 @@ let pressed_keys = 0;
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   cancelled_keys.saw_keydown_(event.code);
-  if (!event.isTrusted || event.isComposing) return;
+  if (!event.isTrusted) return;
+  // Before the token filter: a key that starts a composition or has no token (Dead, Process) is the user typing too. A held key's repeats and a modifier alone are not.
+  if (!event.repeat && !/^(Shift|Control|Alt|Meta|AltGraph|OS|CapsLock)$/.test(event.key)) end_blur();
+  if (event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
-  if (!event.repeat) pressed_keys++, end_blur();
+  if (!event.repeat) pressed_keys++;
   // Before the key is decided, so the first key of an edit that began with no key goes to the field. The keyup call shows a change this key made itself.
   follow_field_change();
   if (replaying && token == "<Escape>") void send_to_background({ type: "replay_stop" });
@@ -416,7 +419,7 @@ function start(): void {
   watch_roots_around_focus();
   listen("pagehide", bundles.page_hidden_, false);
   listen("visibilitychange", on_visibility_change, false, document);
-  listen("mousedown", () => (end_blur(), site_mode.end_on_input_()));
+  listen("mousedown", (event: MouseEvent) => (event.isTrusted && end_blur(), site_mode.end_on_input_()));
   site_mode.on_change_ = () => {
     install_tree();
     refresh_mode_indicator();
