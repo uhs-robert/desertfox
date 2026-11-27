@@ -27,6 +27,7 @@ import { accept_hint_timing } from "./timing_log.ts";
 import { browser_timing_log } from "./timing_browser.ts";
 import type { Asker } from "./complete_items.ts";
 import type { LoadSender } from "./bundle_loader.ts";
+import type { create_browser_module } from "./browser_module.ts";
 import type { create_tab_modes } from "./tab_modes.ts";
 import type { create_tab_insert } from "./tab_insert.ts";
 import type { create_tab_item } from "./tab_item.ts";
@@ -81,6 +82,7 @@ export type ContentDeps = {
   router: ReturnType<typeof create_router>;
   router_deps: ReturnType<typeof make_router_deps>;
   media_quality: ReturnType<typeof create_media_quality>;
+  browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active">;
 };
 
 const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
@@ -144,6 +146,8 @@ export const content_handlers = (deps: ContentDeps) => {
         });
       },
     },
+    // A reply is not needed, and a bar that is not up ignores the report.
+    bar_state: { from: "frame", run: (request, { tab_id, tab, frame_id }) => void deps.browser_module.bar_report(tab_id, frame_id, tab.incognito === true, request) },
     leave_tab_insert: { from: "tab", run: (_request, { tab_id }) => tab_insert.leave(tab_id) },
     load_bundle: { from: "any", run: (request, sender) => bundle_loader.answer(sender, request.name) },
     list_keys: {
@@ -212,7 +216,7 @@ export const content_handlers = (deps: ContentDeps) => {
           browser_macro_recorder
             .register_of(sender.tab?.incognito === true)
             .catch(warn_and_go("macro register_of"))
-            .then((recording) =>
+            .then(async (recording) =>
               read_keymap_reply(
                 browser.storage.local,
                 rule_addresses_of(sender_at(sender, request.url)),
@@ -220,6 +224,7 @@ export const content_handlers = (deps: ContentDeps) => {
                 sender.tab?.id === undefined || sender.frameId === undefined
                   ? undefined
                   : () => join_mode(request.join, () => tab_insert.join(sender.tab!.id!, sender.frameId!), () => tab_media.join(sender.tab!.id!, sender.frameId!, (sender as LoadSender).documentId), () => tab_item.join(sender.tab!.id!, sender.frameId!, (sender as LoadSender).documentId)),
+                await deps.browser_module.bar_active(),
               ),
             );
         return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);

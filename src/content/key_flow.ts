@@ -24,7 +24,8 @@ type HeldKey = { token_: string; on_replay_pass_?: OnReplayPass | undefined; rep
 
 // The keys typed so far in a half-typed sequence. Which-key reads it.
 // `held_` marks a group a hold keeps open: the panel shows at once and says how to leave.
-export type PendingPrefix = { mode: Mode; typed_: string[]; held_?: true };
+// `count_` is a typed count. A bare count has no keys yet, so `typed_` is empty then and which-key has nothing to list.
+export type PendingPrefix = { mode: Mode; typed_: string[]; held_?: true; count_?: number };
 
 export type Matcher = {
   feed: (mode: string, token: string) => MatchResult;
@@ -187,7 +188,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);
     // A leaf run in a hold leaves the panel up: it shows again once the leaf has run.
-    if (!(result.kind_ === "match" && holding)) deps.on_prefix_(result.kind_ === "pending" && listing.length > 0 ? { mode, typed_: listing, ...(holding && { held_: true as const }) } : undefined, holding);
+    if (!(result.kind_ === "match" && holding)) deps.on_prefix_(result.kind_ === "pending" && (listing.length > 0 || result.count) ? { mode, typed_: listing, ...(result.count && { count_: result.count }), ...(holding && { held_: true as const }) } : undefined, holding);
     if (result.kind_ === "match") {
       const passed = deps.run_leaf_(result.leaf, result.count, repeat);
       // A leaf that changed the mode has reset the sequence, so the hold is gone.
