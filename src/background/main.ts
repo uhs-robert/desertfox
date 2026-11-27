@@ -26,7 +26,7 @@ import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { start_bridge } from "./bridge_browser.ts";
-import { item_start_for, media_quality_is_idle } from "./page_keymap.ts";
+import { item_start_for, keymap_snapshot_of, media_quality_is_idle } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -305,10 +305,7 @@ const browser_module_rpc = create_browser_module_rpc({
   dispatch: (message, sender) => locked_page_dispatch(message, sender),
   read_part: {
     // The whole stored keymap with its site rules: the shim resolves them for the tab address that `read_keymap_state` gives.
-    keymap: async () => {
-      const keymap = current_keymap(await stored_keymap(browser.storage.local));
-      return keymap && JSON.stringify(keymap);
-    },
+    keymap: async () => keymap_snapshot_of(current_keymap(await stored_keymap(browser.storage.local))),
     config: () => stored_value(CONFIG_STATUS_STORAGE_KEY),
     theme: () => stored_value(THEME_STORAGE_KEY),
     which_key: () => list_keys(browser.storage.local, (id) => registry.get(id), { mode: "normal", prefix: [] }),

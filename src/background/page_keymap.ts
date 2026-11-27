@@ -2,7 +2,7 @@
 
 import { current_keymap, is_freed } from "../shared/prefix_tree.ts";
 import { stored_keymap } from "./keymap_source.ts";
-import { HINT_SITE_SETTINGS, QUALITY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
+import { HINT_SITE_SETTINGS, ITEM_SELECT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS, QUALITY_SITE_SETTINGS } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, FrameSiteValues, PageKeymap, TreeLeaf } from "../shared/prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { frees_of } from "../shared/keys/prune_tree.ts";
@@ -102,3 +102,17 @@ export const read_keymap_reply = async (storage: KeymapStorage, addresses: reado
   const reply = await page_keymap_for(storage, addresses, recording, join, bar);
   return reply && JSON.stringify(reply);
 };
+
+// The setting values of a site row that the page resolver reads: `frame_site_values_for` is asked for these names only.
+const SHIM_SITE_VALUES: readonly string[] = [...PAGE_REPLY_SITE_SETTINGS, ...ITEM_SELECT_SITE_SETTINGS];
+
+// The stored keymap as the locked page snapshot holds it, less what the shim never reads: each row's `origin`, `name`, `site` (the site rules view reads them), its setting values outside `SHIM_SITE_VALUES`, and the top-level `item_navigator`. The rows then no longer fit `SiteRule`, which is why the shim reads them only through `page_keymap_of`.
+export function keymap_snapshot_of(keymap: CompiledKeymap | undefined): CompiledKeymap | undefined {
+  if (keymap === undefined) return undefined;
+  const { item_navigator: _, ...rest } = keymap;
+  const site_rules = keymap.site_rules?.map(({ origin: _origin, name: _name, site: _site, values, ...row }: Record<string, unknown> & { values?: Readonly<Record<string, unknown>> }) => ({
+    ...row,
+    ...(values && { values: Object.fromEntries(Object.entries(values).filter(([name]) => SHIM_SITE_VALUES.includes(name))) }),
+  }));
+  return { ...rest, ...(site_rules && { site_rules: site_rules as unknown as CompiledKeymap["site_rules"] }) } as CompiledKeymap;
+}

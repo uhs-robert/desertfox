@@ -19,7 +19,7 @@ const TAB = { id: 7, url: PDF, index: 0, highlighted: false, active: true, pinne
 // The real base channel and the real message table, with a fake session and a handler table that records what reaches it.
 function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Partial<Record<SnapshotPart, unknown>> } = {}) {
   const data = new Map<string, unknown>();
-  const config = { before_send: undefined as ((id: string) => void) | undefined, before_get_tab: undefined as (() => Promise<void>) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: '{"keymap":1}', config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
+  const config = { before_send: undefined as ((id: string) => void) | undefined, before_get_tab: undefined as (() => Promise<void>) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: { format_version: 1, modes: {} }, config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
   const session = {
     get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, structuredClone(data.get(name))])),
     set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value))),
@@ -346,12 +346,12 @@ test("each snapshot part is written whole, rewritten on its own change, and remo
   await rpc.sync();
   for (const part of SNAPSHOT_PART_NAMES) assert.deepEqual(data.get(SNAPSHOT_PARTS[part].key), { v: V, value: config.parts[part] }, part);
   config.parts.theme = { dark: { a: 1 }, light: {} };
-  config.parts.keymap = '{"keymap":2}';
+  config.parts.keymap = { format_version: 1, modes: { a: 1 } };
   rpc.storage_changed({ [THEME_STORAGE_KEY]: {} }, "local");
   await settle();
   assert.deepEqual((data.get(SNAPSHOT_PARTS.theme.key) as { value: unknown }).value, { dark: { a: 1 }, light: {} });
-  assert.equal((data.get(SNAPSHOT_PARTS.keymap.key) as { value: unknown }).value, '{"keymap":1}', "a theme change leaves the keymap");
-  config.parts.keymap = "k".repeat(SNAPSHOT_PARTS.keymap.max_bytes);
+  assert.deepEqual((data.get(SNAPSHOT_PARTS.keymap.key) as { value: unknown }).value, { format_version: 1, modes: {} }, "a theme change leaves the keymap");
+  config.parts.keymap = { format_version: 1, modes: {}, pad: "k".repeat(SNAPSHOT_PARTS.keymap.max_bytes) };
   config.parts.config = undefined;
   await rpc.sync();
   assert.equal(data.has(SNAPSHOT_PARTS.keymap.key), false, "over its cap, the part is gone rather than stale");

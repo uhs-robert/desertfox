@@ -186,11 +186,12 @@ test("each snapshot part has its own check and cap, under the 512 KB ceiling", (
   assert.deepEqual(SNAPSHOT_PART_NAMES, ["keymap", "config", "theme", "which_key"]);
   for (const part of SNAPSHOT_PART_NAMES) assert.ok(SNAPSHOT_PARTS[part].max_bytes <= MAX_SNAPSHOT_BYTES);
   assert.deepEqual(new Set(SNAPSHOT_PART_NAMES.map((part) => SNAPSHOT_PARTS[part].key)).size, 4);
-  const good = { keymap: "{}", config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] } };
+  const good = { keymap: { format_version: 1, modes: {} }, config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] } };
   for (const part of SNAPSHOT_PART_NAMES) {
     assert.deepEqual(validate_snapshot(part, { v: V, value: good[part], later: 1 }), { ok: true, value: { v: V, value: good[part] } }, part);
     assert.deepEqual(validate_snapshot(part, { v: V }), { ok: true, value: { v: V } }, "every field but v is optional");
     for (const junk of [undefined, null, "x", [], { v: V + 1, value: good[part] }, { value: good[part] }, { v: V, value: 5 }]) assert.equal(validate_snapshot(part, junk).ok, false, `${part} ${JSON.stringify(junk)}`);
+    if (part === "keymap") for (const value of ["{}", { modes: {} }, { format_version: "1", modes: {} }, { format_version: 1, modes: [] }, { format_version: 1, modes: {}, site_rules: {} }]) assert.equal(validate_snapshot(part, { v: V, value }).ok, false, JSON.stringify(value));
     assert.equal(validate_snapshot(part, { v: V, value: good[part], pad: "p".repeat(SNAPSHOT_PARTS[part].max_bytes) }).ok, false, `${part} over its cap`);
   }
   assert.equal(validate_snapshot("theme", { v: V, value: { dark: {} } }).ok, false);

@@ -7,7 +7,7 @@ import { BROWSER_MODULE_PROTOCOL_VERSION as V, MAX_KIND_BYTES } from "../../src/
 import type { SnapshotPart } from "../../src/shared/browser_module_protocol.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../src/shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
-import { page_keymap_for } from "../../src/background/page_keymap.ts";
+import { keymap_snapshot_of, page_keymap_for } from "../../src/background/page_keymap.ts";
 import { compile_keymap } from "../../src/shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../../src/shared/prefix_tree.ts";
@@ -59,7 +59,7 @@ const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore
 const KEYMAP = { normal: { j: { id: "a.j" }, k: { id: "a.k" }, q: { id: "macro.record" }, ",i": { id: "a.i" } }, browser: {} };
 const SITE_RULES = [{ site: "https://pass.test/*", pass: "j" }, { site: "https://off.test/*", off: true }, { site: "https://only.test/*", only: "k" }, { site: "https://bind.test/*", bind: { j: { id: "a.bound" } } }];
 const stored_keymap = compile_keymap(KEYMAP as never, { site_rules: SITE_RULES } as never, resolve).compiled as CompiledKeymap;
-const keymap_snapshot = snap(JSON.stringify(stored_keymap));
+const keymap_snapshot = snap(JSON.parse(JSON.stringify(keymap_snapshot_of(stored_keymap))));
 // What the background's `read_keymap_state` answers for a locked tab.
 const state_of = (state: Record<string, unknown>) => async () => JSON.stringify({ value: state });
 const storage_of = (keymap: CompiledKeymap) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) }) as never;
@@ -109,11 +109,6 @@ test("read_keymap and the root which-key panel come from their snapshots, a bund
   assert.equal(state.calls.length, 1, "a prefix panel is a call");
   assert.deepEqual(plain(await browser.runtime.sendMessage({ type: "load_bundle", name: "hints" })), { ok: true });
   assert.deepEqual(state.bundles, ["hints"]);
-  // A snapshot that fails its check serves nothing.
-  snapshots.keymap = { v: V + 1, value: JSON.stringify(stored_keymap) };
-  assert.equal(await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "" }), undefined);
-  snapshots.keymap = { v: V, value: { not: "text" } };
-  assert.equal(await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "" }), undefined);
   snapshots.which_key = undefined;
   await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: [], url: "" });
   assert.equal(state.calls.length, 2, "no root snapshot, so the panel is a call");
@@ -181,15 +176,19 @@ test("the shim's answer equals page_keymap_for for the same inputs", async () =>
   }
 });
 
-test("a keymap snapshot of the wrong shape gives no keymap and asks nothing", async () => {
-  const { browser, state, snapshots } = load({ keymap: keymap_snapshot });
-  state.answer = state_of({ address: "https://example.test/" });
-  const stale = { ...stored_keymap, format_version: stored_keymap.format_version + 1 };
-  for (const text of ["not json", "[1]", "null", JSON.stringify({ modes: 5, format_version: stored_keymap.format_version }), JSON.stringify(stale), JSON.stringify({ ...stored_keymap, modes: [] })]) {
-    snapshots.keymap = snap(text);
-    assert.equal(await ask(browser), undefined, text.slice(0, 40));
+// Without a keymap the page code would run with no keys. The shim stops it, as when the extension unloads, so the module's own keys stay in use.
+test("a keymap snapshot that is missing, over its cap or of the wrong shape stops the page code and asks nothing", async () => {
+  const wrong = JSON.parse(JSON.stringify(stored_keymap)) as Record<string, unknown>;
+  const cases: unknown[] = [undefined, { v: V }, { v: V + 1, value: wrong }, snap("text"), snap([1]), snap(null), snap({ ...wrong, modes: 5 }), snap({ ...wrong, modes: [] }), snap({ ...wrong, format_version: (wrong.format_version as number) + 1 })];
+  for (const bad of cases) {
+    const { browser, state } = load({ keymap: bad });
+    state.answer = state_of({ address: "https://example.test/" });
+    assert.ok(browser.runtime.id !== undefined, "alive until the first ask");
+    assert.equal(await ask(browser), undefined, JSON.stringify(bad)?.slice(0, 50));
+    assert.equal(browser.runtime.id, undefined, "the page code sees the extension gone");
+    await assert.rejects(browser.runtime.sendMessage({ type: "register_read", name: "a" }), /invalidated/);
+    assert.deepEqual(state.calls, []);
   }
-  assert.deepEqual(state.calls, []);
 });
 
 test("tree_updated makes the page ask again, and the new answer reads the new snapshot and state", async () => {
@@ -199,7 +198,7 @@ test("tree_updated makes the page ask again, and the new answer reads the new sn
   state.answer = state_of({ address: "https://example.test/" });
   assert.equal((await ask(browser))!.recording, undefined);
   state.answer = state_of({ address: "https://example.test/", recording: "a" });
-  snapshots.keymap = snap(JSON.stringify({ ...stored_keymap, item_navigator: true }));
+  snapshots.keymap = snap({ ...JSON.parse(JSON.stringify(stored_keymap)), item_navigator: true });
   changed("keymap");
   assert.equal(updates, 1);
   assert.equal((await ask(browser))!.recording, "a");

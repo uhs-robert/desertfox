@@ -38,32 +38,28 @@ const is_record = (value: unknown): value is Record<string, unknown> => typeof v
 function locked_browser(transport: Transport) {
   const message_listeners = new Set<Listener>();
   const change_listeners = new Set<Listener>();
-  const alive = (): boolean => transport.alive();
+  let refused = false;
+  const alive = (): boolean => !refused && transport.alive();
 
   const snapshot_value = (part: SnapshotPart): unknown => {
     const checked = validate_snapshot(part, transport.snapshot(part));
     return checked.ok ? checked.value.value : undefined;
   };
 
-  // The keymap snapshot is the stored keymap as JSON text, with its site rules. It is chrome-readable storage, so its shape is checked here before the resolver reads it. The parse is kept while the text stays the same.
-  let parsed_keymap: { text: unknown; keymap: CompiledKeymap | undefined } = { text: undefined, keymap: undefined };
+  // The keymap snapshot is the stored keymap object, with its site rules. It is chrome-readable storage, so `validate_snapshot` checked its outline and `current_keymap` checks its version before the resolver reads it.
   const snapshot_keymap = (): CompiledKeymap | undefined => {
-    const text = snapshot_value("keymap");
-    if (parsed_keymap.text === text) return parsed_keymap.keymap;
-    let keymap: unknown;
-    try {
-      keymap = typeof text === "string" ? JSON.parse(text) : undefined;
-    } catch {
-      keymap = undefined;
-    }
-    parsed_keymap = { text, keymap: is_record(keymap) && is_record(keymap.modes) ? current_keymap(keymap as CompiledKeymap) : undefined };
-    return parsed_keymap.keymap;
+    const value = snapshot_value("keymap");
+    return is_record(value) && is_record(value.modes) ? current_keymap(value as unknown as CompiledKeymap) : undefined;
   };
 
   // The page's keymap as the background would answer `read_keymap`: the snapshot resolved for the tab's own address. The page's `url` is not read, because the page is not trusted with its address.
   async function read_keymap(message: unknown): Promise<string | undefined> {
     const keymap = snapshot_keymap();
-    if (keymap === undefined) return undefined;
+    // No usable keymap (over its cap, never written, another version): the page code would run with no keys at all, so it stops and the module's own keys stay in use, as when the extension unloads.
+    if (keymap === undefined) {
+      refused = true;
+      return undefined;
+    }
     const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
     if (!is_record(state) || typeof state.address !== "string") return undefined;
     const { address, recording, join, bar } = state;

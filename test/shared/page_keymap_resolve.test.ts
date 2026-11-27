@@ -3,10 +3,10 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
-import { page_keymap_for } from "../../src/background/page_keymap.ts";
+import { keymap_snapshot_of, page_keymap_for } from "../../src/background/page_keymap.ts";
 import type { JoinMode } from "../../src/background/page_keymap.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
-import { BROWSER_MODULE_PROTOCOL_VERSION, MAX_SNAPSHOT_BYTES, validate_snapshot } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION, json_bytes, MAX_SNAPSHOT_BYTES, validate_snapshot } from "../../src/shared/browser_module_protocol.ts";
 import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../../src/shared/prefix_tree.ts";
@@ -51,7 +51,7 @@ const storage_of = (keymap: CompiledKeymap) => ({ get: async () => ({ [COMPILED_
 for (const [name, settings] of [["the default keymap with the shipped and test rows", {}], ["item_select set to arrows everywhere", { item_select: "arrows" }]] as const) {
   test(`the shared resolver equals page_keymap_for: ${name}`, async () => {
     const stored = compiled_with(settings);
-    const from_snapshot = current_keymap(JSON.parse(JSON.stringify(stored)) as CompiledKeymap);
+    const from_snapshot = current_keymap(JSON.parse(JSON.stringify(keymap_snapshot_of(stored))) as CompiledKeymap);
     for (const address of ADDRESSES) {
       for (const state of STATES) {
         const expected = await page_keymap_for(storage_of(stored), [address], state.recording, async () => state.join, state.bar);
@@ -86,12 +86,11 @@ test("no keymap gives no answer", () => {
   assert.equal(page_keymap_of(undefined, ["https://example.test/"]), undefined);
 });
 
-// The keymap snapshot is the stored keymap with its site rules as JSON text inside the snapshot, so the text is escaped once more. Measured with the shipped rows: 501423 bytes of the 524288 cap. A user config that adds rules can pass the cap, and the part is then removed (`write_parts`), so a locked page gets no keymap.
+// The snapshot holds the stored keymap with its site rules as an object, and the validator measures the whole snapshot as JSON text. With the shipped rows it is about 419 KB of the 512 KB cap. A user config that adds rules can pass the cap, and the part is then removed (`write_parts`), so the shim stops the page code.
 test("the keymap snapshot with the shipped site rows fits the snapshot cap", () => {
-  const snapshot_bytes = (keymap: CompiledKeymap) => Buffer.byteLength(JSON.stringify({ v: BROWSER_MODULE_PROTOCOL_VERSION, value: JSON.stringify(keymap) }));
   const shipped = compiled_with({ site_rules: [] });
-  const bytes = snapshot_bytes(shipped);
+  const bytes = json_bytes({ v: BROWSER_MODULE_PROTOCOL_VERSION, value: keymap_snapshot_of(shipped) })!;
   console.log(`keymap snapshot bytes: ${bytes} of ${MAX_SNAPSHOT_BYTES}, ${MAX_SNAPSHOT_BYTES - bytes} left for user rules`);
-  assert.equal(validate_snapshot("keymap", { v: BROWSER_MODULE_PROTOCOL_VERSION, value: JSON.stringify(shipped) }).ok, true);
-  assert.ok(bytes < MAX_SNAPSHOT_BYTES);
+  assert.equal(validate_snapshot("keymap", { v: BROWSER_MODULE_PROTOCOL_VERSION, value: JSON.parse(JSON.stringify(keymap_snapshot_of(shipped))) }).ok, true);
+  assert.ok(bytes < 450 * 1024);
 });

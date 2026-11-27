@@ -360,8 +360,8 @@ export const MAX_SNAPSHOT_BYTES = 512 * 1024;
 
 type SnapshotRow = { key: string; max_bytes: number; value_ok: (value: unknown) => boolean };
 export const SNAPSHOT_PARTS: Record<SnapshotPart, SnapshotRow> = {
-  // The `read_keymap` answer, already JSON text. The default keymap's is about 300 KB.
-  keymap: { key: BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, max_bytes: MAX_SNAPSHOT_BYTES, value_ok: (value) => typeof value === "string" },
+  // The stored compiled keymap with its site rules, as an object, so storage holds it with no escaping. Only the outline is checked here: the shim runs `current_keymap` on it before use.
+  keymap: { key: BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, max_bytes: MAX_SNAPSHOT_BYTES, value_ok: (value) => is_record(value) && typeof value.format_version === "number" && is_record(value.modes) && (value.site_rules === undefined || Array.isArray(value.site_rules)) },
   // The stored config status (CONFIG_STATUS_STORAGE_KEY).
   config: { key: BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, max_bytes: 64 * 1024, value_ok: is_record },
   // The stored theme (THEME_STORAGE_KEY).
