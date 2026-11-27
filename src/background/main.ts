@@ -299,7 +299,7 @@ const stored_value = async (key: string): Promise<unknown> => (await browser.sto
 const browser_module_rpc = create_browser_module_rpc({
   session: browser.storage.session,
   is_on: () => pages_setting_on(browser.storage.local),
-  send: (kind, args) => browser_module.send(kind, args),
+  send: (kind, args, on_id) => browser_module.send(kind, args, on_id),
   get_tab: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)),
   // The table is built below, after the last service it names. A call arrives only after the first turn.
   dispatch: (message, sender) => locked_page_dispatch(message, sender),
