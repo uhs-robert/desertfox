@@ -69,9 +69,10 @@ Example: the scroll widget of the browser module's bar.
 
 1. Add the name to `BROWSER_BAR_WIDGETS` (the list the settings and the protocol share). Run `just settings-defaults`.
 2. If the widget needs a value only the page knows, add an optional field to `BarFields` in `src/shared/browser_module_protocol.ts` with its check, and report it through the existing `bar_state` path. A value the browser holds is read in `browser_module/desertfox-statusbar.js` instead.
-3. Add the widget to `WIDGETS` and `widget_of` in `browser_module/desertfox-statusbar.js`, and to `DROP_ORDER` if a narrow bar may drop it. Keep its text equal to the command line's when both show it, and add the case to `test/browser_module/statusbar_labels.test.ts`.
-4. Draw it with `textContent` only. Add a case to `test/browser_module/statusbar_draw.test.ts`, with a hostile value if the text comes from the state.
-5. Describe it in [`design/browser_module.md`](design/browser_module.md), "The status bar", and in the setting's text in `src/shared/settings_docs.ts`.
+3. If the value comes through the state, validate it and copy it into the object `tab_view` returns in `browser_module/desertfox-statusbar.js`. `widget_of` reads only what `tab_view` copies, so a field left out there never shows.
+4. Add the widget to `WIDGETS` and `widget_of` in `browser_module/desertfox-statusbar.js`, and to `DROP_ORDER` if a narrow bar may drop it. Keep its text equal to the command line's when both show it, and add the case to `test/browser_module/statusbar_labels.test.ts`.
+5. Draw it with `textContent` only. Add a case to `test/browser_module/statusbar_draw.test.ts`, with a hostile value if the text comes from the state.
+6. Describe it in [`design/browser_module.md`](design/browser_module.md), "The status bar", and in the setting's text in `src/shared/settings_docs.ts`.
 
 ## Raise a guard
 
