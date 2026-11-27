@@ -298,6 +298,30 @@ test("a deny pick on a doorhanger clicks at once, Block with no delay and the cl
   assert.equal(early.chrome.block.clicks, 0);
 });
 
+test("a deny that stays waits for Enter: notifications' Always Block, and any Block with Remember ticked", async () => {
+  const always_block = await doorhanger_pick((chrome) => chrome.block, { popupid: "web-notifications" });
+  assert.equal(always_block.chrome.block.clicks, 0, "Always Block on a notifications prompt clicked at once");
+  assert.ok(marked(always_block.chrome));
+  always_block.chrome.press("Enter");
+  assert.equal(always_block.chrome.block.clicks, 1);
+
+  for (const popupid of ["geolocation", "webRTC-shareDevices"]) {
+    const run = started((firefox) => {
+      const window = browser_with_doorhanger(firefox, { popupid });
+      window.remember.setAttribute("checked", "");
+      return window;
+    });
+    const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+    run.firefox.chrome_now = 5000;
+    await collect(run, 5);
+    await (await labelled(run, 5))(chrome.block);
+    assert.equal(chrome.block.clicks, 0, `${popupid}: Block with Remember ticked clicked at once`);
+    assert.ok(marked(chrome), popupid);
+    chrome.press("Enter");
+    assert.equal(chrome.block.clicks, 1, popupid);
+  }
+});
+
 test("on a doorhanger the table does not know, the second button waits for Enter, and so does any control it does not name", async () => {
   const unknown = await doorhanger_pick((chrome) => chrome.block, { popupid: "addon-install-confirmation" });
   assert.equal(unknown.chrome.block.clicks, 0, "an unknown prompt's second button clicked at once");
