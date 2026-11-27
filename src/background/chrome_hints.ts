@@ -1,8 +1,9 @@
-// Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window and sends their ids and boxes (`browser_module/desertfox-chrome-hints.js`, and `desertfox-devtools.js` for DevTools). This file makes the labels, narrows them as the module reports each typed key, and names the target to pick.
+// Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window, or of one of Firefox's own pages, and sends their ids and boxes (`browser_module/desertfox-chrome-hints.js`, and `desertfox-devtools.js` for DevTools). This file makes the labels, narrows them as the module reports each typed key, and names the target to pick.
 // The session lives in `storage.session`, so a restarted background still narrows and picks. Every message carries the session number, so a message of an older session finds nothing.
 
 import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, json_bytes } from "../shared/browser_module_protocol.ts";
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
+import type { PageHintChoice } from "../shared/browser_module_scope.ts";
 import { CHROME_HINTS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { make_labels, narrow } from "../shared/hints/labels.ts";
 import { keep_chain } from "../shared/swallow.ts";
@@ -41,6 +42,8 @@ export type ChromeHintDeps = {
   // Tells the user in that window, or the last focused one, why a pick or a start did nothing.
   notify: (window_id: number | undefined, message: string) => Promise<void>;
   new_session: () => number;
+  // The action of the hint key the module matched on one of Firefox's own pages, from the stored keymap.
+  page_action: (keys: string) => Promise<PageHintChoice>;
 };
 
 // Room beside a part's rows for the rest of the message.
@@ -195,6 +198,19 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       if (!is_whole(args.start)) return;
       const start = args.start;
       const result = await begin({}, (session, colors) => deps.call("chrome_hints.collect_here", { session, start, colors }));
+      if (!result.ok && result.error !== STALE_START) await deps.notify(undefined, result.error);
+    },
+    // The module heard a hint key on one of Firefox's own pages. As with `want`, its token goes back as it came, with the action of the key's binding.
+    // A refusal throws, so the reply tells the module to end its start at once and give the keys back.
+    "page_hints.want": async (args: ModuleArgs): Promise<void> => {
+      if (!is_whole(args.start) || typeof args.keys !== "string") return;
+      const start = args.start;
+      const chosen = await deps.page_action(args.keys);
+      if (!chosen.ok) {
+        await deps.notify(undefined, chosen.problem);
+        throw new Error(chosen.problem);
+      }
+      const result = await begin({}, (session, colors) => deps.call("page_hints.collect", { session, start, action: chosen.action, colors }));
       if (!result.ok && result.error !== STALE_START) await deps.notify(undefined, result.error);
     },
     // The module heard the hint key in DevTools. As with `want`, its token goes back as it came.

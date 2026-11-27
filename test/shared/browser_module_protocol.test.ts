@@ -27,6 +27,7 @@ import {
   reply_fits,
   MAX_MESSAGES,
   MODULE_TO_EXTENSION_KINDS,
+  PAGE_HINT_ACTIONS,
   status_of_hello,
   tab_state_in,
   DEFAULT_MAX_AGE_MS,
@@ -130,8 +131,8 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -390,4 +391,21 @@ test("the DevTools hint rows match the chrome hint rows they stand beside, and t
   assert.deepEqual(EXTENSION_TO_MODULE_KINDS["devtools_hints.collect"], { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 });
   assert.deepEqual(MODULE_TO_EXTENSION_KINDS["devtools_hints.ask"], { args: { ask: "int" }, reply: true, max_bytes: 256 });
   assert.equal(validate_message({ v: V, id: "a1", kind: "devtools_hints.ask", args: { ask: "1" } }, MODULE_TO_EXTENSION_KINDS).ok, false);
+});
+
+test("hints on Firefox's own pages: the want carries the token and the matched keys, the collect takes an action of the fixed list only, and the state and hello flags are kept only when true", () => {
+  assert.deepEqual(MODULE_TO_EXTENSION_KINDS["page_hints.want"], { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: 512 });
+  const collect = (action: unknown) => validate_message({ v: V, id: "p1", kind: "page_hints.collect", args: { session: 1, start: 2, action, colors: "" } }, EXTENSION_TO_MODULE_KINDS);
+  for (const action of PAGE_HINT_ACTIONS) assert.ok(collect(action).ok, action);
+  for (const action of ["here", "window", "copy", "inspect", "", undefined, 1]) assert.equal(collect(action).ok, false, String(action));
+  // A selector or an address never fits a collect: its only text is the colors, and the action is a name of the list.
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["page_hints.collect"]!.args), ["session", "start", "action", "colors"]);
+  const kept = validate_module_state(state({ page_hints: true }));
+  assert.ok(kept.ok && kept.value.page_hints === true);
+  for (const flag of [false, "true", 1, undefined]) {
+    const checked = validate_module_state(state({ page_hints: flag }));
+    assert.ok(checked.ok && !("page_hints" in checked.value), String(flag));
+  }
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", page_hints: true }), { ok: true, value: { v: V, module_version: "1", page_hints: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", page_hints: 1 }), { ok: true, value: { v: V, module_version: "1" } });
 });

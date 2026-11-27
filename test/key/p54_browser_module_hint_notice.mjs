@@ -1,5 +1,5 @@
-// The hint keys where hints cannot run: with browser_module_pages off, the module claims them on the PDF viewer and Reader View and DesertFox says to turn the setting on, once per document. On about:preferences it says hints do not run there.
-// Also about:addons, that the setting turning on gives the keys to the page code, and that the about:preferences search box still takes f as text.
+// The hint keys where hints cannot run: with browser_module_pages off, the module claims them on the PDF viewer and Reader View and DesertFox says to turn the setting on, once per document. On about:support, which the module does not label, it says hints do not run there.
+// Also that the setting turning on gives the keys to the page code, and that the about:preferences search box still takes f as text. p55_page_hints covers the about: pages the module labels.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -93,21 +93,22 @@ export async function run_cases(context) {
     });
   }
 
-  await run_case("on about:addons f says hints do not run there, and shows no hints", async () => {
-    await home("hn_addons");
-    await open_tab("about:addons");
-    await poll_until("about:addons to load", () => in_selected_page(`(win) => win.document.readyState === "complete"`));
+  await run_case("on about:support f says hints do not run there, and shows no hints", async () => {
+    await home("hn_support");
+    await open_tab("about:support");
+    await poll_until("about:support to load", () => in_selected_page(`(win) => win.document.readyState === "complete"`));
     await focus_page();
     await clear_notices();
     on_teardown(clear_notices);
     await press_keys("f");
-    await poll_until("the notice on about:addons", async () => (await notices()).includes(NOT_HERE_NOTICE), { timeout_ms: 5000 });
-    expect((await hint_labels()) === 0, "about:addons showed hint labels");
+    await poll_until("the notice on about:support", async () => (await notices()).includes(NOT_HERE_NOTICE), { timeout_ms: 5000 });
+    expect((await hint_labels()) === 0, "about:support showed hint labels");
+    expect((await chrome(`(async () => ${W}.document.querySelectorAll(".desertfox-page-hints").length)()`)) === 0, "about:support got the module's page labels");
     await clear_notices();
     await close_selected_tab();
   });
 
-  await run_case("on about:preferences the search box takes f as text, and f outside it says hints do not run there", async () => {
+  await run_case("on about:preferences the search box takes f as text, and no notice shows", async () => {
     await home("hn_prefs");
     await open_tab("about:preferences");
     await poll_until("the search box to hold the focus", () => chrome(`(async () => ${W}.windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`));
@@ -119,11 +120,7 @@ export async function run_cases(context) {
     await poll_until("f in the search box", async () => (await in_selected_page(field_value)) === "f");
     await sleep(NO_EFFECT_MS);
     expect((await hint_runs()).length === runs_before && (await notices()).length === 0, "f in the search box was claimed");
-    await in_selected_page(`(win) => { let node = win.document.activeElement; while (node?.shadowRoot?.activeElement) node = node.shadowRoot.activeElement; node?.blur(); return true; }`);
-    await poll_until("the focus out of the search box", () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`));
-    await press_keys("f");
-    await poll_until("the notice on about:preferences", async () => (await notices()).includes(NOT_HERE_NOTICE), { timeout_ms: 5000 });
-    await clear_notices();
+    expect((await chrome(`(async () => ${W}.document.querySelectorAll(".desertfox-page-hints").length)()`)) === 0, "f in the search box started page hints");
     await close_selected_tab();
   });
 }

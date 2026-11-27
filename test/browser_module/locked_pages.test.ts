@@ -269,6 +269,27 @@ test("the rule it lends the key taker: the PDF viewer and Reader View need the s
   assert.equal(notice_on({ principal: SYSTEM_PRINCIPAL, uri: "about:preferences", inner: 5 }), "not_here");
 });
 
+test("the rule says page_hints only on a page chrome hints label, once the extension's state says it answers their start, and the notice stays everywhere else", () => {
+  const { firefox, browser, set_page } = locked({ config: null, keymap: null });
+  const core = firefox.Services.desertfox_browser_module as { locked_page_rule(): { hint_notice(browser: unknown, win: unknown): unknown }; share_page_hints(entry: unknown): void };
+  const win = { private_window: false };
+  const notice_on = (uri: string) => (set_page({ principal: SYSTEM_PRINCIPAL, uri, inner: 5 }), core.locked_page_rule().hint_notice(browser, win));
+  const STATE = { v: V, enabled: true, keys: [], tabs: {} };
+  firefox.write_state({ ...STATE, page_hints: true });
+  assert.equal(notice_on("about:addons"), "not_here", "a module with no page start lent said page_hints");
+  core.share_page_hints({ handles: () => (browser as { handled?: boolean }).handled === true, start: () => false });
+  (browser as { handled?: boolean }).handled = true;
+  assert.equal(notice_on("about:addons"), "page_hints");
+  assert.equal(core.locked_page_rule().hint_notice(browser, undefined), "not_here", "no window, no state to read");
+  // An older extension writes no flag, and a page chrome hints do not label keeps the notice.
+  firefox.write_state(STATE);
+  assert.equal(notice_on("about:addons"), "not_here");
+  firefox.write_state({ ...STATE, page_hints: true });
+  (browser as { handled?: boolean }).handled = false;
+  assert.equal(notice_on("about:support"), "not_here");
+  assert.equal(notice_on("https://a.test/"), undefined);
+});
+
 test("a page call goes out as the text it came as, with the tab and attach that chrome knows, and its answer comes back as it came", async () => {
   const { frame, load, from_module, extension_sends } = locked();
   await load();

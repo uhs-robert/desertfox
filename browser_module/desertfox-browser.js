@@ -49,8 +49,11 @@
 //   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
 //   share_hint_drawing(drawing)  In the sandbox: chrome hints lend their label drawing (the layer, the label checks, a whole draw from its parts), so other hints draw alike. The first one stays.
 //   hint_drawing()             In the sandbox: that drawing, or undefined while no feature lent one.
-//   share_locked_page_rule(rule)  In the sandbox: the locked pages feature lends its page rule, rule = { hint_notice(browser) }, so the key taker knows where hints cannot run now. The first one stays.
+//   share_locked_page_rule(rule)  In the sandbox: the locked pages feature lends its page rule, rule = { hint_notice(browser, win) }, so the key taker knows where hints cannot run now or run as page hints. The first one stays.
 //   locked_page_rule()         In the sandbox: that rule, or undefined while no feature lent one.
+//   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
+//   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
+//   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -124,6 +127,7 @@
     const MAX_DEVTOOLS_KEY_ROWS = 8;
     const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
     const MAX_DEVTOOLS_VISUAL_ROWS = 16;
+    const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
     const EXTENSION_TO_MODULE_KINDS = {
       page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
@@ -141,6 +145,7 @@
       "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
+      "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
       "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
@@ -157,6 +162,7 @@
       "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: 256 },
+      "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: 512 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
@@ -246,7 +252,7 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys) };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true };
     }
 
     // chrome_hint_keys_of: a bad list leaves chrome focus without the hint start and the rest of the state alone.
@@ -287,7 +293,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -743,6 +749,7 @@
       if (kind === "text") return typeof value === "string";
       if (kind === "region") return PANE_REGIONS.includes(value);
       if (kind === "direction") return value === "left" || value === "right";
+      if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.includes(value);
       if (kind === "optional_int" && value === undefined) return true;
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
       return typeof value === "number" && Number.isFinite(value) && (kind === "number" || Number.isInteger(value));
@@ -963,6 +970,7 @@
     const key_holders = new WeakMap();
     let hint_drawing;
     let locked_page_rule;
+    let page_hints;
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -1107,6 +1115,12 @@
         else locked_page_rule = Object.freeze({ ...rule });
       },
       locked_page_rule: () => locked_page_rule,
+      share_page_hints(entry) {
+        if (page_hints) log_once("two feature files share a page hint start, the first one stays");
+        else page_hints = Object.freeze({ ...entry });
+      },
+      page_hints: () => page_hints,
+      page_hints_wanted: (win) => !!win && state_for(win)?.page_hints === true,
       shut_down() {
         fail_awaited("the module shut down");
         try {

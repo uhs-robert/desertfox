@@ -35,11 +35,14 @@ export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "devtools_keys" | "devtools_visual_keys";
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
 export const PANE_DIRECTIONS = ["left", "right"] as const;
+// What a pick does in a hint session on one of Firefox's own pages: click or focus the target, or, for a link to a web address only, open it in a tab or a background tab, or copy it. The module reads the address itself, so none crosses the channel.
+export const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"] as const;
+export type PageHintAction = (typeof PAGE_HINT_ACTIONS)[number];
 
 // The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each tree action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
 // `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`). `visual.start` starts visual mode in the focused DevTools text area.
@@ -140,7 +143,8 @@ export type BarTheme = { dark: BarColors; light: BarColors };
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][] };
+// `page_hints` says the extension answers `page_hints.want`, so the module may start hints on Firefox's own pages. Without it the hint keys there keep the notice.
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true };
 // The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
@@ -152,8 +156,8 @@ export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: strin
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages.
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -175,6 +179,7 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
   if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
+  if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? undefined : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
   if (kind === "optional_int" && value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
   if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? undefined : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
@@ -331,7 +336,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (tree && !tree.ok) return tree;
   const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
   const chrome_hint_keys = chrome_hint_keys_of(value.chrome_hint_keys);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }) } };
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -347,7 +352,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -403,6 +408,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The user typed the `hints.start` key in DevTools. `ask` is a token the module made for that key, and the module drops the keys typed until the labels show. A reply, as for `chrome_hints.want`, so an ask read twice runs once and never clears the session it started. The session's targets, keys and end come on the chrome_hints rows.
   "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  // The user typed a hint key on one of Firefox's own pages that the module labels. `start` is a token the module made for that key, as for `chrome_hints.want`. `keys` holds the tokens of the hint leaf's path, joined by one space, and `count` the typed count or 0, which a page session ignores. The extension matches the keys against its own tree and names the action, or refuses. The session's targets, keys and end come on the chrome_hints rows.
+  "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
@@ -431,6 +438,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // Ends the session in chrome. The extension sends it after a failed collect, whose lost reply can hide a session that started.
   "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // Starts a session on the page where the user typed the hint key, for a `page_hints.want`. The module takes its own `start` token once, while fresh, and only with that page still shown in that window. `action` comes from the fixed list. Draw, pick and clear go on the chrome_hints rows.
+  "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
   // The DevTools key table, pushed after each matched hello, since the module keeps it in memory only. A module without DevTools code refuses the kind, and one that never got it claims no key in DevTools.
   // A day to be read, not the default 2 s: the push sets a table rather than pressing a key, so a late one does no harm, and a dropped one leaves DevTools keys off until the next hello.
   "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86_400_000 },

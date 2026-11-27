@@ -246,6 +246,10 @@
       }
     }
 
+    // Chrome hints put this layer in the window while their labels show over one of Firefox's own pages, which has no tab record to say so.
+    const PAGE_HINTS_CLASS = "desertfox-page-hints";
+    const page_hints_shown = () => [...(doc.documentElement?.children ?? [])].some((child) => child.className === PAGE_HINTS_CLASS);
+
     // The keys type into a field on a page with no DesertFox code and no tab record, so the bar says INSERT, as it does on a web page.
     function field_has_focus(browser, record) {
       if (record?.live === true) return false;
@@ -456,7 +460,8 @@
       const record = id !== undefined && Object.hasOwn(view_state.tabs, id) ? view_state.tabs[id] : undefined;
       const scroll = scrolls.get(browser);
       const view = tab_view(record);
-      if (view.mode === "normal" && field_has_focus(browser, record)) view.mode = "insert";
+      if (view.mode === "normal" && page_hints_shown()) view.mode = "hint";
+      else if (view.mode === "normal" && field_has_focus(browser, record)) view.mode = "insert";
       return {
         enabled: view_state.enabled,
         view,
@@ -658,6 +663,11 @@
     undo.push(() => Services.mm.removeMessageListener(SCROLL_MESSAGE, on_scroll_message));
     Services.mm.addMessageListener(FIELD_MESSAGE, on_field_message);
     undo.push(() => Services.mm.removeMessageListener(FIELD_MESSAGE, on_field_message));
+    if (typeof win.MutationObserver === "function" && doc.documentElement) {
+      const layers = new win.MutationObserver(schedule);
+      layers.observe(doc.documentElement, { childList: true });
+      undo.push(() => layers.disconnect());
+    }
     const tab_events = ["TabSelect", "TabOpen", "TabClose", "TabMove", "TabAttrModified", "TabShow", "TabHide", "SSTabRestoring"];
     for (const type of tab_events) {
       win.gBrowser.tabContainer.addEventListener(type, schedule);

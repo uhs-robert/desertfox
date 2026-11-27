@@ -27,12 +27,13 @@ function make({ collect = { ok: true } as { ok: true } | { ok: false; error: str
     },
     call: async (kind, args) => {
       called.push({ kind, args: args as Sent["args"] });
-      return kind === "chrome_hints.collect" || kind === "chrome_hints.collect_here" || kind === "devtools_hints.collect" ? collect : pick;
+      return kind === "chrome_hints.collect" || kind === "chrome_hints.collect_here" || kind === "devtools_hints.collect" || kind === "page_hints.collect" ? collect : pick;
     },
     letters: async () => [...DEFAULT_HINT_LETTERS],
     colors,
     notify: async (_window_id, message) => void notes.push(message),
     new_session: () => next++,
+    page_action: async (keys) => (keys === "f" ? { ok: true, action: "follow" } : keys === "; y l" ? { ok: true, action: "yank" } : { ok: false, problem: "This hint does not run on this page" }),
   };
   const hints = create_chrome_hints(deps);
   const session = () => bucket.get(CHROME_HINTS_STORAGE_KEY) as { session: number; labels?: LabelRow[]; typed: string } | undefined;
@@ -273,4 +274,25 @@ test("a refused DevTools collect clears the DevTools session, tells the user why
   const junk = make();
   await junk.hints.handlers["devtools_hints.ask"]({ ask: "5" });
   assert.deepEqual(junk.called, []);
+});
+
+test("a hint key on one of Firefox's own pages hands the token back with the action of its binding, and a hint that cannot run there tells the user and fails the reply", async () => {
+  const { hints, called, session, notes } = make();
+  assert.equal(MODULE_TO_EXTENSION_KINDS["page_hints.want"]!.reply, true, "a start read twice would run twice");
+  await hints.handlers["page_hints.want"]({ start: 77, keys: "; y l", count: 0 });
+  assert.deepEqual(called.map((sent) => sent.kind), ["page_hints.collect"]);
+  assert.deepEqual(called[0]!.args, { session: session()!.session, start: 77, action: "yank", colors: "" });
+  assert.ok(validate_message({ v: 1, id: "c1", kind: "page_hints.collect", args: called[0]!.args }, EXTENSION_TO_MODULE_KINDS).ok);
+  assert.deepEqual(notes, []);
+
+  const other = make();
+  // The throw is the error reply, which ends the module's start at once.
+  await assert.rejects(other.hints.handlers["page_hints.want"]({ start: 78, keys: "; v", count: 0 }));
+  assert.deepEqual(other.called, [], "a refused hint still asked the module to collect");
+  assert.deepEqual(other.notes, ["This hint does not run on this page"]);
+  assert.equal(other.session(), undefined);
+
+  const stale = make({ collect: { ok: false, error: "The hint key is stale" } });
+  await stale.hints.handlers["page_hints.want"]({ start: 79, keys: "f", count: 0 });
+  assert.deepEqual(stale.notes, []);
 });
