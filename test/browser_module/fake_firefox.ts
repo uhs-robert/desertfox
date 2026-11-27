@@ -153,7 +153,9 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     get stack() {
       return { filename: running_file };
     },
-    interfaces: { nsIDOMWindowUtils: { IME_STATUS_DISABLED: IME_DISABLED, IME_STATUS_ENABLED: IME_ENABLED, IME_STATUS_PASSWORD: IME_PASSWORD } },
+    interfaces: { nsIDOMWindowUtils: { IME_STATUS_DISABLED: IME_DISABLED, IME_STATUS_ENABLED: IME_ENABLED, IME_STATUS_PASSWORD: IME_PASSWORD } } as Record<string, unknown>,
+    // XPCOM classes by contract id. A test adds the ones its feature file creates.
+    classes: {} as Record<string, unknown>,
     utils: {
       reportError: (text: unknown) => errors.push(String(text)),
       Sandbox: () => {
@@ -304,6 +306,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
 
   return Object.assign(firefox, {
     Services,
+    Components,
     make_window,
     report,
     set_pref,

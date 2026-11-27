@@ -16,7 +16,9 @@
 //                              fn(args) gets checked args and returns { ok, error?, value? } or a promise of it. `value` is text, copied into the reply. A throw or a rejection replies with a fixed error.
 //   send(kind, args)           In the sandbox: start a call to the extension, a kind on the copy of MODULE_TO_EXTENSION_KINDS. Returns { ok: true, id } or { ok: false, problem }.
 //   log_once(text)             One line in the browser console per distinct text.
-// A feature file lets an error in its start throw: the core then turns the module off for the session, so no half of a feature takes keys.
+//   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
+//   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
+// A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
 
@@ -648,7 +650,8 @@
       throw error;
     }
 
-    // Turning off for the session also takes every window's listener away.
+    // Turning off for the session also takes every window's listener away, and every feature's.
+    const shut_down_steps = [];
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -703,7 +706,18 @@
         return { ok: true, id: message.id };
       },
       log_once,
+      may_act: (win) => state_for(win) !== undefined,
+      on_shut_down(fn) {
+        shut_down_steps.push(fn);
+      },
       shut_down() {
+        for (const step of shut_down_steps.splice(0)) {
+          try {
+            step();
+          } catch (error) {
+            log_once(`a feature failed to shut down: ${error}`);
+          }
+        }
         for (const win of [...windows.keys()]) detach(win);
         for (const step of undo) step();
         active = false;
