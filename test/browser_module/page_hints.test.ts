@@ -250,6 +250,28 @@ test("keys typed before the labels showed, or at once after, spell no label", as
   }
 });
 
+test("a held key or steady taps past the labels' first moments spell nothing; a key after a pause with the labels shown does", async () => {
+  for (const kind of ["held", "tapped", "paused"]) {
+    const run = start_on("about:preferences", preferences().build);
+    run.hint_key();
+    await run.collect(5);
+    const rows = run.rows(5);
+    await run.draw(5, rows.map(([id], index) => [id!, String.fromCharCode(97 + index)] as [number, string]));
+    if (kind === "paused") run.chrome.clock.now += SEEN_MS;
+    else {
+      // A key every 100 ms runs past the first 300 ms after the draw.
+      for (let at = 0; at < 4; at++) {
+        run.chrome.press("j", { repeat: kind === "held" && at > 0 });
+        run.chrome.clock.now += 100;
+      }
+    }
+    run.chrome.press("a", { repeat: kind === "held" });
+    const result = await run.pick(5, rows[0]![0]!);
+    if (kind === "paused") assert.equal(result?.ok, true, "a key after a pause did not spell");
+    else assert.equal(result?.error, "The keys typed do not name this hint", `a ${kind} key spelled a label`);
+  }
+});
+
 test("a page's labels take no sheet and no theme from the extension: each is styled inline in a layer with no link", async () => {
   const run = start_on("about:preferences", preferences().build);
   run.hint_key();
