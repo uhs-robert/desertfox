@@ -337,10 +337,10 @@ const browser_module_rpc = create_browser_module_rpc({
 });
 reach_locked_tabs(browser_module_rpc);
 browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.storage_changed(changes, area));
-// A reload of the same address reports only the status, so the status counts as a load too.
+// A locked tab's lock ends on the module's `page_gone`, not on a load event: Firefox reports a second load for a PDF that stays.
 browser.tabs.onUpdated.addListener((tab_id, change) => {
-  if (change.status === "loading" || change.url !== undefined) void browser_module_rpc.tab_loading(tab_id).catch(warn_and_go("browser_module_rpc.tab_loading"));
-}, { properties: ["status", "url"] });
+  if (change.url !== undefined) browser_module_rpc.tab_url_changed(tab_id, change.url);
+}, { properties: ["url"] });
 browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const locked_commands = locked_page_command_ids(registry.list());
@@ -364,7 +364,10 @@ const browser_module = create_browser_module({
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);
   },
-  on_status: (status) => browser_module_call.status_changed(status),
+  on_status: (status) => {
+    browser_module_call.status_changed(status);
+    void browser_module_rpc.module_status_changed(status)?.catch(warn_and_go("browser_module_rpc.module_status_changed"));
+  },
   read_disabled,
   read_blur_on_load: () => stored_setting_on(browser.storage.local, "blur_on_load"),
   read_keymap: () => stored_keymap(browser.storage.local),

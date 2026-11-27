@@ -7,6 +7,7 @@ import type { KeymapPageState } from "../shared/messages/content.ts";
 import { current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { page_keymap_of } from "../shared/site/page_keymap_resolve.ts";
+import { site_rules_matching } from "../shared/site/site_columns.ts";
 import { json_bytes, locked_route_of, MESSAGE_ENVELOPE_BYTES, PAGE_TEXT_BYTES, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -39,6 +40,10 @@ function locked_browser(transport: Transport) {
   const message_listeners = new Set<Listener>();
   const change_listeners = new Set<Listener>();
   let refused = false;
+  // The which-key snapshot is the panel with no site rule, so it serves only a page that no rule names. Until the keymap read knows the address, the background answers.
+  let root_panel_from_snapshot = false;
+  // Counts keymap snapshots, so a read that started on an older one does not set the flag above.
+  let keymap_seen = 0;
   const alive = (): boolean => !refused && transport.alive();
 
   const snapshot_value = (part: SnapshotPart): unknown => {
@@ -60,6 +65,7 @@ function locked_browser(transport: Transport) {
   // The page's keymap as the background would answer `read_keymap`: the snapshot resolved for the tab's own address. The page's `url` is not read, because the page is not trusted with its address.
   async function read_keymap(message: unknown): Promise<string | undefined> {
     const keymap = snapshot_keymap();
+    const read_on = keymap_seen;
     // No usable keymap (over its cap, never written, another version): the page code would run with no keys at all, so it stops and the module's own keys stay in use, as when the extension unloads.
     if (keymap === undefined) return refuse();
     // The same stop for a state that fails or is malformed, or a row the resolver cannot read: an empty tree would leave the page with no keys.
@@ -67,6 +73,7 @@ function locked_browser(transport: Transport) {
       const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
       if (!is_record(state) || typeof state.address !== "string") return refuse();
       const { address, recording, join, bar } = state;
+      if (read_on === keymap_seen) root_panel_from_snapshot = site_rules_matching(keymap, [address]).length === 0;
       const page = page_keymap_of(keymap, [address], { recording: typeof recording === "string" ? recording : undefined, join: join === "insert" ? join : undefined, bar: bar === true });
       return page && JSON.stringify(page);
     } catch {
@@ -94,7 +101,7 @@ function locked_browser(transport: Transport) {
     const route = locked_route_of(type);
     if (route === "module") return loaded_bundle(await transport.load_bundle(String((message as { name?: unknown }).name)));
     if (route === "snapshot") return read_keymap(message);
-    if (type === "list_keys" && is_root_panel(message as Record<string, unknown>)) {
+    if (type === "list_keys" && root_panel_from_snapshot && is_root_panel(message as Record<string, unknown>)) {
       const panel = snapshot_value("which_key");
       if (panel !== undefined) return panel;
     }
@@ -132,7 +139,12 @@ function locked_browser(transport: Transport) {
   // A snapshot change reaches the page code as the storage change, or for the keymap as the push, that the background would send a web page.
   transport.on_snapshot((part) => {
     if (!alive()) return;
-    if (part === "keymap") return void deliver({ type: "tree_updated" });
+    if (part === "keymap") {
+      // A new keymap may hold a rule for this site, so the background answers again until the next read.
+      keymap_seen += 1;
+      root_panel_from_snapshot = false;
+      return void deliver({ type: "tree_updated" });
+    }
     const key = Object.keys(LOCAL_PARTS).find((name) => LOCAL_PARTS[name] === part);
     if (key === undefined) return;
     const changes = { [key]: { newValue: snapshot_value(part) } };

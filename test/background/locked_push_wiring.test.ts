@@ -49,6 +49,9 @@ async function locked_tab_env() {
   // The start-up read replaced the status with the defaults, so the settings go on now.
   await area_of(local, "local").set({ [CONFIG_STATUS_STORAGE_KEY]: { settings: { browser_module: true, browser_module_pages: true } } });
   await settle();
+  // A module that said hello, as one must have for a page to call: with no module, a locked tab stops being one.
+  await area_of(session, "session").set({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { v: V, module_version: "1" } });
+  await settle();
   // The page's first call marks tab 7 as locked.
   await area_of(session, "session").set({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: [{ v: V, id: "c1", kind: "page_call", args: { tab_id: 7, document_id: 1, message: JSON.stringify({ type: "run", invocations: [], mode: "normal" }) } }] });
   await settle();

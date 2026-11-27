@@ -2,7 +2,7 @@
 // It answers the page's calls through the message table, stands in for `tabs.sendMessage` to such a tab, and keeps the snapshots of read-only data the page needs whole. Nothing is written or served while the `browser_module_pages` setting is off.
 // Every call is foreign input from chrome storage: the base channel (`browser_module.ts`) checks the envelope and the size, this file checks the message and builds the sender itself.
 
-import type { ModuleArgs, ModuleReply, PageAnswer, SnapshotPart } from "../shared/browser_module_protocol.ts";
+import type { ModuleArgs, ModuleReply, ModuleStatus, PageAnswer, SnapshotPart } from "../shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_PROTOCOL_VERSION, locked_route_of, MAX_ERROR_CHARS, MAX_STATE_TABS, SNAPSHOT_PART_NAMES, SNAPSHOT_PARTS, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, CONFIG_STATUS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -26,8 +26,8 @@ export async function pages_setting_on(storage: Pick<typeof browser.storage.loca
 export type BrowserModuleRpcDeps = {
   session: SessionStorage;
   is_on: () => Promise<boolean>;
-  // The base channel's `send`. `on_id` hears the request id before the module can see the request.
-  send: (kind: string, args: ModuleArgs, on_id?: (id: string) => void) => Promise<Sent>;
+  // The base channel's `send`. `on_id` hears the request id before the module can see the request, and returns false to leave it unwritten.
+  send: (kind: string, args: ModuleArgs, on_id?: (id: string) => boolean | void) => Promise<Sent>;
   get_tab: (tab_id: number) => Promise<browser.tabs.Tab | undefined>;
   // The message table's `dispatch`, with no sender counted as an extension page.
   dispatch: (message: unknown, sender: Sender) => Promise<unknown> | undefined | void;
@@ -72,7 +72,7 @@ async function answer_of(run: () => Promise<unknown> | undefined | void): Promis
 
 export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   // The page's answers to pushes that are on their way, by the push's message id. In memory only, as the promise of a `tabs.sendMessage` is.
-  const waiting = new Map<string, { tab_id: number; resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  const waiting = new Map<string, { tab_id: number; document_id: number; resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
   // One queue for every write of this file: the locked marks, their removal, the snapshots and the cleanup when the setting goes off. Two writes of the marks never interleave, so neither loses the other's tab.
   let queue: Promise<unknown> = Promise.resolve();
@@ -87,50 +87,87 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     return typeof stored === "object" && stored !== null && !Array.isArray(stored) ? (stored as Record<string, LockedTab>) : {};
   };
 
-  // A tab is locked from its document's first call until its next top-level load. The next document marks it again with its own first call. A call from a document that a load left is refused, so a call the old document sent before a reload of the same address cannot mark the tab again. False when the call may not run.
-  const mark_locked = (tab_id: number, url: string, document_id: number): Promise<boolean> =>
+  // A tab is locked from its document's first call until the module says the document is gone (`page_gone`). The next document marks it again with its own first call. A call from a gone document is refused, so a call the old document sent before a reload of the same address cannot mark the tab again. False when the call may not run.
+  const mark_locked = (tab_id: number, url: string, document_id: number, module_at_start: number): Promise<boolean> =>
     in_turn(async () => {
-      if (!(await deps.is_on())) return false;
+      // A call that started before the module went off must not lock the tab again after its locks ended.
+      if (module_at_start !== module_epoch || !(await deps.is_on())) return false;
       const locked = await read_locked();
       const entry = locked[tab_id] ?? {};
       if (entry.left?.includes(document_id)) return false;
       if (entry.url === url && entry.document_id === document_id) return true;
       if (!(tab_id in locked) && Object.keys(locked).length >= MAX_STATE_TABS) return false;
       await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: { ...entry, url, document_id } } });
+      locked_urls.set(tab_id, url);
       return true;
     });
+
+  // The address of each locked tab as its page code last called from it, so a change of the tab's address can be told from Firefox's repeated load events for the same page (a PDF reports two). A copy of the stored address, for the pushes that wait in memory.
+  const locked_urls = new Map<number, string>();
+  const without_fragment = (url: string): string => url.replace(/#.*$/s, "");
 
   // Counts the loads of each tab, and every setting off in `epoch`, so a push whose send spans one knows its page went away.
   const loads = new Map<number, number>();
   let epoch = 0;
+  // Every end of a waiting push goes through here, once: the reply, a load, the tab closing, the setting or the module going off, or a failed send. A push has no deadline, because it can wait on the user.
+  const settle_waiting = (id: string, why: string): void => {
+    const entry = waiting.get(id);
+    waiting.delete(id);
+    entry?.reject(new Error(why));
+  };
   const drop_waiting = (tab_id: number | undefined, why: string): void => {
     if (tab_id === undefined) epoch += 1;
     else loads.set(tab_id, (loads.get(tab_id) ?? 0) + 1);
-    for (const [id, entry] of waiting) {
-      if (tab_id !== undefined && entry.tab_id !== tab_id) continue;
-      waiting.delete(id);
-      entry.reject(new Error(why));
-    }
+    for (const [id, entry] of [...waiting]) if (tab_id === undefined || entry.tab_id === tab_id) settle_waiting(id, why);
   };
 
-  // The page went away: its pushes reject, as a `tabs.sendMessage` to it would, and the tab is no longer locked. A load keeps the id of the document it left. A closed tab keeps nothing.
-  const unmark = (tab_id: number, why: string, closed: boolean): Promise<void> => {
-    drop_waiting(tab_id, why);
+  // No lock outlives the module: with no module to read the pushes, a locked tab is an ordinary tab again.
+  let module_epoch = 0;
+  const end_all_locks = (why: string): Promise<void> => {
+    module_epoch += 1;
+    drop_waiting(undefined, why);
+    locked_urls.clear();
+    return in_turn(async () => {
+      if (Object.keys(await read_locked()).length > 0) await deps.session.remove(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY);
+    });
+  };
+
+  // The tab closed: its pushes reject, as a `tabs.sendMessage` to it would, and it keeps nothing.
+  const forget_tab = (tab_id: number): Promise<void> => {
+    drop_waiting(tab_id, "the tab closed");
+    locked_urls.delete(tab_id);
     return in_turn(async () => {
       const locked = await read_locked();
-      const entry = locked[tab_id];
-      if (entry === undefined) return;
-      if (closed) delete locked[tab_id];
-      else locked[tab_id] = { left: [...(entry.left ?? []), ...(entry.document_id === undefined ? [] : [entry.document_id])].slice(-LEFT_DOCUMENTS_KEPT) };
+      if (!(tab_id in locked)) return;
+      delete locked[tab_id];
       await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: locked });
     });
   };
+
+  // Chrome's word that a document's page code ended (pagehide, or its window went away). Only chrome sees documents, so only this ends a lock: the tab's load events also fire for a page that stays. The id goes on the tab's left list, and a lock it held ends. A push of the module may come twice, and the second changes nothing.
+  const page_gone = (args: ModuleArgs): Promise<void> =>
+    in_turn(async () => {
+      const { tab_id, document_id } = args as { tab_id: number; document_id: number };
+      // Its pushes get no answer from a page that is gone. A newer document's pushes stay.
+      for (const [id, entry] of [...waiting]) if (entry.tab_id === tab_id && entry.document_id === document_id) settle_waiting(id, "the page went away");
+      if (!(await deps.is_on())) return;
+      const locked = await read_locked();
+      const entry = locked[tab_id];
+      if (entry === undefined && Object.keys(locked).length >= MAX_STATE_TABS) return;
+      // A late word about a tab that closed would leave a row no close removes.
+      if (entry === undefined && (await deps.get_tab(tab_id)) === undefined) return;
+      const left = entry?.left?.includes(document_id) ? entry.left : [...(entry?.left ?? []), document_id].slice(-LEFT_DOCUMENTS_KEPT);
+      const newer_document = entry?.document_id !== undefined && entry.document_id !== document_id;
+      if (!newer_document) locked_urls.delete(tab_id);
+      await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: newer_document ? { ...entry, left } : { left } } });
+    });
 
   // The base runs this outside its queue, so the dispatch may send to the same tab. The text it returns is the reply's value.
   const page_call = async (args: ModuleArgs): Promise<string> => {
     // The kind row checked the arg shapes: `tab_id` and `document_id` are whole numbers and `message` text.
     const { tab_id, document_id, message } = args as { tab_id: number; document_id: number; message: string };
     const load_at_start = loads.get(tab_id) ?? 0;
+    const module_at_start = module_epoch;
     if (!(await deps.is_on())) throw new Error("the browser_module_pages setting is off");
     const request = page_message_of(message);
     if (request === undefined) throw new Error("the message is not one a locked page may send");
@@ -139,7 +176,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     if (!runs_page_code(tab.url)) throw new Error("DesertFox's page code does not run on this page");
     // A load that ran while the tab was read left the document that sent this call, and no mark records it yet.
     if ((loads.get(tab_id) ?? 0) !== load_at_start) throw new Error("the page went away");
-    if (!(await mark_locked(tab_id, tab.url, document_id))) throw new Error("the page went away");
+    if (!(await mark_locked(tab_id, tab.url, document_id, module_at_start))) throw new Error("the page went away");
     // The sender holds only what the browser says of the tab: no extension id, so no handler counts it as an extension page, and frame 0, the only frame the module runs in. An address the page names is the tab's.
     const sender: Sender = { tab, frameId: 0, url: tab.url };
     const request_at_tab = "url" in request ? { ...request, url: tab.url } : request;
@@ -169,7 +206,8 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const is_locked_tab = async (tab_id: number): Promise<boolean> => {
     if (!(await deps.is_on())) return false;
     const url = (await read_locked())[tab_id]?.url;
-    return url !== undefined && (await deps.get_tab(tab_id))?.url === url;
+    const tab_url = (await deps.get_tab(tab_id))?.url;
+    return url !== undefined && tab_url !== undefined && without_fragment(tab_url) === without_fragment(url);
   };
 
   // In place of `tabs.sendMessage`: the module hands the message to the page, and the page's answer comes back in the reply. A locked page has one frame.
@@ -178,16 +216,32 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     const load_at_start = loads.get(tab_id) ?? 0;
     const epoch_at_start = epoch;
     const page_left = () => (loads.get(tab_id) ?? 0) !== load_at_start || epoch !== epoch_at_start;
+    // The document whose first call locked the tab. None once chrome said it is gone.
+    const document_id = (await read_locked())[tab_id]?.document_id;
+    if (document_id === undefined) throw new Error("the page went away");
     let answer: Promise<unknown> | undefined;
-    // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none.
-    const sent = await deps.send("page_push", { tab_id, message: JSON.stringify(message) }, (id) => {
-      if (page_left()) return;
-      answer = new Promise<unknown>((resolve, reject) => waiting.set(id, { tab_id, resolve, reject }));
+    let wait_id: string | undefined;
+    // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none and leaves the push unwritten, so the next document never gets it.
+    const on_id = (id: string): boolean => {
+      if (page_left()) return false;
+      wait_id = id;
+      answer = new Promise<unknown>((resolve, reject) => waiting.set(id, { tab_id, document_id, resolve, reject }));
       // A load can reject it before this function hands it back. The caller still gets the rejection.
       void best_effort(answer);
-    });
-    if (!sent.ok) throw new Error(sent.problem);
-    if (answer === undefined) throw new Error(epoch === epoch_at_start ? "the page went away" : "the browser_module_pages setting is off");
+      return true;
+    };
+    let sent: Awaited<ReturnType<BrowserModuleRpcDeps["send"]>>;
+    try {
+      sent = await deps.send("page_push", { tab_id, document_id, message: JSON.stringify(message) }, on_id);
+    } catch (error) {
+      if (wait_id !== undefined) settle_waiting(wait_id, error_text(error));
+      throw error;
+    }
+    if (answer === undefined && page_left()) throw new Error(epoch === epoch_at_start ? "the page went away" : "the browser_module_pages setting is off");
+    if (!sent.ok || answer === undefined) {
+      if (wait_id !== undefined) settle_waiting(wait_id, sent.ok ? "the push was not sent" : sent.problem);
+      throw new Error(sent.ok ? "the push was not sent" : sent.problem);
+    }
     return answer;
   };
 
@@ -195,6 +249,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const write_parts = async (parts: readonly SnapshotPart[]): Promise<void> => {
     if (!(await deps.is_on())) {
       drop_waiting(undefined, "the browser_module_pages setting is off");
+      locked_urls.clear();
       await deps.session.remove([...SNAPSHOT_PART_NAMES.map((part) => SNAPSHOT_PARTS[part].key), BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]);
       return;
     }
@@ -208,7 +263,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const sync_parts = (parts: readonly SnapshotPart[]): Promise<void> => in_turn(() => write_parts(parts));
 
   return {
-    handlers: { page_call },
+    handlers: { page_call, page_gone },
     // The base channel's `on_reply`.
     push_answered,
     is_locked_tab,
@@ -222,8 +277,17 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       else if (COMPILED_KEYMAP_STORAGE_KEY in changes) void sync_parts(["keymap", "which_key"]);
       if (THEME_STORAGE_KEY in changes) void sync_parts(["theme"]);
     },
-    // Every top-level load of the tab, a reload of the same address included.
-    tab_loading: (tab_id: number): Promise<void> => unmark(tab_id, "the page went away", false),
-    tab_removed: (tab_id: number): Promise<void> => unmark(tab_id, "the tab closed", true),
+    // A new address for the tab. Only a real change rejects the pushes on their way: the module answers a gone page's own pushes, and the lock ends on `page_gone`.
+    tab_url_changed(tab_id: number, url: string): void {
+      const locked_url = locked_urls.get(tab_id);
+      if (locked_url === undefined || without_fragment(locked_url) === without_fragment(url)) return;
+      locked_urls.delete(tab_id);
+      drop_waiting(tab_id, "the page went away");
+    },
+    tab_removed: forget_tab,
+    // Hears each change of the module's status. Anything but a matched module ends every lock and every waiting push.
+    module_status_changed(status: ModuleStatus | undefined): Promise<void> | undefined {
+      return status?.result === "matched" ? undefined : end_all_locks("the browser module is off");
+    },
   };
 }
