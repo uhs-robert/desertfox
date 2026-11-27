@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_chrome_hints, key_step, label_parts, reading_order, target_rows } from "../../src/background/chrome_hints.ts";
 import type { ChromeHintDeps, LabelRow, TargetRow } from "../../src/background/chrome_hints.ts";
-import { CHROME_HINT_PART_BYTES, EXTENSION_TO_MODULE_KINDS, MODULE_TO_EXTENSION_KINDS, json_bytes, validate_message } from "../../src/shared/browser_module_protocol.ts";
+import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, EXTENSION_TO_MODULE_KINDS, MODULE_TO_EXTENSION_KINDS, json_bytes, validate_message } from "../../src/shared/browser_module_protocol.ts";
 import { CHROME_HINTS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { DEFAULT_HINT_LETTERS, make_labels } from "../../src/shared/hints/labels.ts";
 
@@ -135,6 +135,8 @@ test("a refused pick tells the user, a refused collect drops the session, and an
   const refused = make({ collect: { ok: false, error: "Nothing to hint here" } });
   assert.deepEqual(await refused.hints.start(7), { ok: false, error: "Nothing to hint here" });
   assert.equal(refused.session(), undefined);
+  // The collect's reply can be lost after the module started a session, which would then hold the keys.
+  assert.deepEqual(refused.pushed, [{ kind: "chrome_hints.clear", args: { session: 100 } }], "a failed collect left the module's session alone");
 
   const { hints, session, notes } = make({ pick: { ok: false, error: "The hint's target moved" } });
   await hints.start(7);
@@ -163,4 +165,16 @@ test("a second start replaces the first, so the first session's targets and keys
   assert.equal(draws().length, 0);
   await hints.handlers["chrome_hints.targets"](targets(second, [row(2, 0, 0)]));
   assert.equal(draws()[0]!.args.session, second);
+});
+
+test("a part count above the protocol's limit and a part index outside the count are dropped before anything is stored", async () => {
+  const { hints, session, draws } = make();
+  await hints.start(7);
+  const number = session()!.session;
+  for (const [part, parts] of [[0, 2 ** 40], [0, CHROME_HINT_MAX_PARTS + 1], [0, 0], [-1, 2], [2, 2], [5, 2]]) {
+    await hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0)], part, parts));
+  }
+  assert.deepEqual(session(), { session: number, window_id: 7, targets: {}, typed: "", seq: 0, gen: 0 });
+  await hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0)], 0, 1));
+  assert.equal(draws().length, 1, "a bad part blocked a good one");
 });

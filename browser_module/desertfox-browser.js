@@ -25,6 +25,10 @@
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
 //   type_key(win, key, still_holds)  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
+//   hold_keys(win, owner)      In the sandbox: claim every key of `win` for the feature named `owner`. A feature's key listener leaves a key alone while another owner holds its window.
+//                              Listener order cannot settle this, because Firefox calls the newest window watcher first.
+//   release_keys(win, owner)   In the sandbox: end `owner`'s hold on `win`. A release by another owner does nothing.
+//   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -736,6 +740,7 @@
 
     // Turning off for the session also takes every window's listener away, and every feature's.
     const shut_down_steps = [];
+    const key_holders = new WeakMap();
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -800,6 +805,13 @@
       on_shut_down(fn) {
         shut_down_steps.push(fn);
       },
+      hold_keys(win, owner) {
+        key_holders.set(win, owner);
+      },
+      release_keys(win, owner) {
+        if (key_holders.get(win) === owner) key_holders.delete(win);
+      },
+      keys_held_by: (win) => key_holders.get(win),
       shut_down() {
         for (const step of shut_down_steps.splice(0)) {
           try {

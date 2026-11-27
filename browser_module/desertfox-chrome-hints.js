@@ -1,4 +1,4 @@
-// DesertFox browser module, hints over Firefox's own UI: the nav bar, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, and the rows of an open app menu or downloads panel.
+// DesertFox browser module, hints over Firefox's own UI: the nav bar, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, and the rows of an open app menu.
 // The module collects the targets and sends only ids and boxes. The extension makes the labels, narrows them as the user types and names the target to pick. The module draws what it is told and runs one fixed action per target kind.
 // Requests: chrome_hints.collect starts a session, chrome_hints.draw shows labels, chrome_hints.pick runs a target, chrome_hints.clear ends it. Pushes back: chrome_hints.targets, chrome_hints.key and chrome_hints.end.
 
@@ -26,8 +26,10 @@
     // Bounds so that a session's targets fit a few messages of the from-module list, which keeps only its newest 16.
     const MAX_TARGETS = 400;
     const PART_BYTES = 3000;
+    // CHROME_HINT_MAX_PARTS of the protocol.
     const MAX_PARTS = 32;
-    const MAX_LABEL_CHARS = 8;
+    // Two letters, the smallest alphabet hint_letters allows, give make_labels its longest labels: one letter per halving of the targets.
+    const MAX_LABEL_CHARS = Math.ceil(Math.log2(MAX_TARGETS));
     const MAX_EARLY_KEYS = 16;
     // The extension answers a collect with its first labels within this, or the session ends: a dead extension must not keep the keys.
     const FIRST_DRAW_MS = 2000;
@@ -38,7 +40,9 @@
     const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "OS", "CapsLock", "Dead", "Unidentified", "Process"]);
     const COLOR = /^#[0-9a-fA-F]{3,8}$/;
     const COLOR_ROLES = ["primary", "bg_core", "fg_core"];
-    const LABEL = /^[\p{L}\p{N}]+$/u;
+    // The alphabet the hint_letters setting allows: any key but a blank and "/".
+    const LABEL = /^[^\s/]+$/u;
+    const KEY_OWNER = "chrome_hints";
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
     const WINDOW_GROUPS = [
@@ -50,9 +54,9 @@
       { root: "sidebar-main", take: "moz-button, button", shadow: true },
     ];
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
+    // The downloads panel is left out: a click on its row does nothing, and its blocked-download buttons need a confirm key first.
     const PANELS = [
       { id: "appMenu-popup", take: "toolbarbutton, button" },
-      { id: "downloadsPanel", take: "richlistitem, toolbarbutton, button" },
     ];
 
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -168,6 +172,9 @@
       return false;
     }
 
+    // A field of the window's own process: the address bar, the find bar, a tab-modal prompt. A session would read what the user types there, which no content script sees.
+    const chrome_field_focused = (win) => core.is_field(core.focused_element(win));
+
     // The window the request names, only when it is a browser window in front. A window that lost the focus between the key and the request gets no session.
     function window_for(window_id) {
       let win;
@@ -239,7 +246,7 @@
     // While a session runs, each letter and hint key in its window is the session's. Escape ends it here, so it works with no answer from the extension.
     function on_key(event) {
       if (!session || !event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
-      if (!enabled_by_pref()) return end_session(false);
+      if (!core.may_act(session.win)) return end_session(false);
       if (event.ctrlKey || event.altKey || event.metaKey) return end_session(true);
       // A key that is no letter and no hint key (an arrow, F5) goes on to the page as if no labels showed.
       const key = [...event.key].length === 1 || NAMED_KEYS.has(event.key) ? event.key : undefined;
@@ -261,6 +268,8 @@
       end_session(true);
       const doc = win.document;
       session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys: [] };
+      core.hold_keys(win, KEY_OWNER);
+      session.undo.push(() => core.release_keys(win, KEY_OWNER));
       for (const target of found) session.targets.set(next_target_id++, { ...target, kind: kind_of(target.element) });
       const window_layer = make_layer(doc, style_url, theme, true);
       doc.documentElement.append(window_layer.host);
@@ -300,6 +309,7 @@
       if (!win) return { ok: false, error: problem };
       const doc = win.document;
       if (menu_open(doc)) return { ok: false, error: "Close the menu first" };
+      if (chrome_field_focused(win)) return { ok: false, error: "Leave the field first" };
       const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
       const opened = open_panel(doc);
       const panel = opened && panel_targets(opened.panel, opened.row);
@@ -313,12 +323,12 @@
 
     // ---- Draw.
 
-    // A label row from the extension: an id of this session and a short label of letters or digits. Anything else drops the whole part.
+    // A label row from the extension: an id of this session and a short label of hint letters. Anything else drops the whole part.
     function label_rows(text) {
       const rows = parse_json(text);
       if (!Array.isArray(rows) || rows.length > session.targets.size) return undefined;
       for (const row of rows) {
-        if (!Array.isArray(row) || row.length !== 2 || !session.targets.has(row[0]) || typeof row[1] !== "string" || row[1].length > MAX_LABEL_CHARS || !LABEL.test(row[1])) return undefined;
+        if (!Array.isArray(row) || row.length !== 2 || !session.targets.has(row[0]) || typeof row[1] !== "string" || [...row[1]].length > MAX_LABEL_CHARS || !LABEL.test(row[1])) return undefined;
       }
       return rows;
     }
@@ -361,7 +371,7 @@
     function draw({ session: tag, gen, part, parts, typed, labels }) {
       if (!session || session.tag !== tag) return { ok: true };
       if (!Number.isInteger(gen) || gen <= session.drawn_gen || !Number.isInteger(parts) || parts < 1 || parts > MAX_PARTS || !Number.isInteger(part) || part < 0 || part >= parts) return { ok: true };
-      if (typeof typed !== "string" || typed.length > MAX_LABEL_CHARS) return { ok: true };
+      if (typeof typed !== "string" || [...typed].length > MAX_LABEL_CHARS) return { ok: true };
       const rows = label_rows(labels);
       if (!rows) return { ok: true };
       if (session.pending?.gen !== gen) {
@@ -373,9 +383,15 @@
       pending.got.set(part, rows);
       if (pending.got.size < parts) return { ok: true };
       session.pending = undefined;
+      const rows_drawn = [...pending.got.keys()].sort((a, b) => a - b).flatMap((index) => pending.got.get(index));
+      // The extension never narrows to nothing, so a draw with no labels would only hold the keys with nothing shown.
+      if (rows_drawn.length === 0) {
+        end_session(true);
+        return { ok: true };
+      }
       const first = session.drawn_gen === 0;
       session.drawn_gen = gen;
-      apply_draw([...pending.got.keys()].sort((a, b) => a - b).flatMap((index) => pending.got.get(index)), [...typed].length);
+      apply_draw(rows_drawn, [...typed].length);
       if (first) for (const key of session.early_keys.splice(0)) push_key(key);
       return { ok: true };
     }
@@ -407,8 +423,8 @@
     }
 
     // ---- The key listener of each browser window.
-    // It sits on the window root, which hears a key before the window does, and it is added there before the popup walk's: this file sorts first, so its window watcher and each window's load listener come first too.
-    // So while a session runs, its letters go to the labels, not to the core's keys and not to the walk's j and k in an open app menu. With no session in the window it does nothing.
+    // It sits on the window root, which hears a key before the window does, so the core's keys never see a session's letters.
+    // The popup walk listens on the window root too, sometimes first. A session holds the window's keys in the core, so the walk's j and k leave them alone in an open app menu. With no session in the window it does nothing.
     const watched = new Map();
     const loading = new Map();
 

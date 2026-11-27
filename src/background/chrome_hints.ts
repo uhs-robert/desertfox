@@ -1,7 +1,7 @@
 // Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window and sends their ids and boxes (`browser_module/desertfox-chrome-hints.js`). This file makes the labels, narrows them as the module reports each typed key, and names the target to pick.
 // The session lives in `storage.session`, so a restarted background still narrows and picks. Every message carries the session number, so a message of an older session finds nothing.
 
-import { CHROME_HINT_PART_BYTES, json_bytes } from "../shared/browser_module_protocol.ts";
+import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, json_bytes } from "../shared/browser_module_protocol.ts";
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
 import { CHROME_HINTS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { make_labels, narrow } from "../shared/hints/labels.ts";
@@ -45,6 +45,7 @@ const ROWS_BYTES = CHROME_HINT_PART_BYTES - 512;
 const MAX_ROWS = 400;
 
 const is_whole = (value: unknown): value is number => Number.isSafeInteger(value);
+const is_part_of = (part: unknown, parts: unknown): boolean => is_whole(parts) && parts >= 1 && parts <= CHROME_HINT_MAX_PARTS && is_whole(part) && part >= 0 && part < parts;
 
 // The module's targets are foreign input: rows of five whole numbers, the id above zero. A part with any other row is dropped whole.
 export function target_rows(text: string): TargetRow[] | undefined {
@@ -119,7 +120,7 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       in_turn(async () => {
         const session = await current(args.session);
         const rows = typeof args.targets === "string" ? target_rows(args.targets) : undefined;
-        if (!session || session.labels || !rows || !is_whole(args.part) || !is_whole(args.parts)) return;
+        if (!session || session.labels || !rows || !is_part_of(args.part, args.parts)) return;
         if (session.parts !== undefined && session.parts !== args.parts) return;
         session.parts = args.parts as number;
         session.targets[String(args.part)] = rows;
@@ -164,7 +165,11 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       const session: ChromeHintSession = { session: deps.new_session(), window_id, targets: {}, typed: "", seq: 0, gen: 0 };
       await in_turn(() => write(session));
       const result = await deps.call("chrome_hints.collect", { session: session.session, window_id, colors: await deps.colors() });
-      if (!result.ok) await in_turn(async () => (await current(session.session)) && (await drop()));
+      if (!result.ok) {
+        // A collect whose reply was lost can still have started a session in chrome, which would hold the keys until Escape.
+        await deps.push("chrome_hints.clear", { session: session.session });
+        await in_turn(async () => (await current(session.session)) && (await drop()));
+      }
       return result;
     },
   };

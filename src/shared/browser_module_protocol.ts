@@ -289,8 +289,10 @@ const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
-// The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of letters and digits.
+// The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
 export const CHROME_HINT_PART_BYTES = 4096;
+// The most parts a session's targets or one draw may come in. The module keeps the same number.
+export const CHROME_HINT_MAX_PARTS = 32;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
@@ -325,6 +327,7 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
   // Runs the target's fixed action. The reply refuses an id of another session and a target that is gone or moved.
   "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  // Ends the session in chrome. The extension sends it after a failed collect, whose lost reply can hide a session that started.
   "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 

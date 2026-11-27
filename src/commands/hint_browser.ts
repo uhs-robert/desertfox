@@ -29,7 +29,7 @@ export const chrome_hints = create_chrome_hints({
 
 define("hint.browser", {
   label: "Hint browser buttons",
-  intent: "Pick a button of Firefox itself by its label. It labels the toolbar buttons, the tabs, the bookmarks toolbar, the sidebar buttons and the menu bar. A button is clicked, a tab is selected, and a menu or a bookmarks folder opens. With the app menu or the downloads panel open, it labels the rows of the panel instead. Escape ends it. Needs the browser module.",
+  intent: "Pick a button of Firefox itself by its label. It labels the toolbar buttons, the tabs, the bookmarks toolbar, the sidebar buttons and the menu bar. A button is clicked, a tab is selected, and a menu or a bookmarks folder opens. With the app menu open, it labels the rows of the menu instead. Escape ends it. Needs the browser module.",
   bridge: false,
   runs_in: "background",
   run: async (ctx) => {

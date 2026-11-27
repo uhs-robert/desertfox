@@ -4,6 +4,8 @@ import { test } from "node:test";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { create_firefox, key_event, source_of } from "./fake_firefox.ts";
+import { label_parts } from "../../src/background/chrome_hints.ts";
+import { make_labels } from "../../src/shared/hints/labels.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
 
 const FILE = "desertfox-chrome-hints.js";
@@ -122,7 +124,7 @@ class Node {
 const button = (id: string, left: number, props: Partial<Node> = {}) => new Node("toolbarbutton", { id, box: { left, top: 10, width: 24, height: 24 }, ...props });
 
 // A browser window: a nav bar with buttons, a tab strip with tabs, and an app menu panel that is closed until a test opens it.
-function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3, private_window = false } = {}) {
+function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3, private_window = false, loaded = true } = {}) {
   const root = new Node("#root");
   const document_element = new Node("window");
   document_element.setAttribute("windowtype", "navigator:browser");
@@ -146,12 +148,26 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
   const panel = new Node("panel", { id: "appMenu-popup" });
   panel.query.panelview = [view, other_view];
   panel.append(view, other_view);
-  document_element.append(panel);
-  const by_id: Record<string, Node> = { "nav-bar": nav, TabsToolbar: tabs_bar, "appMenu-popup": panel, "cmd:go": new Node("command"), "cmd:off": new Node("command", { attrs: new Map([["disabled", "true"]]) }) };
+  // The walk tells a multi-view panel by this.
+  Object.assign(panel, { querySelector: (selector: string) => (selector === "panelmultiview" ? new Node("panelmultiview") : null) });
+  const downloads_view = new Node("panelview", { box: { left: 500, top: 60, width: 200, height: 300 } });
+  downloads_view.setAttribute("visible", "true");
+  downloads_view.query["richlistitem, toolbarbutton, button"] = [new Node("richlistitem", { id: "download-row", box: { left: 510, top: 70, width: 180, height: 24 } })];
+  const downloads_panel = new Node("panel", { id: "downloadsPanel" });
+  downloads_panel.query.panelview = [downloads_view];
+  downloads_panel.append(downloads_view);
+  document_element.append(panel, downloads_panel);
+  const by_id: Record<string, Node> = { "nav-bar": nav, TabsToolbar: tabs_bar, "appMenu-popup": panel, downloadsPanel: downloads_panel, "cmd:go": new Node("command"), "cmd:off": new Node("command", { attrs: new Map([["disabled", "true"]]) }) };
   const all_targets = () => [...nav.query.toolbarbutton!, ...tab_list, ...rows];
+  let focused: Node | undefined;
   const document = {
-    readyState: "complete",
+    readyState: loaded ? "complete" : "uninitialized",
     documentElement: document_element,
+    commandDispatcher: {
+      get focusedElement() {
+        return focused;
+      },
+    },
     createElementNS: (_ns: string, name: string) => new Node(name),
     getElementById: (id: string) => by_id[id] ?? null,
     querySelectorAll: (selector: string) => (selector.startsWith("#") ? (by_id[selector.slice(1)] ? [by_id[selector.slice(1)]] : []) : (document_element.query[selector] ?? [])),
@@ -168,7 +184,7 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
     closed: false,
     private_window,
     windowRoot: window_root,
-    location: { href: "chrome://browser/content/browser.xhtml" },
+    location: { href: loaded ? "chrome://browser/content/browser.xhtml" : "about:blank" },
     gBrowser: { selectedTab: tab_list[0] },
     setTimeout: (run: () => void, ms: number) => timers.push({ run, ms, live: true }) - 1,
     clearTimeout: (handle: number) => void (timers[handle] && (timers[handle]!.live = false)),
@@ -182,7 +198,13 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
   const open_panel = () => (panel.state = "open");
   // The feature's own listeners while no session runs: the key listener on the window root and the unload listener that drops it.
   const session_listeners = () => window_root.listener_total() + win.listener_total() - 2;
-  return { session_listeners, id, win, nav, tab_list, rows, panel, view, press, layers, labels, fire_timers, timers, window_root, document_element };
+  const focus = (node: Node | undefined) => (focused = node);
+  const finish_load = () => {
+    win.location.href = "chrome://browser/content/browser.xhtml";
+    document.readyState = "complete";
+    win.fire("load");
+  };
+  return { session_listeners, id, win, nav, tab_list, rows, panel, downloads_panel, view, press, layers, labels, fire_timers, timers, window_root, document_element, focus, finish_load };
 }
 
 function started({ pref = true as boolean | null, private_access = false, buttons = 3, private_window = false } = {}) {
@@ -223,7 +245,8 @@ function started({ pref = true as boolean | null, private_access = false, button
     await settle();
     return reply(request);
   };
-  return { firefox, chrome, send, from_module, reply, pushes, target_ids, collect, draw, pick };
+  const held = () => (firefox.Services.desertfox_browser_module as { keys_held_by(win: unknown): unknown }).keys_held_by(chrome.win);
+  return { firefox, chrome, send, from_module, reply, pushes, target_ids, collect, draw, pick, held };
 }
 
 test("the module's kind rows are the protocol's, so a collect is answered and its targets pass the extension's check", async () => {
@@ -296,14 +319,15 @@ test("a draw shows only once all its parts came, a part of an older draw and bad
   assert.deepEqual(chrome.labels(), [{ text: "sd", typed: "s", left: "40px", top: "100px", position: "" }]);
   await draw(1, 2, [[a!, "a"]], { part: 1, parts: 2 });
   assert.deepEqual(chrome.labels().map((label) => label.text), ["sd"], "a late part of an older draw showed");
-  for (const bad of [[[999999, "a"]], [[a!, "<b>"]], [[a!, "abcdefghi"]], [[a!]], [[a!, 5]]] as never[]) await draw(1, 9, bad);
+  for (const bad of [[[999999, "a"]], [[a!, "a b"]], [[a!, "a/"]], [[a!, "abcdefghij"]], [[a!]], [[a!, 5]]] as never[]) await draw(1, 9, bad);
   await draw(2, 10, [[a!, "a"]]);
   assert.deepEqual(chrome.labels().map((label) => label.text), ["sd"], "a bad row or another session's draw showed");
 });
 
 test("keys before the first draw wait, then go out in order; Escape ends the session in chrome and tells the extension", async () => {
-  const { collect, draw, chrome, pushes, target_ids } = started();
+  const { collect, draw, chrome, pushes, target_ids, held } = started();
   await collect(1);
+  assert.equal(held(), "chrome_hints", "a session does not hold the window's keys");
   const early = chrome.press("s");
   assert.ok(early.prevented && early.stopped, "a key of the session reached the page");
   assert.deepEqual(pushes("chrome_hints.key"), []);
@@ -319,19 +343,21 @@ test("keys before the first draw wait, then go out in order; Escape ends the ses
   assert.equal(chrome.layers().length, 0);
   assert.equal(chrome.session_listeners(), 0, "a listener outlived the session");
   assert.ok(chrome.timers.every((timer) => !timer.live), "the first draw timer outlived the session");
+  assert.equal(held(), undefined, "Escape left the window's keys held");
   const after = chrome.press("j");
   assert.ok(!after.prevented, "a key after the end was taken");
 });
 
 test("a key with Ctrl, a click, the window leaving the front, a resize and the window closing each end the session", async () => {
   for (const end of ["ctrl", "mousedown", "deactivate", "resize", "unload"]) {
-    const { collect, chrome, pushes } = started();
+    const { collect, chrome, pushes, held } = started();
     await collect(1);
     if (end === "ctrl") assert.ok(!chrome.press("w", { ctrlKey: true }).prevented, "Ctrl+W was taken");
     else chrome.win.fire(end);
     assert.deepEqual(pushes("chrome_hints.end"), [{ session: 1 }], end);
     assert.equal(chrome.layers().length, 0, end);
     assert.equal(end === "unload" ? chrome.session_listeners() + 2 : chrome.session_listeners(), 0, end);
+    assert.equal(held(), undefined, end);
   }
 });
 
@@ -341,16 +367,18 @@ test("no first draw within its time ends the session, and the pref off ends it w
   late.chrome.fire_timers();
   assert.deepEqual(late.pushes("chrome_hints.end"), [{ session: 1 }]);
   assert.equal(late.chrome.layers().length, 0);
+  assert.equal(late.held(), undefined);
 
   const off = started();
   await off.collect(1);
   off.firefox.set_pref(false);
   assert.equal(off.chrome.layers().length, 0);
   assert.equal(off.chrome.session_listeners(), 0);
+  assert.equal(off.held(), undefined);
 });
 
 test("a pick runs the target's fixed action once, and refuses another session, an unknown id, an undrawn target, a gone one and a moved one", async () => {
-  const { collect, draw, pick, chrome, target_ids } = started();
+  const { collect, draw, pick, chrome, target_ids, held } = started();
   await collect(1);
   let ids = target_ids();
   await draw(1, 1, ids.slice(0, 4).map((id, index) => [id, "asdf"[index]!]));
@@ -361,6 +389,7 @@ test("a pick runs the target's fixed action once, and refuses another session, a
   assert.equal(chrome.layers().length, 1, "a refused id ended the session");
   assert.equal((await pick(1, ids[3]!))?.ok, true);
   assert.equal(chrome.layers().length, 0, "the session outlived a pick");
+  assert.equal(held(), undefined, "a pick left the window's keys held");
   assert.equal((await pick(1, ids[0]!))?.error, "The hints have ended", "a second pick of the session ran");
   assert.equal(chrome.nav.query.toolbarbutton![0]!.clicks, 0);
   assert.equal(chrome.win.gBrowser.selectedTab, chrome.tab_list[0]);
@@ -441,7 +470,7 @@ test("a button that runs a <command> follows the command's state, not its own st
 });
 
 test("the session's key listener runs before a listener a later feature adds on the window root, and the module shutting down takes every listener away", async () => {
-  const { firefox, collect, chrome } = started();
+  const { firefox, collect, chrome, held } = started();
   const later: boolean[] = [];
   chrome.window_root.addEventListener("keydown", (event) => void later.push(event.prevented));
   await collect(1);
@@ -449,6 +478,107 @@ test("the session's key listener runs before a listener a later feature adds on 
   assert.deepEqual(later, [true], "a later listener saw the session's key as not taken");
   (firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
   assert.equal(chrome.layers().length, 0);
+  assert.equal(held(), undefined, "the module shut down with the window's keys held");
   assert.equal(chrome.window_root.listener_total(), 1, "the feature's window root listener outlived the module");
   assert.equal(chrome.win.listener_total(), 0);
+});
+
+test("a whole draw with no labels ends the session, so it never holds the keys with nothing shown", async () => {
+  const { collect, draw, chrome, pushes, held } = started();
+  await collect(1);
+  await draw(1, 1, []);
+  assert.deepEqual(pushes("chrome_hints.end"), [{ session: 1 }]);
+  assert.equal(chrome.layers().length, 0);
+  assert.equal(held(), undefined);
+  assert.ok(!chrome.press("a").prevented, "a key after an empty draw was taken");
+});
+
+test("a collect is refused while a field of the window has the focus, such as the address bar", async () => {
+  const { collect, chrome, held } = started();
+  chrome.focus(new Node("input", { id: "urlbar-input" }));
+  assert.equal((await collect(1))?.error, "Leave the field first");
+  assert.equal(chrome.layers().length, 0);
+  assert.equal(held(), undefined);
+  chrome.focus(new Node("browser", { isRemoteBrowser: true } as never));
+  assert.equal((await collect(2))?.ok, true, "a collect with the focus in a page was refused");
+});
+
+test("a key after DesertFox stops acting in the window ends the session and goes on to the page", async () => {
+  const { firefox, collect, draw, chrome, target_ids, pushes, held } = started();
+  await collect(1);
+  await draw(1, 1, target_ids().map((id, index) => [id, "asdfg"[index]!]));
+  firefox.write_state({ v: 1, enabled: false, keys: [], tabs: {} });
+  assert.ok(!chrome.press("a").prevented, "a key was taken with the toolbar switch off");
+  assert.deepEqual(pushes("chrome_hints.key"), []);
+  assert.equal(chrome.layers().length, 0);
+  assert.equal(held(), undefined);
+});
+
+test("the downloads panel gets no labels yet: with it open the window's buttons are the targets", async () => {
+  const { collect, chrome, target_ids } = started();
+  chrome.downloads_panel.state = "open";
+  await collect(1);
+  assert.equal(target_ids().length, 5);
+  assert.equal(chrome.downloads_panel.children[0]!.children.length, 0, "a layer went into the downloads panel");
+});
+
+test("labels of any hint letters the settings allow show, up to 400 targets with two letters", async () => {
+  const { collect, chrome, target_ids, send } = started({ buttons: 398 });
+  await collect(1);
+  const ids = target_ids();
+  assert.equal(ids.length, 400);
+  const labels = make_labels(ids.length, [",", "."]);
+  assert.equal(Math.max(...labels.map((label) => label.length)), 9);
+  const parts = label_parts(ids.map((id, index) => [id, labels[index]!]));
+  // One message at a time, as the module reads each draw part off the list.
+  for (const [part, rows] of parts.entries()) {
+    send("chrome_hints.draw", { session: 1, gen: 1, part, parts: parts.length, typed: "", labels: JSON.stringify(rows) });
+    await settle();
+  }
+  assert.equal(chrome.labels().length, 400);
+  assert.equal(chrome.labels()[0]!.text, labels[0]);
+});
+
+test("in a window opened after startup the popup walk, whose watcher Firefox calls first, leaves a session's j to the labels", async () => {
+  const firefox = create_firefox({ extra_files: { [FILE]: source_of(FILE), "desertfox-popup-walk.js": source_of("desertfox-popup-walk.js") } });
+  const extension = firefox.start_extension();
+  Object.assign(extension, { baseURI: { resolve: (path: string) => `moz-extension://uuid/${path}` } });
+  firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {} });
+  // Firefox's observer list calls the newest observer first, so the later feature file hears a new window first.
+  const watchers: { observe(subject: unknown, topic: string): void }[] = [];
+  const typed: string[] = [];
+  Object.assign(firefox.Services, {
+    ww: { registerNotification: (watcher: never) => watchers.unshift(watcher), unregisterNotification: (watcher: never) => watchers.splice(watchers.indexOf(watcher), 1) },
+    wm: { getEnumerator: () => [] },
+  });
+  firefox.Components.interfaces.nsITextInputProcessor = {};
+  firefox.Components.classes["@mozilla.org/text-input-processor;1"] = {
+    createInstance: () => ({ beginInputTransaction: () => true, keydown: (event: { key: string }) => typed.push(event.key), keyup: () => undefined }),
+  };
+  firefox.make_window().load();
+  const chrome = chrome_window(firefox, { loaded: false });
+  Object.assign(chrome.win, { KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } } });
+  for (const watcher of [...watchers]) watcher.observe(chrome.win, "domwindowopened");
+  chrome.finish_load();
+  (firefox.Services.focus as { activeWindow: unknown }).activeWindow = chrome.win;
+  chrome.panel.state = "open";
+  chrome.win.fire("popupshown", { originalTarget: chrome.panel } as never);
+  const without_session = chrome.press("j");
+  chrome.fire_timers();
+  assert.ok(without_session.prevented && typed.join() === "ArrowDown", "the walk is not attached to the new window, so the test proves nothing");
+
+  const sent = [{ v: 1, id: "r0", kind: "chrome_hints.collect", args: { session: 1, window_id: chrome.id, colors: "" }, sent_at: Date.now() }];
+  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, sent);
+  await settle();
+  const ids = (plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)) as { kind?: string; args?: { targets: string } }[])
+    .filter((message) => message.kind === "chrome_hints.targets")
+    .flatMap((message) => (JSON.parse(message.args!.targets) as number[][]).map(([id]) => id!));
+  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [...sent, { v: 1, id: "r1", kind: "chrome_hints.draw", args: { session: 1, gen: 1, part: 0, parts: 1, typed: "", labels: JSON.stringify(ids.map((id, index) => [id, ["j", "k"][index]!])) }, sent_at: Date.now() }]);
+  await settle();
+  assert.equal(chrome.labels().length, 2);
+  chrome.press("j");
+  chrome.fire_timers();
+  assert.deepEqual(typed, ["ArrowDown"], "the walk moved the menu on a session's j");
+  const keys = (plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)) as { kind?: string; args?: { key: string } }[]).filter((message) => message.kind === "chrome_hints.key");
+  assert.deepEqual(keys.map((message) => message.args!.key), ["j"]);
 });
