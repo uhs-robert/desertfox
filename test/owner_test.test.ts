@@ -672,8 +672,10 @@ test("start_unit passes the window env to a plain spawn, over the caller's own v
   } finally {
     process.env.PATH = original_path;
   }
-  for (let waited = 0; !existsSync(out) && waited < 50; waited++) await new Promise((done) => setTimeout(done, 100));
-  assert.equal(readFileSync(out, "utf8"), "/private|/scratch");
+  // The shell's redirect creates the file before printf writes to it, so an empty file means the child has not written yet. printf writes its one line in one call.
+  const written = () => (existsSync(out) ? readFileSync(out, "utf8") : "");
+  for (let waited = 0; !written() && waited < 50; waited++) await new Promise((done) => setTimeout(done, 100));
+  assert.equal(written(), "/private|/scratch");
 });
 
 test("check_environment refuses on the key-test marker and the /tmp runtime dir, and no longer on DESERTFOX_CONFIG_DIR", () => {
