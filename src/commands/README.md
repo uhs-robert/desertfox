@@ -49,7 +49,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `settings.ts`: `set`, `toggle` and `unset` (ids `settings.set`, `settings.toggle`, `settings.unset`), over the planners in `src/shared/settings_plan.ts`.
 - `tab.ts`: the `tab.*` commands: next, prev, undo_close, move, duplicate, detach, goto, alternate, pin, mute and more.
 - `tab_group.ts`: the `tabgroup.*` commands on the tab's native tab group, over `TabGroupDeps`.
-- `tab_split.ts`: `tab.split_other` and `tab.split_swap`, over `src/background/tab_split.ts`.
+- `tab_split.ts`: `tab.split_other` and `tab.split_swap`, over `src/background/tab_split.ts`, and the browser module calls `pane.split`, `pane.unsplit`, `pane.close_both`, `pane.resize` and `pane.focus`, over `src/background/browser_module_call.ts`.
 - `text.ts`: `text.insert`, `register.paste` and `text.edit_external`. The code sits in the `text` and `editor` bundles.
 - `url.ts`: `url.parent`, `url.root` and `url.increment`.
 - `visual.ts`: `visual.act`, `visual.object` and `visual.open`. The code sits in a bundle.

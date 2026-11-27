@@ -34,7 +34,10 @@ export const HELLO_MIN_INTERVAL_MS = 1000;
 export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
-type ArgKind = "int" | "number" | "axis" | "text";
+type ArgKind = "int" | "number" | "axis" | "text" | "step" | "region";
+
+export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
+export const MAX_RESIZE_STEPS = 20;
 
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
@@ -82,7 +85,9 @@ const is_key_token = (key: unknown): key is string => typeof key === "string" &&
 function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "text") return typeof value === "string" ? undefined : "must be text";
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
+  if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
+  if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? undefined : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
   return kind === "int" && !Number.isInteger(value) ? "must be a whole number" : undefined;
 }
 
@@ -214,6 +219,7 @@ export const MAX_KIND_BYTES = 64 * 1024;
 export const MESSAGE_ENVELOPE_BYTES = 512;
 // The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
 const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
+const PANE_CALL_BYTES = 256;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
@@ -223,6 +229,13 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`.
   page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
+  // The pane calls change the window, so each expects a reply: the module answers with its refusal text when it cannot do the call. A resize step is 5 percent of the panel area. Each message is tiny, so one limit covers all.
+  "pane.split_new_tab": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
+  "pane.split_next_tab": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
+  "pane.unsplit": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
+  "pane.close_both": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
+  "pane.resize": { args: { steps: "step" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: PANE_CALL_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
@@ -257,7 +270,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
     if (typeof value.ok !== "boolean") return bad("ok must be true or false");
     if (value.error !== undefined && (typeof value.error !== "string" || value.error.length > MAX_ERROR_CHARS)) return bad("error must be short text");
     if (value.value !== undefined && (typeof value.value !== "string" || (json_bytes(value) ?? Number.POSITIVE_INFINITY) > MAX_KIND_BYTES)) return bad("value must be text within the size limit");
-    return { ok: true, value: { v: value.v, reply_to: value.reply_to, ok: value.ok, ...(value.error === undefined ? {} : { error: value.error }), ...(value.value === undefined ? {} : { value: value.value }) } };
+    return { ok: true, value: { v: value.v, reply_to: value.reply_to, ok: value.ok, ...(value.error === undefined ? {} : { error: value.error.replace(/[\p{Cc}\p{Cf}]/gu, "") }), ...(value.value === undefined ? {} : { value: value.value }) } };
   }
   if (!is_message_id(value.id)) return bad("a request needs an id of 1 to 32 letters, digits, - or _");
   if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return bad("the kind is not on the allow list");

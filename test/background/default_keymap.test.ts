@@ -425,9 +425,18 @@ test("which-key rows for the guarded tree keys carry their chain, and the unguar
   assert.equal(h?.chain?.otherwise?.label, "Item to the left, or scroll left");
 });
 
-test("the E group is named Pane and binds the two split commands that gp and gP also reach", () => {
+test("the E group is named Pane and binds the split commands that gp and gP also reach, and the module pane calls", () => {
   assert.equal(DEFAULT_KEYMAP.group_names?.E, "Pane");
-  const normal = DEFAULT_KEYMAP.normal!;
-  assert.deepEqual([(normal.Ep as { id: string }).id, (normal.Es as { id: string }).id], ["tab.split_other", "tab.split_swap"]);
-  assert.deepEqual(Object.keys(normal).filter((key) => key.startsWith("E")), ["Ep", "Es"]);
+  const normal = DEFAULT_KEYMAP.normal! as Record<string, { id: string; args?: Record<string, unknown> }>;
+  assert.deepEqual([normal.Ep!.id, normal.Es!.id], ["tab.split_other", "tab.split_swap"]);
+  const keys = Object.keys(normal).filter((key) => key.startsWith("E"));
+  assert.deepEqual(keys.sort(), ["ED", "EN", "ES", "E<", "E>", "Ej", "Ek", "Ep", "Es", "Eu", "Ex", "En"].sort());
+  const bound = (key: string) => `${normal[key]!.id} ${JSON.stringify(normal[key]!.args ?? {})}`;
+  assert.equal(bound("En"), 'pane.split {"with":"new"}');
+  assert.equal(bound("EN"), 'pane.split {"with":"next"}');
+  assert.equal(bound("E<"), 'pane.resize {"direction":"narrow"}');
+  assert.equal(bound("E>"), 'pane.resize {"direction":"widen"}');
+  assert.equal(bound("Ej"), 'pane.focus {"region":"devtools"}');
+  assert.equal(bound("Ek"), 'pane.focus {"region":"page"}');
+  assert.equal(bound("ES"), 'pane.focus {"region":"sidebar"}');
 });
