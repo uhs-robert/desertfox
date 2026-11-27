@@ -6,6 +6,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-tabs-scroll.js`: the tab and scroll feature. It defines `tab.next`, `tab.prev` and the four scroll commands, and holds the scroll frame script.
 - `desertfox-panes.js`: the pane feature. It answers the extension's `pane.*` requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused window.
 - `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type arrow keys in open menus and panels and in the Library, Page Info and Picture-in-Picture windows.
+- `desertfox-locked-pages.js`: DesertFox's own page code in the PDF viewer and Reader View. Open it for the attach rule, the sandbox or the transport.
 - `desertfox-commands.js`: generated from `sources/commands.js`, never edited. Key sequences and counts on locked pages, the ignore toggle, `page.stop` and the address bar opener.
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
 - `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
