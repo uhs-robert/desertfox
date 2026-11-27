@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { create_browser_module, key_rows_of, module_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
+import { bar_setting_on, create_browser_module, key_rows_of, module_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
@@ -57,9 +57,10 @@ const TEST_KINDS: { from_module: KindTable; from_extension: KindTable } = {
   from_extension: { note: { args: {}, reply: true }, nudge: { args: { n: "int" }, reply: false } },
 };
 
-function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord> } = {}) {
+function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord>; bar_setting?: boolean; theme?: unknown } = {}) {
   const data = new Map<string, unknown>();
-  const config = { on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000, gets: [] as string[] };
+  const bar_changes = { count: 0 };
+  const config = { bar_setting: options.bar_setting ?? true, theme: options.theme as unknown, on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000, gets: [] as string[] };
   const timers: (() => void)[] = [];
   const calls: unknown[] = [];
   const replies: unknown[] = [];
@@ -78,6 +79,9 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     read_keymap: async () => keymap({ J: leaf("tab.next") }),
     read_tab_records: async () => config.records,
     check_args: real_check,
+    bar_setting: async () => config.bar_setting,
+    read_theme: async () => config.theme,
+    on_bar_change: () => void bar_changes.count++,
     kinds: TEST_KINDS,
     handlers: {
       push: async (args) => void calls.push(["push", args]),
@@ -95,7 +99,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     for (let turn = 0; turn < 3; turn++) await module.tab_changed("0", undefined);
   };
   const hello_reads = () => config.gets.filter((key) => key === BROWSER_MODULE_HELLO_STORAGE_KEY).length;
-  return { data, config, timers, module, flush, calls, replies, hello_reads };
+  return { data, config, timers, module, flush, calls, replies, hello_reads, bar_changes };
 }
 const status_of = (data: Map<string, unknown>) => (data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string } | undefined)?.result;
 
@@ -353,4 +357,107 @@ test("the message reads do not use up the hello's second", async () => {
   module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "session");
   await flush();
   assert.equal(status_of(data), "matched", "the first hello read runs at once, whatever the message reads did");
+});
+
+const THEME_COLORS = { bg_core: "#101010", mode_normal: "#89b4fa", mode_insert: "#a6e3a1", mode_ignore: "#f38ba8", mode_caret: "#cba6f7", mode_visual: "#f9e2af", mode_item: "#94e2d5", mode_media: "#fab387", fg_core: "#fff" };
+const state_of = (data: Map<string, unknown>) => data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as { tabs: Record<string, Record<string, unknown>>; bar_theme?: unknown };
+
+test("a bar report lands in the tab's entry, a child frame changes only the pending keys and a repeat writes nothing", async () => {
+  const { data, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await module.bar_report(3, 0, false, { pending: ["g"], count: 2, pass: true, site: "GMAIL", recording: "q", junk: 1 });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], count: 2, pass: true, site: "GMAIL", recording: "q" });
+  await module.bar_report(3, 5, false, { pending: ["<Space>", "z"] });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["<Space>", "z"], pass: true, site: "GMAIL", recording: "q" });
+  const written = structuredClone(data.get(BROWSER_MODULE_STATE_STORAGE_KEY));
+  data.delete(BROWSER_MODULE_STATE_STORAGE_KEY);
+  await module.bar_report(3, 5, false, { pending: ["<Space>", "z"] });
+  assert.equal(data.has(BROWSER_MODULE_STATE_STORAGE_KEY), false, "nothing changed, so nothing is written");
+  data.set(BROWSER_MODULE_STATE_STORAGE_KEY, written);
+});
+
+test("a private tab's report never carries a site label", async () => {
+  const { data, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}4`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await module.bar_report(4, 0, true, { pending: ["g"], site: "GMAIL" });
+  assert.deepEqual(state_of(data).tabs["4"], { mode: "normal", live: true, pending: ["g"] });
+});
+
+test("the bar fields survive a mode change and a full sync, and go when the tab loads a new page or closes", async () => {
+  const records: Record<string, TabModeRecord> = { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } };
+  const { data, module, flush } = setup({ records });
+  await module.sync();
+  await flush();
+  await module.bar_report(3, 0, false, { pending: ["g"] });
+  await module.tab_changed("3", { top_mode: "insert", live: true });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "insert", live: true, pending: ["g"] });
+  await module.sync();
+  await flush();
+  assert.deepEqual(state_of(data).tabs["3"]!.pending, ["g"]);
+  await module.tab_changed("3", { awaiting_commit: true });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: false });
+  await module.bar_report(3, 0, false, { pending: ["g"] });
+  await module.tab_changed("3", undefined);
+  assert.equal("3" in state_of(data).tabs, false);
+  delete records[`${TAB_MODE_STORAGE_PREFIX}3`];
+  await module.sync();
+  await flush();
+  assert.equal("3" in state_of(data).tabs, false);
+});
+
+test("the bar is active only with the module setting, the bar setting and a hello that says bar", async () => {
+  const { data, config, module, flush } = setup();
+  await module.sync();
+  await flush();
+  assert.equal(await module.bar_active(), false, "no hello yet");
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1" });
+  assert.equal(await module.bar_active(), false, "an older module that has no bar");
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
+  assert.equal(await module.bar_active(), true);
+  config.bar_setting = false;
+  assert.equal(await module.bar_active(), false);
+  config.bar_setting = true;
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 2, module_version: "1", bar: true });
+  assert.equal(await module.bar_active(), false, "another protocol version claims nothing");
+  config.on = false;
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
+  assert.equal(await module.bar_active(), false);
+});
+
+test("a hello that flips the bar mark tells the pages once, and the setting is read from the stored status", async () => {
+  const { data, config, module, flush, bar_changes } = setup();
+  await module.sync();
+  await flush();
+  assert.equal(bar_changes.count, 0);
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
+  config.now += HELLO_MIN_INTERVAL_MS + 1;
+  module.read_hello();
+  await flush();
+  assert.equal(bar_changes.count, 1);
+  config.now += HELLO_MIN_INTERVAL_MS + 1;
+  module.read_hello();
+  await flush();
+  assert.equal(bar_changes.count, 1, "no change, no word");
+  const local = (settings: unknown) => ({ get: async (key: string) => ({ [key]: { settings } }) });
+  assert.equal(await bar_setting_on(local({ browser_bar: false })), false);
+  assert.equal(await bar_setting_on(local({ browser_bar: true })), true);
+  assert.equal(await bar_setting_on(local({})), true, "an absent value is the default, on");
+});
+
+test("the state carries the bar theme from the stored theme and a theme change republishes it", async () => {
+  const { data, config, module, flush } = setup({ theme: { dark: THEME_COLORS, light: { ...THEME_COLORS, bg_core: "#eff1f5" } } });
+  await module.sync();
+  await flush();
+  const { fg_core: _, ...bar } = THEME_COLORS;
+  assert.deepEqual(state_of(data).bar_theme, { dark: bar, light: { ...bar, bg_core: "#eff1f5" } });
+  config.theme = { dark: { ...THEME_COLORS, mode_normal: "#000000" }, light: THEME_COLORS };
+  module.storage_changed({ desertfox_theme: {} }, "local");
+  await flush();
+  assert.equal((state_of(data).bar_theme as { dark: { mode_normal: string } }).dark.mode_normal, "#000000");
+  config.theme = undefined;
+  await module.sync();
+  await flush();
+  assert.equal("bar_theme" in state_of(data), false, "no theme, no field");
 });

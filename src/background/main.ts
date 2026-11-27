@@ -61,7 +61,8 @@ import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import { create_browser_module, module_setting_on } from "./browser_module.ts";
+import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
+import { bar_setting_on, create_browser_module, module_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -295,6 +296,9 @@ void toolbar.sync_look();
 const browser_module = create_browser_module({
   session: browser.storage.session,
   is_on: () => module_setting_on(browser.storage.local),
+  bar_setting: () => bar_setting_on(browser.storage.local),
+  read_theme: async () => (await browser.storage.local.get(THEME_STORAGE_KEY))[THEME_STORAGE_KEY],
+  on_bar_change: () => void browser.tabs.query({}).then((tabs) => tabs.forEach((tab) => tab.id === undefined || void best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))).catch(warn_and_go("browser_module.on_bar_change")),
   check_args: (id, args) => {
     const command = registry.get(id);
     const checked = command && check_args(command, args);
@@ -428,7 +432,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
 const handlers = {
   ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
-  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module }),
 } satisfies Handlers<keyof ToBackground>;
 browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
 

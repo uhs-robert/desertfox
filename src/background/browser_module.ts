@@ -5,7 +5,7 @@
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, TabState } from "../shared/browser_module_protocol.ts";
+import type { BarFields, KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, TabState } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -13,7 +13,10 @@ import {
   BROWSER_MODULE_FROM_MODULE_STORAGE_KEY,
   BROWSER_MODULE_STATE_STORAGE_KEY,
   BROWSER_MODULE_STATUS_STORAGE_KEY,
+  bar_fields_of,
+  bar_theme_of,
   check_module_args,
+  validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
   is_module_command_id,
@@ -28,6 +31,7 @@ import {
   validate_message_list,
   validate_module_state,
 } from "../shared/browser_module_protocol.ts";
+import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import { keep_chain } from "../shared/swallow.ts";
 import { mode_of_record } from "./tab_modes.ts";
@@ -67,6 +71,12 @@ export async function module_setting_on(storage: Pick<typeof browser.storage.loc
   return status?.settings?.browser_module === true;
 }
 
+// Whether the `browser_bar` setting is on in the stored config status. A status with no value reads as the default, on.
+export async function bar_setting_on(storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> {
+  const status = (await storage.get(CONFIG_STATUS_STORAGE_KEY))[CONFIG_STATUS_STORAGE_KEY] as { settings?: { browser_bar?: unknown } } | undefined;
+  return status?.settings?.browser_bar !== false;
+}
+
 export type BrowserModuleDeps = {
   session: SessionStorage;
   // Whether the setting is on (`module_setting_on`).
@@ -75,6 +85,12 @@ export type BrowserModuleDeps = {
   read_keymap: () => Promise<CompiledKeymap | undefined>;
   read_tab_records: () => Promise<Record<string, TabModeRecord>>;
   check_args: CheckCommandArgs;
+  // The status bar's inputs. Without them the bar counts as off.
+  bar_setting?: () => Promise<boolean>;
+  // The stored theme, `{ dark, light }` role colors.
+  read_theme?: () => Promise<unknown>;
+  // The bar appeared or went away, so the pages must ask for their keymap again (the corner badge hides while the bar shows).
+  on_bar_change?: () => void;
   // The allow list of each direction. The protocol's lists are empty now, so a test passes its own.
   kinds?: { from_module: KindTable; from_extension: KindTable };
   // One handler per kind the module may request. A handler never awaits `send`: handlers run inside the queue and `send` waits behind them, so it would never settle and every later step would hang. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
@@ -122,6 +138,19 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const write_state = async (state: ModuleState): Promise<void> => {
     if (validate_module_state(state).ok) await deps.session.set({ [BROWSER_MODULE_STATE_STORAGE_KEY]: state });
   };
+
+  // What each tab last reported for the bar, in memory only: the pending keys of a private tab must not reach the disk, and a restart empties them.
+  const bars = new Map<string, BarFields>();
+  let bar_seen = false;
+
+  // The bar draws and the corner badge hides: the setting is on, and the module said in its hello that it built the bar.
+  const bar_built = (stored_hello: unknown): boolean => {
+    const hello = validate_module_hello(stored_hello);
+    return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.bar === true;
+  };
+  const bar_active_now = async (): Promise<boolean> => (await deps.is_on()) && !!(await deps.bar_setting?.()) && bar_built((await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]);
+
+  const tab_with_bar = (id: string, tab: TabState | undefined): TabState => ({ mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...bars.get(id) });
 
   const kinds = deps.kinds ?? { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS };
   // Ids of messages of the module that were handled, kept to skip them when the module rewrites its list. A copy: the replies in the extension's own list say the same for the requests that expect one.
@@ -183,7 +212,13 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   const read_hello_status = async (): Promise<void> => {
     if (!(await deps.is_on())) return;
-    await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status_of_hello((await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]) });
+    const hello = (await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY];
+    await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status_of_hello(hello) });
+    const bar = !!(await deps.bar_setting?.()) && bar_built(hello);
+    if (bar !== bar_seen) {
+      bar_seen = bar;
+      deps.on_bar_change?.();
+    }
   };
 
   const read_messages = async (): Promise<void> => {
@@ -203,9 +238,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const tabs: Record<string, TabState> = {};
     for (const [key, record] of Object.entries(records)) {
       const id = tab_id_of_key(key);
-      if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_state_of(record);
+      if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_with_bar(id, tab_state_of(record));
     }
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs });
+    const bar_theme = bar_theme_of(await deps.read_theme?.());
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(bar_theme && { bar_theme }) });
     request_hello_read();
     request_messages_read();
   };
@@ -216,9 +252,26 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // No state yet: a full sync is on its way or the setting just turned off.
     if (state === undefined) return;
     const tabs = { ...state.tabs };
+    // A tab that closed or began a load has nothing half-typed any more.
+    if (record === undefined || record.awaiting_commit) bars.delete(tab_id);
     if (record === undefined) delete tabs[tab_id];
-    else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_state_of(record);
+    else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_with_bar(tab_id, tab_state_of(record));
     await write_state({ ...state, tabs });
+  };
+
+  // A content frame reports what the bar shows. The top frame's report replaces the tab's whole entry. A child frame only says what it has half-typed. `site` never reaches a private tab.
+  const bar_report_now = async (tab_id: string, frame_id: number, incognito: boolean, raw: Record<string, unknown>): Promise<void> => {
+    const { site, ...fields } = bar_fields_of(raw);
+    const given: BarFields = incognito || site === undefined ? fields : { ...fields, site };
+    const { pending: _, count: __, ...kept } = bars.get(tab_id) ?? {};
+    const next: BarFields = frame_id === 0 ? given : { ...kept, ...(given.pending && { pending: given.pending }), ...(given.count && { count: given.count }) };
+    if (JSON.stringify(next) === JSON.stringify(bars.get(tab_id) ?? {})) return;
+    if (Object.keys(next).length === 0) bars.delete(tab_id);
+    else bars.set(tab_id, next);
+    const state = await read_state();
+    if (state === undefined || !(await deps.is_on())) return;
+    if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return;
+    await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, { mode: state.tabs[tab_id]?.mode ?? "normal", live: state.tabs[tab_id]?.live ?? false }) } });
   };
 
   // The extension starts a call. The kind must be on the extension's allow list and the args must pass its check. Nothing is written while the setting is off. The id comes back so a caller can match the reply.
@@ -238,6 +291,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // Run at each background start, and after anything that changes the setting, the keymap or the switch.
     sync,
     tab_changed,
+    bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
+    bar_active: bar_active_now,
     send: (kind: string, args: ModuleArgs = {}) => enqueue(() => send_now(kind, args)),
     // Ask for a read. Each has its own limiter, which decides when it runs.
     read_hello: request_hello_read,
@@ -251,7 +306,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       }
       if (area !== "local") return;
       // A change of the setting alone leaves the compiled keymap as it is, so the settings status counts too.
-      if (COMPILED_KEYMAP_STORAGE_KEY in changes || DISABLED_STORAGE_KEY in changes || touches_settings(changes, area)) void sync();
+      if (COMPILED_KEYMAP_STORAGE_KEY in changes || THEME_STORAGE_KEY in changes || DISABLED_STORAGE_KEY in changes || touches_settings(changes, area)) void sync();
       for (const [key, change] of Object.entries(changes)) {
         const id = tab_id_of_key(key);
         if (id !== undefined) void tab_changed(id, change.newValue as TabModeRecord | undefined);

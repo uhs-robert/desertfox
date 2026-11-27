@@ -20,6 +20,11 @@ export const MAX_MESSAGE_LIST_BYTES = 4096;
 export const MAX_MESSAGE_ID_CHARS = 32;
 export const MAX_ERROR_CHARS = 120;
 export const MAX_MODULE_VERSION_CHARS = 32;
+// The status bar's per-tab fields. They are sized to stay small beside the key rows: a tab with every field set adds under 200 bytes.
+export const MAX_PENDING_KEYS = 8;
+export const MAX_PENDING_TOKEN_CHARS = 16;
+export const MAX_SITE_LABEL_CHARS = 24;
+export const MAX_COUNT = 999999;
 // The extension reads the hello at most this often.
 export const HELLO_MIN_INTERVAL_MS = 1000;
 // The extension reads the module's message list at most this often. It is short because a call the module starts, such as a key on a locked page, must not wait a second. The list is capped, so a read is cheap.
@@ -42,9 +47,17 @@ export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleComm
 
 export type ModuleArgs = Record<string, number | string>;
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
-export type TabState = { mode: Mode; live: boolean };
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState> };
-export type ModuleHello = { v: number; module_version: string };
+// What the status bar shows of a tab beyond its mode, all optional. `pending` holds the keys of a half-typed sequence (a held group included), `count` a typed count, `pass` that pass-next is armed, `site` the label of a site mode and `recording` the register a macro records into. A private tab never has `site`.
+export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
+export type TabState = { mode: Mode; live: boolean } & BarFields;
+// The roles the bar's mode badge takes from the theme, for the dark and the light scheme.
+export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"] as const;
+export type BarRole = (typeof BAR_ROLES)[number];
+export type BarColors = Record<BarRole, string>;
+export type BarTheme = { dark: BarColors; light: BarColors };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme };
+// `bar` says the module built its status bar.
+export type ModuleHello = { v: number; module_version: string; bar?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -87,6 +100,31 @@ function check_key_row(row: unknown): Checked<KeyRow> {
   return { ok: true, value: { key: row.key, id: row.id, args: args.value } };
 }
 
+const is_color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
+
+// The bar fields a value carries. A field of the wrong shape is left out and never fails the tab, so a bad bar report cannot take the keys down.
+export function bar_fields_of(value: Record<string, unknown>): BarFields {
+  const fields: BarFields = {};
+  const { pending, count, pass, site, recording } = value;
+  if (Array.isArray(pending) && pending.length > 0 && pending.length <= MAX_PENDING_KEYS && pending.every((key) => is_key_token(key) && key.length <= MAX_PENDING_TOKEN_CHARS)) fields.pending = pending as string[];
+  if (typeof count === "number" && Number.isInteger(count) && count > 0 && count <= MAX_COUNT) fields.count = count;
+  if (pass === true) fields.pass = true;
+  if (typeof site === "string" && site.length > 0 && site.length <= MAX_SITE_LABEL_CHARS && !/\p{Cc}/u.test(site)) fields.site = site;
+  if (typeof recording === "string" && /^[\p{L}\p{N}"]$/u.test(recording)) fields.recording = recording;
+  return fields;
+}
+
+function bar_colors_of(value: unknown): BarColors | undefined {
+  if (!is_record(value) || !BAR_ROLES.every((role) => is_color(value[role]))) return undefined;
+  return Object.fromEntries(BAR_ROLES.map((role) => [role, value[role]])) as BarColors;
+}
+
+export function bar_theme_of(value: unknown): BarTheme | undefined {
+  if (!is_record(value)) return undefined;
+  const [dark, light] = [bar_colors_of(value.dark), bar_colors_of(value.light)];
+  return dark && light ? { dark, light } : undefined;
+}
+
 export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
@@ -111,9 +149,11 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
     const tab = given_tabs[id];
     if (!/^\d{1,10}$/.test(id)) return bad("a tab id must be a number");
     if (!is_record(tab) || typeof tab.live !== "boolean" || !(MODES as readonly unknown[]).includes(tab.mode)) return bad("a tab needs a mode and a live mark");
-    tabs[id] = { mode: tab.mode as Mode, live: tab.live };
+    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab) };
   }
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs } };
+  // The theme is optional and a bad one is left out, as the bar fields are.
+  const bar_theme = bar_theme_of(value.bar_theme);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the two fields it reads. An older or newer module may send more fields, which are ignored.
@@ -129,7 +169,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
