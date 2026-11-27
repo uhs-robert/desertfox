@@ -103,10 +103,17 @@
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
       "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: 4096 },
+      "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+      "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
+      "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 },
       run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: 512 },
+      "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: 4096 },
+      "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: 256 },
+      "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.

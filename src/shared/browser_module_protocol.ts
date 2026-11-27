@@ -289,6 +289,8 @@ const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
+// The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of letters and digits.
+export const CHROME_HINT_PART_BYTES = 4096;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
@@ -296,6 +298,12 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
   // A forward leaf of the tree matched: `keys` holds the tokens of its path, joined by one space, and `count` the typed count or 0 for none. The background matches the keys again against its own tree and runs the binding in the active tab. Chrome names no tab.
   run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
+  // One part of a session's targets: `targets` is a list of [id, left, top, width, height] in CSS pixels.
+  "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // A key typed while the labels show. `seq` counts up per session, so a key read twice runs once.
+  "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // The session ended in chrome: Escape, a click, the window left the front or closed, or no labels came.
+  "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`.
@@ -311,6 +319,13 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "pane.equalize": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
   "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
+  // Starts a session in the window, which must be in front. `colors` is JSON text of the theme's dark and light hex colors, or "". The reply refuses when there is nothing to hint.
+  "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+  // One part of the labels to show: `labels` is a list of [id, label]. Only a draw whose parts all came shows, and it replaces the one before.
+  "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // Runs the target's fixed action. The reply refuses an id of another session and a target that is gone or moved.
+  "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.

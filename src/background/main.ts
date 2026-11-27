@@ -62,6 +62,7 @@ import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { attach_browser_module, browser_module_call } from "./browser_module_call.ts";
+import { chrome_hints } from "../commands/hint_browser.ts";
 import { create_browser_module, read_bar_config, module_setting_on, stored_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
@@ -335,7 +336,7 @@ const browser_module = create_browser_module({
     return checked?.ok ? checked.args : undefined;
   },
   locked_commands,
-  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal }) },
+  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal }), ...chrome_hints.handlers },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);

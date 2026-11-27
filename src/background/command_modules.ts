@@ -27,6 +27,7 @@ import "../commands/copy.ts";
 import "../commands/copy_tabs.ts";
 import "../commands/hint.ts";
 import "../commands/hint_text.ts";
+import "../commands/hint_browser.ts";
 import "../commands/heading.ts";
 import "../commands/cmdline.ts";
 import "../commands/caret.ts";
