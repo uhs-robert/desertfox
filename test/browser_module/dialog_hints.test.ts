@@ -19,12 +19,13 @@ const STATE = { v: 1, enabled: true, keys: [], tabs: {}, chrome_hint_keys: [["g"
 type Firefox = ReturnType<typeof create_firefox>;
 
 // A document of chrome: its elements hang under `root`, and the hit test finds the last element whose box holds the point.
-function chrome_document(root: Node, view: unknown) {
+function chrome_document(root: Node, view: unknown, url = "chrome://test/content/window.xhtml") {
   const holder = new Node("#root");
   holder.append(root);
   let focused: Node | undefined;
   const document = {
     readyState: "complete",
+    documentURI: url,
     documentElement: root,
     defaultView: view,
     commandDispatcher: {
@@ -104,7 +105,9 @@ function page_info(firefox: Firefox) {
 }
 
 // A browser window with a dialog in a `dialogFrame`: a tab's prompt at the frame's place, or a settings sub-dialog inside about:preferences inside a tab.
-function browser_with_dialog(firefox: Firefox, { nested = false } = {}) {
+const PROMPT_URL = "chrome://global/content/commonDialog.xhtml";
+
+function browser_with_dialog(firefox: Firefox, { nested = false, url = PROMPT_URL, extra = [] as Node[] } = {}) {
   const window = chrome_window(firefox, "navigator:browser", (root) => root.append(button("reload-button", 10)));
   const outer = nested ? new Node("browser", { box: box(0, 80, 1200, 700) }) : undefined;
   const frame = Object.assign(new Node("browser", { box: box(300, 200, 400, 200) }), { classList: { contains: (name: string) => name === "dialogFrame" }, clientLeft: 0, clientTop: 0 });
@@ -118,8 +121,8 @@ function browser_with_dialog(firefox: Firefox, { nested = false } = {}) {
   shadow.append(accept, cancel);
   dialog.openOrClosedShadowRoot = shadow;
   shadow.host = dialog;
-  dialog_root.append(field, dialog);
-  const dialog_doc = chrome_document(dialog_root, dialog_view);
+  dialog_root.append(field, dialog, ...extra);
+  const dialog_doc = chrome_document(dialog_root, dialog_view, url);
   dialog_doc.own();
   if (outer) {
     const prefs_view = { browsingContext: { embedderElement: outer } };
@@ -404,4 +407,38 @@ test("the module shutting down mid-start releases the hold and leaves no listene
   assert.equal(run.held(), undefined);
   assert.equal(run.chrome.window_root.listener_total(), 0);
   assert.equal(run.chrome.win.listener_total(), 0);
+});
+
+test("a dialog off the short list, such as the external protocol prompt or the client certificate prompt, takes no binding and gets no labels", async () => {
+  for (const url of ["chrome://mozapps/content/handling/permissionDialog.xhtml", "chrome://pippki/content/clientauthask.xhtml"]) {
+    const run = started((firefox) => browser_with_dialog(firefox, { url }));
+    assert.ok(!run.type_binding().some((event) => event.prevented), `${url}: the binding was taken`);
+    assert.deepEqual(run.tokens(), [], url);
+    assert.equal(run.chrome.layers().length, 0, url);
+  }
+  const settings = started((firefox) => browser_with_dialog(firefox, { url: "chrome://browser/content/preferences/dialogs/languages.xhtml" }));
+  settings.type_binding();
+  assert.equal((await settings.collect_here(5))?.ok, true, "a settings sub-dialog lost its labels");
+});
+
+test("a click inside the dialog while the extension answers cancels the start and releases the hold", async () => {
+  const run = started(browser_with_dialog);
+  run.type_binding();
+  (run.chrome as unknown as { dialog_view: Node }).dialog_view.fire("mousedown");
+  assert.equal(run.held(), undefined, "a click in the dialog left the start holding the keys");
+  assert.equal((await run.collect_here(5))?.error, "The hint key is stale");
+  assert.equal(run.chrome.layers().length, 0);
+});
+
+test("a moz- widget gets one label, not one on the host and one on the control in its shadow root", async () => {
+  const toggle = new Node("moz-toggle", { id: "toggle", box: box(20, 100) });
+  const inner = new Node("button", { id: "toggle-inner", box: box(20, 100) });
+  const shadow = new Node("#shadow");
+  shadow.append(inner);
+  shadow.host = toggle;
+  toggle.openOrClosedShadowRoot = shadow;
+  const run = started((firefox) => browser_with_dialog(firefox, { url: "chrome://browser/content/preferences/dialogs/languages.xhtml", extra: [toggle] }));
+  run.type_binding();
+  await run.collect_here(5);
+  assert.equal(run.target_rows().length, 3, "the toggle got two labels, or the dialog's buttons lost theirs");
 });
