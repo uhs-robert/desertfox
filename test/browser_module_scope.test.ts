@@ -68,6 +68,17 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
 });
 
+test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
+  // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
+  for (const keys of [":", "o", "T", "w w"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of ["u", "x x", "g t"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
+  assert.equal(DEFAULT_TREE.line_keys?.some((keys) => keys.split(" ").includes("")), false, "a path through the capture key");
+  for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, line_keys: [junk] }).ok, false, JSON.stringify(junk));
+  assert.equal(validate_scope_tree({ children: {}, line_keys: ":" }).ok, false);
+  // A module that predates the field reads the tree by `children` alone.
+  assert.equal(validate_scope_tree({ children: {} }).ok, true);
+});
+
 test("the default tree is about 4 KB and a large keymap's stays under the cap", () => {
   const size = bytes(DEFAULT_TREE);
   assert.ok(size > 2000 && size < 6000, `default tree ${size} bytes`);

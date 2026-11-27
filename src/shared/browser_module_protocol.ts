@@ -82,7 +82,8 @@ export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: R
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
 export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
-export type ScopeTree = { children: Record<string, ScopeNode> };
+// `line_keys`, on the root only: the key paths (tokens joined by one space) of the forward leaves that open the command line. After one of them the module holds the keys that follow until the line has the focus, so they never run on the page. An older module ignores the field.
+export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[] };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
@@ -156,11 +157,17 @@ function tree_problem(node: unknown, depth: number): string | undefined {
   return undefined;
 }
 
+function line_keys_problem(line_keys: unknown): string | undefined {
+  if (line_keys === undefined) return undefined;
+  const fits = (path: unknown) => typeof path === "string" && path.split(" ").length <= MAX_SEQUENCE_KEYS && path.split(" ").every(is_key_token);
+  return Array.isArray(line_keys) && line_keys.every(fits) ? undefined : "the line keys are not key paths";
+}
+
 export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   const size = json_bytes(value);
   if (size === undefined) return bad("the tree is not plain data");
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
-  const problem = tree_problem(value, 0);
+  const problem = tree_problem(value, 0) ?? line_keys_problem((value as { line_keys?: unknown }).line_keys);
   return problem === undefined ? { ok: true, value: value as ScopeTree } : bad(problem);
 }
 
@@ -415,6 +422,7 @@ export const LOCKED_PAGE_ROUTES = {
   frame_cue: "background",
   open_cmdline: "background",
   open_panel_cmdline: "refused",
+  close_panel_cmdline: "refused",
   record_cmdline: "refused",
   complete_items: "refused",
   tab_rows_action: "refused",

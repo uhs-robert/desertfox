@@ -28,7 +28,7 @@ const ROWS = [{ key: "J", id: "tab.next", args: {} }];
 const state = (patch: Record<string, unknown> = {}) => ({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: true, keys: ROWS, tabs: {}, tree: DEFAULT_TREE, ...patch });
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 
-type Core = { module_pending(win: unknown): unknown; set_hello_flag(name: unknown, on: unknown): boolean; status(): { commands: string[] } };
+type Core = { take_held_keys(win: unknown, end?: boolean): string; module_pending(win: unknown): unknown; set_hello_flag(name: unknown, on: unknown): boolean; status(): { commands: string[] } };
 
 // One window with two tabs, the core, the tab and scroll feature and the commands feature loaded, and the state written.
 function started({ written = state() as unknown, private_window = false, private_access = false } = {}) {
@@ -295,6 +295,54 @@ test(": opens the address bar with df, unless the tree binds it", () => {
   assert.deepEqual(bound.runs(), [{ keys: ":", count: 0 }]);
 });
 
+test("after a key that opens the line, the keys typed before the line has the focus run nothing, and the line gets their text once", () => {
+  const { type, press, runs, core, window } = started();
+  const win = vm.runInContext("globalThis", window.win.context!);
+  press(":", { shiftKey: true });
+  const held = type("u", "x", "x", "Backspace", "!");
+  assert.ok(held.every((event) => event.prevented && event.stopped));
+  assert.deepEqual(runs(), [{ keys: ":", count: 0 }]);
+  assert.equal(core.take_held_keys(win), "ux!");
+  // Still held, but no longer kept: the reply that carried the text has gone.
+  assert.equal(press("u").prevented, true);
+  assert.equal(core.take_held_keys(win, true), "");
+  assert.equal(window.timer_count(), 0, "the hold's timer outlived it");
+  type("u");
+  assert.deepEqual(runs(), [{ keys: ":", count: 0 }, { keys: "u", count: 0 }]);
+  // A prompt key (`o`) opens the line too. A key that runs at once does not hold.
+  press("o");
+  assert.equal(press("u").prevented, true);
+  core.take_held_keys(win, true);
+  type("x", "x", "u");
+  assert.deepEqual(runs().slice(2), [{ keys: "o", count: 0 }, { keys: "x x", count: 0 }, { keys: "u", count: 0 }]);
+});
+
+test("the hold ends on Escape, a tab switch, leaving the window and its time limit", () => {
+  const ends: [string, (world: ReturnType<typeof started>) => void][] = [
+    ["Escape", (world) => assert.equal(world.press("Escape").prevented, true)],
+    ["a tab switch", (world) => world.window.fire_tab_select()],
+    ["leaving the window", (world) => world.window.fire("deactivate")],
+    ["the time limit", (world) => world.window.run_timers()],
+  ];
+  for (const [what, end] of ends) {
+    const world = started();
+    world.press(":", { shiftKey: true });
+    end(world);
+    world.type("u");
+    assert.deepEqual(world.runs(), [{ keys: ":", count: 0 }, { keys: "u", count: 0 }], what);
+    assert.equal(world.core.take_held_keys(vm.runInContext("globalThis", world.window.win.context!)), "", what);
+    assert.equal(world.window.timer_count(), 0, what);
+  }
+});
+
+test("a tree from before the line keys holds nothing", () => {
+  const { line_keys: _line_keys, ...older } = DEFAULT_TREE;
+  const { press, type, runs } = started({ written: state({ tree: older }) });
+  press(":", { shiftKey: true });
+  type("u");
+  assert.deepEqual(runs(), [{ keys: ":", count: 0 }, { keys: "u", count: 0 }]);
+});
+
 const bar_request = (text: unknown, tab_id?: number) => [{ v: BROWSER_MODULE_PROTOCOL_VERSION, id: "bar1", kind: "address_bar.open", args: { text, ...(tab_id !== undefined && { tab_id }) }, sent_at: Date.now() }];
 const replies = (firefox: ReturnType<typeof create_firefox>) => plain(((firefox.read_holder("desertfox_browser_module_from_module") ?? []) as { reply_to?: string }[]).filter((message) => message.reply_to === "bar1"));
 
@@ -305,6 +353,19 @@ test("address_bar.open types df and the text into the focused window's address b
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(window.address_bar, ["df open.url --where=tab "]);
   assert.deepEqual(replies(firefox), [{ v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: "bar1", ok: true }]);
+});
+
+test("address_bar.open adds the keys typed while the line opened and ends their hold", async () => {
+  const { firefox, window, press, type, runs } = started();
+  // The window the keys came from, as the core sees it.
+  (firefox.Services.focus as { activeWindow: unknown }).activeWindow = vm.runInContext("globalThis", window.win.context!);
+  press(":", { shiftKey: true });
+  type("t", "a", "b");
+  firefox.extension_writes("desertfox_browser_module_from_extension", bar_request(""));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(window.address_bar, ["df tab"]);
+  type("u");
+  assert.deepEqual(runs(), [{ keys: ":", count: 0 }, { keys: "u", count: 0 }]);
 });
 
 test("address_bar.open fills the bar only while the tab that asked is the focused window's selected tab", async () => {

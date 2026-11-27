@@ -66,11 +66,16 @@
     }
     return void 0;
   }
+  function line_keys_problem(line_keys) {
+    if (line_keys === void 0) return void 0;
+    const fits = (path) => typeof path === "string" && path.split(" ").length <= MAX_SEQUENCE_KEYS && path.split(" ").every(is_key_token);
+    return Array.isArray(line_keys) && line_keys.every(fits) ? void 0 : "the line keys are not key paths";
+  }
   function validate_scope_tree(value) {
     const size = json_bytes(value);
     if (size === void 0) return bad("the tree is not plain data");
     if (size > MAX_TREE_BYTES) return bad("the tree is too large");
-    const problem = tree_problem(value, 0);
+    const problem = tree_problem(value, 0) ?? line_keys_problem(value.line_keys);
     return problem === void 0 ? { ok: true, value } : bad(problem);
   }
   var MAX_KIND_BYTES = 64 * 1024;
@@ -240,10 +245,47 @@
     const ADDRESS_BAR_KEY = ":";
     const OMNIBOX_PREFIX = "df ";
     const MAX_NATIVE_REPEAT = 100;
+    const LINE_HOLD_MS = 1500;
+    const MAX_HELD_CHARS = 32;
     let walks = /* @__PURE__ */ new WeakMap();
     const tree_texts = /* @__PURE__ */ new WeakMap();
     const ignored = /* @__PURE__ */ new WeakMap();
+    const holds = /* @__PURE__ */ new Map();
     const is_ignored = (browser2) => ignored.get(browser2) === browser2.innerWindowID;
+    function end_hold(win) {
+      holds.get(win)?.stop();
+      holds.delete(win);
+    }
+    function start_hold(win, browser2) {
+      end_hold(win);
+      const end = () => end_hold(win);
+      const timer = win.setTimeout(end, LINE_HOLD_MS);
+      win.gBrowser.tabContainer.addEventListener("TabSelect", end);
+      win.addEventListener("deactivate", end);
+      holds.set(win, {
+        browser: browser2,
+        typed: "",
+        collecting: true,
+        stop: () => {
+          win.clearTimeout(timer);
+          win.gBrowser.tabContainer.removeEventListener("TabSelect", end);
+          win.removeEventListener("deactivate", end);
+        }
+      });
+    }
+    function hold_key(hold, event) {
+      if (!hold.collecting || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (event.key === "Backspace") hold.typed = [...hold.typed].slice(0, -1).join("");
+      else if ([...event.key].length === 1 && [...hold.typed].length < MAX_HELD_CHARS) hold.typed += event.key.replace(/[\p{Cc}\p{Cf}]/gu, "");
+    }
+    function take_held(win, end) {
+      const hold = holds.get(win);
+      if (!hold) return "";
+      const typed = hold.collecting ? hold.typed : "";
+      hold.collecting = false;
+      if (end) end_hold(win);
+      return typed;
+    }
     function tree_text(tree) {
       let text = tree_texts.get(tree);
       if (text === void 0) {
@@ -257,7 +299,9 @@
     function walk_for(win, browser2, text) {
       const walk = walks.get(win);
       if (walk?.text === text && walk.browser === browser2 && walk.inner === browser2.innerWindowID) return walk;
-      const fresh = { text, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(JSON.parse(text))), pending: void 0 };
+      const tree = JSON.parse(text);
+      const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
+      const fresh = { text, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: void 0 };
       walks.set(win, fresh);
       return fresh;
     }
@@ -272,15 +316,26 @@
       }
       return true;
     }
-    function forward(result) {
-      const sent = core2.send("run", { keys: path_of(result).join(" "), count: result.count ?? 0 });
+    function forward(result, walk, win) {
+      const keys = path_of(result).join(" ");
+      const sent = core2.send("run", { keys, count: result.count ?? 0 });
       if (!sent.ok) core2.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
+      else if (walk.line_keys.has(keys)) start_hold(win, walk.browser);
       return sent.ok;
     }
     function take_key(context) {
       const { window: win, browser: browser2, event, tree } = context;
       const token = event_to_token(event);
       if (token === null) return void 0;
+      const hold = holds.get(win);
+      if (hold?.browser === browser2 && event.key !== "Escape") {
+        hold_key(hold, event);
+        return true;
+      }
+      if (hold) {
+        end_hold(win);
+        if (event.key === "Escape") return true;
+      }
       if (is_ignored(browser2)) {
         if (token !== IGNORE_TOGGLE_KEY) return false;
         ignored.delete(browser2);
@@ -309,7 +364,7 @@
       if (result.kind_ !== "match") return false;
       const leaf = result.leaf.scope;
       if (result.register_keys_ !== void 0) return true;
-      if (leaf === "forward") return forward(result);
+      if (leaf === "forward") return forward(result, walk, win);
       return run_native(leaf, result, context);
     }
     function pending_in(win) {
@@ -322,7 +377,7 @@
       const bar = win?.gURLBar;
       if (!bar || typeof bar.focus !== "function") return { ok: false, error: "This Firefox has no address bar to open" };
       bar.focus();
-      bar.value = text.replace(/[\p{Cc}\p{Cf}]/gu, "");
+      bar.value = (text + take_held(win, true)).replace(/[\p{Cc}\p{Cf}]/gu, "");
       return { ok: true };
     }
     function focused_window() {
@@ -343,8 +398,10 @@
       reset: (win) => {
         if (win) walks.delete(win);
         else walks = /* @__PURE__ */ new WeakMap();
+        for (const held_win of win ? [win] : [...holds.keys()]) end_hold(held_win);
       },
-      pending: pending_in
+      pending: pending_in,
+      take_held
     });
   }
 })();

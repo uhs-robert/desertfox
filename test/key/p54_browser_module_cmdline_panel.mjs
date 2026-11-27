@@ -97,6 +97,26 @@ export async function run_cases(context) {
     await close_others();
   });
 
+  // No probe key here: the second key goes out in the same press as `:`, while the panel is still on its way.
+  await run_case("keys typed right after : wait for the line: :u reopens no tab and :xx closes none", async () => {
+    await prefs_with_tab_after();
+    // A closed tab for u to reopen.
+    await chrome(`(async () => { const w = ${W}; w.gBrowser.removeTab(w.gBrowser.tabs[2], { animate: false }); w.gBrowser.selectedTab = w.gBrowser.tabs[1]; })()`);
+    await poll_until("about:robots to close", async () => (await tab_count()) === 2);
+    await focus_page();
+    for (const typed of [":u", ":xx"]) {
+      await press_keys(typed);
+      // A key that ran on the page reopens or closes a tab, and the panel then closes or never opens.
+      await poll_until(`${typed} to open the panel or change the tabs`, async () => (await tab_count()) !== 2 || (await panel.state()).state === "open", { timeout_ms: 8000 });
+      await sleep(NO_EFFECT_MS);
+      const tabs = await tab_count();
+      expect(tabs === 2, `${typed} ran a key on the page under the line: ${tabs} tabs, not 2`);
+      await escape_until_closed();
+      await focus_page();
+    }
+    await close_others();
+  });
+
   await run_case("a prompt key opens the panel with the command typed in", async () => {
     await prefs_with_tab_after();
     await press_keys("o");
