@@ -3,6 +3,7 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { create_browser_module, key_rows_of, module_setting_on, read_bar_config, stored_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
+import { create_module_call } from "../../src/background/browser_module_call.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
 import { MESSAGE_MIN_GAP_MS } from "../../src/shared/browser_module_protocol.ts";
@@ -66,6 +67,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
   const timers: (() => void)[] = [];
   const calls: unknown[] = [];
   const replies: unknown[] = [];
+  const statuses: unknown[] = [];
   const session = {
     get: async (key: string | string[]) => {
       config.gets.push(...[key].flat());
@@ -94,6 +96,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
       },
     },
     on_reply: (reply) => void replies.push(reply),
+    on_status: (status) => void statuses.push(status),
     now: () => config.now,
     later: (run) => void timers.push(run),
   });
@@ -110,7 +113,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     timers.splice(0).forEach((run) => run());
     await flush();
   };
-  return { data, config, timers, module, flush, calls, replies, hello_reads, bar_changes, raise_bar };
+  return { data, config, timers, module, flush, calls, replies, statuses, hello_reads, bar_changes, raise_bar };
 }
 const status_of = (data: Map<string, unknown>) => (data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string } | undefined)?.result;
 
@@ -698,4 +701,55 @@ test("the extension stamps sent_at on its requests, and a module request older t
   await flush();
   assert.deepEqual(calls, [["push", { n: 2 }], ["push", { n: 3 }]]);
   assert.deepEqual(outbox_of(data).filter((message) => "reply_to" in message), [{ v: 1, reply_to: "old", ok: false, error: "the request is too old" }]);
+});
+
+test("each status the module writes and its removal reach on_status", async () => {
+  const { data, config, module, flush, statuses } = setup();
+  await module.sync();
+  await flush();
+  assert.deepEqual(statuses, [{ result: "waiting" }]);
+  config.now += 5000;
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1.0" });
+  module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: {} } }, "session");
+  await flush();
+  assert.equal((statuses.at(-1) as { result: string }).result, "matched");
+  config.on = false;
+  await module.sync();
+  assert.equal(statuses.at(-1), undefined);
+  assert.equal(statuses.length, 3);
+});
+
+test("a call that timed out or lost its module leaves nothing in the list the module reads", async () => {
+  const { data, config, module, flush } = setup();
+  const timers: (() => void)[] = [];
+  config.now = 20_000;
+  const calls = create_module_call({
+    send: (kind, args, on_id) => module.send(kind, args, on_id),
+    withdraw: (id) => module.withdraw(id),
+    read_status: async () => ({ result: "matched", module_version: "1", module_v: 1 }),
+    later: (run) => {
+      timers.push(run);
+      return () => undefined;
+    },
+  });
+  await module.sync();
+  await flush();
+  const timed_out = calls.call("note");
+  const dropped = calls.call("note");
+  const answered = calls.call("note");
+  for (let turn = 0; turn < 5; turn++) await flush();
+  assert.equal(outbox_of(data).length, 3);
+  const [first, second, third] = outbox_of(data).map((message) => message.id as string);
+  // The module answered the third call, so its request is not withdrawn and the reply settles it.
+  calls.hear({ v: 1, reply_to: third!, ok: true });
+  assert.deepEqual(await answered, { ok: true });
+  timers[0]!();
+  await timed_out;
+  await flush();
+  assert.deepEqual(outbox_of(data).map((message) => message.id), [second, third]);
+  assert.ok(first);
+  calls.status_changed(undefined);
+  await dropped;
+  await flush();
+  assert.deepEqual(outbox_of(data).map((message) => message.id), [third]);
 });

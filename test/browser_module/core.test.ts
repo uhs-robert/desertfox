@@ -49,8 +49,9 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
   assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
-  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
   assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
+  assert.deepEqual(plain(vm.runInNewContext(/const PANE_REGIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PANE_REGIONS);
   assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);
   assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
 });
@@ -391,6 +392,7 @@ const TEST_EXTENSION_KINDS = {
   later: { args: {}, reply: true },
   unanswered: { args: {}, reply: true },
   sized: { args: { message: "text" }, reply: true, max_bytes: 200 },
+  noisy: { args: {}, reply: true },
 };
 const TEST_MODULE_KINDS = { ping: { args: { axis: "axis" }, reply: true } };
 
@@ -407,6 +409,7 @@ const ANSWERING_FEATURE = `(function (scope) {
   core.register_kind("rejects", () => Promise.reject(new Error("secret detail")));
   core.register_kind("shapeless", () => "yes");
   core.register_kind("wordy", () => ({ ok: false, error: "x".repeat(500) }));
+  core.register_kind("noisy", () => ({ ok: false, error: "no\\u202e split\\n\\u0007here" }));
   core.register_kind("later", () => new Promise((resolve) => { Services.test_resolve = resolve; }));
   core.register_kind("sized", (args) => ({ ok: true, value: args.message.repeat(10) }));
   core.register_kind("tab.close", () => ({ ok: true }));
@@ -659,4 +662,31 @@ test("a DesertFox reload while the pref is off gets no hello, and the pref turne
   assert.equal(firefox.hello(), undefined, "the module said its hello with the pref off");
   firefox.set_pref(true);
   assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0" });
+});
+
+test("a handler's error text loses control and bidi characters", async () => {
+  const { send, replies } = messaging();
+  send([request("n", "noisy")]);
+  await settle();
+  assert.deepEqual(replies(), [{ v: 1, reply_to: "n", ok: false, error: "no splithere" }]);
+});
+
+test("the pane kinds take only their arg shapes, and with no feature to answer them they get an error reply", async () => {
+  const firefox = create_firefox();
+  firefox.start_extension();
+  firefox.make_window().load();
+  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [
+    request("r0", "pane.resize", { steps: 0 }),
+    request("r9", "pane.resize", { steps: 21 }),
+    request("f1", "pane.focus_region", { region: "toolbar" }),
+    request("ok", "pane.focus_region", { region: "devtools" }),
+  ]);
+  await settle();
+  const got = plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)) as { reply_to: string; error: string }[];
+  assert.deepEqual(got.map(({ reply_to, error }) => [reply_to, error]), [
+    ["r0", "pane.resize steps has the wrong shape"],
+    ["r9", "pane.resize steps has the wrong shape"],
+    ["f1", "pane.focus_region region has the wrong shape"],
+    ["ok", "no handler for this kind"],
+  ]);
 });

@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 509 (normal 266, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 519 (normal 276, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -85,6 +85,16 @@ bound: 509 (normal 266, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `gP` | `tab.split_swap` | Swap panes |
 | `Ep` | `tab.split_other` | Other pane |
 | `Es` | `tab.split_swap` | Swap panes |
+| `En` | `pane.split` | Split view |
+| `EN` | `pane.split --next` | Split view |
+| `Eu` | `pane.unsplit` | Unsplit |
+| `Ex` | `pane.close_both` | Close both panes |
+| `E<` | `pane.resize --narrow` | Resize pane |
+| `E>` | `pane.resize` | Resize pane |
+| `Ej` | `pane.focus devtools` | Focus region |
+| `Ek` | `pane.focus page` | Focus region |
+| `ES` | `pane.focus sidebar` | Focus region |
+| `ED` | `pane.focus devtools` | Focus region |
 | `gF` | `frame.exit` | Focus top page |
 | `g0` | `tab.goto 1` | First tab |
 | `g$` | `tab.goto -1` | Last tab |

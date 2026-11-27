@@ -130,6 +130,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `image_actions.ts`: answers `image_action` from the `hints` bundle.
 - `browser_deps.ts`: the only file that wires the router to Firefox calls.
 - `tab_split.ts`: `focus_other_pane` and `swap_panes` (`tab.split_other`, `tab.split_swap`) over `TabSplitDeps`; a swap moves the partner onto the tab's place.
+- `browser_module_call.ts`: one call to the browser module and its reply, shared by every command that starts one.
 - `tab_model.ts`: the live tab model (rows also carry `group_id` and `split_id`, and a groups table follows the `tabGroups` events).
 - `command_modules.ts`: one import per command group. The commands.json build tool imports it, so it is the only list.
 

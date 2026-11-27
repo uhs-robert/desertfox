@@ -80,7 +80,17 @@
     const DEFAULT_MAX_AGE_MS = 2000;
     const MAX_KIND_BYTES = 65536;
     const MESSAGE_ENVELOPE_BYTES = 512;
-    const EXTENSION_TO_MODULE_KINDS = { page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
+    const MAX_RESIZE_STEPS = 20;
+    const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
+    const EXTENSION_TO_MODULE_KINDS = {
+      page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: 65536 },
+      "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
+      "pane.split_next_tab": { args: {}, reply: true, max_bytes: 256 },
+      "pane.unsplit": { args: {}, reply: true, max_bytes: 256 },
+      "pane.close_both": { args: {}, reply: true, max_bytes: 256 },
+      "pane.resize": { args: { steps: "step" }, reply: true, max_bytes: 256 },
+      "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: 256 },
+    };
     const MODULE_TO_EXTENSION_KINDS = { page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
@@ -445,9 +455,13 @@
     const own_lists = new WeakMap();
     let sent = 0;
 
+    // As the extension's reader does, an error loses control and bidi characters before anyone shows it.
+    const printable = (text) => text.replace(/[\p{Cc}\p{Cf}]/gu, "");
     const arg_fits = (kind, value) => {
       if (kind === "axis") return value === "x" || value === "y";
       if (kind === "text") return typeof value === "string";
+      if (kind === "region") return PANE_REGIONS.includes(value);
+      if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
       return typeof value === "number" && Number.isFinite(value) && (kind !== "int" || Number.isInteger(value));
     };
     // json_bytes: undefined for a value that is not plain data.
@@ -473,7 +487,7 @@
         if (typeof value.ok !== "boolean") return { problem: "ok must be true or false" };
         if (value.error !== undefined && (typeof value.error !== "string" || value.error.length > MAX_ERROR_CHARS)) return { problem: "error must be short text" };
         if (value.value !== undefined && (typeof value.value !== "string" || !fits_bytes(value, MAX_KIND_BYTES))) return { problem: "value must be text within the size limit" };
-        return { message: { reply_to: value.reply_to, ok: value.ok, ...(value.value === undefined ? {} : { value: value.value }) } };
+        return { message: { reply_to: value.reply_to, ok: value.ok, ...(value.error === undefined ? {} : { error: printable(value.error) }), ...(value.value === undefined ? {} : { value: value.value }) } };
       }
       if (typeof value.id !== "string" || !MESSAGE_ID.test(value.id)) return { problem: "a request needs an id of 1 to 32 letters, digits, - or _" };
       if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return { problem: "the kind is not on the allow list" };
@@ -530,7 +544,7 @@
     // A handler's result as a reply: `ok` only when it says so, its own error text cut to the cap, and a text `value` within the kind's limit (reply_fits).
     function reply_of(request, result) {
       if (!is_record(result)) return reply_to(request.id, false, HANDLER_FAILED);
-      const reply = reply_to(request.id, result.ok === true, typeof result.error === "string" ? result.error.slice(0, MAX_ERROR_CHARS) : undefined, typeof result.value === "string" ? result.value : undefined);
+      const reply = reply_to(request.id, result.ok === true, typeof result.error === "string" ? printable(result.error).slice(0, MAX_ERROR_CHARS) : undefined, typeof result.value === "string" ? result.value : undefined);
       return fits_bytes(reply, kind_bytes(EXTENSION_TO_MODULE_KINDS[request.kind])) ? reply : reply_to(request.id, false, "the answer is too large");
     }
 

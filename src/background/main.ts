@@ -61,6 +61,7 @@ import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
+import { attach_browser_module, browser_module_call } from "./browser_module_call.ts";
 import { create_browser_module, read_bar_config, module_setting_on, stored_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
@@ -330,7 +331,11 @@ const browser_module = create_browser_module({
     return checked?.ok ? checked.args : undefined;
   },
   handlers: browser_module_rpc.handlers,
-  on_reply: browser_module_rpc.push_answered,
+  on_reply: (reply) => {
+    browser_module_rpc.push_answered(reply);
+    browser_module_call.hear(reply);
+  },
+  on_status: (status) => browser_module_call.status_changed(status),
   read_disabled,
   read_blur_on_load: () => stored_setting_on(browser.storage.local, "blur_on_load"),
   read_keymap: () => stored_keymap(browser.storage.local),
@@ -338,6 +343,7 @@ const browser_module = create_browser_module({
   now: Date.now,
   later: (run, ms) => void setTimeout(run, ms),
 });
+attach_browser_module(browser_module);
 browser.storage.onChanged.addListener((changes, area) => browser_module.storage_changed(changes, area));
 void get_config().then(() => browser_module.sync()).catch(warn_and_go("browser_module.sync"));
 const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_theme, host_update.bridge_ready);
