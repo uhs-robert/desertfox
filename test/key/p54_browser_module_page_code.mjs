@@ -163,8 +163,10 @@ export async function run_cases(context) {
       await poll_until(`caret mode on ${name}`, async () => /caret/i.test(String(await mode_now())), { timeout_ms: 5000 });
       await press_keys("v");
       await poll_until(`visual mode on ${name}`, async () => /visual/i.test(String(await mode_now())), { timeout_ms: 5000 });
+      const selected = () => in_selected_page(`(win) => win.getSelection().toString().length`);
+      const before_w = await selected();
       await press_keys("w");
-      await sleep(150);
+      await poll_until(`w to grow the selection on ${name}`, async () => (await selected()) > before_w, { timeout_ms: 3000 });
       await press_keys("y");
       await poll_until(`the yank on ${name}`, async () => !["", "before the yank"].includes(await chrome(clipboard_text)), { timeout_ms: 5000 });
       const copied = (await chrome(clipboard_text)).trim();
