@@ -40,6 +40,8 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "pane.close_both": [/Needs the browser module/],
   "pane.resize": [/Needs the browser module/],
   "pane.focus": [/Needs the browser module/],
+  "pane.equalize": [/Needs the browser module/],
+  "pane.focus_side": [/Needs the browser module/],
   "tabgroup.remove": [/no group/],
   "tabgroup.close": [/no group/],
   "tabgroup.name": [/no group/],

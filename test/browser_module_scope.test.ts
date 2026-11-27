@@ -39,7 +39,7 @@ test("the locked-page set: background commands that need no page, minus the deny
     "help.issue", "help.key", "help.open", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
     "page.back", "page.forward", "page.home", "page.print", "page.reload", "page.save_pdf",
-    "pane.close_both", "pane.focus", "pane.resize", "pane.split", "pane.unsplit", "permissions.grant",
+    "pane.close_both", "pane.equalize", "pane.focus", "pane.focus_side", "pane.resize", "pane.split", "pane.unsplit", "permissions.grant",
     "quickmark.add", "quickmark.delete", "quickmark.list", "quickmark.open", "register.list",
     "session.delete", "session.open", "session.rename", "session.save", "settings.set", "settings.toggle", "settings.unset",
     "tab.alternate", "tab.alternate_any_window", "tab.attach", "tab.close", "tab.detach", "tab.duplicate", "tab.goto", "tab.goto_audible", "tab.load", "tab.move", "tab.mute", "tab.next", "tab.pin", "tab.prev", "tab.reopen_in_container", "tab.split_other", "tab.split_swap", "tab.switch", "tab.undo_close", "tab.unload",

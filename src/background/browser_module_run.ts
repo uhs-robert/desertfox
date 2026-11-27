@@ -3,7 +3,7 @@
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
 import { counted_steps, resolve_run } from "../shared/browser_module_scope.ts";
-import type { Refusal, RunResponse } from "../shared/messages/index.ts";
+import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
 import type { CallResult } from "./browser_module_call.ts";
@@ -17,6 +17,7 @@ export type ModuleRunDeps = {
 };
 
 const REFUSAL_ID = "browser_module.run";
+const HANDED_TO_ADDRESS_BAR: Outcome = { ok: true, cancelled: true };
 
 // The handler of the `run` kind. It settles when the router has answered, and throws for a refusal, so the module's reply says the keys did not run.
 export function create_module_run(deps: ModuleRunDeps) {
@@ -48,6 +49,7 @@ export const with_address_bar = (
       if (await has_content_script(tab_id)) throw error;
       const opened = await call("address_bar.open", { text });
       if (!opened.ok) throw error;
-      return undefined;
+      // The bar runs the command itself on Enter and never answers here, so the binding ends as a line the user left does: its later steps must not run while the user still edits the bar.
+      return HANDED_TO_ADDRESS_BAR;
     }
   };

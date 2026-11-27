@@ -11,6 +11,7 @@
   var MAX_KEY_CHARS = 24;
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
+  var PANE_DIRECTIONS = ["left", "right"];
   var MODULE_COMMAND_ARGS = {
     "tab.next": {},
     "tab.prev": {},
@@ -31,6 +32,7 @@
     if (kind === "text") return typeof value === "string" ? void 0 : "must be text";
     if (kind === "axis") return value === "x" || value === "y" ? void 0 : "must be x or y";
     if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? void 0 : `must be one of ${PANE_REGIONS.join(", ")}`;
+    if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
     return kind === "int" && !Number.isInteger(value) ? "must be a whole number" : void 0;
