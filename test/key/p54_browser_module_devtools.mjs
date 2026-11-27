@@ -153,7 +153,7 @@ export async function run_cases(context) {
     await poll_until("the Inspector in the DevTools window", () => chrome(`(async () => { ${TOOLBOX} return tb.hostType === "window" && !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 10000 });
     await chrome(`(async () => { ${TOOLBOX} tb.win.top.focus(); })()`);
     await markup_moves("in a DevTools window");
-    // DevTools opens its context menus in the DevTools window's own document, so the popup walk, not the tree, takes the letter there.
+    // DevTools opens its context menus in the DevTools window's own document. The DevTools feature types the arrow key there, and the open menu takes it ahead of the tree.
     const MENU = `const popup = Services.wm.getMostRecentWindow("devtools:toolbox")?.document.querySelector('popupset menupopup[menu-api="true"]');`;
     const open_menu = async () => {
       await chrome(`(async () => { ${TOOLBOX} const markup = tb.getPanel("inspector").markup; const top = tb.win.top; markup.contextMenu.openMenu({ target: markup.getContainer(markup.inspector.selection.nodeFront).elt, screenX: top.mozInnerScreenX + 100, screenY: top.mozInnerScreenY + 100 }); })()`);
