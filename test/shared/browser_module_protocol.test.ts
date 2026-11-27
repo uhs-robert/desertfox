@@ -136,11 +136,11 @@ test("an older module's list, with the fields of its own version only, still par
   assert.ok(validate_message_list([{ v: V, id: "old", kind: "ask", args: { axis: "x" } }, { v: V, reply_to: "x1", ok: true }], KINDS).ok);
 });
 
-const page_call = (message: string, patch: Record<string, unknown> = {}, id = "c1") => ({ v: V, id, kind: "page_call", args: { tab_id: 7, message, ...patch } });
+const page_call = (message: string, patch: Record<string, unknown> = {}, id = "c1") => ({ v: V, id, kind: "page_call", args: { tab_id: 7, document_id: 1, message, ...patch } });
 
 test("a page call checks the shape of its args", () => {
   assert.ok(validate_message(page_call("{}"), MODULE_TO_EXTENSION_KINDS).ok);
-  for (const args of [{ tab_id: "7" }, { tab_id: 1.5 }, { message: 5 }, { message: undefined }]) {
+  for (const args of [{ tab_id: "7" }, { tab_id: 1.5 }, { document_id: "1" }, { document_id: undefined }, { message: 5 }, { message: undefined }]) {
     assert.equal(validate_message(page_call("{}", args), MODULE_TO_EXTENSION_KINDS).ok, false, JSON.stringify(args));
   }
 });
