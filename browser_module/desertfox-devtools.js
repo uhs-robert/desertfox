@@ -472,7 +472,12 @@
     // A larger copy is refused, so a held key cannot fill the clipboard with megabytes.
     const MAX_COPY_CHARS = 1_000_000;
     const OVER_COPY_CAP = `visual mode in DevTools copied nothing: the selection is over ${MAX_COPY_CHARS} characters`;
+    const SHOW_ELEMENT = 1;
     const SHOW_TEXT = 4;
+    const FILTER_ACCEPT = 1;
+    const FILTER_REJECT = 2;
+    const FILTER_SKIP = 3;
+    const TEXT_NODE = 3;
     const MAX_START_NODES = 5000;
     // The areas the mode starts in, by the address of their document. The root holds the selection. Class names change between Firefox releases, and a root that finds nothing starts no mode.
     // `start` marks the current row, where the mode starts while the document itself has the focus, as the markup view keeps it.
@@ -529,8 +534,8 @@
         if (!url.startsWith(row.url)) continue;
         const root = target.closest(row.root) ?? root_of_focused_document(doc, target, row.root);
         const content = root?.querySelector(".cm-content");
-        // The root also holds fields that type: the Debugger's breakpoint condition is an editor inside the source, and the response has a filter box.
-        if (in_editable(target) && target.closest(".cm-content") !== content) continue;
+        // The root also holds fields: the Debugger's breakpoint condition is an editor inside the source with a checkbox beside it, and the response has a filter box.
+        if (in_editable(target) && (target.closest(".cm-content") !== content || target.matches("input, textarea, select"))) continue;
         if (content) return { doc, root, content, code: true };
       }
       if (in_editable(target)) return null;
@@ -548,7 +553,11 @@
       const shown = root.getBoundingClientRect();
       let seen = 0;
       for (const scope of target !== root && root.contains(target) ? [target, root] : [root]) {
-        const walker = root.ownerDocument.createTreeWalker(scope, SHOW_TEXT);
+        // The area pass leaves out the focused subtree it already searched, so those nodes count once against the limit.
+        const searched = scope === root ? target : null;
+        const walker = root.ownerDocument.createTreeWalker(scope, SHOW_ELEMENT | SHOW_TEXT, {
+          acceptNode: (node) => (node === searched ? FILTER_REJECT : node.nodeType === TEXT_NODE ? FILTER_ACCEPT : FILTER_SKIP),
+        });
         for (let node = walker.nextNode(); node && seen < MAX_START_NODES; node = walker.nextNode(), seen++) {
           const offset = node.data.search(/\S/);
           const parent = node.parentElement;
@@ -617,8 +626,10 @@
     }
 
     // CodeMirror fills the clipboard from its own selection on the copy command. The listener runs after CodeMirror's own, on the way up, and empties a copy over the cap.
+    // With its selection empty, CodeMirror copies the whole line, which the user never selected.
     function copy_code(doc) {
       const view = doc.defaultView;
+      if (view.getSelection().isCollapsed) return;
       const cap = (event) => {
         const data = event.clipboardData;
         if (!data || data.getData("text/plain").length <= MAX_COPY_CHARS) return;
@@ -656,6 +667,12 @@
     function answer_key(win, event, token) {
       if (!mode || mode.win !== win || MODIFIER_KEYS.has(event.key)) return undefined;
       if (dispatching) return false;
+      // DevTools can move the focus into a field by itself. A key there ends the mode and types, Escape too.
+      const target = event.originalTarget ?? event.target;
+      if (in_editable(target) && !mode.content?.contains(target)) {
+        end(false);
+        return false;
+      }
       const chord = event.ctrlKey || event.altKey || event.metaKey;
       if (event.key === "Escape" && !chord) {
         end(true);
@@ -667,8 +684,11 @@
       }
       const op = ops.get(token);
       if (op === COPY) {
-        copy();
-        end(false);
+        try {
+          copy();
+        } finally {
+          end(false);
+        }
       } else if (op) move(op);
       return true;
     }
