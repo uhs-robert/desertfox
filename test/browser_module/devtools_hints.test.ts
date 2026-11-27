@@ -395,7 +395,7 @@ test("no labels within the time, a click, the pref off and a new hello each end 
   }
 });
 
-test("a pick runs the target's fixed action: a mouse press on a markup line or a tool tab, a click on a button, the focus into a field or an area", async () => {
+test("a pick runs the target's fixed action: a mouse press on a markup line or a tool tab, a click on a button, the focus into a field or an area, or out of a field for an area that takes none", async () => {
   const pick_label = async (choose: (dom: ReturnType<typeof toolbox_in>) => Node) => {
     const fixture = started();
     await settle();
@@ -424,6 +424,14 @@ test("a pick runs the target's fixed action: a mouse press on a markup line or a
     return dom.rules;
   });
   assert.equal((area.fixture.dom.rules.children[0] as Element).focused, 1, "the area's focusable child took the focus");
+  // An area with nothing to focus, as the console output: the field with the focus lets it go, so the next keys reach the area's document.
+  let blurred = 0;
+  const bare = await pick_label((dom) => {
+    Object.assign(dom.inspector.doc, { activeElement: { blur: () => void blurred++ } });
+    return dom.rules;
+  });
+  assert.equal(bare.answer?.ok, true);
+  assert.equal(blurred, 1);
 });
 
 test("a pick is refused for a target that moved or is gone, an id of no target and a session that ended", async () => {

@@ -6,6 +6,9 @@ import {
   DEVTOOLS_ACTIONS,
   DEVTOOLS_HINT_KEY,
   DEVTOOLS_TREE_KEYS,
+  DEVTOOLS_VISUAL_KEY,
+  DEVTOOLS_VISUAL_KEYS,
+  MAX_DEVTOOLS_VISUAL_ROWS,
   MAX_DEVTOOLS_KEY_ROWS,
   check_module_args,
   EXTENSION_TO_MODULE_KINDS,
@@ -128,7 +131,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -359,6 +362,27 @@ test("the hint key is one more DevTools action, and the hello says devtools_hint
   for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_hints: flag }), { ok: true, value: { v: V, module_version: "1" } });
   const largest = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY] }, sent_at: Number.MAX_SAFE_INTEGER };
   assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes!);
+});
+
+test("visual mode is one more DevTools action with a push of its own keys, and the hello says devtools_visual only when it is true", () => {
+  const keys_push = (keys: unknown) => validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys } }, EXTENSION_TO_MODULE_KINDS);
+  const visual_push = (keys: unknown) => validate_message({ v: V, id: "d2", kind: "devtools.visual_keys", args: { keys } }, EXTENSION_TO_MODULE_KINDS);
+  const table = [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY, DEVTOOLS_VISUAL_KEY];
+  assert.ok(keys_push(table).ok);
+  assert.equal(EXTENSION_TO_MODULE_KINDS["devtools.visual_keys"]!.reply, false);
+  assert.deepEqual(visual_push([{ key: "y", op: "copy", text: "x" }]), { ok: true, value: { v: V, id: "d2", kind: "devtools.visual_keys", args: { keys: [{ key: "y", op: "copy" }] } } });
+  assert.ok(visual_push(DEVTOOLS_VISUAL_KEYS).ok);
+  const full = Array.from({ length: MAX_DEVTOOLS_VISUAL_ROWS }, (_, index) => ({ key: "abcdefghijklmnop"[index]!, op: "word.forward" }));
+  assert.ok(visual_push(full).ok);
+  for (const bad of [undefined, [], [...full, { key: "q", op: "copy" }], [{ key: "<C-c>", op: "copy" }], [{ key: "Escape", op: "copy" }], [{ key: "y", op: "paste" }], [{ key: "y", action: "copy" }], [{ key: "y", op: "copy" }, { key: "y", op: "line.up" }], [null]]) {
+    assert.equal(visual_push(bad).ok, false, JSON.stringify(bad));
+  }
+  for (const [kind, keys] of [["devtools.keys", table], ["devtools.visual_keys", full]] as const) {
+    const largest = { v: V, id: "x".repeat(32), kind, args: { keys }, sent_at: Number.MAX_SAFE_INTEGER };
+    assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS[kind]!.max_bytes!, `the largest ${kind} fits its kind`);
+  }
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_visual: true }), { ok: true, value: { v: V, module_version: "1", devtools_visual: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_visual: flag }), { ok: true, value: { v: V, module_version: "1" } });
 });
 
 test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {

@@ -12,14 +12,25 @@
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
   var PANE_DIRECTIONS = ["left", "right"];
-  var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start"];
+  var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
   var MAX_DEVTOOLS_KEY_ROWS = 8;
+  var DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
+  var MAX_DEVTOOLS_VISUAL_ROWS = 16;
   var is_devtools_key = (key) => typeof key === "string" && [...key].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(key);
   function devtools_keys_problem(value) {
     if (!Array.isArray(value) || value.length === 0 || value.length > MAX_DEVTOOLS_KEY_ROWS) return `must be a list of 1 to ${MAX_DEVTOOLS_KEY_ROWS} rows`;
     const seen = /* @__PURE__ */ new Set();
     for (const row of value) {
       if (!is_record(row) || !is_devtools_key(row.key) || !DEVTOOLS_ACTIONS.includes(row.action) || seen.has(row.key)) return "rows need one-character keys, each once, and an action from the list";
+      seen.add(row.key);
+    }
+    return void 0;
+  }
+  function devtools_visual_keys_problem(value) {
+    if (!Array.isArray(value) || value.length === 0 || value.length > MAX_DEVTOOLS_VISUAL_ROWS) return `must be a list of 1 to ${MAX_DEVTOOLS_VISUAL_ROWS} rows`;
+    const seen = /* @__PURE__ */ new Set();
+    for (const row of value) {
+      if (!is_record(row) || !is_devtools_key(row.key) || !DEVTOOLS_VISUAL_OPS.includes(row.op) || seen.has(row.key)) return "rows need one-character keys, each once, and an op from the list";
       seen.add(row.key);
     }
     return void 0;
@@ -42,6 +53,7 @@
   var is_key_token = (key) => typeof key === "string" && key.length > 0 && key.length <= MAX_KEY_CHARS && !/[\s\p{Cc}\p{Cf}]/u.test(key);
   function arg_problem(kind, value) {
     if (kind === "devtools_keys") return devtools_keys_problem(value);
+    if (kind === "devtools_visual_keys") return devtools_visual_keys_problem(value);
     if (kind === "text") return typeof value === "string" ? void 0 : "must be text";
     if (kind === "axis") return value === "x" || value === "y" ? void 0 : "must be x or y";
     if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? void 0 : `must be one of ${PANE_REGIONS.join(", ")}`;

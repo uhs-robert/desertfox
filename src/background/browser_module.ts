@@ -18,6 +18,8 @@ import {
   bar_theme_of,
   DEVTOOLS_HINT_KEY,
   DEVTOOLS_TREE_KEYS,
+  DEVTOOLS_VISUAL_KEY,
+  DEVTOOLS_VISUAL_KEYS,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
@@ -207,9 +209,14 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
 
-  const devtools_keys_for = (stored_hello: unknown) => {
+  // Each row past the tree keys goes only to a module whose hello names its feature, since an older module refuses a table with an action it does not know.
+  // The visual table goes first, so the module knows the mode's keys before `v` can start it.
+  const send_devtools_tables = async (stored_hello: unknown): Promise<boolean> => {
     const hello = validate_module_hello(stored_hello);
-    return hello.ok && hello.value.devtools_hints === true ? [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY] : DEVTOOLS_TREE_KEYS;
+    const flags = hello.ok ? hello.value : undefined;
+    if (flags?.devtools_visual === true && !(await send_now("devtools.visual_keys", { keys: DEVTOOLS_VISUAL_KEYS })).ok) return false;
+    const keys = [...DEVTOOLS_TREE_KEYS, ...(flags?.devtools_hints === true ? [DEVTOOLS_HINT_KEY] : []), ...(flags?.devtools_visual === true ? [DEVTOOLS_VISUAL_KEY] : [])];
+    return (await send_now("devtools.keys", { keys })).ok;
   };
   const bar_built = (stored_hello: unknown): boolean => {
     const hello = validate_module_hello(stored_hello);
@@ -313,7 +320,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const status = status_of_hello(hello);
     await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status });
     deps.on_status?.(status);
-    if (status.result === "matched" && !devtools_keys_sent) devtools_keys_sent = (await send_now("devtools.keys", { keys: devtools_keys_for(hello) })).ok;
+    if (status.result === "matched" && !devtools_keys_sent) devtools_keys_sent = await send_devtools_tables(hello);
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
     if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
