@@ -4,6 +4,7 @@
 
 import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
+import { BROWSER_BAR_WIDGETS } from "./settings_table.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -20,7 +21,7 @@ export const MAX_MESSAGE_LIST_BYTES = 4096;
 export const MAX_MESSAGE_ID_CHARS = 32;
 export const MAX_ERROR_CHARS = 120;
 export const MAX_MODULE_VERSION_CHARS = 32;
-// The status bar's per-tab fields. They are sized to stay small beside the key rows: a tab with every field set adds under 200 bytes.
+// The status bar's per-tab fields. They are sized to stay small beside the key rows: a tab with every field set adds under 300 bytes.
 export const MAX_PENDING_KEYS = 8;
 export const MAX_PENDING_TOKEN_CHARS = 16;
 export const MAX_SITE_LABEL_CHARS = 24;
@@ -55,7 +56,11 @@ export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore"
 export type BarRole = (typeof BAR_ROLES)[number];
 export type BarColors = Record<BarRole, string>;
 export type BarTheme = { dark: BarColors; light: BarColors };
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme };
+// What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
+export const BAR_BORDERS = ["auto", "square", "round", "chamfer"] as const;
+export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
+export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BAR_BORDERS)[number] };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig };
 // `bar` says the module built its status bar.
 export type ModuleHello = { v: number; module_version: string; bar?: true };
 
@@ -69,7 +74,7 @@ const bad = (problem: string): { ok: false; problem: string } => ({ ok: false, p
 const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 export const is_module_command_id = (id: unknown): id is ModuleCommandId => typeof id === "string" && Object.hasOwn(MODULE_COMMAND_ARGS, id);
 // One normalized key token: a character, or a name in angle brackets. No spaces or control characters.
-const is_key_token = (key: unknown): key is string => typeof key === "string" && key.length > 0 && key.length <= MAX_KEY_CHARS && !/[\s\p{Cc}]/u.test(key);
+const is_key_token = (key: unknown): key is string => typeof key === "string" && key.length > 0 && key.length <= MAX_KEY_CHARS && !/[\s\p{Cc}\p{Cf}]/u.test(key);
 
 function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
@@ -106,10 +111,11 @@ const is_color = (value: unknown): value is string => typeof value === "string" 
 export function bar_fields_of(value: Record<string, unknown>): BarFields {
   const fields: BarFields = {};
   const { pending, count, pass, site, recording } = value;
-  if (Array.isArray(pending) && pending.length > 0 && pending.length <= MAX_PENDING_KEYS && pending.every((key) => is_key_token(key) && key.length <= MAX_PENDING_TOKEN_CHARS)) fields.pending = pending as string[];
+  // A longer sequence shows its last keys.
+  if (Array.isArray(pending) && pending.length > 0 && pending.length <= MAX_KEY_ROWS && pending.every((key) => is_key_token(key) && key.length <= MAX_PENDING_TOKEN_CHARS)) fields.pending = (pending as string[]).slice(-MAX_PENDING_KEYS);
   if (typeof count === "number" && Number.isInteger(count) && count > 0 && count <= MAX_COUNT) fields.count = count;
   if (pass === true) fields.pass = true;
-  if (typeof site === "string" && site.length > 0 && site.length <= MAX_SITE_LABEL_CHARS && !/\p{Cc}/u.test(site)) fields.site = site;
+  if (typeof site === "string" && site.length > 0 && site.length <= MAX_SITE_LABEL_CHARS && !/[\p{Cc}\p{Cf}]/u.test(site)) fields.site = site;
   if (typeof recording === "string" && /^[\p{L}\p{N}"]$/u.test(recording)) fields.recording = recording;
   return fields;
 }
@@ -123,6 +129,16 @@ export function bar_theme_of(value: unknown): BarTheme | undefined {
   if (!is_record(value)) return undefined;
   const [dark, light] = [bar_colors_of(value.dark), bar_colors_of(value.light)];
   return dark && light ? { dark, light } : undefined;
+}
+
+const widgets_of = (value: unknown): BarWidget[] | undefined =>
+  Array.isArray(value) && value.length <= BROWSER_BAR_WIDGETS.length && new Set(value).size === value.length && value.every((item) => (BROWSER_BAR_WIDGETS as readonly unknown[]).includes(item)) ? (value as BarWidget[]) : undefined;
+
+// A bar config needs both lists and the border, else it is left out and the module draws nothing.
+export function bar_config_of(value: unknown): BarConfig | undefined {
+  if (!is_record(value)) return undefined;
+  const [left, right] = [widgets_of(value.left), widgets_of(value.right)];
+  return left && right && (BAR_BORDERS as readonly unknown[]).includes(value.border) ? { left, right, border: value.border as BarConfig["border"] } : undefined;
 }
 
 export function validate_module_state(value: unknown): Checked<ModuleState> {
@@ -153,10 +169,11 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   }
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }) } };
+  const bar = bar_config_of(value.bar);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }) } };
 }
 
-// What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the two fields it reads. An older or newer module may send more fields, which are ignored.
+// What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
 export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (!is_record(value)) return bad("hello must be a table");
   let size: number;
