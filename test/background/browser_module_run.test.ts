@@ -211,13 +211,15 @@ test("the address bar stands in for the command line only on a tab with no conte
   };
   const call = async (kind: string, args: Record<string, unknown>) => (calls.push([kind, args]), { ok: true as const });
   await with_address_bar(fails, async () => false, call)(4, 0, "open ");
-  assert.deepEqual(calls, [["address_bar.open", { text: "open " }]]);
+  assert.deepEqual(calls, [["address_bar.open", { text: "open ", tab_id: 4 }]]);
   await assert.rejects(with_address_bar(fails, async () => true, call)(4, 0, "open "), /no receiver/);
   await assert.rejects(with_address_bar(fails, async () => false, async () => ({ ok: false as const, error: "Needs the browser module" }))(4, 0, "open "), /no receiver/);
   assert.equal(await with_address_bar(async () => "opened", async () => false, call)(4, 0, "open "), "opened");
   assert.equal(calls.length, 1);
   // The kind takes text, within its cap.
   assert.ok(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open " } }, EXTENSION_TO_MODULE_KINDS).ok);
+  assert.deepEqual(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open ", tab_id: 4 } }, EXTENSION_TO_MODULE_KINDS), { ok: true, value: { v: 1, id: "a", kind: "address_bar.open", args: { text: "open ", tab_id: 4 } } });
+  assert.equal(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open ", tab_id: 1.5 } }, EXTENSION_TO_MODULE_KINDS).ok, false);
   assert.equal(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "x".repeat(5000) } }, EXTENSION_TO_MODULE_KINDS).ok, false);
 });
 

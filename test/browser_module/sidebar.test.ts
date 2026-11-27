@@ -165,10 +165,10 @@ function setup({ written = state() as unknown, vertical = false, panel_url = HIS
   });
   Object.assign(main_doc, { readyState: "complete", documentElement: { getAttribute: (name: string) => (name === "windowtype" ? "navigator:browser" : null) }, commandDispatcher: { focusedElement: null } });
   win.document = main_doc;
+  // The fake window reads its selected tab through getters, which Object.assign cannot write.
+  Object.defineProperties(win.gBrowser, { selectedTab: { value: tab, writable: true }, selectedBrowser: { value: page, writable: true } });
   Object.assign(win.gBrowser, {
     tabContainer: tab_container,
-    selectedTab: tab,
-    selectedBrowser: page,
     removeTab: (each: unknown) => removed.push(each),
     removeTabs: (list: unknown[]) => removed.push(...list),
     getBrowserContainer: (each: unknown) => containers.get(each),

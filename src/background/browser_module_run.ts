@@ -47,7 +47,7 @@ export const with_address_bar = (
       return await open_in_page(tab_id, frame_id, text);
     } catch (error) {
       if (await has_content_script(tab_id)) throw error;
-      const opened = await call("address_bar.open", { text });
+      const opened = await call("address_bar.open", { text, tab_id });
       if (!opened.ok) throw error;
       // The bar runs the command itself on Enter and never answers here, so the binding ends as a line the user left does: its later steps must not run while the user still edits the bar.
       return HANDED_TO_ADDRESS_BAR;
