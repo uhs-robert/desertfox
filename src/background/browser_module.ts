@@ -208,6 +208,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   let hello_bar = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
+  // Counts each reset of `devtools_keys_sent`, so a send that a newer hello overtook does not mark the newer hello as served.
+  let hello_generation = 0;
 
   // Each row past the tree keys goes only to a module whose hello names its feature, since an older module refuses a table with an action it does not know.
   // The visual table goes first, so the module knows the mode's keys before `v` can start it.
@@ -316,11 +318,15 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   const read_hello_status = async (): Promise<void> => {
     if (!(await deps.is_on())) return;
+    const generation = hello_generation;
     const hello = (await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY];
     const status = status_of_hello(hello);
     await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status });
     deps.on_status?.(status);
-    if (status.result === "matched" && !devtools_keys_sent) devtools_keys_sent = await send_devtools_tables(hello);
+    if (status.result === "matched" && !devtools_keys_sent) {
+      const sent = await send_devtools_tables(hello);
+      if (generation === hello_generation) devtools_keys_sent = sent;
+    }
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
     if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
@@ -337,6 +343,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (!(await deps.is_on())) {
       hello_bar = false;
       devtools_keys_sent = false;
+      hello_generation++;
       set_bar_seen(false);
       await deps.session.remove([BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY]);
       deps.on_status?.(undefined);
@@ -460,6 +467,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       if (area === "session") {
         if (BROWSER_MODULE_HELLO_STORAGE_KEY in changes) {
           devtools_keys_sent = false;
+          hello_generation++;
           request_hello_read();
         }
         if (BROWSER_MODULE_FROM_MODULE_STORAGE_KEY in changes) request_messages_read();

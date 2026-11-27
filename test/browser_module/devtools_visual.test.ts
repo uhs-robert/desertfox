@@ -206,6 +206,15 @@ function started({ table = TABLE as unknown, visual_table = protocol.DEVTOOLS_VI
   const mount = debugger_doc.body.add(new El(debugger_doc, "div", { classes: ["editor-mount"] })) as El;
   const source = (mount.add(new El(debugger_doc, "div", { classes: ["cm-editor"] })) as El).add(new El(debugger_doc, "div", { classes: ["cm-content"] })) as El;
   source.isContentEditable = true;
+  // The breakpoint condition: an editor that types, drawn inside the source's own content.
+  const condition = (source.add(new El(debugger_doc, "div", { classes: ["cm-editor"] })) as El).add(new El(debugger_doc, "div", { classes: ["cm-content"] })) as El;
+  condition.isContentEditable = true;
+
+  // The Network response: a CodeMirror editor and the filter box in one panel.
+  const network_doc = panel("chrome://devtools/content/netmonitor/index.html");
+  const response = network_doc.body.add(new El(network_doc, "div", { id: "response-panel" })) as El;
+  const filter = response.add(new El(network_doc, "input")) as El;
+  const response_source = (response.add(new El(network_doc, "div", { classes: ["cm-editor"] })) as El).add(new El(network_doc, "div", { classes: ["cm-content"] })) as El;
 
   // The markup view: three lines, the second one the current row, while the document keeps the focus.
   const markup_doc = panel("chrome://devtools/content/inspector/markup/markup.html");
@@ -228,7 +237,7 @@ function started({ table = TABLE as unknown, visual_table = protocol.DEVTOOLS_VI
     if (visual_table !== null) await push("devtools.visual_keys", visual_table);
     if (table !== null) await push("devtools.keys", table);
   };
-  return { firefox, window, copied, press, push, ready, markup_doc, console_doc, output, messages, input, inspector_doc, rules, rule, toolbar_text, debugger_doc, source };
+  return { firefox, window, copied, press, push, ready, markup_doc, console_doc, output, messages, input, inspector_doc, rules, rule, toolbar_text, debugger_doc, source, condition, filter, response_source };
 }
 
 test("the hello says devtools_visual, so the extension may push the v row and the mode's keys", async () => {
@@ -320,6 +329,8 @@ test("the Debugger source gets CodeMirror's own Shift+arrow keys, its keys pass 
   assert.ok(press("v", source).prevented, "the read-only editor of the code table starts the mode, though it is editable");
   for (const key of ["j", "k", "w", "b", "0", "$", "h", "l"]) press(key, source);
   assert.deepEqual(source.dispatched, [
+    { key: "ArrowRight", shiftKey: false, ctrlKey: false },
+    { key: "ArrowLeft", shiftKey: false, ctrlKey: false },
     { key: "ArrowRight", shiftKey: true, ctrlKey: false },
     { key: "ArrowDown", shiftKey: true, ctrlKey: false },
     { key: "ArrowUp", shiftKey: true, ctrlKey: false },
@@ -336,6 +347,15 @@ test("the Debugger source gets CodeMirror's own Shift+arrow keys, its keys pass 
   assert.equal(debugger_doc.cleared, 0);
   assert.deepEqual(copied, [], "CodeMirror fills the clipboard itself");
   assert.equal(debugger_doc.listeners.get("copy")?.size ?? 0, 0, "the copy listener went");
+});
+
+test("v in a field inside a code area types there: the Debugger's breakpoint condition and the response filter box", async () => {
+  const { ready, press, source, condition, filter, response_source } = started();
+  await ready();
+  assert.equal(press("v", condition).prevented, false, "the condition editor");
+  assert.equal(press("v", filter).prevented, false, "the filter box");
+  assert.deepEqual([source.dispatched, condition.dispatched, response_source.dispatched], [[], [], []]);
+  assert.ok(press("v", response_source).prevented, "the response editor itself still starts the mode");
 });
 
 test("Escape in a code area drops CodeMirror's selection with a plain arrow", async () => {

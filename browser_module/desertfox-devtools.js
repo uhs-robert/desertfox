@@ -522,6 +522,8 @@
         if (!url.startsWith(row.url)) continue;
         const root = target.closest(row.root) ?? root_of_focused_document(doc, target, row.root);
         const content = root?.querySelector(".cm-content");
+        // The root also holds fields that type: the Debugger's breakpoint condition is an editor inside the source, and the response has a filter box.
+        if (in_editable(target) && target.closest(".cm-content") !== content) continue;
         if (content) return { doc, root, content, code: true };
       }
       if (in_editable(target)) return null;
@@ -576,6 +578,9 @@
       for (const type of ["mousedown", "deactivate", "unload"]) listen(mode, win, type, end_kept);
       listen(mode, area.doc.defaultView, "pagehide", end_kept);
       if (area.code) {
+        // Plain arrows first collapse the selection the last copy left, which a Shift+arrow would extend. A plain arrow ends a selection at its edge, and the pair moves an empty one there and back.
+        press_in_editor(area.content, CODE_KEYS["char.forward"], false);
+        press_in_editor(area.content, CODE_KEYS["char.back"], false);
         press_in_editor(area.content, CODE_KEYS["char.forward"]);
       } else {
         const selection = area.doc.defaultView.getSelection();

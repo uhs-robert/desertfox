@@ -1,5 +1,5 @@
 // The browser module's visual mode in DevTools: v selects in a text area, the mode's keys extend the selection, y copies it, Escape ends the mode.
-// Text areas: the console output, the rule view, the Network headers and the markup view. Code areas: the Debugger source. Docked and in a DevTools window.
+// Text areas: the console output, the rule view, the Network headers and the markup view. Code areas: the Debugger source and the Network response. Docked and in a DevTools window.
 // Also what it leaves alone: v in the console input types there, a module whose hello does not say devtools_visual gets no v, and the tree keys work after the mode.
 import { module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
 
@@ -181,6 +181,25 @@ export async function run_cases(context) {
     expect(text.length > 0 && text === shown, `the copy ${JSON.stringify(text)} is not the selection ${JSON.stringify(shown)}`);
   });
 
+  await run_case("docked Network response: v and l select through CodeMirror's own selection, and y copies it", async () => {
+    await home("bm_dv_response");
+    await open_tab(RULE_PAGE);
+    await show_tool("netmonitor");
+    const text_url = new URL("/captions.vtt", context.url_of("page", "bm_dv_response")).href;
+    await in_selected_page(`(win) => { win.fetch(${JSON.stringify(text_url)}).catch(() => undefined); return true; }`);
+    const NETWORK = `const doc = tb.getPanel("netmonitor").panelWin.document;`;
+    await poll_until("the text request row", () => chrome(`(async () => { ${TOOLBOX} ${NETWORK} return [...doc.querySelectorAll(".request-list-item")].some((row) => row.textContent.includes("captions.vtt")); })()`), { timeout_ms: 10000 });
+    await chrome(`(async () => { ${TOOLBOX} ${NETWORK} [...doc.querySelectorAll(".request-list-item")].find((row) => row.textContent.includes("captions.vtt")).click(); })()`);
+    await poll_until("the Response tab", () => chrome(`(async () => { ${TOOLBOX} ${NETWORK} const tab = doc.querySelector("#response-tab"); tab?.click(); return !!tab; })()`), { timeout_ms: 10000 });
+    await poll_until("the response in the editor", () => chrome(`(async () => { ${TOOLBOX} ${NETWORK} return doc.querySelector("#response-panel .cm-content")?.textContent.includes("WEBVTT") ?? false; })()`), { timeout_ms: 10000 });
+    await chrome(`(async () => { ${TOOLBOX} ${NETWORK} doc.defaultView.focus(); doc.querySelector("#response-panel .cm-content").focus(); })()`);
+    await focus_in_devtools();
+    await set_clipboard();
+    await press_keys("v", "l", "l", "y");
+    const text = await copied("the Network response");
+    expect(text === "WEB", `the copy is ${JSON.stringify(text)}, not the first three characters`);
+  });
+
   await run_case("a DevTools window of its own: v, w and y copy from the console output there", async () => {
     await home("bm_dv_window");
     await open_tab(LOG_PAGE);
@@ -238,5 +257,10 @@ export async function run_cases(context) {
     await press_keys("v", "j", "j", "j", "y");
     const text = await copied("the Debugger source");
     expect(text.includes("doctype html>") && text.split("\n").length === 4, `the copy is not the first four lines: ${JSON.stringify(text.slice(0, 300))}`);
+    // The copy keeps its selection in view, and the next v starts again from one character instead of extending it.
+    await set_clipboard();
+    await press_keys("v", "y");
+    const again = await copied("the Debugger source again");
+    expect(again.length === 1, `the next v did not start with one character: ${JSON.stringify(again.slice(0, 300))}`);
   });
 }
