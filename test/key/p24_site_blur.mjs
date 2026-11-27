@@ -1,4 +1,4 @@
-// blur_on_load: a site row takes the focus away from a field the page focuses as it loads, until the page gets user activation (a key or a click), or about 1 s after the first install.
+// blur_on_load: a site row takes the focus away from a field the page focuses as it loads, until a key that is no repeat or a click, or about 1 s after the first install.
 // The row lives in a config copy, so no other piece sees it. Cases that need the window still open skip the key probe of `open_page`, because its key press ends the window.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";

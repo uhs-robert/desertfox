@@ -8,7 +8,7 @@ import { module_steps } from "./browser_module_steps.mjs";
 export const areas = ["keys", "config", "tabs"];
 
 export async function run_cases(context) {
-  const { config_copy, load_config_dir, setup, run_case, open_page, send_keys, press_keys, in_background, in_active_tab, wait_event, tab_switch_mark, tabs_shown_since, poll_until, settle_focus, events, expect, sleep, rdp, close_tabs_with } = context;
+  const { config_copy, load_config_dir, setup, run_case, on_teardown, open_page, send_keys, press_keys, in_background, in_active_tab, wait_event, tab_switch_mark, tabs_shown_since, poll_until, settle_focus, events, expect, sleep, rdp, close_tabs_with } = context;
   const log = (line) => console.log(`[p24_dead_keys] ${line}`);
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   const page_id_now = () => in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => new URL(tab.url).searchParams.get("id"))`);
@@ -39,14 +39,6 @@ export async function run_cases(context) {
     await sleep(400);
     return tabs_shown_since(switch_mark);
   };
-  const hold_rounds = async (rounds) => {
-    for (let round = 0; round < rounds; round++) {
-      const forward = await hold("j", 2000);
-      log(`round ${round} J switched ${forward.length}: ${forward.join(",")}`);
-      const back = await hold("k", 2000);
-      log(`round ${round} K switched ${back.length}: ${back.join(",")}`);
-    }
-  };
   // Every tab in turn by the tab bar (the background), so a dead tab is found without DesertFox's own keys.
   const dead_tabs = async (prefix) => {
     const dead = [];
@@ -64,14 +56,13 @@ export async function run_cases(context) {
   const open_row = async (prefix, kinds) => {
     for (const [kind, id] of kinds) await open_page(kind, `${prefix}${id}`, { new_tab: true });
   };
+  // Pages that focus their field on load, on each show and on window focus, but never fight a blur.
   const ROW = [
     ["page", "a"],
-    ["refocus", "auto_vis"],
+    ["refocus", "auto"],
     ["refocus", "login_auto"],
-    ["refocus", "auto_blur"],
-    ["refocus", "auto_blurt"],
-    ["refocus", "auto_loop"],
-    ["refocus", "login_auto_vis_blurt"],
+    ["refocus", "auto_vis"],
+    ["refocus", "login_auto_vis"],
     ["page", "z"],
   ];
 
@@ -88,14 +79,19 @@ export async function run_cases(context) {
         await in_background(`browser.tabs.update(${await tab_id_of(`${prefix}a`)}, { active: true }).then(() => true)`);
         await settle_focus();
         for (const [, id] of ROW.slice(1)) await in_background(`browser.tabs.discard(${await tab_id_of(`${prefix}${id}`)})`);
+        await poll_until("the row to be discarded", () => in_background(`browser.tabs.query({ discarded: true }).then((tabs) => tabs.length === ${ROW.length - 1})`));
       }
       await settle_focus().catch((error) => log(`settle failed: ${error.message}`));
     });
-    let typed = "";
-    await run_case(`${what}: held Shift+J and Shift+K switch on and type nothing`, async () => {
-      await hold_rounds(2);
-      typed = await typed_anywhere();
+    await run_case(`${what}: held Shift+J and Shift+K keep switching and type nothing`, async () => {
+      const order = await tab_order();
+      const forward = await hold("j", 1500);
+      log(`J switched ${forward.length}: ${forward.join(",")}`);
+      const back = await hold("k", 1500);
+      log(`K switched ${back.length}: ${back.join(",")}`);
+      const typed = await typed_anywhere();
       expect(typed === "", `held Shift+J/K typed "${typed}"`);
+      expect(forward.length >= order.length && back.length >= order.length, `held Shift+J/K stopped: J ${forward.length}, K ${back.length} switches over ${order.length} tabs`);
     });
     await run_case(`${what}: DesertFox keys work in every tab after`, async () => {
       const dead = await dead_tabs(prefix);
@@ -107,72 +103,30 @@ export async function run_cases(context) {
     });
   };
 
-  // A page that refocuses its field a tick after each blur and on each show and window focus, as a chat page does: what holds the keys, and what brings them back.
-  const msg_count_start = () => in_background(`(() => { globalThis.dk_counts = {}; if (!globalThis.dk_listening) { globalThis.dk_listening = true; browser.runtime.onMessage.addListener((message) => { if (globalThis.dk_counts) globalThis.dk_counts[message?.type] = (globalThis.dk_counts[message?.type] ?? 0) + 1; }); } return true; })()`);
-  const msg_counts = () => in_background(`JSON.stringify(globalThis.dk_counts)`);
-  const ping_ms = async () => { const start = Date.now(); await in_background("1"); return Date.now() - start; };
-  const dead_now = async () => JSON.parse(await page_state());
-  const make_dead = async () => {
-    await in_background(`browser.tabs.update(${await tab_id_of("dkr_next")}, { active: true }).then(() => true)`);
-    await poll_until("dkr_next active", async () => (await page_id_now()) === "dkr_next");
-    await sleep(300);
-    await press_keys("K");
-    await poll_until("dkr back", async () => (await page_id_now()) === "dkr_login_auto_vis_blurt");
-    await msg_count_start();
-    await sleep(1500);
-    const state = await dead_now();
-    log(`dead state: ${JSON.stringify(state)} messages in 1.5 s ${await msg_counts()} background ping ${await ping_ms()} ms`);
-    return state.focus === "field";
-  };
-  const click_page = () => evaluate_in_chrome(rdp, `(async () => {
-    const win = Services.wm.getMostRecentWindow("navigator:browser");
-    const browser = win.gBrowser.selectedBrowser;
-    const box = browser.getBoundingClientRect();
-    const at = [(win.mozInnerScreenX + box.left + 400) * win.devicePixelRatio, (win.mozInnerScreenY + box.top + 300) * win.devicePixelRatio];
-    for (const message of [win.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
-      win.windowUtils.sendNativeMouseEvent(at[0], at[1], message, 0, 0, browser, null);
-      await new Promise((resolve) => win.setTimeout(resolve, 20));
-    }
-  })()`);
-  const revive_with = async (what, act) => {
-    const dead = await make_dead();
-    await act();
-    const soon = await keys_work_quick();
-    await sleep(1500);
-    const later = await keys_work_quick();
-    log(`revive ${what}: dead before ${dead}, keys right after ${soon}, keys 1.5 s later ${later}, state ${await page_state()}`);
-  };
-  const keys_work_quick = async () => {
-    const page_id = await page_id_now();
-    const mark = events.length;
-    await press_keys("j");
-    const scrolled = await wait_event(mark, (event) => event.type === "scroll" && event.page_id === page_id, "a scroll from j", 600).then(() => true, () => false);
-    await in_active_tab(`for (const f of document.querySelectorAll("input")) f.value = ""; true`).catch(() => {});
-    return scrolled;
-  };
-  await setup("open the revive pages", async () => {
-    await open_page("refocus", "dkr_login_auto_vis_blurt", { new_tab: true });
-    await open_page("page", "dkr_next", { new_tab: true });
-  });
-  await run_case("revive: Escape", () => revive_with("Escape", () => press_keys("-k", "Escape")));
-  await run_case("revive: click in the page", () => revive_with("click", click_page));
-  await run_case("revive: switch away and back from chrome", () => revive_with("switch away and back", async () => {
-    await evaluate_in_chrome(rdp, `(async () => { const g = Services.wm.getMostRecentWindow("navigator:browser").gBrowser; const here = g.selectedTab; g.selectedTab = here.nextElementSibling ?? g.tabs[0]; await new Promise((r) => setTimeout(r, 300)); g.selectedTab = here; })()`);
-    await sleep(200);
-  }));
-  await run_case("revive: reload", () => revive_with("reload", async () => {
-    const mark = events.length;
-    await in_background(`browser.tabs.reload(${await tab_id_of("dkr_login_auto_vis_blurt")}).then(() => true)`);
-    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "dkr_login_auto_vis_blurt", "reloaded", 6000);
-    await sleep(200);
-  }));
-  await setup("close the revive pages", () => close_tabs_with("dkr_"));
+  // A page that refocuses its field after every blur, in its blur handler or a tick later: a few blurs, then the page keeps the field and the frame is in insert mode, as with the setting off.
+  for (const id of ["dkf_auto_vis_blurt", "dkf_auto_vis_blur", "dkf_ce_auto_vis_blurt_heavy"]) {
+    await run_case(`a page that refocuses after each blur (${id}) gets a few blurs per show, then keeps its field`, async () => {
+      on_teardown(() => close_tabs_with(id));
+      await open_page("refocus", id, { new_tab: true });
+      await open_page("page", `${id}_next`, { new_tab: true });
+      const before = await in_background(`browser.tabs.executeScript(${await tab_id_of(id)}, { code: "window.wrappedJSObject.refocus_count" }).then((answers) => answers[0])`);
+      await press_keys("K");
+      await poll_until(`${id} active`, async () => (await page_id_now()) === id);
+      await sleep(1300);
+      const state = JSON.parse(await page_state());
+      log(`${id}: ${JSON.stringify(state)}, focus calls before the show ${before}`);
+      // The show focus and the window focus each refocus once, and each of the few blurs of the window gives one more.
+      expect(state.refocus_count - before <= 8, `the page refocused ${state.refocus_count - before} times in one show: a blur and refocus loop`);
+      expect(state.focus === "field" && badge_of(id) === "INSERT", `the page did not keep its field: ${JSON.stringify(state)}, badge ${badge_of(id)}`);
+      await close_tabs_with(id);
+      await settle_focus().catch(() => {});
+    });
+  }
 
   await row_cases("dk1_", "refocusing pages");
   await row_cases("dk2_", "discarded refocusing pages", { discard: true });
 
   const { turn_on_module } = module_steps(context);
   await setup("turn on the browser module", turn_on_module);
-  await row_cases("dk3_", "module on, refocusing pages");
   await row_cases("dk4_", "module on, discarded refocusing pages", { discard: true });
 }

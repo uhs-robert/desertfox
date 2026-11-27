@@ -627,17 +627,18 @@
         }
       };
       let load_blur_ends = 0;
-      let blur_by_switch = false;
-      const open_load_blur = (by_switch = false) => {
-        blur_by_switch = by_switch;
+      // BLURS_PER_WINDOW: as in src/content/main.ts. A page that takes the focus back after them keeps the field, so no blur and refocus loop runs.
+      const BLURS_PER_WINDOW = 5;
+      let blurs_left = 0;
+      const open_load_blur = () => {
         load_blur_ends = Date.now() + LOAD_BLUR_MS;
+        blurs_left = BLURS_PER_WINDOW;
       };
       const end_load_blur = () => {
         load_blur_ends = 0;
       };
-      // Whether the focus is still the page's own: the window is open, and for a load window no key or click reached the document yet.
-      // A switch window skips the activation check, which never resets: a page used once would never blur again. Input since the switch ends the window instead.
-      const page_focus = (win) => Date.now() < load_blur_ends && (blur_by_switch || !win.navigator.userActivation?.hasBeenActive);
+      // Whether the focus is still the page's own: the window is open. Input ends it, not user activation: the repeats of a held Shift+J give each tab they pass activation, and a page used once keeps it for good.
+      const page_focus = () => Date.now() < load_blur_ends;
       function report() {
         try {
           const win = content;
@@ -645,7 +646,7 @@
           const field = field_has_focus(win.document);
           // text_field is a real field, which field is not: design mode counts for the key gate but has nothing to blur.
           const text_field = is_field(deep_active(win.document));
-          sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, listeners: desertfox_listeners(win), field, text_field, load_focus: field && page_focus(win) });
+          sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, listeners: desertfox_listeners(win), field, text_field, load_focus: field && page_focus() });
         } catch (_) {
           // A document going away mid-report sends nothing. The next report covers it.
         }
@@ -660,7 +661,7 @@
       // The tab shown again: a page that focuses its field on each show gets the same blur as on load. The report covers a field that already holds the focus.
       addEventListener(
         "visibilitychange",
-        for_top(() => (content.document.hidden ? end_load_blur() : (open_load_blur(true), report()))),
+        for_top(() => (content.document.hidden ? end_load_blur() : (open_load_blur(), report()))),
         true,
       );
       // A held key repeats into each tab it switches to, and a modifier alone is no input to the page, so neither ends the window.
@@ -673,8 +674,9 @@
       addMessageListener("desertfox-browser-module:blur", ({ data }) => {
         try {
           const win = content;
-          if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || (data.escape !== true && !page_focus(win))) return;
+          if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || (data.escape !== true && !page_focus())) return;
           const focused = deep_active(win.document);
+          if (data.escape !== true && --blurs_left < 1) end_load_blur();
           if (is_field(focused)) focused.blur();
         } catch (_) {
           // A document going away keeps its focus.

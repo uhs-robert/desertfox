@@ -289,10 +289,16 @@ function follow_field_change(): void {
 
 // `blur_on_load`: the time the window of about 1 s ends, opened at the first install and each time the tab is shown again.
 // A key that is no repeat, a mouse press, a command run here or the tab going hidden ends it.
-// A load window also refuses while the page has user activation, which counts input from before this script started, as in any subframe, which starts on its first focus.
-// A switch window skips that check: the held Shift+J that switched tabs gives the new tab user activation too.
+// User activation is no input: the repeats of a held Shift+J give activation to each tab they pass, a tab that loads as it is shown included.
+// A subframe's load window is the exception: its script starts on its first focus, so the click that gave it is only seen as activation.
 let blur_ends_ms = 0;
 let blur_by_switch = false;
+// A few blurs per window: a page that takes the focus back after them keeps the field, as with the setting off, so no blur and refocus loop runs.
+// One is too few: a chat page focuses its prompt on the show and again on the window focus, two moves of one switch.
+const BLURS_PER_WINDOW = 5;
+let blurs_left = 0;
+// The focus_on_load element this window focused, whose own focusin is no page focus.
+let load_focus_given: Element | null = null;
 const end_blur = () => (blur_ends_ms = 0);
 // Whether a click or key has reached this window.
 const activated = (): boolean => navigator.userActivation.hasBeenActive;
@@ -310,14 +316,21 @@ const load_focus_target = (): HTMLElement | null => {
 // Body stands for no focus, so the target can take the focus before the page focuses anything.
 // True when it blurred or moved the focus. A switch only blurs: focus_on_load is for loads.
 const blur_load_focus = (target: EventTarget | null) => {
-  if (Date.now() >= blur_ends_ms || (!blur_by_switch && navigator.userActivation.isActive) || !(target === document.body || is_editable_element(target))) return false;
+  if (Date.now() >= blur_ends_ms || (!blur_by_switch && window !== window.top && navigator.userActivation.isActive) || !(target === document.body || is_editable_element(target))) return false;
+  if (target === load_focus_given) return true;
+  // A page that refocuses inside its blur handler fires this focusin before the blur's focusout, so the mode follows the focus once both have run.
+  if (blurs_left < 1) return end_blur(), setTimeout(sync_mode_to_focus), false;
   const wanted = !blur_by_switch && load_focus_target();
-  wanted ? wanted.focus() : (target as HTMLElement).blur();
+  // Counted before the blur: a page can refocus inside its own blur handler, and that focus must find the count already lowered.
+  if (target !== document.body) blurs_left--;
+  wanted ? (load_focus_given = wanted).focus() : (target as HTMLElement).blur();
   return true;
 };
 
 const open_blur = (by_switch: boolean) => {
   blur_by_switch = by_switch;
+  blurs_left = BLURS_PER_WINDOW;
+  load_focus_given = null;
   blur_ends_ms = Date.now() + 1e3;
   blur_load_focus(deepest_focused_element());
 };
