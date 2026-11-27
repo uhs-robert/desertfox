@@ -297,7 +297,7 @@ let blur_by_switch = false;
 // One is too few: a chat page focuses its prompt on the show and again on the window focus, two moves of one switch.
 const BLURS_PER_WINDOW = 5;
 let blurs_left = 0;
-// The focus_on_load element this window focused, whose own focusin is no page focus.
+// The focus_on_load element this window focused, whose own focusin is no page focus and spends no blur.
 let load_focus_given: Element | null = null;
 const end_blur = () => (blur_ends_ms = 0);
 // A key or click of the user's own, which no held key's repeat sets. Once set, no load window opens: input before the keymap reply must keep its field.
@@ -320,7 +320,8 @@ const load_focus_target = (): HTMLElement | null => {
 // True when it blurred or moved the focus. A switch only blurs: focus_on_load is for loads.
 const blur_load_focus = (target: EventTarget | null) => {
   if (Date.now() >= blur_ends_ms || (!blur_by_switch && window !== window.top && navigator.userActivation.isActive) || !(target === document.body || is_editable_element(target))) return false;
-  if (target === load_focus_given) return true;
+  // The focus_on_load element's own focusin takes the usual path, so a field there enters insert mode.
+  if (target === load_focus_given) return false;
   // A page that refocuses inside its blur handler fires this focusin before the blur's focusout, so the mode follows the focus once both have run.
   if (blurs_left < 1) return end_blur(), setTimeout(sync_mode_to_focus), false;
   const wanted = !blur_by_switch && load_focus_target();
