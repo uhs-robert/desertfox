@@ -752,8 +752,10 @@ test("installed-host mode drops a caller's DESERTFOX_CONFIG_DIR from the window"
     if (saved.dir === undefined) delete process.env.DESERTFOX_CONFIG_DIR;
     else process.env.DESERTFOX_CONFIG_DIR = saved.dir;
   }
-  for (let waited = 0; !existsSync(out) && waited < 50; waited++) await new Promise((done) => setTimeout(done, 100));
-  assert.equal(readFileSync(out, "utf8"), "[]");
+  // The brackets make even an empty value text, so an empty file still means the child has not written yet.
+  const written = () => (existsSync(out) ? readFileSync(out, "utf8") : "");
+  for (let waited = 0; !written() && waited < 50; waited++) await new Promise((done) => setTimeout(done, 100));
+  assert.equal(written(), "[]");
 });
 
 test("a mistyped flag prints a usage line and no stack trace", () => {
