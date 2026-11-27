@@ -284,7 +284,7 @@ export const MAX_KIND_BYTES = 64 * 1024;
 // Room for the envelopes of the other messages beside the largest one.
 export const MESSAGE_ENVELOPE_BYTES = 512;
 // The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
-const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
+export const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.

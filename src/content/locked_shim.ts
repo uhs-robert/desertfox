@@ -7,7 +7,7 @@ import type { KeymapPageState } from "../shared/messages/content.ts";
 import { current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { page_keymap_of } from "../shared/site/page_keymap_resolve.ts";
-import { EXTENSION_TO_MODULE_KINDS, json_bytes, locked_route_of, MESSAGE_ENVELOPE_BYTES, MODULE_TO_EXTENSION_KINDS, validate_snapshot } from "../shared/browser_module_protocol.ts";
+import { json_bytes, locked_route_of, MESSAGE_ENVELOPE_BYTES, PAGE_TEXT_BYTES, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 
@@ -26,10 +26,10 @@ type Transport = {
 type Listener = (...args: never[]) => unknown;
 
 const GONE = "Extension context invalidated.";
-// The text of a page message rides inside an envelope, so it gets the kind's limit less the envelope.
-const CALL_TEXT_BYTES = MODULE_TO_EXTENSION_KINDS["page_call"]!.max_bytes! - MESSAGE_ENVELOPE_BYTES;
-const ANSWER_TEXT_BYTES = EXTENSION_TO_MODULE_KINDS["page_push"]!.max_bytes! - MESSAGE_ENVELOPE_BYTES;
-const PUSH_TEXT_BYTES = EXTENSION_TO_MODULE_KINDS["page_push"]!.max_bytes!;
+// The text of a page message rides inside an envelope, so it gets the kind's limit less the envelope. The limit is the constant of the page kinds, not a read of the kind tables, which would bundle every kind's row into the shim.
+const CALL_TEXT_BYTES = PAGE_TEXT_BYTES - MESSAGE_ENVELOPE_BYTES;
+const ANSWER_TEXT_BYTES = PAGE_TEXT_BYTES - MESSAGE_ENVELOPE_BYTES;
+const PUSH_TEXT_BYTES = PAGE_TEXT_BYTES;
 // The two `storage.local` keys the page code reads, each served from its snapshot.
 const LOCAL_PARTS: Record<string, SnapshotPart> = { [CONFIG_STATUS_STORAGE_KEY]: "config", [THEME_STORAGE_KEY]: "theme" };
 
