@@ -691,3 +691,34 @@ test("the pane kinds take only their arg shapes, and with no feature to answer t
     ["ok", "no handler for this kind"],
   ]);
 });
+
+test("may_act follows the pref, DesertFox, private access and a valid state with the switch on", () => {
+  const { firefox, window } = started();
+  const core = () => firefox.Services.desertfox_browser_module as { may_act(win: unknown): boolean };
+  assert.equal(core().may_act(window.win), true);
+  firefox.write_state(state({ enabled: false }));
+  assert.equal(core().may_act(window.win), false, "the toolbar switch is off");
+  firefox.write_state(state({ keys: Array.from({ length: 40 }, (_, index) => ({ key: `<F${index}>`, id: "tab.next", args: {} })) }));
+  assert.equal(core().may_act(window.win), false, "a state past the key row limit");
+  firefox.write_state(state());
+  firefox.set_pref(false);
+  assert.equal(core().may_act(window.win), false, "the pref is off");
+  firefox.set_pref(true);
+  const private_window = firefox.make_window({ private_window: true });
+  assert.equal(core().may_act(private_window.win), false, "a private window without private access");
+});
+
+test("on_shut_down runs each feature's step once when the module turns off, and one that throws does not stop the rest", () => {
+  const { firefox, window } = started();
+  const core = firefox.Services.desertfox_browser_module as { on_shut_down(fn: () => void): void; shut_down(): void };
+  const ran: string[] = [];
+  core.on_shut_down(() => {
+    throw new Error("feature broke");
+  });
+  core.on_shut_down(() => ran.push("second"));
+  core.shut_down();
+  core.shut_down();
+  assert.deepEqual(ran, ["second"]);
+  assert.ok(firefox.errors.some((line) => line.includes("a feature failed to shut down")));
+  assert.equal(window.listener_count("keydown"), 0, "the core kept its window listener");
+});
