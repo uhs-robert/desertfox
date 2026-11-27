@@ -5,7 +5,7 @@
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, TabState } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, TabState } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -13,7 +13,11 @@ import {
   BROWSER_MODULE_FROM_MODULE_STORAGE_KEY,
   BROWSER_MODULE_STATE_STORAGE_KEY,
   BROWSER_MODULE_STATUS_STORAGE_KEY,
+  bar_config_of,
+  bar_fields_of,
+  bar_theme_of,
   check_module_args,
+  validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
   is_module_command_id,
@@ -21,15 +25,18 @@ import {
   MAX_STATE_TABS,
   status_of_hello,
   EXTENSION_TO_MODULE_KINDS,
-  MAX_MESSAGE_LIST_BYTES,
+  message_list_bytes,
+  reply_fits,
   MAX_MESSAGES,
   MODULE_TO_EXTENSION_KINDS,
   validate_message,
   validate_message_list,
   validate_module_state,
 } from "../shared/browser_module_protocol.ts";
+import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
+import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
-import { keep_chain } from "../shared/swallow.ts";
+import { keep_chain, warn_and_go } from "../shared/swallow.ts";
 import { mode_of_record } from "./tab_modes.ts";
 import type { TabModeRecord } from "./tab_modes.ts";
 
@@ -68,6 +75,14 @@ export async function stored_setting_on(storage: Pick<typeof browser.storage.loc
 }
 export const module_setting_on = (storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> => stored_setting_on(storage, "browser_module");
 
+// The bar settings in the stored config status, or undefined while `browser_bar` is off. A value the status lacks or the protocol refuses reads as the default.
+export async function read_bar_config(storage: Pick<typeof browser.storage.local, "get">): Promise<BarConfig | undefined> {
+  const status = (await storage.get(CONFIG_STATUS_STORAGE_KEY))[CONFIG_STATUS_STORAGE_KEY] as { settings?: Record<string, unknown> } | undefined;
+  const settings = status?.settings ?? {};
+  if (settings.browser_bar === false) return undefined;
+  return bar_config_of({ left: settings.browser_bar_left, right: settings.browser_bar_right, border: settings.browser_bar_border }) ?? { left: [...DEFAULT_SETTINGS.browser_bar_left], right: [...DEFAULT_SETTINGS.browser_bar_right], border: DEFAULT_SETTINGS.browser_bar_border };
+}
+
 export type BrowserModuleDeps = {
   session: SessionStorage;
   // Whether the setting is on (`module_setting_on`).
@@ -78,10 +93,17 @@ export type BrowserModuleDeps = {
   read_keymap: () => Promise<CompiledKeymap | undefined>;
   read_tab_records: () => Promise<Record<string, TabModeRecord>>;
   check_args: CheckCommandArgs;
+  // The status bar's inputs. Without them the bar counts as off.
+  // The bar settings, or undefined while `browser_bar` is off.
+  read_bar_config?: () => Promise<BarConfig | undefined>;
+  // The stored theme, `{ dark, light }` role colors.
+  read_theme?: () => Promise<unknown>;
+  // The bar appeared or went away, so the pages must ask for their keymap again (the corner badge hides while the bar shows).
+  on_bar_change?: () => void;
   // The allow list of each direction. The protocol's lists are empty now, so a test passes its own.
   kinds?: { from_module: KindTable; from_extension: KindTable };
-  // One handler per kind the module may request. A handler never awaits `send`: handlers run inside the queue and `send` waits behind them, so it would never settle and every later step would hang. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
-  handlers: Record<string, (args: ModuleArgs) => Promise<void>>;
+  // One handler per kind the module may request. Handlers run outside the queue and at the same time, so one may await `send`. Each reply is written when its handler settles, so replies can land in any order, and the module matches each to its request by `reply_to`. The text it gives is the reply's `value`, within its kind's limit. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
+  handlers: Record<string, (args: ModuleArgs) => Promise<string | void>>;
   // Hears each reply the module sends to a request of the extension.
   on_reply?: (reply: ModuleReply) => void;
   now: () => number;
@@ -126,9 +148,50 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (validate_module_state(state).ok) await deps.session.set({ [BROWSER_MODULE_STATE_STORAGE_KEY]: state });
   };
 
+  // What each tab last reported for the bar, in memory only: the pending keys of a private tab must not reach the disk, and a restart empties them.
+  const bars = new Map<string, BarFields>();
+  // The pending keys and count of the child frame that holds a tab's focus. While one is set it stands in for the top frame's own, which the tab's entry in `bars` may still hold.
+  const child_keys = new Map<string, Pick<BarFields, "pending" | "count">>();
+  // Whether the bar is up: the settings are on and the module said in its hello that it built the bar. Pages ask on their first key, so they get this copy and no storage read.
+  let bar_seen = false;
+  // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
+  let hello_bar = false;
+
+  const bar_built = (stored_hello: unknown): boolean => {
+    const hello = validate_module_hello(stored_hello);
+    return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.bar === true;
+  };
+  // A change of the answer tells the pages to ask again. The bar going away also drops what the tabs reported, which would otherwise show again, stale, when the bar returns.
+  const set_bar_seen = (now: boolean): boolean => {
+    if (now === bar_seen) return false;
+    bar_seen = now;
+    if (!now) {
+      bars.clear();
+      child_keys.clear();
+    }
+    deps.on_bar_change?.();
+    return true;
+  };
+
+  // The tabs whose record says a load began and no page has taken over yet.
+  const loading = new Set<string>();
+  const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
+    if (loading.has(id)) return { mode: tab?.mode ?? "normal", live: tab?.live ?? false };
+    const { pending: _, count: __, ...top } = bars.get(id) ?? {};
+    return { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
+  };
+  // A tab that began a load shows no bar fields, from a record change or from a report. A load that leaves the old page in place brings them back at its end, because the page's own report is kept and its content script has nothing new to send.
+  const tab_of_record = (id: string, record: TabModeRecord): TabState => {
+    if (record.awaiting_commit) loading.add(id);
+    else loading.delete(id);
+    return tab_with_bar(id, tab_state_of(record));
+  };
+
   const kinds = deps.kinds ?? { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS };
   // Ids of messages of the module that were handled, kept to skip them when the module rewrites its list. A copy: the replies in the extension's own list say the same for the requests that expect one.
   const handled = new Set<string>();
+  // Ids of requests whose handler has not settled. Kept apart from `handled`, whose oldest ids drop, so a rewrite never starts a running request again.
+  const running = new Set<string>();
   let sent = 0;
 
   const read_outbox = async (): Promise<ModuleMessage[]> => {
@@ -139,30 +202,31 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // The newest messages that fit both caps. The list is rewritten whole, and a message that falls off the front is one the module has had time to read.
   const write_outbox = async (messages: ModuleMessage[]): Promise<void> => {
     let kept = messages.slice(-MAX_MESSAGES);
-    while (kept.length > 0 && new TextEncoder().encode(JSON.stringify(kept)).length > MAX_MESSAGE_LIST_BYTES) kept = kept.slice(1);
+    while (kept.length > 0 && new TextEncoder().encode(JSON.stringify(kept)).length > message_list_bytes(kinds.from_extension)) kept = kept.slice(1);
     if (validate_message_list(kept, kinds.from_extension).ok) await deps.session.set({ [BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY]: kept });
   };
 
   const run_request = async (request: ModuleRequest): Promise<ModuleReply | undefined> => {
-    const expects_reply = kinds.from_module[request.kind]!.reply;
-    const reply = (ok: boolean, error?: string): ModuleReply | undefined => (expects_reply ? { v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: request.id, ok, ...(error === undefined ? {} : { error }) } : undefined);
+    const row = kinds.from_module[request.kind]!;
+    const reply = (ok: boolean, error?: string, value?: string): ModuleReply | undefined =>
+      row.reply ? { v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: request.id, ok, ...(error === undefined ? {} : { error }), ...(typeof value === "string" ? { value } : {}) } : undefined;
     const handler = deps.handlers[request.kind];
     if (handler === undefined) return reply(false, "no handler for this kind");
     try {
-      await handler(request.args);
-      return reply(true);
+      const answered = reply(true, undefined, (await handler(request.args)) ?? undefined);
+      return answered === undefined || reply_fits(answered, row) ? answered : reply(false, "the answer is too large");
     } catch {
       return reply(false, "the request failed");
     }
   };
 
-  // Handles each message of the module list that is new, and writes the replies in one rewrite of the extension's list.
+  // Handles each message of the module list that is new. Refusals go out in one rewrite of the extension's list, and each handler's reply when it settles.
   const answer_module_messages = async (): Promise<void> => {
     const checked = validate_message_list((await deps.session.get(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY))[BROWSER_MODULE_FROM_MODULE_STORAGE_KEY], kinds.from_module, deps.now());
     if (!checked.ok) return;
     const outbox = await read_outbox();
     const answered = new Set(outbox.flatMap((message) => ("reply_to" in message ? [message.reply_to] : [])));
-    const seen = (id: string) => handled.has(id) || answered.has(id);
+    const seen = (id: string) => handled.has(id) || running.has(id) || answered.has(id);
     const replies: ModuleMessage[] = [];
     for (const message of checked.value.messages) {
       if ("reply_to" in message) {
@@ -170,8 +234,12 @@ export function create_browser_module(deps: BrowserModuleDeps) {
         handled.add(`reply:${message.reply_to}`);
       } else if (!seen(message.id)) {
         handled.add(message.id);
-        const reply = await run_request(message);
-        if (reply) replies.push(reply);
+        running.add(message.id);
+        void run_request(message)
+          .finally(() => running.delete(message.id))
+          // A reply that settles after the setting went off is dropped: the off sync removed the list, and the reply can hold page text.
+          .then((reply) => reply && enqueue(async () => (await deps.is_on()) && write_outbox([...(await read_outbox()), reply])))
+          .catch(warn_and_go("browser_module.reply"));
       }
     }
     for (const { id, error } of checked.value.refused) {
@@ -186,7 +254,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   const read_hello_status = async (): Promise<void> => {
     if (!(await deps.is_on())) return;
-    await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status_of_hello((await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]) });
+    const hello = (await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY];
+    await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status_of_hello(hello) });
+    // The rewrite takes the dropped reports out of the state too.
+    hello_bar = bar_built(hello);
+    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
   };
 
   const read_messages = async (): Promise<void> => {
@@ -198,18 +270,23 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   const sync_now = async (): Promise<void> => {
     if (!(await deps.is_on())) {
+      hello_bar = false;
+      set_bar_seen(false);
       await deps.session.remove([BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY]);
       return;
     }
+    const bar = await deps.read_bar_config?.();
+    set_bar_seen(!!bar && hello_bar);
     const disabled = await deps.read_disabled();
     const records = await deps.read_tab_records();
     const tabs: Record<string, TabState> = {};
     for (const [key, record] of Object.entries(records)) {
       const id = tab_id_of_key(key);
-      if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_state_of(record);
+      if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_of_record(id, record);
     }
+    const bar_theme = bar_theme_of(await deps.read_theme?.());
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(blur_on_load ? { blur_on_load } : {}) });
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}) });
     request_hello_read();
     request_messages_read();
   };
@@ -220,17 +297,45 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // No state yet: a full sync is on its way or the setting just turned off.
     if (state === undefined) return;
     const tabs = { ...state.tabs };
+    // A tab that closed, or whose new page took over, has nothing half-typed any more.
+    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id), loading.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
-    else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_state_of(record);
+    else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });
   };
 
+  // A content frame reports what the bar shows. The top frame's report replaces the tab's entry and ends the child's keys, unless it is marked `child`: then a child frame holds the focus, the report has no keys of its own, and the child's keys stay. A child frame says only what it has half-typed. `site` never reaches a private tab.
+  const bar_report_now = async (tab_id: string, frame_id: number, incognito: boolean, raw: Record<string, unknown>): Promise<void> => {
+    // A report in flight when the bar went away must not fill the maps again.
+    if (!bar_seen) return;
+    const { site, pending, count, ...rest } = bar_fields_of(raw);
+    const before = JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]);
+    if (frame_id !== 0) {
+      const keys = { ...(pending && { pending }), ...(count && { count }) };
+      if (Object.keys(keys).length === 0) child_keys.delete(tab_id);
+      else child_keys.set(tab_id, keys);
+    } else {
+      if (raw.child !== true) child_keys.delete(tab_id);
+      const own = raw.child === true ? {} : { ...(pending && { pending }), ...(count && { count }) };
+      const top: BarFields = { ...own, ...rest, ...(!incognito && site !== undefined && { site }) };
+      if (Object.keys(top).length === 0) bars.delete(tab_id);
+      else bars.set(tab_id, top);
+    }
+    if (JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]) === before) return;
+    const state = await read_state();
+    if (state === undefined || !(await deps.is_on())) return;
+    if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return;
+    await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, { mode: state.tabs[tab_id]?.mode ?? "normal", live: state.tabs[tab_id]?.live ?? false }) } });
+  };
+
   // The extension starts a call. The kind must be on the extension's allow list and the args must pass its check. Nothing is written while the setting is off. The id comes back so a caller can match the reply.
-  const send_now = async (kind: string, args: ModuleArgs): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
+  // `on_id` hears the id before the request is written, so a caller can wait for its reply before the module can answer.
+  const send_now = async (kind: string, args: ModuleArgs, on_id?: (id: string) => void): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
     if (!(await deps.is_on())) return { ok: false, problem: "the browser module setting is off" };
     const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args, sent_at: deps.now() };
     const checked = validate_message(request, kinds.from_extension);
     if (!checked.ok) return checked;
+    on_id?.(request.id);
     await write_outbox([...(await read_outbox()), checked.value]);
     return { ok: true, id: request.id };
   };
@@ -242,7 +347,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // Run at each background start, and after anything that changes the setting, the keymap or the switch.
     sync,
     tab_changed,
-    send: (kind: string, args: ModuleArgs = {}) => enqueue(() => send_now(kind, args)),
+    bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
+    bar_active: (): Promise<boolean> => Promise.resolve(bar_seen),
+    send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => void) => enqueue(() => send_now(kind, args, on_id)),
     // Ask for a read. Each has its own limiter, which decides when it runs.
     read_hello: request_hello_read,
     read_messages: request_messages_read,
@@ -255,7 +362,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       }
       if (area !== "local") return;
       // A change of the setting alone leaves the compiled keymap as it is, so the settings status counts too.
-      if (COMPILED_KEYMAP_STORAGE_KEY in changes || DISABLED_STORAGE_KEY in changes || touches_settings(changes, area)) void sync();
+      if (COMPILED_KEYMAP_STORAGE_KEY in changes || THEME_STORAGE_KEY in changes || DISABLED_STORAGE_KEY in changes || touches_settings(changes, area)) void sync();
       for (const [key, change] of Object.entries(changes)) {
         const id = tab_id_of_key(key);
         if (id !== undefined) void tab_changed(id, change.newValue as TabModeRecord | undefined);

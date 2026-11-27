@@ -94,6 +94,8 @@ export type CompiledKeymap = {
   // In list order. Each column takes the first rule that fits the page and sets it. Absent when no rule exists.
   site_rules?: SiteRule[];
   mode_indicator: ModeIndicator;
+  // Set in a page's reply only, while the browser module's status bar is up (the stored map never has it). The reply then reads `mode_indicator` as `off`, and the page reports its pending keys and mode details for the bar.
+  bar?: true;
   // Set when the `bridge` setting is on. The background reads it to open the bridge port. Pages ignore it.
   bridge?: true;
   // Set when `bridge_share_tabs` is on as well. The bridge then answers the tab verbs. Pages ignore it.

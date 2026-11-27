@@ -78,8 +78,10 @@
     const MAX_MESSAGE_LIST_BYTES = 4096;
     const MAX_ERROR_CHARS = 120;
     const DEFAULT_MAX_AGE_MS = 2000;
-    const EXTENSION_TO_MODULE_KINDS = {};
-    const MODULE_TO_EXTENSION_KINDS = {};
+    const MAX_KIND_BYTES = 65536;
+    const MESSAGE_ENVELOPE_BYTES = 512;
+    const EXTENSION_TO_MODULE_KINDS = { page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
+    const MODULE_TO_EXTENSION_KINDS = { page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
     const ENABLED_PREF = "desertfox.browser_module.enabled";
@@ -443,8 +445,24 @@
     const own_lists = new WeakMap();
     let sent = 0;
 
-    const arg_fits = (kind, value) => (kind === "axis" ? value === "x" || value === "y" : typeof value === "number" && Number.isFinite(value) && (kind !== "int" || Number.isInteger(value)));
-    const byte_size = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
+    const arg_fits = (kind, value) => {
+      if (kind === "axis") return value === "x" || value === "y";
+      if (kind === "text") return typeof value === "string";
+      return typeof value === "number" && Number.isFinite(value) && (kind !== "int" || Number.isInteger(value));
+    };
+    // json_bytes: undefined for a value that is not plain data.
+    const byte_size = (value) => {
+      try {
+        const text = JSON.stringify(value);
+        return text === undefined ? undefined : new TextEncoder().encode(text).length;
+      } catch (_) {
+        return undefined;
+      }
+    };
+    const fits_bytes = (value, limit) => (byte_size(value) ?? Number.POSITIVE_INFINITY) <= limit;
+    // kind_bytes and message_list_bytes: a list has room for two of its largest messages and the envelopes beside them.
+    const kind_bytes = (row) => Math.min(row.max_bytes ?? MAX_MESSAGE_LIST_BYTES, MAX_KIND_BYTES);
+    const list_bytes = (kinds) => Math.max(MAX_MESSAGE_LIST_BYTES, ...Object.values(kinds).map((row) => 2 * kind_bytes(row))) + MESSAGE_ENVELOPE_BYTES;
 
     // validate_message: { message } or { problem }.
     function checked_message(value, kinds) {
@@ -454,10 +472,12 @@
         if (typeof value.reply_to !== "string" || !MESSAGE_ID.test(value.reply_to)) return { problem: "reply_to must be a message id" };
         if (typeof value.ok !== "boolean") return { problem: "ok must be true or false" };
         if (value.error !== undefined && (typeof value.error !== "string" || value.error.length > MAX_ERROR_CHARS)) return { problem: "error must be short text" };
-        return { message: { reply_to: value.reply_to, ok: value.ok } };
+        if (value.value !== undefined && (typeof value.value !== "string" || !fits_bytes(value, MAX_KIND_BYTES))) return { problem: "value must be text within the size limit" };
+        return { message: { reply_to: value.reply_to, ok: value.ok, ...(value.value === undefined ? {} : { value: value.value }) } };
       }
       if (typeof value.id !== "string" || !MESSAGE_ID.test(value.id)) return { problem: "a request needs an id of 1 to 32 letters, digits, - or _" };
       if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return { problem: "the kind is not on the allow list" };
+      if (!fits_bytes(value, kind_bytes(kinds[value.kind]))) return { problem: `a ${value.kind} message is over its size limit` };
       if (value.sent_at !== undefined && (typeof value.sent_at !== "number" || !Number.isSafeInteger(value.sent_at) || value.sent_at < 0)) return { problem: "sent_at must be whole ms since the epoch" };
       const given = value.args ?? {};
       if (!is_record(given)) return { problem: "args must be a table" };
@@ -471,14 +491,7 @@
 
     // validate_message_list with `now`: undefined for a list that is not a list or is too big, else the messages and the refused requests with a usable id.
     function checked_list(value, kinds, now) {
-      if (!Array.isArray(value) || value.length > MAX_MESSAGES) return undefined;
-      let size;
-      try {
-        size = byte_size(value);
-      } catch (_) {
-        return undefined;
-      }
-      if (size > MAX_MESSAGE_LIST_BYTES) return undefined;
+      if (!Array.isArray(value) || value.length > MAX_MESSAGES || !fits_bytes(value, list_bytes(kinds))) return undefined;
       const list = { messages: [], refused: [] };
       for (const item of value) {
         const { message, problem } = checked_message(item, kinds);
@@ -506,7 +519,7 @@
     function append_own(extension, messages) {
       if (!enabled_by_pref() || shut || desertfox() !== extension) return false;
       let kept = [...(own_lists.get(extension) ?? []), ...messages].slice(-MAX_MESSAGES);
-      while (kept.length > 0 && byte_size(kept) > MAX_MESSAGE_LIST_BYTES) kept = kept.slice(1);
+      while (kept.length > 0 && !fits_bytes(kept, list_bytes(MODULE_TO_EXTENSION_KINDS))) kept = kept.slice(1);
       own_lists.set(extension, kept);
       write_session(extension, FROM_MODULE_STORAGE_KEY, kept);
       return true;
@@ -514,10 +527,11 @@
 
     const reply_to = (id, ok, error, value) => ({ v: PROTOCOL_VERSION, reply_to: id, ok, ...(error === undefined ? {} : { error }), ...(value === undefined ? {} : { value }) });
 
-    // A handler's result as a reply: `ok` only when it says so, its own error text cut to the cap, and a text `value`.
-    function reply_of(id, result) {
-      if (!is_record(result)) return reply_to(id, false, HANDLER_FAILED);
-      return reply_to(id, result.ok === true, typeof result.error === "string" ? result.error.slice(0, MAX_ERROR_CHARS) : undefined, typeof result.value === "string" ? result.value : undefined);
+    // A handler's result as a reply: `ok` only when it says so, its own error text cut to the cap, and a text `value` within the kind's limit (reply_fits).
+    function reply_of(request, result) {
+      if (!is_record(result)) return reply_to(request.id, false, HANDLER_FAILED);
+      const reply = reply_to(request.id, result.ok === true, typeof result.error === "string" ? result.error.slice(0, MAX_ERROR_CHARS) : undefined, typeof result.value === "string" ? result.value : undefined);
+      return fits_bytes(reply, kind_bytes(EXTENSION_TO_MODULE_KINDS[request.kind])) ? reply : reply_to(request.id, false, "the answer is too large");
     }
 
     function run_request(extension, request) {
@@ -531,7 +545,7 @@
       Promise.resolve()
         .then(() => handler(request.args))
         .then(
-          (result) => reply_of(request.id, result),
+          (result) => reply_of(request, result),
           (error) => {
             log_once(`the handler of ${request.kind} failed: ${error}`);
             return reply_to(request.id, false, HANDLER_FAILED);

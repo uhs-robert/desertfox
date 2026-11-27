@@ -49,7 +49,7 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
   assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
-  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
   assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
   assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);
   assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
@@ -378,7 +378,7 @@ test("a state past the protocol's limits or with a malformed tab claims nothing 
   }
 });
 
-// ---- The messages. Both kind lists of the protocol are empty, so these tests put test-only rows into the module's copy.
+// ---- The messages. These tests put test-only rows into the module's copy of the kind lists, so each path has a kind to take.
 
 const TEST_EXTENSION_KINDS = {
   note: { args: { n: "int" }, reply: true },
@@ -390,6 +390,7 @@ const TEST_EXTENSION_KINDS = {
   wordy: { args: {}, reply: true },
   later: { args: {}, reply: true },
   unanswered: { args: {}, reply: true },
+  sized: { args: { message: "text" }, reply: true, max_bytes: 200 },
 };
 const TEST_MODULE_KINDS = { ping: { args: { axis: "axis" }, reply: true } };
 
@@ -407,6 +408,7 @@ const ANSWERING_FEATURE = `(function (scope) {
   core.register_kind("shapeless", () => "yes");
   core.register_kind("wordy", () => ({ ok: false, error: "x".repeat(500) }));
   core.register_kind("later", () => new Promise((resolve) => { Services.test_resolve = resolve; }));
+  core.register_kind("sized", (args) => ({ ok: true, value: args.message.repeat(10) }));
   core.register_kind("tab.close", () => ({ ok: true }));
 })(this);`;
 
@@ -416,7 +418,7 @@ function messaging({ pref = true as boolean | null } = {}) {
     extra_files: { "desertfox-zz-answers.js": ANSWERING_FEATURE },
     patch_source: (name, source) => {
       if (name !== CORE_FILE) return source;
-      const patched = source.replace("const EXTENSION_TO_MODULE_KINDS = {};", `const EXTENSION_TO_MODULE_KINDS = ${JSON.stringify(TEST_EXTENSION_KINDS)};`).replace("const MODULE_TO_EXTENSION_KINDS = {};", `const MODULE_TO_EXTENSION_KINDS = ${JSON.stringify(TEST_MODULE_KINDS)};`);
+      const patched = source.replace(/const EXTENSION_TO_MODULE_KINDS = \{[^;]*\};/, `const EXTENSION_TO_MODULE_KINDS = ${JSON.stringify(TEST_EXTENSION_KINDS)};`).replace(/const MODULE_TO_EXTENSION_KINDS = \{[^;]*\};/, `const MODULE_TO_EXTENSION_KINDS = ${JSON.stringify(TEST_MODULE_KINDS)};`);
       assert.notEqual(patched, source, "the kind lists moved, so the test rows went nowhere");
       return patched;
     },
@@ -451,7 +453,7 @@ test("a request is answered once and a push gets no reply, though the extension 
 test("junk, another version, a bad id, too many messages and too many bytes are dropped without a word", async () => {
   const { firefox, send, replies, calls } = messaging();
   const too_many = Array.from({ length: protocol.MAX_MESSAGES + 1 }, (_, index) => request(`m${index}`, "note", { n: index }));
-  const too_big = [request("big", "note", { n: 1, pad: "x".repeat(protocol.MAX_MESSAGE_LIST_BYTES) })];
+  const too_big = [request("big", "note", { n: 1, pad: "x".repeat(protocol.message_list_bytes(TEST_EXTENSION_KINDS as never)) })];
   for (const list of ["junk", { 0: request("o", "note", { n: 1 }) }, [request("v", "note", { n: 1 }, { v: 2 })], [request("bad id!", "note", { n: 1 })], [42, null, "x"], too_many, too_big]) send(list);
   await settle();
   assert.deepEqual(calls(), []);
@@ -624,4 +626,26 @@ test("the pref turned off forgets the reports, and turned on again asks every ta
   firefox.set_pref(true);
   assert.deepEqual(firefox.broadcasts, ["desertfox-browser-module:report-now"]);
   assert.equal(press("J").prevented, true, "a report from before the pref went off still counted");
+});
+
+test("a message over its kind's max_bytes is refused, and an answer over it becomes an error reply", async () => {
+  const { send, replies, calls } = messaging();
+  send([request("big", "sized", { message: "x".repeat(300) }), request("fits", "sized", { message: "y".repeat(50) }), request("small", "sized", { message: "z" })]);
+  await settle();
+  assert.deepEqual(calls(), []);
+  assert.deepEqual(replies(), [
+    { v: 1, reply_to: "big", ok: false, error: "a sized message is over its size limit" },
+    { v: 1, reply_to: "fits", ok: false, error: "the answer is too large" },
+    { v: 1, reply_to: "small", ok: true, value: "zzzzzzzzzz" },
+  ]);
+});
+
+test("the real page_push kind with no feature to answer it gets an error reply", async () => {
+  const firefox = create_firefox();
+  firefox.start_extension();
+  firefox.make_window().load();
+  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [request("p1", "page_push", { tab_id: 3, message: "{}" })]);
+  await settle();
+  assert.deepEqual(plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)), [{ v: 1, reply_to: "p1", ok: false, error: "no handler for this kind" }]);
+  assert.ok(protocol.validate_message_list(plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
 });

@@ -38,6 +38,18 @@ export type ModeChanged = {
   in_field: boolean;
 };
 
+// What the browser module's status bar shows of the tab, sent only while the bar is up. Keys are in keymap notation (`g`, `<Space>`). `count` is a typed count, `pass` says pass-next is armed, `site` is the label of a site mode and `recording` the macro register. A field that is absent is not set.
+// `child` marks a top frame report made while a child frame holds the focus: it leaves out `pending` and `count`, which the child reports.
+export type BarState = {
+  type: "bar_state";
+  child?: true;
+  pending?: string[];
+  count?: number;
+  pass?: true;
+  site?: string;
+  recording?: string;
+};
+
 // Escape in a frame that holds insert mode from `i`: the background returns the tab's switched frames to normal.
 export type LeaveTabInsert = {
   type: "leave_tab_insert";

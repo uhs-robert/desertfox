@@ -491,6 +491,17 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     ]
   },
   {
+    "name": "browser_module_pages",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
     "name": "completion_all_windows",
     "settable": true,
     "is_toggle": true,
@@ -567,6 +578,62 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
       "url",
       "scroll",
       "tabs"
+    ]
+  },
+  {
+    "name": "browser_bar",
+    "settable": true,
+    "is_toggle": true,
+    "is_list": false,
+    "expectation": "true or false",
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "name": "browser_bar_left",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of \"mode\", \"pending\", \"recording\", \"container\", \"scroll\", \"tabs\" and \"url\" with no repeat",
+    "values": [
+      "mode",
+      "pending",
+      "recording",
+      "container",
+      "scroll",
+      "tabs",
+      "url"
+    ]
+  },
+  {
+    "name": "browser_bar_right",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": true,
+    "expectation": "a list of \"mode\", \"pending\", \"recording\", \"container\", \"scroll\", \"tabs\" and \"url\" with no repeat",
+    "values": [
+      "mode",
+      "pending",
+      "recording",
+      "container",
+      "scroll",
+      "tabs",
+      "url"
+    ]
+  },
+  {
+    "name": "browser_bar_border",
+    "settable": true,
+    "is_toggle": false,
+    "is_list": false,
+    "expectation": "\"auto\", \"square\", \"round\" or \"chamfer\"",
+    "values": [
+      "auto",
+      "square",
+      "round",
+      "chamfer"
     ]
   },
   {

@@ -44,6 +44,7 @@ export const DEFAULT_BRIDGE: Settings["bridge"] = false;
 export const DEFAULT_BRIDGE_SHARE_TABS: Settings["bridge_share_tabs"] = false;
 export const DEFAULT_HOST_AUTO_UPDATE: Settings["host_auto_update"] = false;
 export const DEFAULT_BROWSER_MODULE: Settings["browser_module"] = false;
+export const DEFAULT_BROWSER_MODULE_PAGES: Settings["browser_module_pages"] = false;
 export const DEFAULT_COMPLETION_ALL_WINDOWS: Settings["completion_all_windows"] = false;
 export const DEFAULT_ITEM_NAVIGATOR: Settings["item_navigator"] = "shipped";
 export const DEFAULT_ITEM_HOVER: Settings["item_hover"] = true;
@@ -51,6 +52,10 @@ export const DEFAULT_ITEM_SELECT: Settings["item_select"] = "off";
 export const DEFAULT_CMDLINE_PROMPT: Settings["cmdline_prompt"] = "caret";
 export const DEFAULT_OPEN_COMPLETION: Settings["open_completion"] = ["bookmarks","history"];
 export const DEFAULT_STATUSBAR_WIDGETS: Settings["statusbar_widgets"] = ["url","scroll","tabs"];
+export const DEFAULT_BROWSER_BAR: Settings["browser_bar"] = true;
+export const DEFAULT_BROWSER_BAR_LEFT: Settings["browser_bar_left"] = ["mode","pending","recording"];
+export const DEFAULT_BROWSER_BAR_RIGHT: Settings["browser_bar_right"] = ["container","scroll","tabs"];
+export const DEFAULT_BROWSER_BAR_BORDER: Settings["browser_bar_border"] = "auto";
 export const DEFAULT_HISTORY_COMPLETION_MAX: Settings["history_completion_max"] = 10;
 export const DEFAULT_HISTORY_LIST_MAX: Settings["history_list_max"] = 20;
 export const DEFAULT_NEWTAB_CLOCK: Settings["newtab_clock"] = true;
@@ -112,6 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bridge_share_tabs: DEFAULT_BRIDGE_SHARE_TABS,
   host_auto_update: DEFAULT_HOST_AUTO_UPDATE,
   browser_module: DEFAULT_BROWSER_MODULE,
+  browser_module_pages: DEFAULT_BROWSER_MODULE_PAGES,
   completion_all_windows: DEFAULT_COMPLETION_ALL_WINDOWS,
   item_navigator: DEFAULT_ITEM_NAVIGATOR,
   item_hover: DEFAULT_ITEM_HOVER,
@@ -119,6 +125,10 @@ export const DEFAULT_SETTINGS: Settings = {
   cmdline_prompt: DEFAULT_CMDLINE_PROMPT,
   open_completion: DEFAULT_OPEN_COMPLETION,
   statusbar_widgets: DEFAULT_STATUSBAR_WIDGETS,
+  browser_bar: DEFAULT_BROWSER_BAR,
+  browser_bar_left: DEFAULT_BROWSER_BAR_LEFT,
+  browser_bar_right: DEFAULT_BROWSER_BAR_RIGHT,
+  browser_bar_border: DEFAULT_BROWSER_BAR_BORDER,
   history_completion_max: DEFAULT_HISTORY_COMPLETION_MAX,
   history_list_max: DEFAULT_HISTORY_LIST_MAX,
   newtab_clock: DEFAULT_NEWTAB_CLOCK,

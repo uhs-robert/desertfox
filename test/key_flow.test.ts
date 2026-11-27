@@ -129,3 +129,13 @@ test("the auto-repeat of the Space that opened a hold does not end it", () => {
   type("i");
   assert.deepEqual(ran, ["zoom.in"]);
 });
+
+test("a typed count shows in the pending prefix, bare or with keys, and the hold keeps its group", () => {
+  const { panels, type } = make_hold_flow();
+  type("3");
+  assert.deepEqual(panels.at(-1), { mode: "normal", typed_: [], count_: 3 });
+  type("z");
+  assert.deepEqual(panels.at(-1), { mode: "normal", typed_: ["z"], count_: 3 });
+  type("<Escape>", "z", "<Space>");
+  assert.deepEqual(panels.at(-1), { mode: "normal", typed_: ["z"], held_: true });
+});

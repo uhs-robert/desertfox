@@ -21,7 +21,8 @@ export function create_which_key_timer(get_delay_ms: () => number | undefined, a
     const drawn = () => void (shown = is_current());
     ask(undefined, is_current, drawn);
     const delay_ms = get_delay_ms();
-    if (prefix && (delay_ms || prefix.held_) && (instant || !get_skip?.()?.includes(prefix.typed_.join(""))))
+    // A bare count (no keys yet) has nothing to list.
+    if (prefix?.typed_.length && (delay_ms || prefix.held_) && (instant || !get_skip?.()?.includes(prefix.typed_.join(""))))
       timer = setTimeout(() => ask(prefix, is_current, drawn), instant ? 0 : delay_ms);
   };
 }

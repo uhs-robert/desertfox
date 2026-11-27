@@ -26,7 +26,7 @@ import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { start_bridge } from "./bridge_browser.ts";
-import { item_start_for, media_quality_is_idle } from "./page_keymap.ts";
+import { item_start_for, media_quality_is_idle, read_keymap_reply } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -60,12 +60,15 @@ import { MEDIA_PANEL_HANDLER } from "../shared/bundles.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
-import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import { create_browser_module, module_setting_on, stored_setting_on } from "./browser_module.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
+import { create_browser_module, read_bar_config, module_setting_on, stored_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
+import { has_content_script, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
+import { create_browser_module_rpc, pages_setting_on } from "./browser_module_rpc.ts";
+import { list_keys } from "./list_keys.ts";
+import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { create_global_mark_jump } from "./global_mark_jump.ts";
 import { browser_jump_store } from "./jump_store.ts";
 import { create_jump_step } from "./jump_step.ts";
@@ -292,15 +295,42 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
+const stored_value = async (key: string): Promise<unknown> => (await browser.storage.local.get(key))[key];
+const browser_module_rpc = create_browser_module_rpc({
+  session: browser.storage.session,
+  is_on: () => pages_setting_on(browser.storage.local),
+  send: (kind, args, on_id) => browser_module.send(kind, args, on_id),
+  get_tab: (tab_id) => ignore_refusal(browser.tabs.get(tab_id)),
+  // The table is built below, after the last service it names. A call arrives only after the first turn.
+  dispatch: (message, sender) => locked_page_dispatch(message, sender),
+  read_part: {
+    keymap: () => read_keymap_reply(browser.storage.local, []),
+    config: () => stored_value(CONFIG_STATUS_STORAGE_KEY),
+    theme: () => stored_value(THEME_STORAGE_KEY),
+    which_key: () => list_keys(browser.storage.local, (id) => registry.get(id), { mode: "normal", prefix: [] }),
+  },
+});
+reach_locked_tabs(browser_module_rpc);
+browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.storage_changed(changes, area));
+// A reload of the same address reports only the status, so the status counts as a load too.
+browser.tabs.onUpdated.addListener((tab_id, change) => {
+  if (change.status === "loading" || change.url !== undefined) void browser_module_rpc.tab_loading(tab_id).catch(warn_and_go("browser_module_rpc.tab_loading"));
+}, { properties: ["status", "url"] });
+browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
+void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const browser_module = create_browser_module({
   session: browser.storage.session,
   is_on: () => module_setting_on(browser.storage.local),
+  read_bar_config: () => read_bar_config(browser.storage.local),
+  read_theme: async () => (await browser.storage.local.get(THEME_STORAGE_KEY))[THEME_STORAGE_KEY],
+  on_bar_change: () => void browser.tabs.query({}).then((tabs) => tabs.forEach((tab) => tab.id === undefined || void best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))).catch(warn_and_go("browser_module.on_bar_change")),
   check_args: (id, args) => {
     const command = registry.get(id);
     const checked = command && check_args(command, args);
     return checked?.ok ? checked.args : undefined;
   },
-  handlers: {},
+  handlers: browser_module_rpc.handlers,
+  on_reply: browser_module_rpc.push_answered,
   read_disabled,
   read_blur_on_load: () => stored_setting_on(browser.storage.local, "blur_on_load"),
   read_keymap: () => stored_keymap(browser.storage.local),
@@ -429,9 +459,11 @@ browser.storage.onChanged.addListener((changes, area) => {
 const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
 const handlers = {
   ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
-  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module }),
 } satisfies Handlers<keyof ToBackground>;
 browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
+// A locked page is never an extension page, whatever its message says.
+const locked_page_dispatch = dispatch(handlers, () => false);
 
 const start_item_mode = async (tab_id: number, address: string | undefined) => {
   const resume = await tab_item.take_resume(tab_id);

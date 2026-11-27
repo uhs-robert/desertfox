@@ -128,7 +128,7 @@ export async function run_cases(context) {
   });
 
   await run_case("the module hears the extension's message list and refuses a kind it does not know with an error reply", async () => {
-    // No kind is on either list yet, so a refusal is the one answer a real Firefox can give. It runs the storage listener, the checks and the module's write.
+    // A refusal needs no feature to answer it. It runs the storage listener, the checks and the module's write in a real Firefox.
     const id = `kt${Date.now().toString(36)}`;
     await steps.set_session_value("desertfox_browser_module_from_extension", [{ v: 1, id, kind: "no.such.kind", args: {}, sent_at: Date.now() }]);
     await poll_until("the module's refusal", async () => ((await steps.session_value("desertfox_browser_module_from_module")) ?? []).some((reply) => reply.reply_to === id && reply.ok === false && reply.error === "the kind is not on the allow list"));

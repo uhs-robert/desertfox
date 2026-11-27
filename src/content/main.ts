@@ -54,7 +54,27 @@ function refresh_mode_indicator(): void {
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
   // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
   const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
-  show_mode_label(badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
+  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
+  bar_flags = { ...(pass_next_armed && { pass: true as const }), ...(site_label && { site: site_label }) };
+  report_bar();
+}
+
+// The browser module's status bar is up, so the badge stays hidden and the bar hears what it shows. Only a change is sent.
+let bar_on = false;
+let bar_pending: PendingPrefix | undefined;
+let bar_sent = "";
+let bar_flags: { pass?: true; site?: string } = {};
+function report_bar(): void {
+  if (!bar_on) return;
+  const { typed_ = [], count_ } = bar_pending ?? {};
+  const keys = { ...(typed_.length && { pending: typed_ }), ...(count_ && { count: count_ }) };
+  // A child frame that holds the focus reports its own keys, so the top frame's say nothing about them.
+  const message = { type: "bar_state", ...(focused_frame_mode ? { child: true as const } : keys), ...(window === window.top && { ...bar_flags, ...(recording && { recording }) }) } satisfies ContentToBackground;
+  const text = JSON.stringify(message);
+  if (text === bar_sent) return;
+  bar_sent = text;
+  // A report that failed is sent again at the next identical one.
+  void send_to_background(message).then((reply) => reply?.ok === false && (bar_sent = ""));
 }
 
 const script_started_ms = KEY_TEST_BUILD ? performance.now() : 0;
@@ -71,7 +91,11 @@ async function send_to_background(message: ContentToBackground): Promise<RunResp
 let which_key_delay_ms: number | undefined;
 let which_key_skip: readonly string[] | undefined;
 // The timer lives in the `whichkey` bundle, so the first panel may appear late by the load.
-const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => follow_which_key(bundles, prefix, at_once, which_key_delay_ms, which_key_skip);
+const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => {
+  bar_pending = prefix;
+  report_bar();
+  follow_which_key(bundles, prefix?.typed_.length ? prefix : undefined, at_once, which_key_delay_ms, which_key_skip);
+};
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
 let last_leaf: Promise<unknown> = Promise.resolve();
@@ -300,6 +324,8 @@ function install_matcher(reply: PageKeymap | undefined): void {
   const all_off = reply?.all_off === true;
   // A tree stored before the setting existed has no value, which means the default.
   mode_indicator = keymap?.mode_indicator ?? DEFAULT_MODE_INDICATOR;
+  if (bar_on !== (keymap?.bar === true)) bar_sent = "";
+  bar_on = keymap?.bar === true;
   which_key_delay_ms = keymap?.which_key_delay_ms;
   key_flow.set_layout_fallback_(keymap?.layout_fallback !== false);
   set_toast_durations(keymap);

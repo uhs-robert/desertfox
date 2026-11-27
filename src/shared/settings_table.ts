@@ -22,6 +22,9 @@ export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[
 // A site mode: its badge label and its own table of binds, in the same formats as `bind`.
 export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable; sticky?: boolean }>>;
 
+// The items either side of the browser bar can list.
+export const BROWSER_BAR_BORDERS = ["auto", "square", "round", "chamfer"] as const;
+export const BROWSER_BAR_WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"] as const;
 // The keymap modes a site row can bind keys in. `normal` is what the `bind` column writes in short form.
 export const SITE_KEYMAP_MODES = ["normal", "visual", "visual_line", "caret", "item"] as const;
 export type SiteKeymapMode = (typeof SITE_KEYMAP_MODES)[number];
@@ -135,6 +138,8 @@ export const SETTINGS_TABLE = {
   host_auto_update: { kind: "boolean", default: false },
   // Consent to share the key table and the mode of each tab with the browser module, an optional script installed with root rights (`src/background/browser_module.ts`). Nothing runs until the module file is installed.
   browser_module: { kind: "boolean", default: false },
+  // Consent to run DesertFox's own page code inside locked pages through the browser module, and to put the keymap, the config status and the theme in `storage.session` for it (`src/background/browser_module_rpc.ts`). Needs `browser_module`.
+  browser_module_pages: { kind: "boolean", default: false },
   completion_all_windows: { kind: "boolean", default: false },
   // Starts item mode on a page that has finished loading and holds a list or a grid that the finder (`src/content/item/finder.ts`) finds. The mode itself starts with `I` and ends with Escape, with the setting off or on.
   item_navigator: { kind: "enum", values: ["shipped", true, false], default: "shipped", per_site: true },
@@ -146,6 +151,12 @@ export const SETTINGS_TABLE = {
   open_completion: { kind: "enum_list", values: ["bookmarks", "history"], default: ["bookmarks", "history"] },
   // List order is display order. An empty list hides the status area.
   statusbar_widgets: { kind: "enum_list", values: ["url", "scroll", "tabs"], default: ["url", "scroll", "tabs"] },
+  browser_bar: { kind: "boolean", default: true },
+  // List order is display order. The left list holds the mode and key state, the right list holds the page state. `url` is off by default because the address bar already shows it.
+  browser_bar_left: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["mode", "pending", "recording"] },
+  browser_bar_right: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["container", "scroll", "tabs"] },
+  // `auto` follows the corners of the Firefox panes and falls back to `square` when it finds none.
+  browser_bar_border: { kind: "enum", values: BROWSER_BAR_BORDERS, default: "auto" },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
   history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.

@@ -894,3 +894,16 @@ test("which-key rows of a site row bind with a guard carry the chain, and an ung
   assert.equal(rows.find((row) => row.keys === "Q")?.chain?.when_present, "ul li");
   assert.equal(rows.find((row) => row.keys === "W")?.chain, undefined);
 });
+
+test("while the bar is up the reply hides the corner badge and says why, and the stored map is not touched", async () => {
+  const compiled = compile([]);
+  const [plain, with_bar] = [await page_keymap_for(storage_of(compiled), ["https://b.test/"]), await page_keymap_for(storage_of(compiled), ["https://b.test/"], undefined, undefined, true)];
+  assert.equal(plain!.keymap.mode_indicator, "always");
+  assert.equal(plain!.keymap.bar, undefined);
+  assert.equal(with_bar!.keymap.mode_indicator, "off");
+  assert.equal(with_bar!.keymap.bar, true);
+  assert.equal(compiled.mode_indicator, "always");
+  const recording = await page_keymap_for(storage_of(compiled), ["https://b.test/"], "q", undefined, true);
+  assert.equal(recording!.keymap.mode_indicator, "off", "a recording does not bring the badge back");
+  assert.equal(recording!.recording, "q");
+});

@@ -87,6 +87,10 @@ const GOLDEN_LISTENERS = [
   "listen windows.onFocusChanged from background/main.ts",
   "listen windows.onRemoved from background/main.ts",
   "listen runtime.onConnect from background/main.ts",
+  // The locked page end, then the base channel of the browser module.
+  "listen storage.onChanged from background/main.ts",
+  "listen tabs.onUpdated from background/main.ts",
+  "listen tabs.onRemoved from background/main.ts",
   "listen storage.onChanged from background/main.ts",
   "listen windows.onFocusChanged from background/bridge_browser.ts",
   "listen tabs.onActivated from background/bridge_browser.ts",
