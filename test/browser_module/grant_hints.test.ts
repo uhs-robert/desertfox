@@ -312,13 +312,16 @@ test("gB typed with the focus in the doorhanger starts there through the token",
   assert.equal(run.target_rows().length, 5);
 });
 
-test("the downloads panel: gB in it labels the rows, a row pick runs Firefox's own click on its main area, a blocked row opens its view at once, and Allow download waits for Enter", async () => {
+test("the downloads panel: gB in it labels the rows, a row pick opens its file only after Enter through Firefox's own click on its main area, a blocked row opens its view at once, and Allow download waits for Enter", async () => {
   const run = started(browser_with_downloads);
   const chrome = run.chrome as unknown as ReturnType<typeof browser_with_downloads>;
   run.type_binding();
   assert.equal((await run.collect_here(5))?.ok, true);
   let pick = await labelled(run, 5);
   assert.equal((await pick(chrome.done.row))?.ok, true);
+  assert.equal(chrome.done.main.clicks, 0, "a row pick opened its file with no Enter");
+  assert.ok(marked(chrome));
+  chrome.press("Enter");
   assert.equal(chrome.list.selectedItem, chrome.done.row, "the pick did not choose the row first");
   assert.deepEqual([chrome.done.main.clicks, chrome.done.row.clicks], [1, 0], "the pick clicked the row, which does nothing");
 

@@ -681,13 +681,13 @@
       return true;
     }
 
-    // A pick of a Library row only chooses it. A pick of a panel row opens its file, or the blocked-download view for a row Firefox holds back.
+    // A pick of a Library row only chooses it, and the user's own Enter there opens the file. A pick of a panel row opens its file, which waits, or the blocked-download view for a row Firefox holds back, which does not.
     function download_grants(win, element) {
       if (element.id === "downloadsHistory" || element.id === "downloadsPanel-blockedSubview-deleteButton" || has_class(element, "subviewbutton-back")) return false;
       const row = closest_of(element, (at) => at.localName === "richlistitem");
       if (!row) return true;
       const blocked = row.hasAttribute("verdict");
-      if (element === row) return window_type(win) === BROWSER && blocked && !has_class(row, "temporary-block");
+      if (element === row) return window_type(win) === BROWSER && !(blocked && has_class(row, "temporary-block"));
       if (!has_class(element, "downloadButton")) return true;
       return !(AT_ONCE_DOWNLOAD_ICONS.some((icon) => has_class(element, icon)) || (has_class(element, "downloadIconShow") && !blocked));
     }
