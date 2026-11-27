@@ -23,7 +23,7 @@
   }
 
   function start(core) {
-    const missing = ["may_act", "on_shut_down", "sidebar_row", "type_key", "token_of"].find((name) => typeof core[name] !== "function");
+    const missing = ["may_act", "on_shut_down", "sidebar_row", "type_key", "token_of", "is_field", "deep_active", "focused_element"].find((name) => typeof core[name] !== "function");
     if (missing) {
       core.log_once(`the core has no ${missing}, so the sidebar keys stay off`);
       return;
@@ -40,19 +40,8 @@
     ]);
     const LEAVE = "sidebar.leave";
     const ESCAPE = "<Escape>";
-    const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "OS", "CapsLock", "Dead", "Unidentified", "Process"]);
-
-    const TEXT_INPUT = /^(?!button$|checkbox$|radio$|submit$|reset$|image$|file$|range$|color$|hidden$)/;
-    const is_field = (node) =>
-      !!node?.localName &&
-      (node.isContentEditable || node.localName === "textarea" || node.localName === "select" || (node.localName === "input" && TEXT_INPUT.test(node.type || "text")));
+    const { is_field, deep_active } = core;
     const has_function = (object, name) => typeof object?.[name] === "function";
-
-    function deep_active(doc) {
-      let active_element = doc?.activeElement;
-      while (active_element?.shadowRoot?.activeElement) active_element = active_element.shadowRoot.activeElement;
-      return active_element;
-    }
 
     // ---- Where the key is.
 
@@ -262,7 +251,7 @@
     let stopped = false;
 
     function on_key(win, record, event) {
-      if (typing || !event.isTrusted || event.defaultPrevented || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
+      if (typing || !event.isTrusted || event.defaultPrevented || event.isComposing) return;
       const place = place_of(win, event.originalTarget ?? event.target);
       if (!place) {
         record.pending = undefined;

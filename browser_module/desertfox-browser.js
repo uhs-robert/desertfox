@@ -20,6 +20,9 @@
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
 //   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
 //   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
+//   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
+//   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
+//   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
 //   type_key(win, key, still_holds)  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
@@ -783,6 +786,9 @@
       may_act: (win) => state_for(win) !== undefined,
       sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),
       token_of,
+      is_field,
+      deep_active,
+      focused_element,
       type_key,
       on_shut_down(fn) {
         shut_down_steps.push(fn);
