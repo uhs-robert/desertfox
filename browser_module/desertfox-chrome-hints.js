@@ -61,8 +61,17 @@
     const CONTROLS = "button, toolbarbutton, checkbox, radio, menulist:not([editable]), menu, label.text-link, moz-button, moz-checkbox, moz-toggle, moz-radio, input[type=checkbox], input[type=radio], input[type=button], input[type=submit]";
     // Left to a later confirm key, as the permission prompts are: the Library's download rows can unblock a download, and Page Info's permission rows grant a permission at once.
     const LEFT_OUT = "#downloadsListBox, #permList";
-    // The dialogs in a `dialogFrame` that get labels. Others are left out until a confirm key exists: the external protocol prompt opens an application with a URL the page chose, and the client certificate prompt sends the user's certificate to the site.
-    const LABELLED_DIALOG = (url) => url === "chrome://global/content/commonDialog.xhtml" || url.startsWith("chrome://browser/content/preferences/dialogs/");
+    // The dialogs in a `dialogFrame` that get labels: the settings sub-dialogs, and the tab prompts but those that ask for a site's password, whose OK sends the filled-in login.
+    // Others are left out until a confirm key exists: the external protocol prompt opens an application with a URL the page chose, and the client certificate prompt sends the user's certificate to the site.
+    // A tab prompt names its kind on its dialog element once loaded (CommonDialog.sys.mjs). One with no kind yet gets no labels.
+    const AUTH_PROMPTS = new Set(["prompt:promptUserAndPass", "prompt:promptPassword"]);
+    function labelled_dialog(doc) {
+      const url = String(doc.documentURI);
+      if (url.startsWith("chrome://browser/content/preferences/dialogs/")) return true;
+      if (url !== "chrome://global/content/commonDialog.xhtml") return false;
+      const kind = doc.getElementById("commonDialog")?.getAttribute("windowtype") ?? "";
+      return kind.startsWith("prompt:") && !AUTH_PROMPTS.has(kind);
+    }
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
     const WINDOW_GROUPS = [
@@ -241,7 +250,7 @@
       const focused = core.focused_element(win);
       const doc = focused?.ownerDocument;
       if (!doc) return undefined;
-      if (doc !== win.document && doc.defaultView?.browsingContext?.embedderElement?.classList?.contains("dialogFrame")) return LABELLED_DIALOG(String(doc.documentURI)) ? { doc, frame_win: doc.defaultView } : undefined;
+      if (doc !== win.document && doc.defaultView?.browsingContext?.embedderElement?.classList?.contains("dialogFrame")) return labelled_dialog(doc) ? { doc, frame_win: doc.defaultView } : undefined;
       const opened = open_panel(win.document);
       if (opened?.panel.contains(focused)) return { opened };
       return undefined;

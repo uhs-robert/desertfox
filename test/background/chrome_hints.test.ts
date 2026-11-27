@@ -8,7 +8,7 @@ import { DEFAULT_HINT_LETTERS, make_labels } from "../../src/shared/hints/labels
 
 type Sent = { kind: string; args: Record<string, number | string> };
 
-function make({ collect = { ok: true } as { ok: true } | { ok: false; error: string }, pick = { ok: true } as { ok: true } | { ok: false; error: string } } = {}) {
+function make({ collect = { ok: true } as { ok: true } | { ok: false; error: string }, pick = { ok: true } as { ok: true } | { ok: false; error: string }, colors = async () => "" } = {}) {
   const bucket = new Map<string, unknown>();
   const pushed: Sent[] = [];
   const called: Sent[] = [];
@@ -30,7 +30,7 @@ function make({ collect = { ok: true } as { ok: true } | { ok: false; error: str
       return kind === "chrome_hints.collect" || kind === "chrome_hints.collect_here" ? collect : pick;
     },
     letters: async () => [...DEFAULT_HINT_LETTERS],
-    colors: async () => "",
+    colors,
     notify: async (_window_id, message) => void notes.push(message),
     new_session: () => next++,
   };
@@ -218,4 +218,22 @@ test("a start the user cancelled or let expire before the extension answered end
   const nothing = make({ collect: { ok: false, error: "Nothing to hint here" } });
   await nothing.hints.handlers["chrome_hints.want"]({ start: 1 });
   assert.deepEqual(nothing.notes, ["Nothing to hint here"]);
+});
+
+test("a start whose colors read outlasts a newer start sends no collect, so the module keeps the newer session", async () => {
+  let release_first: (colors: string) => void = () => undefined;
+  let reads = 0;
+  const colors = () => (reads++ === 0 ? new Promise<string>((resolve) => (release_first = resolve)) : Promise.resolve(""));
+  const { hints, called, session, notes } = make({ colors });
+  const first = hints.start(7);
+  await flush();
+  const first_session = session()!.session;
+  await hints.start(8);
+  const second_session = session()!.session;
+  release_first("");
+  assert.deepEqual(await first, { ok: true });
+  const collected = called.filter((sent) => sent.kind === "chrome_hints.collect").map((sent) => sent.args.session);
+  assert.deepEqual(collected, [second_session], `the older start ${first_session} collected after the newer one`);
+  assert.equal(session()!.session, second_session);
+  assert.deepEqual(notes, []);
 });
