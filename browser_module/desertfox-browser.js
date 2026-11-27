@@ -118,8 +118,10 @@
     const MESSAGE_ENVELOPE_BYTES = 512;
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
-    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start"];
+    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
     const MAX_DEVTOOLS_KEY_ROWS = 8;
+    const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
+    const MAX_DEVTOOLS_VISUAL_ROWS = 16;
     const EXTENSION_TO_MODULE_KINDS = {
       page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
@@ -142,6 +144,7 @@
       "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
+      "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -282,7 +285,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -673,17 +676,19 @@
 
     // As the extension's reader does, an error loses control and bidi characters before anyone shows it.
     const printable = (text) => text.replace(/[\p{Cc}\p{Cf}]/gu, "");
-    const devtools_keys_fit = (value) => {
-      if (!Array.isArray(value) || value.length === 0 || value.length > MAX_DEVTOOLS_KEY_ROWS) return false;
+    // A DevTools table: `field` names the list each row's value comes from.
+    const devtools_table_fits = (value, max_rows, field, allowed) => {
+      if (!Array.isArray(value) || value.length === 0 || value.length > max_rows) return false;
       const seen = new Set();
       for (const row of value) {
-        if (!is_record(row) || typeof row.key !== "string" || [...row.key].length !== 1 || /[\s\p{Cc}\p{Cf}]/u.test(row.key) || !DEVTOOLS_ACTIONS.includes(row.action) || seen.has(row.key)) return false;
+        if (!is_record(row) || typeof row.key !== "string" || [...row.key].length !== 1 || /[\s\p{Cc}\p{Cf}]/u.test(row.key) || !allowed.includes(row[field]) || seen.has(row.key)) return false;
         seen.add(row.key);
       }
       return true;
     };
     const arg_fits = (kind, value) => {
-      if (kind === "devtools_keys") return devtools_keys_fit(value);
+      if (kind === "devtools_keys") return devtools_table_fits(value, MAX_DEVTOOLS_KEY_ROWS, "action", DEVTOOLS_ACTIONS);
+      if (kind === "devtools_visual_keys") return devtools_table_fits(value, MAX_DEVTOOLS_VISUAL_ROWS, "op", DEVTOOLS_VISUAL_OPS);
       if (kind === "axis") return value === "x" || value === "y";
       if (kind === "text") return typeof value === "string";
       if (kind === "region") return PANE_REGIONS.includes(value);
@@ -727,7 +732,7 @@
       for (const [name, kind] of Object.entries(kinds[value.kind].args)) {
         if (!arg_fits(kind, given[name])) return { problem: `${value.kind} ${name} has the wrong shape` };
         // A table's rows keep only the fields the module reads, as fresh objects of this sandbox.
-        if (given[name] !== undefined) args[name] = kind === "devtools_keys" ? given[name].map(({ key, action }) => ({ key, action })) : given[name];
+        if (given[name] !== undefined) args[name] = kind === "devtools_keys" ? given[name].map(({ key, action }) => ({ key, action })) : kind === "devtools_visual_keys" ? given[name].map(({ key, op }) => ({ key, op })) : given[name];
       }
       return { message: { v: PROTOCOL_VERSION, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
     }

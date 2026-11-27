@@ -341,7 +341,7 @@ export async function run_cases(context) {
     // Teardowns run at the piece's end, and the cases after this one need the hint key back.
     try {
       await set_session_value(HELLO_KEY, Object.fromEntries(Object.entries(own_hello).filter(([name]) => name !== "devtools_hints")));
-      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhl", { timeout_ms: 5000 });
+      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhlv", { timeout_ms: 5000 });
       await open_tab(TREE_PAGE);
       await show_tool("inspector");
       await markup_on_section();
@@ -353,7 +353,7 @@ export async function run_cases(context) {
       await moves("l", markup_state, ["section", true], "the tree keys stay: l expands");
     } finally {
       await set_session_value(HELLO_KEY, own_hello);
-      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlf", { timeout_ms: 5000 });
+      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlfv", { timeout_ms: 5000 });
     }
   });
 

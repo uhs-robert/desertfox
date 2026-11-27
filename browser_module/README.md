@@ -4,7 +4,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 
 - `desertfox-browser.js`: the core. The state, the hello, the message lists, the guards (fields, DevTools, modes, liveness, private windows), the report frame script and the surface feature files use. Start here.
 - `desertfox-tabs-scroll.js`: the tab and scroll feature. It defines `tab.next`, `tab.prev` and the four scroll commands, and holds the scroll frame script.
-- `desertfox-devtools.js`: the DevTools feature: the pushed tree keys as arrow keys, docked or in a DevTools window, and hints over DevTools from its own target table.
+- `desertfox-devtools.js`: the DevTools feature, docked or in a DevTools window: the pushed tree keys as arrow keys, hints from its own target table, and visual mode with copy.
 - `desertfox-panes.js`: the pane feature. It answers the extension's `pane.*` requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused window.
 - `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type arrow keys in open menus and panels and in the Library, Page Info and Picture-in-Picture windows.
 - `desertfox-cmdline-panel.js`: the command line panel. It answers `cmdline_panel.open` with DesertFox's own `cmdline.html` in a panel over the selected tab.

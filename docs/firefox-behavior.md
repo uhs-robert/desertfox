@@ -618,3 +618,18 @@ Results:
 - An inline `<style>` applies in the Inspector, markup, Console, Debugger and Network documents (`style-src chrome: 'unsafe-inline'`), and is ignored in the toolbox and Storage documents, whose CSP has `default-src chrome:` and no `style-src`. A constructed sheet in `adoptedStyleSheets` applies in all of them.
 - The labels in a docked toolbox showed in a screenshot taken 700 ms after they were in the documents, and not in one taken at once.
 - A tool tab (`.devtools-tab`) selects its tool on mousedown: `element.click()` does nothing. A `mousedown`, `mouseup`, `click` sequence made by chrome code selects it. The same sequence on a markup `.tag-line` selects its node, and the markup view keeps the keyboard focus, so j then moves on from it.
+
+## Visual mode in DevTools (devtools-keys)
+
+Question: can chrome code select and copy text in DevTools panels with keys, and where does the focus sit when it starts?
+
+Setup: Firefox 161, a private copy with a temporary profile in the key-test session, docked DevTools and a DevTools window, the module's visual mode driven by real key presses.
+
+Results:
+- `Selection.modify("extend", ...)` by character, word and line boundary selects text in the console output, the rule view, the markup view and the Network headers, and `nsIClipboardHelper.copyString` copies it. A line move in the rule view leaves it for the box model and the toolbar unless held in. The console draws only the messages near the view (52 of 301 in a probe), so a line move from the first message jumped to message 251. A line move in the markup view stops after one line. The computed view's text is `user-select: none` and selects nothing.
+- In the Debugger source and the Network response (CodeMirror 6), `Selection.modify` loses the lines CodeMirror has not drawn, and CodeMirror rewrites the DOM selection a moment later. Shift+arrow keydowns made by chrome code on `.cm-content` move CodeMirror's own selection and scroll the editor, and `docShell.doCommand("cmd_copy")` copies all of it (121 lines in a probe). The `.cm-content` of the Debugger has `contenteditable="true"` though the editor is read-only.
+- A click in the console output gives the focus to the console input. The output takes no focus, so a focus call on it leaves the focus where it was. A `blur()` of the input leaves the focus on the console document's body, and keys then reach that document.
+- A click on a rule in the rule view opens an inline editor (an `input`). Its first focusable element takes the focus without an editor.
+- The markup view keeps the focus on its document's body. The selected line is the `.tag-line` with `aria-selected="true"`.
+- After a case that showed a source in the Debugger, the test page of the next case never took the focus, so that case runs last in its piece.
+- Storage values were not reached: the Storage panel showed no rows for two localStorage items the page had set (`localStorage.length` 2), so whether its table cells and sidebar select is unknown, and the mode has no Storage row.

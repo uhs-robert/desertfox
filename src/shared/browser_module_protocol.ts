@@ -35,15 +35,15 @@ export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "devtools_keys";
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "devtools_keys" | "devtools_visual_keys";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
 export const PANE_DIRECTIONS = ["left", "right"] as const;
 
 // The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each tree action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
-// `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`).
-export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start"] as const;
+// `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`). `visual.start` starts visual mode in the focused DevTools text area.
+export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"] as const;
 export type DevtoolsAction = (typeof DEVTOOLS_ACTIONS)[number];
 export type DevtoolsKeyRow = { key: string; action: DevtoolsAction };
 export const MAX_DEVTOOLS_KEY_ROWS = 8;
@@ -55,6 +55,25 @@ export const DEVTOOLS_TREE_KEYS: DevtoolsKeyRow[] = [
 ];
 // Pushed only to a module whose hello says `devtools_hints`: a module before it refuses a table with an action it does not know, and would lose the tree keys too.
 export const DEVTOOLS_HINT_KEY: DevtoolsKeyRow = { key: "f", action: "hints.start" };
+// Pushed only to a module whose hello says `devtools_visual`, for the same reason.
+export const DEVTOOLS_VISUAL_KEY: DevtoolsKeyRow = { key: "v", action: "visual.start" };
+// The keys of visual mode in DevTools, a push of their own (`devtools.visual_keys`), so a module before visual mode keeps its tree table. Each op moves the end of the selection or copies it.
+// The module copies on its own, so no text ever comes back. Escape ends the mode in the module, as it ends the hints, since a one-character key cannot name it.
+export const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"] as const;
+export type DevtoolsVisualOp = (typeof DEVTOOLS_VISUAL_OPS)[number];
+export type DevtoolsVisualRow = { key: string; op: DevtoolsVisualOp };
+export const MAX_DEVTOOLS_VISUAL_ROWS = 16;
+export const DEVTOOLS_VISUAL_KEYS: DevtoolsVisualRow[] = [
+  { key: "h", op: "char.back" },
+  { key: "l", op: "char.forward" },
+  { key: "j", op: "line.down" },
+  { key: "k", op: "line.up" },
+  { key: "w", op: "word.forward" },
+  { key: "b", op: "word.back" },
+  { key: "0", op: "line.start" },
+  { key: "$", op: "line.end" },
+  { key: "y", op: "copy" },
+];
 const is_devtools_key = (key: unknown): key is string => typeof key === "string" && [...key].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(key);
 
 // A table that is not a list, is empty or too long, repeats a key or holds a row of the wrong shape fails whole. A row's unknown fields are ignored.
@@ -68,6 +87,18 @@ function devtools_keys_problem(value: unknown): string | undefined {
   return undefined;
 }
 const devtools_rows_of = (value: unknown): DevtoolsKeyRow[] => (value as Record<string, unknown>[]).map((row) => ({ key: row.key as string, action: row.action as DevtoolsAction }));
+
+// The same rule for the visual table, with its own ops and cap.
+function devtools_visual_keys_problem(value: unknown): string | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_DEVTOOLS_VISUAL_ROWS) return `must be a list of 1 to ${MAX_DEVTOOLS_VISUAL_ROWS} rows`;
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (!is_record(row) || !is_devtools_key(row.key) || !(DEVTOOLS_VISUAL_OPS as readonly unknown[]).includes(row.op) || seen.has(row.key)) return "rows need one-character keys, each once, and an op from the list";
+    seen.add(row.key);
+  }
+  return undefined;
+}
+const devtools_visual_rows_of = (value: unknown): DevtoolsVisualRow[] => (value as Record<string, unknown>[]).map((row) => ({ key: row.key as string, op: row.op as DevtoolsVisualOp }));
 
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
@@ -95,7 +126,7 @@ export const MAX_CHROME_HINT_KEY_TOKENS = 4;
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;
 export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleCommandId[];
 
-export type ModuleArgs = Record<string, number | string | DevtoolsKeyRow[]>;
+export type ModuleArgs = Record<string, number | string | DevtoolsKeyRow[] | DevtoolsVisualRow[]>;
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 // What the status bar shows of a tab beyond its mode, all optional. `pending` holds the keys of a half-typed sequence (a held group included), `count` a typed count, `pass` that pass-next is armed, `site` the label of a site mode and `recording` the register a macro records into. A private tab never has `site`.
 export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
@@ -120,8 +151,8 @@ export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: strin
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table.
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -138,6 +169,7 @@ const is_key_token = (key: unknown): key is string => typeof key === "string" &&
 
 function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "devtools_keys") return devtools_keys_problem(value);
+  if (kind === "devtools_visual_keys") return devtools_visual_keys_problem(value);
   if (kind === "text") return typeof value === "string" ? undefined : "must be text";
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
@@ -313,7 +345,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -405,6 +437,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
   "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // The keys of visual mode in DevTools, pushed with the key table and kept the same way. Each row maps a key to an op from the closed list, so the module moves and copies only the user's own selection. No text, selector or range comes or goes.
+  "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86_400_000 },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
@@ -454,7 +488,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
   for (const [name, kind] of Object.entries(kinds[value.kind]!.args)) {
     const problem = arg_problem(kind, given[name]);
     if (problem !== undefined) return bad(`${value.kind} ${name} ${problem}`);
-    if (given[name] !== undefined) args[name] = kind === "devtools_keys" ? devtools_rows_of(given[name]) : (given[name] as number | string);
+    if (given[name] !== undefined) args[name] = kind === "devtools_keys" ? devtools_rows_of(given[name]) : kind === "devtools_visual_keys" ? devtools_visual_rows_of(given[name]) : (given[name] as number | string);
   }
   return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
 }

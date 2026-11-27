@@ -6,7 +6,7 @@ import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { create_module_call } from "../../src/background/browser_module_call.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
-import { DEVTOOLS_HINT_KEY, DEVTOOLS_TREE_KEYS, EXTENSION_TO_MODULE_KINDS, MESSAGE_MIN_GAP_MS, MODULE_TO_EXTENSION_KINDS, validate_message } from "../../src/shared/browser_module_protocol.ts";
+import { DEVTOOLS_HINT_KEY, DEVTOOLS_TREE_KEYS, DEVTOOLS_VISUAL_KEY, DEVTOOLS_VISUAL_KEYS, EXTENSION_TO_MODULE_KINDS, MESSAGE_MIN_GAP_MS, MODULE_TO_EXTENSION_KINDS, validate_message } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, DEFAULT_MAX_AGE_MS, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -827,4 +827,27 @@ test("the hint key goes in the DevTools table only for a module whose hello says
   await hello({ v: 1, module_version: "1", devtools_hints: true });
   assert.deepEqual(pushes().at(-1)!.args, { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY] });
   assert.ok(validate_message(pushes().at(-1), EXTENSION_TO_MODULE_KINDS).ok);
+});
+
+test("the v row and the mode's keys go only to a module whose hello says devtools_visual, the mode's keys first", async () => {
+  const { data, config, module, flush, timers } = setup({ kinds: { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS } });
+  const devtools_pushes = () => outbox_of(data).filter((message) => message.kind === "devtools.keys" || message.kind === "devtools.visual_keys");
+  const hello = async (value: unknown) => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, value);
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: value } }, "session");
+    await flush();
+    timers.splice(0).forEach((run) => run());
+    await flush();
+  };
+  await module.sync();
+  await hello({ v: 1, module_version: "1", devtools_hints: true });
+  assert.deepEqual(devtools_pushes().map((message) => message.kind), ["devtools.keys"], "an older module gets no visual keys");
+  assert.ok(!(devtools_pushes().at(-1)!.args as { keys: { key: string }[] }).keys.some(({ key }) => key === "v"));
+  await hello({ v: 1, module_version: "1", devtools_hints: true, devtools_visual: true });
+  const [visual, keys] = devtools_pushes().slice(-2);
+  assert.equal(visual!.kind, "devtools.visual_keys");
+  assert.deepEqual(visual!.args, { keys: DEVTOOLS_VISUAL_KEYS });
+  assert.deepEqual(keys!.args, { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY, DEVTOOLS_VISUAL_KEY] });
+  for (const message of [visual, keys]) assert.ok(validate_message(message, EXTENSION_TO_MODULE_KINDS).ok);
 });

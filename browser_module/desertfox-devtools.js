@@ -1,6 +1,7 @@
-// DesertFox browser module, the DevTools feature: tree keys and hints in docked DevTools and in DevTools windows. See docs/design/browser_module.md.
+// DesertFox browser module, the DevTools feature: tree keys, hints and visual mode in docked DevTools and in DevTools windows. See docs/design/browser_module.md.
 // The extension pushes the key table (`devtools.keys`), a one-character key and a fixed action per row. Each tree action becomes an arrow key on the focused DevTools element, so a DevTools tree (the Inspector markup, the Debugger sources, Storage, Network rows) moves, expands and collapses as its own arrows make it.
 // The `hints.start` action asks the extension for hints (`devtools_hints.ask`). The hints work as chrome hints do: this file collects targets from a fixed table and sends only ids and boxes, the extension makes the labels and names the pick, and this file draws them and runs one fixed action per target.
+// The `visual.start` action starts visual mode in the focused text area. Its keys come in a second table (`devtools.visual_keys`), each a fixed op that moves the end of the selection or copies it. The copy stays in this process.
 // No DesertFox page code runs in DevTools: every DevTools document has the system principal, so code there runs as the browser. This file reads no DevTools internals either, only the focused element and the elements of its fixed table.
 // The core decides that the focus is in DevTools and that the module may act. This file passes a key it has no row for, a key with a modifier, a key typed in an editable field (the console input, the markup view's inline editors) and a key for a frame of another process, so DevTools keeps those.
 
@@ -20,8 +21,37 @@
     core.log_once("the core cannot hand DevTools keys to a feature, so the DevTools feature stays off");
     return;
   }
+  const ENABLED_PREF = "desertfox.browser_module.enabled";
+  const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "OS", "CapsLock", "Dead", "Unidentified", "Process"]);
   // In the sandbox an error goes on to the core's `adopt`, which turns the module off for the session.
   define(core);
+
+  function enabled_by_pref() {
+    try {
+      return Services.prefs.getBoolPref(ENABLED_PREF, false);
+    } catch (_) {
+      return false;
+    }
+  }
+  function undo_all(owner) {
+    for (const stop of owner.undo.splice(0)) {
+      try {
+        stop();
+      } catch (error) {
+        core.log_once(`a DevTools cleanup step failed: ${error}`);
+      }
+    }
+  }
+  function listen(owner, target, type, handler) {
+    target.addEventListener(type, handler, true);
+    owner.undo.push(() => target.removeEventListener(type, handler, true));
+  }
+  // The popup walk and the sidebar leave a held window's keys alone, so a DevTools context menu cannot take the hints' or the mode's letters. False while another feature holds the window.
+  function hold(owner, win, key_owner) {
+    if (!core.hold_keys(win, key_owner)) return false;
+    owner.undo.push(() => core.release_keys(win, key_owner));
+    return true;
+  }
 
   function define(core) {
     const ARROWS = {
@@ -31,33 +61,39 @@
       "tree.expand": { key: "ArrowRight", keyCode: 39 },
     };
     const HINTS_START = "hints.start";
+    const VISUAL_START = "visual.start";
     // Empty until the extension pushes a table, so a module with an older extension takes no key in DevTools.
     let actions = new Map();
-    const hints = define_hints(core);
-    // A reloaded or older DesertFox gets a new hello. The table and the hints of the one before go, so only a DesertFox that pushes its own table gets these keys.
-    core.on_hello(() => {
-      actions = new Map();
-      hints.end();
-    });
-
-    // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
-    core.register_kind("devtools.keys", ({ keys }) => {
-      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START).map(({ key, action }) => [key, action]));
-      return { ok: true };
-    });
-
     const in_editable = (node) =>
       !!node?.localName && (node.isContentEditable || node.localName === "input" || node.localName === "textarea" || node.localName === "select" || !!node.closest?.(".CodeMirror, .cm-editor"));
     // A key in a frame of another process, such as an extension's DevTools panel, targets the frame element, so the field it types into is out of sight.
     const is_frame = (node) => node?.localName === "iframe" || node?.localName === "browser";
+    const hints = define_hints(core);
+    const visual = define_visual(core, in_editable);
+    // A reloaded or older DesertFox gets a new hello. The tables, the hints and the mode of the one before go, so only a DesertFox that pushes its own table gets these keys.
+    core.on_hello(() => {
+      actions = new Map();
+      hints.end();
+      visual.forget();
+    });
+
+    // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
+    core.register_kind("devtools.keys", ({ keys }) => {
+      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START).map(({ key, action }) => [key, action]));
+      return { ok: true };
+    });
 
     core.claim_devtools_keys(({ window: win, event, token }) => {
       const taken_by_hints = hints.answer_key(win, event);
       if (taken_by_hints !== undefined) return taken_by_hints;
+      const taken_by_visual = visual.answer_key(win, event, token);
+      if (taken_by_visual !== undefined) return taken_by_visual;
       if (event.ctrlKey || event.altKey || event.metaKey) return false;
       const action = actions.get(token);
       if (!action) return false;
       const target = event.originalTarget ?? event.target;
+      // Before the field check: a code area of the mode's own table is an editor that DevTools keeps read-only. The mode refuses every other field.
+      if (action === VISUAL_START) return visual.start(win, target);
       if (in_editable(target) || is_frame(target)) return false;
       if (action === HINTS_START) return hints.ask(win);
       // Chrome code makes this arrow, so Gecko marks it trusted, and it reaches the core's listener again. No row takes an arrow there, so it moves the tree once.
@@ -73,7 +109,6 @@
   // From the hint key until the first labels show, every letter in that window is dropped, so a fast `fh` never hides a node in the markup view.
   // The label checks, the assembly of a draw and the layer are chrome hints' own (`core.hint_drawing`). This file holds its own session, targets and picks.
   function define_hints(core) {
-    const ENABLED_PREF = "desertfox.browser_module.enabled";
     const HOST_CLASS = "desertfox-devtools-hints";
     const KEY_OWNER = "devtools_hints";
     const STALE_ASK = "The hint key is stale";
@@ -85,7 +120,6 @@
     const ICON_PX = 40;
     const MAX_FRAME_DEPTH = 3;
     const NAMED_KEYS = new Set(["Backspace", "Enter", "Tab"]);
-    const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "OS", "CapsLock", "Dead", "Unidentified", "Process"]);
     // DevTools rows are dense, so the labels drop most of their padding. A fixed rule of this file, never from a message.
     const COMPACT_LABELS = ".desertfox-hint { padding: 0 2px; }";
     const TOOLBOX_URL = "about:devtools-toolbox";
@@ -117,36 +151,10 @@
     // Where `focus` lands inside an area or a field's wrapper that takes no focus itself.
     const FOCUSABLE = "[tabindex], [contenteditable=true], input, textarea, select, button";
 
-    const enabled_by_pref = () => {
-      try {
-        return Services.prefs.getBoolPref(ENABLED_PREF, false);
-      } catch (_) {
-        return false;
-      }
-    };
     const send = (kind, args) => {
       const sent = core.send(kind, args);
       if (!sent.ok) core.log_once(`${kind} was not sent: ${sent.problem}`);
       return sent.ok;
-    };
-    const undo_all = (owner) => {
-      for (const stop of owner.undo.splice(0)) {
-        try {
-          stop();
-        } catch (error) {
-          core.log_once(`a DevTools hints cleanup step failed: ${error}`);
-        }
-      }
-    };
-    const listen = (owner, target, type, handler) => {
-      target.addEventListener(type, handler, true);
-      owner.undo.push(() => target.removeEventListener(type, handler, true));
-    };
-    // The popup walk and the sidebar leave a held window's keys alone, so a DevTools context menu cannot take the session's letters. False while another feature holds the window.
-    const hold = (owner, win) => {
-      if (!core.hold_keys(win, KEY_OWNER)) return false;
-      owner.undo.push(() => core.release_keys(win, KEY_OWNER));
-      return true;
     };
     const fresh_token = () => 1 + Math.floor(Math.random() * 0x7ffffffe);
 
@@ -168,7 +176,7 @@
       end_ask();
       end_session(true);
       asking = { win, ask: fresh_token(), made_at: Date.now(), undo: [] };
-      if (!hold(asking, win)) {
+      if (!hold(asking, win, KEY_OWNER)) {
         asking = null;
         return false;
       }
@@ -313,7 +321,7 @@
     function start_session(tag, win, found, colors, drawing) {
       end_session(true);
       session = { tag, win, drawing, targets: new Map(), layers: new Map(), theme: drawing.theme_text(colors) + COMPACT_LABELS, undo: [], seq: 0, drawn_gen: 0, pending: undefined };
-      if (!hold(session, win)) {
+      if (!hold(session, win, KEY_OWNER)) {
         session = null;
         return false;
       }
@@ -400,8 +408,12 @@
     }
 
     function focus(element) {
-      element.ownerDocument.defaultView.focus();
-      (element.matches(FOCUSABLE) ? element : (element.querySelector(FOCUSABLE) ?? element)).focus();
+      const doc = element.ownerDocument;
+      doc.defaultView.focus();
+      const focusable = element.matches(FOCUSABLE) ? element : element.querySelector(FOCUSABLE);
+      // An area that takes no focus, such as the console output: the field that had it lets it go, so the next keys reach the area's document and not that field.
+      if (focusable) focusable.focus();
+      else doc.activeElement?.blur();
     }
 
     function pick({ session: tag, id }) {
@@ -443,5 +455,230 @@
     core.set_hello_flag("devtools_hints", true);
 
     return { ask, answer_key, end };
+  }
+
+  // ---- Visual mode in DevTools text areas.
+  // `v` selects the character at the area's start point, and each key of the mode's table moves the end of the selection. The copy key copies the selection and ends the mode, Escape ends it, and any other one-character key does nothing.
+  // A plain DOM area moves the selection with Selection.modify and keeps its end inside the area. A CodeMirror area gets Shift+arrow keys on its editor, since CodeMirror draws only the lines near the view and keeps the selection of the rest in its own state.
+  function define_visual(core, in_editable) {
+    const KEY_OWNER = "devtools_visual";
+    // A larger copy is refused, so a held key cannot fill the clipboard with megabytes.
+    const MAX_COPY_CHARS = 1_000_000;
+    const OVER_COPY_CAP = `visual mode in DevTools copied nothing: the selection is over ${MAX_COPY_CHARS} characters`;
+    const SHOW_TEXT = 4;
+    const MAX_START_NODES = 5000;
+    // The areas the mode starts in, by the address of their document. The root holds the selection. Class names change between Firefox releases, and a root that finds nothing starts no mode.
+    // `start` marks the current row, where the mode starts while the document itself has the focus, as the markup view keeps it.
+    // `lines: false` where a line move goes wrong: the console draws only the messages near the view, so a line move skips the rest, and in the markup view it stops after one line (measured).
+    // The computed view is out: its text is user-select none, so nothing selects.
+    const TEXT_AREAS = [
+      { url: "chrome://devtools/content/webconsole/index.html", root: ".webconsole-output", lines: false },
+      { url: "chrome://devtools/content/inspector/index.xhtml", root: "#ruleview-container", lines: true },
+      { url: "chrome://devtools/content/inspector/markup/markup.html", root: "#root", lines: false, start: ".tag-line[aria-selected=true]" },
+      { url: "chrome://devtools/content/netmonitor/index.html", root: "#headers-panel", lines: true },
+    ];
+    // CodeMirror editors that DevTools shows read-only: the Debugger source and the Network response. The console input is a CodeMirror editor too, and stays out by having no row.
+    const CODE_AREAS = [
+      { url: "chrome://devtools/content/debugger/index.html", root: ".editor-mount" },
+      { url: "chrome://devtools/content/netmonitor/index.html", root: "#response-panel" },
+    ];
+    const DOM_MOVES = {
+      "char.back": ["backward", "character"],
+      "char.forward": ["forward", "character"],
+      "line.down": ["forward", "line"],
+      "line.up": ["backward", "line"],
+      "word.forward": ["forward", "word"],
+      "word.back": ["backward", "word"],
+      "line.start": ["backward", "lineboundary"],
+      "line.end": ["forward", "lineboundary"],
+    };
+    const CODE_KEYS = {
+      "char.back": { key: "ArrowLeft", keyCode: 37 },
+      "char.forward": { key: "ArrowRight", keyCode: 39 },
+      "line.down": { key: "ArrowDown", keyCode: 40 },
+      "line.up": { key: "ArrowUp", keyCode: 38 },
+      "word.forward": { key: "ArrowRight", keyCode: 39, ctrlKey: true },
+      "word.back": { key: "ArrowLeft", keyCode: 37, ctrlKey: true },
+      "line.start": { key: "Home", keyCode: 36 },
+      "line.end": { key: "End", keyCode: 35 },
+    };
+    const COPY = "copy";
+    const LINE_OPS = new Set(["line.down", "line.up"]);
+
+    // Empty until the extension pushes the mode's table, so `v` starts nothing that no key could end but Escape.
+    let ops = new Map();
+    let mode = null;
+    // True while this file dispatches a key into a CodeMirror editor. Chrome makes it, so it comes back to the core's listener as a trusted key, and the mode lets it through.
+    let dispatching = false;
+
+    const root_of_focused_document = (doc, target, selector) => (target === doc.body || target === doc.documentElement ? doc.querySelector(selector) : null);
+
+    // The area that holds `target`: the row of its document whose root holds it, or, when the document itself has the focus, the row's root in it.
+    function area_of(target) {
+      const doc = target?.ownerDocument;
+      if (!doc || typeof target.closest !== "function") return null;
+      const url = String(doc.documentURI);
+      for (const row of CODE_AREAS) {
+        if (!url.startsWith(row.url)) continue;
+        const root = target.closest(row.root) ?? root_of_focused_document(doc, target, row.root);
+        const content = root?.querySelector(".cm-content");
+        if (content) return { doc, root, content, code: true };
+      }
+      if (in_editable(target)) return null;
+      for (const row of TEXT_AREAS) {
+        if (!url.startsWith(row.url)) continue;
+        const root = target.closest(row.root) ?? root_of_focused_document(doc, target, row.root);
+        if (root?.checkVisibility()) return { doc, root, lines: row.lines, start: row.start, code: false };
+      }
+      return null;
+    }
+
+    // The first text that shows in the area: under the focused element when it sits inside the area, or the area's current row, else anywhere in it. Blank text is skipped.
+    function start_point({ root, start }, focused) {
+      const target = root.contains(focused) ? focused : ((start && root.querySelector(start)) ?? root);
+      const shown = root.getBoundingClientRect();
+      let seen = 0;
+      for (const scope of target !== root && root.contains(target) ? [target, root] : [root]) {
+        const walker = root.ownerDocument.createTreeWalker(scope, SHOW_TEXT);
+        for (let node = walker.nextNode(); node && seen < MAX_START_NODES; node = walker.nextNode(), seen++) {
+          const offset = node.data.search(/\S/);
+          const parent = node.parentElement;
+          if (offset < 0 || !parent?.checkVisibility()) continue;
+          const box = parent.getBoundingClientRect();
+          if (box.bottom > shown.top && box.top < shown.bottom) return { node, offset };
+        }
+      }
+      return null;
+    }
+
+    function press_in_editor(content, { key, keyCode, ctrlKey = false }, shiftKey = true) {
+      const view = content.ownerDocument.defaultView;
+      dispatching = true;
+      try {
+        content.dispatchEvent(new view.KeyboardEvent("keydown", { key, code: key, keyCode, shiftKey, ctrlKey, bubbles: true, cancelable: true, composed: true }));
+      } finally {
+        dispatching = false;
+      }
+    }
+
+    function start(win, target) {
+      end(false);
+      if (ops.size === 0) return false;
+      const area = area_of(target);
+      if (!area) return false;
+      const point = area.code ? null : start_point(area, target);
+      if (!area.code && !point) return false;
+      const started = { win, ...area, undo: [] };
+      if (!hold(started, win, KEY_OWNER)) return false;
+      mode = started;
+      const end_kept = () => end(false);
+      // A click sets a selection of its own, and a window in the back gets no keys to end the mode.
+      for (const type of ["mousedown", "deactivate", "unload"]) listen(mode, win, type, end_kept);
+      listen(mode, area.doc.defaultView, "pagehide", end_kept);
+      if (area.code) {
+        press_in_editor(area.content, CODE_KEYS["char.forward"]);
+      } else {
+        const selection = area.doc.defaultView.getSelection();
+        selection.collapse(point.node, point.offset);
+        selection.modify("extend", "forward", "character");
+      }
+      return true;
+    }
+
+    // The end of the selection moves, and a move that leaves the area goes back, so the selection never takes in the panel's toolbar or the next pane.
+    function move(op) {
+      if (mode.code) return press_in_editor(mode.content, CODE_KEYS[op]);
+      if (!mode.lines && LINE_OPS.has(op)) return;
+      const selection = mode.doc.defaultView.getSelection();
+      if (selection.rangeCount === 0) return end(false);
+      const { focusNode, focusOffset } = selection;
+      selection.modify("extend", ...DOM_MOVES[op]);
+      if (!mode.root.contains(selection.focusNode)) selection.extend(focusNode, focusOffset);
+    }
+
+    function copy() {
+      if (mode.code) return copy_code(mode.doc);
+      const text = mode.doc.defaultView.getSelection().toString();
+      if (text.length === 0) return;
+      if (text.length > MAX_COPY_CHARS) return core.log_once(OVER_COPY_CAP);
+      Components.classes["@mozilla.org/widget/clipboardhelper;1"].getService(Components.interfaces.nsIClipboardHelper).copyString(text);
+    }
+
+    // CodeMirror fills the clipboard from its own selection on the copy command. The listener runs after CodeMirror's own, on the way up, and empties a copy over the cap.
+    function copy_code(doc) {
+      const view = doc.defaultView;
+      const cap = (event) => {
+        const data = event.clipboardData;
+        if (!data || data.getData("text/plain").length <= MAX_COPY_CHARS) return;
+        data.clearData();
+        core.log_once(OVER_COPY_CAP);
+      };
+      view.addEventListener("copy", cap);
+      try {
+        view.docShell.doCommand("cmd_copy");
+      } finally {
+        view.removeEventListener("copy", cap);
+      }
+    }
+
+    // Escape drops the selection as well. The copy key and every other end keep it, so the user sees what was copied.
+    function end(drop_selection) {
+      const ended = mode;
+      if (!ended) return;
+      mode = null;
+      undo_all(ended);
+      if (!drop_selection) return;
+      try {
+        if (ended.code) press_in_editor(ended.content, CODE_KEYS["char.forward"], false);
+        else {
+          const selection = ended.doc.defaultView.getSelection();
+          if (selection.rangeCount > 0) selection.collapse(selection.focusNode, selection.focusOffset);
+        }
+      } catch (error) {
+        core.log_once(`visual mode in DevTools could not drop its selection: ${error}`);
+      }
+    }
+
+    // A key in the window of the mode: true to take it, false to leave it to DevTools, undefined when no mode holds the window.
+    // A modifier chord or a named key (an arrow, Tab, F6) ends the mode and goes on, since it can move the focus out of the area. Escape ends it and stays here, so it opens no split console.
+    function answer_key(win, event, token) {
+      if (!mode || mode.win !== win || MODIFIER_KEYS.has(event.key)) return undefined;
+      if (dispatching) return false;
+      const chord = event.ctrlKey || event.altKey || event.metaKey;
+      if (event.key === "Escape" && !chord) {
+        end(true);
+        return true;
+      }
+      if (chord || [...event.key].length !== 1) {
+        end(false);
+        return false;
+      }
+      const op = ops.get(token);
+      if (op === COPY) {
+        copy();
+        end(false);
+      } else if (op) move(op);
+      return true;
+    }
+
+    const forget = () => {
+      ops = new Map();
+      end(false);
+    };
+    // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
+    core.register_kind("devtools.visual_keys", ({ keys }) => {
+      ops = new Map(keys.filter(({ op }) => op === COPY || Object.hasOwn(DOM_MOVES, op)).map(({ key, op }) => [key, op]));
+      return { ok: true };
+    });
+    const on_pref = () => enabled_by_pref() || end(false);
+    Services.prefs.addObserver(ENABLED_PREF, on_pref);
+    core.on_shut_down(() => {
+      end(false);
+      Services.prefs.removeObserver(ENABLED_PREF, on_pref);
+    });
+    // Said last, so the extension sends the `v` row only to a module that runs the mode.
+    core.set_hello_flag("devtools_visual", true);
+
+    return { start, answer_key, forget };
   }
 })(this);
