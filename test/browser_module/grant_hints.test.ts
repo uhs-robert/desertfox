@@ -112,14 +112,19 @@ function page_info_permissions(firefox: Firefox) {
   return { ...window, group, allow, block, use_default };
 }
 
-// Labels every target, so a test can pick a control by its element.
+// How long a grant's mark shows before an Enter counts: Firefox's `security.notification_enable_delay` when unset.
+const DWELL_MS = 500;
+
+// Labels every target, so a test can pick a control by its element. After the pick the user reads the mark as long as it must show, so the next key counts.
 async function labelled(run: Run, session: number) {
   const rows = run.pushes("chrome_hints.targets").filter((args) => args.session === session).flatMap((args) => JSON.parse(args.targets as string) as number[][]);
   await run.draw(session, rows.map(([id], index) => [id!, `a${String.fromCharCode(97 + index)}`]));
   return async (element: Node) => {
     const row = rows.find(([, left, top]) => left === Math.round(element.box.left) && top === Math.round(element.box.top));
     assert.ok(row, `no label on ${element.id || element.className || element.localName}`);
-    return run.pick(session, row[0]!);
+    const reply = await run.pick(session, row[0]!);
+    run.chrome.clock.now += DWELL_MS;
+    return reply;
   };
 }
 
@@ -142,7 +147,7 @@ async function doorhanger_pick(target: (chrome: ReturnType<typeof browser_with_d
   assert.equal((await collect(run, 5))?.ok, true);
   const pick = await labelled(run, 5);
   const reply = await pick(target(chrome));
-  return { run, chrome, reply };
+  return { run, chrome, reply, shown_at: chrome.clock.now - DWELL_MS };
 }
 
 test("a pick of Allow on a doorhanger only marks it: no message clicks it, and the user's Enter in that window does", async () => {
@@ -167,15 +172,53 @@ test("a pick of Allow on a doorhanger only marks it: no message clicks it, and t
 });
 
 test("a synthetic Enter neither confirms nor cancels, and a held-down Enter or one pressed before the mark showed does nothing", async () => {
-  const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
+  const { run, chrome, shown_at } = await doorhanger_pick((chrome) => chrome.allow);
   assert.equal(chrome.press("Enter", { isTrusted: false }).prevented, false);
   assert.equal(chrome.press("Enter", { repeat: true }).prevented, true);
-  assert.equal(chrome.press("Enter", { timeStamp: chrome.clock.now - 1 }).prevented, true);
+  assert.equal(chrome.press("Enter", { timeStamp: shown_at - 1 }).prevented, true);
   assert.equal(chrome.allow.clicks, 0);
   assert.ok(marked(chrome), "an Enter that does not count ended the confirm");
   chrome.press("Enter", { timeStamp: chrome.clock.now + 1 });
   assert.equal(chrome.allow.clicks, 1);
   assert.equal(held(run), undefined);
+});
+
+test("a key while the mark is new ends the confirm and grants nothing, so an Enter meant for what was there before cannot carry through", async () => {
+  for (const key of ["Enter", "a"]) {
+    const { run, chrome, shown_at } = await doorhanger_pick((chrome) => chrome.allow);
+    assert.ok(chrome.press(key, { timeStamp: shown_at + 10 }).prevented, `${key} went on to the page`);
+    assert.equal(chrome.allow.clicks, 0, `${key} right after the mark granted`);
+    assert.equal(marked(chrome), false, `${key} right after the mark left the confirm up`);
+    assert.equal(held(run), undefined, key);
+    chrome.press("Enter");
+    assert.equal(chrome.allow.clicks, 0, `${key} right after the mark, then Enter, granted`);
+  }
+  const { chrome, shown_at } = await doorhanger_pick((chrome) => chrome.allow);
+  chrome.press("Enter", { timeStamp: shown_at + DWELL_MS });
+  assert.equal(chrome.allow.clicks, 1, "an Enter once the mark had shown long enough did not grant");
+});
+
+test("the mark shows as long as Firefox's security.notification_enable_delay says", async () => {
+  const run = started((firefox) => {
+    firefox.set_named_pref("security.notification_enable_delay", 1000);
+    return browser_with_doorhanger(firefox);
+  });
+  const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+  run.firefox.chrome_now = 5000;
+  await collect(run, 5);
+  await (await labelled(run, 5))(chrome.allow);
+  const shown_at = chrome.clock.now - DWELL_MS;
+  chrome.press("Enter", { timeStamp: shown_at + 600 });
+  assert.equal(chrome.allow.clicks, 0, "an Enter inside the pref's delay granted");
+  assert.equal(marked(chrome), false);
+});
+
+test("Enter does nothing once another feature holds the window's keys", async () => {
+  const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
+  (run.firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): void }).hold_keys(chrome.win, "sidebar");
+  chrome.press("Enter");
+  assert.equal(chrome.allow.clicks, 0, "an Enter granted while another feature held the keys");
+  assert.equal(marked(chrome), false);
 });
 
 test("any other key cancels and goes nowhere, and Shift or Ctrl with Enter cancels too", async () => {
@@ -523,7 +566,7 @@ test("a tab prompt's checkbox waits for Enter: on a prompt from a background tab
 test("an Enter in a dialog counts on the dialog's own clock: one pressed before the mark does nothing, and one after it confirms", async () => {
   const { chrome, element } = await dialog_pick("chrome://global/content/commonDialog.xhtml", "accept", { windowtype: "prompt:promptUserAndPass" });
   const dialog_clock = (chrome as unknown as { dialog_view: { performance: { now(): number } } }).dialog_view.performance;
-  chrome.press("Enter", { timeStamp: dialog_clock.now() - 1 });
+  chrome.press("Enter", { timeStamp: dialog_clock.now() - DWELL_MS - 1 });
   assert.equal(element.clicks, 0, "an Enter pressed before the mark sent the login");
   assert.ok(marked(chrome), "an Enter pressed before the mark ended the confirm");
   chrome.press("Enter");
