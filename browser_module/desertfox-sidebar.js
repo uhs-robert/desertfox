@@ -112,12 +112,12 @@
     // The list under the search box: the old places tree, or the revamped panel's tab stop, a row or a group header the tree view keeps focusable.
     const list_of = (doc) => doc.querySelector("tree") ?? deep_query(doc, (element) => element.getAttribute?.("tabindex") === "0" && (element.localName === "summary" || /row$/.test(element.localName)));
 
-    // Typed into the panel, so its own tree view moves, opens and folds. The key goes out only while the focus is still in this panel.
+    // Typed into the panel, so its own tree view moves, opens and folds. The key goes out only while the window's focus is still in this panel. The panel document keeps its own active element after the focus leaves the sidebar, so that one does not tell.
     // The typed key comes back through this feature's own listener, and a typed Enter would run sidebar.open again. The core types right after `still_holds` says yes, so the key is marked from then to the end of the turn.
     let typing = false;
     const typed = (key) => (win, place) =>
       core.type_key(win, key, () => {
-        const holds = place_of(win, deep_active(sidebar_document(win)))?.doc === place.doc && core.may_act(win);
+        const holds = place_of(win, core.focused_element(win))?.doc === place.doc && core.may_act(win);
         if (holds) {
           typing = true;
           win.setTimeout(() => (typing = false), 0);

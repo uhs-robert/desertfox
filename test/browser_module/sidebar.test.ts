@@ -213,11 +213,17 @@ test("a typed Enter goes on to the panel and is not taken again as sidebar.open"
 });
 
 test("a typed key is dropped when the focus left the panel before it went out", () => {
-  const { panel_doc, page, focus, press, typed, run_timers } = setup();
-  focus(panel_row(panel_doc));
+  const { panel_doc, page, main_doc, focus, press, typed, run_timers } = setup();
+  const row = panel_row(panel_doc);
+  focus(row);
   press("j");
+  // As in Firefox, the panel document keeps its own active element after the window's focus moves on.
   focus(page);
-  panel_doc.activeElement = null;
+  assert.equal(panel_doc.activeElement, row);
+  run_timers();
+  focus(row);
+  press("j");
+  focus(make_node(main_doc, "toolbarbutton"));
   run_timers();
   assert.deepEqual(typed, []);
 });
