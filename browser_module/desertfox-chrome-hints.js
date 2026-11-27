@@ -7,6 +7,7 @@
 // With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
 // It makes a token for each such key: used once, within START_TOKEN_MS, and only in the window where the key was typed. No other start opens a session outside a browser window in front.
 //
+// A request alone never labels a control that grants: the module must have seen the binding's last key in that window just before (START_KEY_MS), as gB typed in the page.
 // A pick of a control that grants something (Allow, unblock a download, send a client certificate) does not click. It marks the control and waits for Enter, typed by the user in that window and seen here.
 // No message can confirm, so a compromised extension that names the wrong target grants nothing on its own. `grants` holds the fixed table.
 
@@ -55,6 +56,8 @@
     const PREFIX_OWNER = "chrome_hints.prefix";
     // A start token lives this long. Its key holds the window's keys meanwhile, as a session does.
     const START_TOKEN_MS = 3000;
+    // How long after the last key of a `hint.browser` binding typed in a page a plain collect may label a control that grants. The key goes to the content script, and its start comes back in well under this.
+    const START_KEY_MS = 1000;
     const ESCAPE = "<Escape>";
     const BROWSER = "navigator:browser";
     const LIBRARY = "Places:Organizer";
@@ -437,10 +440,27 @@
       record.held = step.held;
       if (step.held.length > 0) core.hold_keys(win, PREFIX_OWNER);
       else core.release_keys(win, PREFIX_OWNER);
-      if (!step.take) return;
+      if (!step.take) return note_start_key(win, bindings, event);
       event.preventDefault();
       event.stopImmediatePropagation();
       if (step.done) begin_start(win, place.frame_win);
+    }
+
+    // The last key of a binding that went on to the page, per window: the content script starts hints for it with a plain collect.
+    // This is no token as a chrome-focus start makes: the start comes back from the content script, which never sees what the module made.
+    const start_keys = new WeakMap();
+
+    function note_start_key(win, bindings, event) {
+      if (event.repeat) return;
+      const token = core.token_of(event);
+      if (bindings.some((binding) => binding.at(-1) === token)) start_keys.set(win, time_now(win));
+    }
+
+    // Spends the window's start key, once, while fresh.
+    function take_start_key(win) {
+      const typed_at = start_keys.get(win);
+      start_keys.delete(win);
+      return typed_at !== undefined && time_now(win) - typed_at <= START_KEY_MS;
     }
 
     function listen(owner, target, type, handler, capture = true) {
@@ -537,6 +557,9 @@
       const opened = open_panels(win.document)[0];
       if (opened?.row.user_start_only) return { ok: false, error: "Type the hint key in the panel" };
       const { found, places } = opened ? panel_place(opened) : { found: window_targets(win), places: {} };
+      const labels_a_grant = found.some(({ element }) => grants(win, element));
+      // A compromised extension could otherwise mark Allow with no key from the user, and the user's next lone Enter would grant.
+      if (labels_a_grant && !take_start_key(win)) return { ok: false, error: "Type the hint key to label the prompt" };
       return open_session(tag, win, found, colors, places);
     }
 

@@ -32,7 +32,7 @@ const held_by = `(async () => Services.desertfox_browser_module.keys_held_by(${W
 const layer_count = `(async () => ${W}.document.querySelectorAll(".desertfox-chrome-hints").length)()`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep, take_shot, url_of } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, take_shot, url_of, in_background } = context;
   const steps = module_steps(context);
   const { chrome, session_value, open_tab, close_selected_tab, home, in_selected_page, focus_page } = steps;
   const label_for = (labels, name) => labels.find((label) => label.target === name)?.text;
@@ -130,6 +130,34 @@ export async function run_cases(context) {
     await sleep(800);
     expect((await geo_answer()) === "geo:waiting", `Enter after Escape answered the page: ${await geo_answer()}`);
     expect(await chrome(`(async () => ${W}.PopupNotifications.panel.state === "open")()`), "Escape closed the prompt");
+  });
+
+  // A collect the extension sends with no key from the user, as a compromised extension could: written to the module's list as the extension's own requests are.
+  const FROM_EXTENSION = "desertfox_browser_module_from_extension";
+  const send_bare_collect = (id) =>
+    in_background(`(async () => {
+      const list = (await browser.storage.session.get("${FROM_EXTENSION}"))["${FROM_EXTENSION}"] ?? [];
+      const win = await browser.windows.getLastFocused();
+      await browser.storage.session.set({ "${FROM_EXTENSION}": [...list.slice(-10), { v: 1, id: "${id}", kind: "chrome_hints.collect", args: { session: 990001, window_id: win.id, colors: "" }, sent_at: Date.now() }] });
+      return true;
+    })()`);
+  const module_reply = async (id) => (await session_value("desertfox_browser_module_from_module"))?.find((message) => message.reply_to === id) ?? null;
+
+  await prompt_case("a collect with no key from the user labels no prompt, and gB typed in the page then does", async () => {
+    await ask_for_location("gh_geo_bare");
+    // Past the window in which the module counts the last key typed.
+    await sleep(1200);
+    expect((await send_bare_collect("gh_bare_collect")) === true, "the extension could not write its request");
+    let reply = null;
+    await poll_until("the module to answer the bare collect", async () => (reply = await module_reply("gh_bare_collect")) !== null, { timeout_ms: 5000 });
+    expect(reply.ok === false, `a collect with no key labelled the prompt: ${JSON.stringify(reply)}`);
+    expect((await chrome(layer_count)) === 0, "a collect with no key left a layer");
+    expect((await chrome(held_by)) === null, "a collect with no key kept the window's keys");
+    await press_keys("g", "B");
+    await wait_labels(PROMPT_TARGETS, ["allow", "block"], "the prompt after gB");
+    await press_keys("-k", "Escape");
+    await expect_ended("Escape");
+    expect((await geo_answer()) === "geo:waiting", `the page got an answer: ${await geo_answer()}`);
   });
 
   // ---- A login prompt in a tab: its OK sends the login to the site, so it waits for Enter. The key lands in the prompt's own frame.
