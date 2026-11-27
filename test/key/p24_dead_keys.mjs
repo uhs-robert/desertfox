@@ -60,6 +60,28 @@ export async function run_cases(context) {
         switcher: w.gBrowser._switcher ? [w.gBrowser._switcher.requestedTab?.label, w.gBrowser._switcher.visibleTab?.label] : null,
         layers: [b.renderLayers, b.hasLayers, b.docShellIsActive], url: b.currentURI.spec }; })()`).catch((error) => `error ${error.message}`);
   const load_n = Number(process.env.DKF_LOAD ?? 0);
+  // PROBE: the order of show, focus, keydown and input events in each loaded tab, in the content script world. Installed once per document.
+  const ORDER_LOGGER = `(() => {
+    if (window.dkf_order) return "had";
+    const log = (window.dkf_order = []);
+    const t = () => (performance.timeOrigin + performance.now()).toFixed(1);
+    const name = (node) => node === window ? "window" : node === document ? "document" : node?.localName ? node.localName + (node.id ? "#" + node.id : "") : String(node);
+    const count = () => window.wrappedJSObject?.refocus_count;
+    const mode = () => document.documentElement.getAttribute("data-desertfox-mode");
+    const push = (row) => log.push(t() + " " + row + " rc" + count() + " " + mode());
+    document.addEventListener("visibilitychange", () => push("vis " + (document.hidden ? "hidden" : "shown")), true);
+    addEventListener("focus", (event) => event.target === window && push("winfocus"), true);
+    addEventListener("blur", (event) => event.target === window && push("winblur"), true);
+    addEventListener("focusin", (event) => push("focusin " + name(event.target)), true);
+    addEventListener("focusout", (event) => push("focusout " + name(event.target)), true);
+    addEventListener("keydown", (event) => push("keydown " + event.key + (event.repeat ? " rep" : "") + (event.defaultPrevented ? " prevented" : " open") + " in " + name(document.activeElement)), false);
+    addEventListener("keydown", (event) => push("keydown-capture " + event.key + (event.repeat ? " rep" : "") + " in " + name(document.activeElement)), true);
+    addEventListener("input", (event) => push("input " + JSON.stringify(event.data) + " in " + name(event.target)), true);
+    new MutationObserver(() => push("mode")).observe(document.documentElement, { attributes: true, attributeFilter: ["data-desertfox-mode"] });
+    return "new";
+  })()`;
+  const install_order_logger = (prefix) => in_background(`(async () => { for (const tab of await browser.tabs.query({ currentWindow: true })) if (tab.url.includes("id=${prefix}") && !tab.discarded && tab.status === "complete") await browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(ORDER_LOGGER)} }).catch(() => {}); })()`);
+  const order_of = (page_id) => in_background(`browser.tabs.query({}).then((tabs) => tabs.find((tab) => tab.url.includes("id=${page_id}"))).then((tab) => browser.tabs.executeScript(tab.id, { code: 'const rows = window.dkf_order ?? ["no logger"]; const out = rows.slice(-60).join(" | "); rows.length = 0; for (const field of document.querySelectorAll("input")) field.value = ""; out' })).then((answers) => answers[0])`);
   const hold = async (key, ms) => {
     await install_probe();
     const probe_mark = await install_probe();
@@ -74,7 +96,11 @@ export async function run_cases(context) {
     const shown = await tabs_shown_since(switch_mark);
     const typed_per_tab = await in_background(`(async () => { const out = {}; for (const tab of await browser.tabs.query({ currentWindow: true })) { const [answer] = await browser.tabs.executeScript(tab.id, { code: 'JSON.stringify({ typed: [...document.querySelectorAll("input,[contenteditable]")].map((f) => f.value ?? f.textContent).join(""), focus: document.activeElement?.localName, mode: document.documentElement.getAttribute("data-desertfox-mode") })' }).catch(() => [""]); out[new URL(tab.url).searchParams.get("id")] = answer; } return out; })()`);
     const typed_tabs = Object.entries(typed_per_tab).filter(([, answer]) => answer && JSON.parse(answer).typed);
-    if (typed_tabs.length) log(`PROBE typed in ${JSON.stringify(typed_tabs)}`);
+    if (typed_tabs.length) {
+      log(`PROBE typed in ${JSON.stringify(typed_tabs)}`);
+      for (const [page_id] of typed_tabs) log(`PROBE order in ${page_id}: ${await order_of(page_id)}`);
+      log(`PROBE timeline of the typed hold: ${await probe_since(probe_mark)}`);
+    }
     log(`PROBE hold ${key} ${ms}ms load ${load_n}: ${shown.length} switches; timeline ${await probe_since(probe_mark)}`);
     if (shown.length < 7) {
       log(`PROBE stopped: active ${await page_id_now()} badge ${badge_of(await page_id_now())} page ${await page_state()} chrome ${JSON.stringify(await chrome_state())}`);
@@ -140,8 +166,13 @@ export async function run_cases(context) {
       const order = await tab_order();
       const forward = await hold("j", discard ? 4000 : 1500);
       log(`J switched ${forward.length}: ${forward.join(",")}`);
+      await install_order_logger(prefix);
       const back = await hold("k", 1500);
       log(`K switched ${back.length}: ${back.join(",")}`);
+      for (let extra = 0; extra < Number(process.env.DKF_EXTRA ?? 0); extra++) {
+        await install_order_logger(prefix);
+        await hold(extra % 2 ? "k" : "j", 1500);
+      }
       typed = await typed_anywhere();
       expect(typed === "", `held Shift+J/K typed "${typed}"`);
       expect(forward.length >= order.length && back.length >= order.length, `held Shift+J/K stopped: J ${forward.length}, K ${back.length} switches over ${order.length} tabs`);
