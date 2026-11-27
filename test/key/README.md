@@ -32,7 +32,7 @@ Each run starts a private copy of `/usr/lib/firefox`, not the system Firefox, so
 
 - `firefox_copy.mjs` makes the copy once per run in the run folder, before the shards start. It swaps in `chrome_loader.cfg`, a stand-in for the drop-in loader. Its `chrome.d` holds this worktree's `browser_module/desertfox-*.js` files after `chrome_throws.js`, a drop-in that throws at load.
 - `run.mjs` passes the copy's binary to the workers as `KEY_TEST_FIREFOX`, and `launch_firefox.sh` starts it. A `KEY_TEST_FIREFOX` from the caller wins, and without one the launcher starts the system `firefox`.
-- The module's pref stays unset, so every piece but the `p54_browser_module_*` ones runs with the module present and idle. Those pieces turn it on for their own cases. `browser_module_steps.mjs` holds their shared steps. See [docs/design/browser_module.md](../../docs/design/browser_module.md), "Tests".
+- The module's pref stays unset, so every piece but the `p54_browser_module_*` ones and `p55_panes` runs with the module present and idle. Those pieces turn it on for their own cases. `browser_module_steps.mjs` holds their shared steps. See [docs/design/browser_module.md](../../docs/design/browser_module.md), "Tests".
 
 ## Demo
 
