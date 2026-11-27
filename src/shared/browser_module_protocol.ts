@@ -4,6 +4,8 @@
 
 import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
+import type { ContentRequests } from "./messages/map.ts";
+import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -25,7 +27,8 @@ export const HELLO_MIN_INTERVAL_MS = 1000;
 // The extension reads the module's message list at most this often. It is short because a call the module starts, such as a key on a locked page, must not wait a second. The list is capped, so a read is cheap.
 export const MESSAGE_MIN_GAP_MS = 50;
 
-type ArgKind = "int" | "number" | "axis";
+// `text` is any string and `id` a message id. The kind's `max_bytes` bounds both.
+type ArgKind = "int" | "number" | "axis" | "text" | "id";
 
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
@@ -55,10 +58,13 @@ const bad = (problem: string): { ok: false; problem: string } => ({ ok: false, p
 
 const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 export const is_module_command_id = (id: unknown): id is ModuleCommandId => typeof id === "string" && Object.hasOwn(MODULE_COMMAND_ARGS, id);
+const is_message_id = (id: unknown): id is string => typeof id === "string" && id.length > 0 && id.length <= MAX_MESSAGE_ID_CHARS && /^[A-Za-z0-9_-]+$/.test(id);
 // One normalized key token: a character, or a name in angle brackets. No spaces or control characters.
 const is_key_token = (key: unknown): key is string => typeof key === "string" && key.length > 0 && key.length <= MAX_KEY_CHARS && !/[\s\p{Cc}]/u.test(key);
 
 function arg_problem(kind: ArgKind, value: unknown): string | undefined {
+  if (kind === "text") return typeof value === "string" ? undefined : "must be text";
+  if (kind === "id") return is_message_id(value) ? undefined : "must be a message id";
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
   return kind === "int" && !Number.isInteger(value) ? "must be a whole number" : undefined;
@@ -142,21 +148,48 @@ export function status_of_hello(hello: unknown): ModuleStatus {
   return { result: checked.value.v === BROWSER_MODULE_PROTOCOL_VERSION ? "matched" : "mismatch", module_version: checked.value.module_version, module_v: checked.value.v };
 }
 
-// The two-way messages for later pieces. Either side may start a call. Each side owns one key and is its only writer: chrome writes the from-module list, the extension writes the from-extension list. A list holds at most MAX_MESSAGES messages and MAX_MESSAGE_LIST_BYTES bytes, newest last, and its writer rewrites it whole. A reader ignores a message it has already seen (by id) and any field it does not know, so a rewrite is safe and an older reader still parses a newer message.
-// A message is a request `{ v, id, kind, args }` or a reply `{ v, reply_to, ok, error? }`. A `kind` comes from a fixed allow list per direction, with the shape of its args. A request carries typed commands only, never code, selectors or URLs. Both lists are empty now, so every request is refused. Later pieces add kinds and nothing else.
+// The two-way messages for later pieces. Either side may start a call. Each side owns one key and is its only writer: chrome writes the from-module list, the extension writes the from-extension list. A list holds at most MAX_MESSAGES messages and `message_list_bytes` of its kinds, newest last, and its writer rewrites it whole. A reader ignores a message it has already seen (by id) and any field it does not know, so a rewrite is safe and an older reader still parses a newer message.
+// A message is a request `{ v, id, kind, args }` or a reply `{ v, reply_to, ok, error? }`. A `kind` comes from a fixed allow list per direction, with the shape of its args. A request carries typed commands only, never code, selectors or URLs for the module to run. The page kinds carry message text that the module hands on between the background and DesertFox's own code in a locked page, and never reads. Later pieces add kinds and nothing else.
 // A kind row gives the shape of its args and whether the sender expects a reply. A push has `reply: false`: the receiver runs it and says nothing.
-export type KindRow = { args: Record<string, ArgKind>; reply: boolean };
+// `max_bytes` is the size limit of one message of the kind, as JSON. A kind without it keeps the size of a whole default list. No kind goes past MAX_KIND_BYTES: bulk data goes in a snapshot (below), and a chunked message is refused.
+export type KindRow = { args: Record<string, ArgKind>; reply: boolean; max_bytes?: number };
 export type KindTable = Record<string, KindRow>;
+export const MAX_KIND_BYTES = 64 * 1024;
+// Room for the envelopes of the other messages beside the largest one.
+export const MESSAGE_ENVELOPE_BYTES = 512;
+// The page calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and `answer` are JSON text. `tab_id` is a fact chrome reads, never a field of the page's message.
+const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
-export const MODULE_TO_EXTENSION_KINDS: KindTable = {};
-export const EXTENSION_TO_MODULE_KINDS: KindTable = {};
+export const MODULE_TO_EXTENSION_KINDS: KindTable = {
+  // A message of the page for the background. The reply says only that it was taken. The answer comes back as a `page_reply`, so the queue never waits on a handler.
+  page_call: { args: { tab_id: "int", call_id: "id", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
+  // The page's answer to a `page_push`. Settling a call twice does nothing.
+  page_answer: { args: { tab_id: "int", call_id: "id", answer: "text" }, reply: false, max_bytes: PAGE_TEXT_BYTES },
+};
+export const EXTENSION_TO_MODULE_KINDS: KindTable = {
+  page_reply: { args: { tab_id: "int", call_id: "id", answer: "text" }, reply: false, max_bytes: PAGE_TEXT_BYTES },
+  // A message of the background for the page, in place of `tabs.sendMessage`. The page answers with a `page_answer` of the same call id.
+  page_push: { args: { tab_id: "int", call_id: "id", message: "text" }, reply: false, max_bytes: PAGE_TEXT_BYTES },
+};
+
+// The byte cap of a whole list of a direction: room for its largest message and the envelopes beside it.
+export const message_list_bytes = (kinds: KindTable): number => Math.max(MAX_MESSAGE_LIST_BYTES, ...Object.values(kinds).map(kind_bytes)) + MESSAGE_ENVELOPE_BYTES;
+const kind_bytes = (row: KindRow): number => Math.min(row.max_bytes ?? MAX_MESSAGE_LIST_BYTES, MAX_KIND_BYTES);
+
+// The size of a value as JSON text, or undefined when it is not plain data (a cycle, a BigInt).
+export function json_bytes(value: unknown): number | undefined {
+  try {
+    const text = JSON.stringify(value);
+    return text === undefined ? undefined : new TextEncoder().encode(text).length;
+  } catch {
+    return undefined;
+  }
+}
 
 export type ModuleRequest = { v: number; id: string; kind: string; args: ModuleArgs };
 export type ModuleReply = { v: number; reply_to: string; ok: boolean; error?: string };
 export type ModuleMessage = ModuleRequest | ModuleReply;
 export const is_reply = (message: ModuleMessage): message is ModuleReply => "reply_to" in message;
-
-const is_message_id = (id: unknown): id is string => typeof id === "string" && id.length > 0 && id.length <= MAX_MESSAGE_ID_CHARS && /^[A-Za-z0-9_-]+$/.test(id);
 
 // One message against a direction's kinds. A request of a kind not in the list, or with bad args, is a problem.
 export function validate_message(value: unknown, kinds: KindTable): Checked<ModuleMessage> {
@@ -170,6 +203,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
   }
   if (!is_message_id(value.id)) return bad("a request needs an id of 1 to 32 letters, digits, - or _");
   if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return bad("the kind is not on the allow list");
+  if ((json_bytes(value) ?? Number.POSITIVE_INFINITY) > kind_bytes(kinds[value.kind]!)) return bad(`a ${value.kind} message is over its size limit`);
   const given = value.args ?? {};
   if (!is_record(given)) return bad("args must be a table");
   const args: ModuleArgs = {};
@@ -188,13 +222,9 @@ export type MessageList = { messages: ModuleMessage[]; refused: { id: string; er
 export function validate_message_list(value: unknown, kinds: KindTable): Checked<MessageList> {
   if (!Array.isArray(value)) return bad("a message list must be a list");
   if (value.length > MAX_MESSAGES) return bad("a message list holds too many messages");
-  let size: number;
-  try {
-    size = new TextEncoder().encode(JSON.stringify(value)).length;
-  } catch {
-    return bad("a message list is not plain data");
-  }
-  if (size > MAX_MESSAGE_LIST_BYTES) return bad("a message list is too large");
+  const size = json_bytes(value);
+  if (size === undefined) return bad("a message list is not plain data");
+  if (size > message_list_bytes(kinds)) return bad("a message list is too large");
   const list: MessageList = { messages: [], refused: [] };
   for (const item of value) {
     const checked = validate_message(item, kinds);
@@ -202,4 +232,92 @@ export function validate_message_list(value: unknown, kinds: KindTable): Checked
     else if (is_record(item) && item.v === BROWSER_MODULE_PROTOCOL_VERSION && item.reply_to === undefined && is_message_id(item.id) && (typeof item.kind !== "string" || !Object.hasOwn(kinds, item.kind) || kinds[item.kind]!.reply)) list.refused.push({ id: item.id, error: checked.problem.slice(0, MAX_ERROR_CHARS) });
   }
   return { ok: true, value: list };
+}
+
+// Where a message of the in-page DesertFox goes on a locked page (`src/content/locked_shim.ts`). The background takes a `page_call` only of a `background` type. `module`: the module answers it (a bundle load). `snapshot`: the shim answers from a snapshot. `refused`: it needs a real content script, the command line page, or would run user code with the page's privilege (snippets).
+// A new message type does not compile until it has a row here.
+export type LockedRoute = "background" | "module" | "snapshot" | "refused";
+export const LOCKED_PAGE_ROUTES = {
+  run: "background",
+  mode_changed: "background",
+  leave_tab_insert: "background",
+  load_bundle: "module",
+  // The shim answers the panel of normal mode with no prefix from its snapshot, and sends the rest.
+  list_keys: "background",
+  read_repeat_preview: "background",
+  issue_cmdline_ticket: "background",
+  relay: "background",
+  frame_cue: "background",
+  open_cmdline: "background",
+  record_cmdline: "refused",
+  complete_items: "refused",
+  tab_rows_action: "refused",
+  open_help: "background",
+  record_step: "background",
+  read_keymap: "snapshot",
+  replay_end: "background",
+  replay_stop: "background",
+  find_scan: "background",
+  image_action: "background",
+  inspect_pick: "refused",
+  read_hint_selectors: "background",
+  read_strip_patterns: "background",
+  register_read: "background",
+  register_write: "background",
+  register_yank: "background",
+  mark_set: "background",
+  mark_jump: "background",
+  mark_step: "background",
+  jump_push: "background",
+  jump_step: "background",
+  jump_leave: "background",
+  editor_open: "background",
+  hint_frames_start: "background",
+  hint_frames_report: "background",
+  hint_frames_typed: "background",
+  hint_frames_pick: "background",
+  hint_frames_end: "background",
+  hint_frames_unhover: "background",
+  media_pin: "refused",
+  quality_report: "refused",
+  quality_probe: "refused",
+  record_timing: "background",
+  snippet_run: "refused",
+} as const satisfies Record<keyof ContentRequests, LockedRoute>;
+
+export const locked_route_of = (type: unknown): LockedRoute => (typeof type === "string" && Object.hasOwn(LOCKED_PAGE_ROUTES, type) ? LOCKED_PAGE_ROUTES[type as keyof typeof LOCKED_PAGE_ROUTES] : "refused");
+
+// A page call's answer as JSON text: `{ value }`, `{}` for no answer, or `{ error }` when the handler failed.
+export type PageAnswer = { value?: unknown; error?: string };
+
+// Read-only data the in-page DesertFox needs whole, too big for a message: one key per part, written by the extension and rewritten when the part changes. The module reads each once and again on `storage.onChanged`, and never on a key press.
+// A snapshot is `{ v, value? }`. Every field but `v` is optional, and a reader ignores fields it does not know.
+export type SnapshotPart = "keymap" | "config" | "theme" | "which_key";
+export type Snapshot = { v: number; value?: unknown };
+// No part goes past this, whatever its own cap.
+export const MAX_SNAPSHOT_BYTES = 512 * 1024;
+
+type SnapshotRow = { key: string; max_bytes: number; value_ok: (value: unknown) => boolean };
+export const SNAPSHOT_PARTS: Record<SnapshotPart, SnapshotRow> = {
+  // The `read_keymap` answer, already JSON text. The default keymap's is about 300 KB.
+  keymap: { key: BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, max_bytes: MAX_SNAPSHOT_BYTES, value_ok: (value) => typeof value === "string" },
+  // The stored config status (CONFIG_STATUS_STORAGE_KEY).
+  config: { key: BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, max_bytes: 64 * 1024, value_ok: is_record },
+  // The stored theme (THEME_STORAGE_KEY).
+  theme: { key: BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, max_bytes: 16 * 1024, value_ok: (value) => is_record(value) && is_record(value.dark) && is_record(value.light) },
+  // The which-key panel of normal mode with no prefix.
+  which_key: { key: BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY, max_bytes: 128 * 1024, value_ok: (value) => is_record(value) && Array.isArray(value.title) && Array.isArray(value.rows) },
+};
+export const SNAPSHOT_PART_NAMES = Object.keys(SNAPSHOT_PARTS) as SnapshotPart[];
+
+export function validate_snapshot(part: SnapshotPart, value: unknown): Checked<Snapshot> {
+  const row = SNAPSHOT_PARTS[part];
+  if (!is_record(value)) return bad("a snapshot must be a table");
+  const size = json_bytes(value);
+  if (size === undefined) return bad("a snapshot is not plain data");
+  if (size > Math.min(row.max_bytes, MAX_SNAPSHOT_BYTES)) return bad(`the ${part} snapshot is too large`);
+  if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("a snapshot has another protocol version");
+  if (value.value === undefined) return { ok: true, value: { v: value.v } };
+  if (!row.value_ok(value.value)) return bad(`the ${part} snapshot holds the wrong shape`);
+  return { ok: true, value: { v: value.v, value: value.value } };
 }

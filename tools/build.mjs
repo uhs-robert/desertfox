@@ -52,6 +52,8 @@ const MAX_BYTES = {
   "rank_worker.js": 11.5 * 1024,
   // The devtools page.
   "devtools.js": 2 * 1024,
+  // The extension API stand-in that the browser module runs before content.js on a locked page.
+  "locked_shim.js": 6 * 1024,
 };
 
 // The content.js guard (its MAX_BYTES entry) may rise in steps, never past this. See AGENTS.md, "Content script size".
@@ -99,6 +101,8 @@ const minified_entries = {
   rank_worker: "src/background/rank_worker.ts",
   // The page that DevTools loads in each toolbox (the manifest's `devtools_page`).
   devtools: "src/devtools/main.ts",
+  // Not injected by the extension: the browser module loads it into a locked page's sandbox before content.js (src/content/locked_shim.ts). Last, so it moves no other bundle's names.
+  locked_shim: "src/content/locked_shim.ts",
 };
 for (const [name, entry] of Object.entries(minified_entries)) {
   await build_with_cache({ entryPoints: { [name]: entry }, outdir: out_dir, minify: true });

@@ -21,7 +21,7 @@ import {
   MAX_STATE_TABS,
   status_of_hello,
   EXTENSION_TO_MODULE_KINDS,
-  MAX_MESSAGE_LIST_BYTES,
+  message_list_bytes,
   MAX_MESSAGES,
   MODULE_TO_EXTENSION_KINDS,
   validate_message,
@@ -136,7 +136,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // The newest messages that fit both caps. The list is rewritten whole, and a message that falls off the front is one the module has had time to read.
   const write_outbox = async (messages: ModuleMessage[]): Promise<void> => {
     let kept = messages.slice(-MAX_MESSAGES);
-    while (kept.length > 0 && new TextEncoder().encode(JSON.stringify(kept)).length > MAX_MESSAGE_LIST_BYTES) kept = kept.slice(1);
+    while (kept.length > 0 && new TextEncoder().encode(JSON.stringify(kept)).length > message_list_bytes(kinds.from_extension)) kept = kept.slice(1);
     if (validate_message_list(kept, kinds.from_extension).ok) await deps.session.set({ [BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY]: kept });
   };
 

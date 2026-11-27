@@ -205,6 +205,8 @@ test("no background handler refuses args the schema accepts", async () => {
 // src/ instead: a plain `new Error` is allowed only where it is not a refusal a handler gives. Each entry says why. A
 // plain throw that a handler gives belongs to RuntimeRefusal.
 const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
+  "src/background/browser_module_rpc.ts": { count: 9, why: "a refused page call or a failed push on a locked page, turned into an error answer or a rejected tabs.sendMessage stand-in, not a command handler" },
+  "src/content/locked_shim.ts": { count: 11, why: "the extension API stand-in on a locked page, rejecting as runtime.sendMessage and storage.local.get reject, not a command handler" },
   "src/background/browser_deps.ts": { count: 1, why: "the page's refusal to add a bundle tag, turned into the could-not-load refusal by the bundle loader, not a command handler" },
   "src/background/favicon_saver.ts": { count: 1, why: "a redrawn icon that is too large, turned into a skipped save by the saver, not a command handler" },
   "src/background/rank_index.ts": { count: 1, why: "a question to the background that failed, which the history cache turns into a fill to try again, not a command handler" },
