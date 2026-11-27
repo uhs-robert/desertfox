@@ -16,6 +16,7 @@ export type FirefoxPageWhere = (typeof FIREFOX_PAGE_WHERE)[number];
 export type FirefoxPageArgs = { page: FirefoxPage; where: FirefoxPageWhere };
 
 export const FIREFOX_PAGE_OPEN_KIND = "firefox_page.open";
+export const MODULE_UNANSWERED = "The browser module did not answer, so the native host was not asked. Run the command again if no page opened.";
 
 export type FirefoxPageDeps = {
   // Whether the module's hello says it opens Firefox pages. An older module never gets the request.
@@ -33,6 +34,7 @@ export type FirefoxPageDeps = {
 const NO_HOST_FAILURES: ReadonlySet<string> = new Set(["host_missing", "no_permission"]);
 
 // The module answers that it cannot take the request at all: it is gone, or it is older than a value of the request. Only then does the host try. Any other refusal (the rate limit, a tab that moved) stands, because the host would open the page in another window and step around the check.
+// A request the module got but never answered stands too: the module can have opened the page already, and the host then opens a second one.
 const MODULE_CANNOT: ReadonlySet<string> = new Set([NEEDS_MODULE, ...Object.keys(EXTENSION_TO_MODULE_KINDS[FIREFOX_PAGE_OPEN_KIND]!.args).map((arg) => wrong_shape_refusal(FIREFOX_PAGE_OPEN_KIND, arg))]);
 
 const takes_module_route = (page: FirefoxPage): boolean => MODULE_FIREFOX_PAGES.includes(page);
@@ -43,6 +45,7 @@ export function make_open_firefox_page_handler(deps: FirefoxPageDeps) {
     if (takes_module_route(page) && (await deps.module_opens_pages())) {
       const result = await deps.module_open({ page, where, ...(ctx.tab_id !== undefined && { tab_id: ctx.tab_id }) });
       if (result.ok) return;
+      if (result.unanswered) throw new RuntimeRefusal(MODULE_UNANSWERED);
       if (!MODULE_CANNOT.has(result.error)) throw new RuntimeRefusal(result.error);
     }
     // The host and the clipboard can only add a tab.

@@ -7,6 +7,8 @@ import type { ModuleStatus } from "../../src/shared/browser_module_protocol.ts";
 
 const matched: ModuleStatus = { result: "matched", module_version: "1", module_v: 1 };
 const needs = { ok: false, error: NEEDS_MODULE };
+// A written request that got no reply: whether the module ran it is unknown.
+const unanswered = { ok: false, error: NEEDS_MODULE, unanswered: true };
 
 function make(status: ModuleStatus | undefined, send_ok = true, on_write?: (id: string) => Promise<void> | void) {
   const sent: { kind: string; args: unknown }[] = [];
@@ -67,7 +69,7 @@ test("a module that stays silent times out as absent, and its request is withdra
   const done = calls.call("pane.unsplit");
   await flush();
   timers[0]!.run();
-  assert.deepEqual(await done, needs);
+  assert.deepEqual(await done, unanswered);
   assert.deepEqual(withdrawn, ["x1"]);
 });
 
@@ -77,7 +79,7 @@ test("a status that drops out of matched ends the waiting call and cancels its t
     const done = calls.call("pane.unsplit");
     await flush();
     calls.status_changed(status);
-    assert.deepEqual(await done, needs);
+    assert.deepEqual(await done, unanswered);
     assert.equal(timers[0]!.cancelled, true);
   }
 });
@@ -97,7 +99,7 @@ test("the setting turning off clears every pending call", async () => {
   const second = calls.call("pane.close_both");
   await flush();
   calls.clear();
-  assert.deepEqual([await first, await second], [needs, needs]);
+  assert.deepEqual([await first, await second], [unanswered, unanswered]);
   assert.deepEqual(withdrawn.sort(), ["x1", "x2"]);
   assert.deepEqual(timers.map((timer) => timer.cancelled), [true, true]);
 });
@@ -128,7 +130,7 @@ test("a late reply after the timeout is ignored", async () => {
   const done = calls.call("pane.unsplit");
   await flush();
   timers[0]!.run();
-  assert.deepEqual(await done, needs);
+  assert.deepEqual(await done, unanswered);
   calls.hear(ok("x1"));
 });
 
