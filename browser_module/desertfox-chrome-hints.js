@@ -7,7 +7,7 @@
 // With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
 // It makes a token for each such key: used once, within START_TOKEN_MS, and only in the window where the key was typed. No other start opens a session outside a browser window in front.
 //
-// A request alone never labels a control that grants: the module must have seen the binding's last key in that window just before (START_KEY_MS), as gB typed in the page.
+// A request alone never labels a control that grants: the module must have seen a whole `hint.browser` binding typed outside a field in that window just before (START_KEY_MS), as gB typed in the page.
 // A pick of a control that grants something (Allow, unblock a download, send a client certificate) does not click. It marks the control and waits for Enter, typed by the user in that window and seen here.
 // No message can confirm, so a compromised extension that names the wrong target grants nothing on its own. `grants` holds the fixed table.
 
@@ -56,8 +56,10 @@
     const PREFIX_OWNER = "chrome_hints.prefix";
     // A start token lives this long. Its key holds the window's keys meanwhile, as a session does.
     const START_TOKEN_MS = 3000;
-    // How long after the last key of a `hint.browser` binding typed in a page a plain collect may label a control that grants. The key goes to the content script, and its start comes back in well under this.
+    // How long after a `hint.browser` binding typed in a page a plain collect may label a control that grants. The key goes to the content script, and its start comes back in well under this.
     const START_KEY_MS = 1000;
+    // The keys of a binding typed in a page count as one only when each follows the one before within this.
+    const BINDING_GAP_MS = 3000;
     const ESCAPE = "<Escape>";
     const BROWSER = "navigator:browser";
     const LIBRARY = "Places:Organizer";
@@ -440,20 +442,29 @@
       record.held = step.held;
       if (step.held.length > 0) core.hold_keys(win, PREFIX_OWNER);
       else core.release_keys(win, PREFIX_OWNER);
-      if (!step.take) return note_start_key(win, bindings, event);
+      if (!step.take) return note_start_key(win, record, bindings, event);
       event.preventDefault();
       event.stopImmediatePropagation();
       if (step.done) begin_start(win, place.frame_win);
     }
 
-    // The last key of a binding that went on to the page, per window: the content script starts hints for it with a plain collect.
+    // When a whole binding last went on to the page, per window: the content script starts hints for it with a plain collect.
     // This is no token as a chrome-focus start makes: the start comes back from the content script, which never sees what the module made.
     const start_keys = new WeakMap();
 
-    function note_start_key(win, bindings, event) {
+    // `record.typed`: the window's last keys that went on to the page, as many as the longest binding. A key typed in a field empties it, since there it types text.
+    function note_start_key(win, record, bindings, event) {
       if (event.repeat) return;
-      const token = core.token_of(event);
-      if (bindings.some((binding) => binding.at(-1) === token)) start_keys.set(win, time_now(win));
+      if (bindings.length === 0 || field_focused(win)) {
+        record.typed = [];
+        return;
+      }
+      const at = time_now(win);
+      const longest = Math.max(...bindings.map((binding) => binding.length));
+      const in_sequence = record.typed.at(-1) !== undefined && at - record.typed.at(-1).at <= BINDING_GAP_MS;
+      record.typed = [...(in_sequence ? record.typed : []), { token: core.token_of(event), at }].slice(-longest);
+      const ends_in = (binding) => binding.length <= record.typed.length && binding.every((key, index) => record.typed[record.typed.length - binding.length + index].token === key);
+      if (bindings.some(ends_in)) start_keys.set(win, at);
     }
 
     // Spends the window's start key, once, while fresh.
@@ -932,7 +943,7 @@
     function watch(win) {
       if (watched.has(win) || !WATCHED_TYPES.has(window_type(win))) return;
       const root = win.windowRoot;
-      const record = { held: [] };
+      const record = { held: [], typed: [] };
       const keydown = (event) => {
         try {
           if (confirming?.win === win) on_confirm_key(event);
@@ -947,6 +958,7 @@
       // Half a binding does not wait while the user is in another window: the walk would leave this window's keys alone meanwhile.
       const deactivate = () => {
         record.held = [];
+        record.typed = [];
         core.release_keys(win, PREFIX_OWNER);
       };
       root.addEventListener("keydown", keydown, true);
