@@ -131,7 +131,7 @@ On a locked page `:` and a key that asks for a value open DesertFox's own comman
 - A Firefox internal that throws on a key leaves that key to the page and logs one line per distinct error.
 - With the pref off the module loads no frame script, says no hello and handles no message. It turns on at once when the pref does. Turning the pref off takes the hello back. The frame scripts stay loaded for the session once loaded, so they check the pref and do nothing while it is off. Turning it on again asks each tab for a fresh report.
 - The module makes no network request and runs no code it reads. A key row or tree leaf names a command a feature file defines, and a request names a kind on a fixed list, each with checked args. It writes the extension only the hello and the from-module list. The hello has one writer, the core: a feature sets a flag on its fixed list (`bar`) with `set_hello_flag`.
-- A finished match is the only key data the module sends: the tokens of a forward leaf and the count, never raw key events or the keys of an unfinished sequence.
+- A finished match is the only key data the module sends: the tokens of a forward leaf and the count, never raw key events or the keys of an unfinished sequence. The one exception is the text held after a key that opens the command line (at most 32 characters), which goes to the line in the `cmdline_panel.open` reply or into the address bar.
 
 ## Tests
 
