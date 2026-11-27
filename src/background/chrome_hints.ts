@@ -160,10 +160,16 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
 
   return {
     handlers,
-    // Starts a session in the window. A second start ends the first: the module drops the older session's targets when the newer one collects.
+    // Starts a session in the window. A second start ends the first.
     async start(window_id: number): Promise<{ ok: true } | { ok: false; error: string }> {
       const session: ChromeHintSession = { session: deps.new_session(), window_id, targets: {}, typed: "", seq: 0, gen: 0 };
-      await in_turn(() => write(session));
+      const previous = await in_turn(async () => {
+        const replaced = await read();
+        await write(session);
+        return replaced;
+      });
+      // The module ends the older session only when the newer one collects. A refused collect would leave it showing, with no stored session to narrow it.
+      if (previous) await deps.push("chrome_hints.clear", { session: previous.session });
       const result = await deps.call("chrome_hints.collect", { session: session.session, window_id, colors: await deps.colors() });
       if (!result.ok) {
         // A collect whose reply was lost can still have started a session in chrome, which would hold the keys until Escape.
