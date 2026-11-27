@@ -15,6 +15,7 @@ import {
   BROWSER_MODULE_STATUS_STORAGE_KEY,
   check_module_args,
   HELLO_MIN_INTERVAL_MS,
+  MESSAGE_MIN_GAP_MS,
   is_module_command_id,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
@@ -76,7 +77,7 @@ export type BrowserModuleDeps = {
   check_args: CheckCommandArgs;
   // The allow list of each direction. The protocol's lists are empty now, so a test passes its own.
   kinds?: { from_module: KindTable; from_extension: KindTable };
-  // One handler per kind the module may request. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
+  // One handler per kind the module may request. A handler never awaits `send`: handlers run inside the queue and `send` waits behind them, so it would never settle and every later step would hang. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
   handlers: Record<string, (args: ModuleArgs) => Promise<void>>;
   // Hears each reply the module sends to a request of the extension.
   on_reply?: (reply: ModuleReply) => void;
@@ -93,9 +94,24 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     return run;
   };
 
-  // One limiter for everything the module writes to the extension (the hello and the request). `input_pending` is set at once when a read is asked for, so a burst joins the read that is already waiting, and that read takes the latest values.
-  let last_input_read = Number.NEGATIVE_INFINITY;
-  let input_pending = false;
+  // A limiter runs `task` at most once per `gap` ms, in the queue. It is marked pending at once when a read is asked for, so a burst joins the read that is already waiting, and that read takes the latest values. The gap is checked when the read runs.
+  // The hello waits a second. The message list waits only a short gap, so a call the module starts, or a held key that starts one, is not slowed by the hello's limit.
+  const limited = (gap: number, task: () => Promise<void>): (() => void) => {
+    let last = Number.NEGATIVE_INFINITY;
+    let pending = false;
+    const run = async (): Promise<void> => {
+      const wait = last + gap - deps.now();
+      if (wait > 0) return void deps.later(() => void enqueue(run), wait);
+      pending = false;
+      last = deps.now();
+      await task();
+    };
+    return () => {
+      if (pending) return;
+      pending = true;
+      void enqueue(run);
+    };
+  };
 
   const read_state = async (): Promise<ModuleState | undefined> => {
     const checked = validate_module_state((await deps.session.get(BROWSER_MODULE_STATE_STORAGE_KEY))[BROWSER_MODULE_STATE_STORAGE_KEY]);
@@ -165,22 +181,17 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (replies.length > 0) await write_outbox([...outbox, ...replies]);
   };
 
-  const read_input = async (): Promise<void> => {
-    const wait = last_input_read + HELLO_MIN_INTERVAL_MS - deps.now();
-    // Checked when the read runs, so a read that came due meanwhile through another path is not doubled.
-    if (wait > 0) return void deps.later(() => void enqueue(read_input), wait);
-    input_pending = false;
-    last_input_read = deps.now();
+  const read_hello_status = async (): Promise<void> => {
     if (!(await deps.is_on())) return;
     await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status_of_hello((await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]) });
-    await answer_module_messages();
   };
 
-  const request_input_read = (): void => {
-    if (input_pending) return;
-    input_pending = true;
-    void enqueue(read_input);
+  const read_messages = async (): Promise<void> => {
+    if (await deps.is_on()) await answer_module_messages();
   };
+
+  const request_hello_read = limited(HELLO_MIN_INTERVAL_MS, read_hello_status);
+  const request_messages_read = limited(MESSAGE_MIN_GAP_MS, read_messages);
 
   const sync_now = async (): Promise<void> => {
     if (!(await deps.is_on())) {
@@ -195,7 +206,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_state_of(record);
     }
     await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs });
-    request_input_read();
+    request_hello_read();
+    request_messages_read();
   };
 
   const tab_changed_now = async (tab_id: string, record: TabModeRecord | undefined): Promise<void> => {
@@ -227,12 +239,14 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     sync,
     tab_changed,
     send: (kind: string, args: ModuleArgs = {}) => enqueue(() => send_now(kind, args)),
-    // Asks for a read of the hello and the request. The limiter decides when it runs.
-    read_hello: request_input_read,
+    // Ask for a read. Each has its own limiter, which decides when it runs.
+    read_hello: request_hello_read,
+    read_messages: request_messages_read,
     // The one `storage.onChanged` listener.
     storage_changed(changes: Record<string, { newValue?: unknown }>, area: string): void {
       if (area === "session") {
-        if (BROWSER_MODULE_HELLO_STORAGE_KEY in changes || BROWSER_MODULE_FROM_MODULE_STORAGE_KEY in changes) request_input_read();
+        if (BROWSER_MODULE_HELLO_STORAGE_KEY in changes) request_hello_read();
+        if (BROWSER_MODULE_FROM_MODULE_STORAGE_KEY in changes) request_messages_read();
         return;
       }
       if (area !== "local") return;

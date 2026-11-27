@@ -5,6 +5,7 @@ import { create_browser_module, key_rows_of, module_setting_on, tab_id_of_key, t
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
+import { MESSAGE_MIN_GAP_MS } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -264,7 +265,7 @@ test("a kind with no handler answers an error when it expects a reply", async ()
   const { data } = setup();
   from_module(data, [{ v: 1, id: "n1", kind: "ask", args: { axis: "x" } }]);
   const lone = create_browser_module({ session: { get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, data.get(name)])), set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, value)), remove: async () => undefined } as never, is_on: async () => true, read_disabled: async () => false, read_keymap: async () => undefined, read_tab_records: async () => ({}), check_args: real_check, kinds: TEST_KINDS, handlers: {}, now: () => 0, later: () => undefined });
-  lone.read_hello();
+  lone.read_messages();
   await lone.tab_changed("0", undefined);
   await lone.tab_changed("0", undefined);
   assert.deepEqual(outbox_of(data), [{ v: 1, reply_to: "n1", ok: false, error: "no handler for this kind" }]);
@@ -312,4 +313,44 @@ test("the top frame's report sets live and a load start clears it with the recor
   assert.equal((data.get(`${TAB_MODE_STORAGE_PREFIX}1`) as TabModeRecord).live, true);
   await modes.forget_on_navigation(1, { status: "loading" });
   assert.equal((data.get(`${TAB_MODE_STORAGE_PREFIX}1`) as TabModeRecord).live, undefined);
+});
+
+test("the module's list has its own short limit: a call a short gap after another is not held for a second", async () => {
+  const { data, config, timers, module, flush, calls, hello_reads } = setup();
+  const ask = (id: string) => from_module(data, [{ v: 1, id, kind: "ask", args: { axis: "x" } }]);
+  const wake = () => module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  ask("k1");
+  wake();
+  await flush();
+  assert.equal(calls.length, 1);
+  config.now += MESSAGE_MIN_GAP_MS;
+  ask("k2");
+  wake();
+  await flush();
+  assert.equal(calls.length, 2, "a gap of the short limit is enough");
+  assert.equal(timers.length, 0);
+  // Inside the gap the read waits for the gap, not for a second, and the later call still runs.
+  config.now += 10;
+  ask("k3");
+  wake();
+  await flush();
+  assert.equal(calls.length, 2);
+  assert.equal(timers.length, 1);
+  config.now += MESSAGE_MIN_GAP_MS;
+  timers.shift()!();
+  await flush();
+  assert.equal(calls.length, 3);
+  assert.equal(hello_reads(), 0, "the hello was never read, so its own limit did not enter");
+});
+
+test("the message reads do not use up the hello's second", async () => {
+  const { data, config, module, flush } = setup();
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1" });
+  from_module(data, []);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  config.now += 10;
+  module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.equal(status_of(data), "matched", "the first hello read runs at once, whatever the message reads did");
 });
