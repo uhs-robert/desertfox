@@ -45,11 +45,11 @@ function report_frame() {
   const focus_field = () => ((document.activeElement = field), fire("focusin"));
   const last_load_focus = () => reports.at(-1)?.load_focus;
   // The core answers a marked report with a blur for the same document.
-  const core_blurs = () => {
-    for (const listener of messages.get(BLUR) ?? []) listener({ data: { inner: 7 } });
+  const core_blurs = (data: Record<string, unknown> = { inner: 7 }) => {
+    for (const listener of messages.get(BLUR) ?? []) listener({ data });
     return field.blurred;
   };
-  return { clock, field, user_activation, fire, show, hide, focus_field, last_load_focus, core_blurs };
+  return { document, clock, field, user_activation, fire, show, hide, focus_field, last_load_focus, core_blurs };
 }
 
 test("a tab shown again marks a field that already holds the focus, even on a page used before", () => {
@@ -120,4 +120,25 @@ test("a load window still refuses once the page has had a key or click", () => {
   frame.user_activation.hasBeenActive = true;
   frame.focus_field();
   assert.equal(frame.last_load_focus(), false);
+});
+
+test("a blur marked escape works outside any window and after a key, but only for the same document and a field", () => {
+  const frame = report_frame();
+  frame.user_activation.hasBeenActive = true;
+  frame.clock.now += 60_000;
+  frame.focus_field();
+  assert.equal(frame.core_blurs({ inner: 7 }), 0, "an unmarked blur is refused here");
+  assert.equal(frame.core_blurs({ inner: 8, escape: true }), 0, "another document");
+  assert.equal(frame.core_blurs({ inner: 7, escape: true }), 1);
+  frame.document.activeElement = { localName: "button", blur: () => assert.fail("a button was blurred") };
+  frame.core_blurs({ inner: 7, escape: true });
+});
+
+test("a blur marked escape ends editing in a design mode document", () => {
+  const frame = report_frame();
+  let blurs = 0;
+  frame.document.designMode = "on";
+  frame.document.activeElement = { localName: "body", blur: () => blurs++ };
+  frame.core_blurs({ inner: 7, escape: true });
+  assert.equal(blurs, 1);
 });

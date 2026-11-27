@@ -504,7 +504,7 @@ test("a flag set while the pref is off goes in the hello when it comes on", () =
 
 // A page in this process (about:preferences) whose search box holds the focus, and the key target that reaches it.
 function in_process_field(browser: unknown) {
-  const page_document: Record<string, unknown> = { designMode: "off", activeElement: undefined, defaultView: { browsingContext: { isContent: true, top: { embedderElement: browser } } } };
+  const page_document: Record<string, unknown> = { designMode: "off", activeElement: undefined, defaultView: { browsingContext: { isContent: true, parent: null, top: { embedderElement: browser } } } };
   const field = { localName: "input", type: "search", blurs: 0, ownerDocument: page_document, blur() { this.blurs++; page_document.activeElement = undefined; } };
   page_document.activeElement = field;
   return { field, page_document, target: { target: field, originalTarget: field } };
@@ -550,4 +550,27 @@ test("Escape leaves the field alone with a modifier, with no field, in a tab Des
   ignored.press("Escape", { shiftKey: true });
   const escape = ignored.press("Escape", page.target);
   assert.deepEqual([page.field.blurs, escape.prevented], [0, false], "an ignored tab");
+});
+
+test("Escape leaves a field in a subdialog, a field in an iframe of a remote page, and ends editing of a design mode page", () => {
+  const dialog = started();
+  const page = in_process_field(dialog.first.browser);
+  (page.page_document.defaultView as { browsingContext: { parent: unknown } }).browsingContext.parent = {};
+  const kept = dialog.press("Escape", page.target);
+  assert.deepEqual([page.field.blurs, kept.prevented], [0, false], "a subdialog");
+
+  const frame = started();
+  frame.firefox.report(frame.first.browser, { inner: 10, listeners: 0, field: false });
+  frame.window.win.windowUtils.IMEStatus = IME_ENABLED;
+  const passed = frame.press("Escape");
+  assert.deepEqual([passed.prevented, frame.firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")).length], [false, 0], "a field in an iframe");
+
+  const editable = started();
+  const design = in_process_field(editable.first.browser);
+  design.page_document.designMode = "on";
+  let ended_editing = 0;
+  const body = { localName: "body", ownerDocument: design.page_document, blur: () => ended_editing++ };
+  design.page_document.activeElement = body;
+  const ended = editable.press("Escape", { target: body, originalTarget: body });
+  assert.deepEqual([ended_editing, ended.prevented], [1, true], "design mode");
 });
