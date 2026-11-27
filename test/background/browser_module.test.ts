@@ -101,7 +101,15 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     for (let turn = 0; turn < 3; turn++) await module.tab_changed("0", undefined);
   };
   const hello_reads = () => config.gets.filter((key) => key === BROWSER_MODULE_HELLO_STORAGE_KEY).length;
-  return { data, config, timers, module, flush, calls, replies, hello_reads, bar_changes };
+  // The module says it built the bar, and the extension has read it.
+  const raise_bar = async () => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    module.read_hello();
+    timers.splice(0).forEach((run) => run());
+    await flush();
+  };
+  return { data, config, timers, module, flush, calls, replies, hello_reads, bar_changes, raise_bar };
 }
 const status_of = (data: Map<string, unknown>) => (data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string } | undefined)?.result;
 
@@ -365,9 +373,10 @@ const THEME_COLORS = { bg_core: "#101010", mode_normal: "#89b4fa", mode_insert: 
 const state_of = (data: Map<string, unknown>) => data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as { tabs: Record<string, Record<string, unknown>>; bar_theme?: unknown };
 
 test("a bar report lands in the tab's entry, a child frame changes only the pending keys and a repeat writes nothing", async () => {
-  const { data, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
   await module.sync();
   await flush();
+  await raise_bar();
   await module.bar_report(3, 0, false, { pending: ["g"], count: 2, pass: true, site: "GMAIL", recording: "q", junk: 1 });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], count: 2, pass: true, site: "GMAIL", recording: "q" });
   await module.bar_report(3, 5, false, { pending: ["<Space>", "z"] });
@@ -380,18 +389,20 @@ test("a bar report lands in the tab's entry, a child frame changes only the pend
 });
 
 test("a private tab's report never carries a site label", async () => {
-  const { data, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}4`]: { top_mode: "normal", live: true } } });
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}4`]: { top_mode: "normal", live: true } } });
   await module.sync();
   await flush();
+  await raise_bar();
   await module.bar_report(4, 0, true, { pending: ["g"], site: "GMAIL" });
   assert.deepEqual(state_of(data).tabs["4"], { mode: "normal", live: true, pending: ["g"] });
 });
 
 test("the bar fields survive a mode change and a full sync, and go when the tab loads a new page or closes", async () => {
   const records: Record<string, TabModeRecord> = { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } };
-  const { data, module, flush } = setup({ records });
+  const { data, module, flush, raise_bar } = setup({ records });
   await module.sync();
   await flush();
+  await raise_bar();
   await module.bar_report(3, 0, false, { pending: ["g"] });
   await module.tab_changed("3", { top_mode: "insert", live: true });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "insert", live: true, pending: ["g"] });
@@ -477,10 +488,11 @@ test("the state carries the bar settings while the bar setting is on and none wh
 
 test("the bar's reports are dropped when the bar goes away, and a load that keeps the old page keeps them", async () => {
   const records: Record<string, TabModeRecord> = { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } };
-  const { data, config, module, flush } = setup({ records });
+  const { data, config, module, flush, raise_bar } = setup({ records });
   data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
   await module.sync();
   await flush();
+  await raise_bar();
   await module.bar_report(3, 0, false, { pending: ["g"], recording: "q" });
   await module.tab_changed("3", { top_mode: "normal", live: true, awaiting_commit: true });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true }, "hidden while the load runs");
@@ -497,9 +509,10 @@ test("the bar's reports are dropped when the bar goes away, and a load that keep
 });
 
 test("a top frame report made while a child frame has the focus leaves the child's pending keys", async () => {
-  const { data, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
   await module.sync();
   await flush();
+  await raise_bar();
   await module.bar_report(3, 7, false, { pending: ["g"], count: 2 });
   await module.bar_report(3, 0, false, { child: true, site: "FRAME" });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], count: 2, site: "FRAME" });
@@ -521,4 +534,42 @@ test("the state carries the bar theme from the stored theme and a theme change r
   await module.sync();
   await flush();
   assert.equal("bar_theme" in state_of(data), false, "no theme, no field");
+});
+
+test("the top frame's count does not show for a child frame, whichever comes first", async () => {
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar();
+  // The count was typed in the top frame, then the focus moved to a child.
+  await module.bar_report(3, 0, false, { count: 3 });
+  await module.bar_report(3, 0, false, { child: true });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
+  await module.bar_report(3, 7, false, { pending: ["g"] });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"] });
+  // The child reported first and the top frame's report of the move came after, with the top's old count still stored.
+  await module.bar_report(3, 0, false, { count: 3 });
+  await module.bar_report(3, 7, false, { pending: ["g"], count: 2 });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], count: 2 });
+  await module.bar_report(3, 0, false, { child: true, site: "FRAME" });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], count: 2, site: "FRAME" });
+  // The child loses the focus: the top frame's own report brings its keys back and drops the child's.
+  await module.bar_report(3, 0, false, {});
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
+});
+
+test("a report that arrives after the bar went away is dropped", async () => {
+  const { data, config, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar();
+  config.bar_setting = false;
+  await module.sync();
+  await flush();
+  await module.bar_report(3, 0, false, { pending: ["g"] });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
+  config.bar_setting = true;
+  await module.sync();
+  await flush();
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true }, "nothing came back");
 });

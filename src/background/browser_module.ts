@@ -146,6 +146,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   // What each tab last reported for the bar, in memory only: the pending keys of a private tab must not reach the disk, and a restart empties them.
   const bars = new Map<string, BarFields>();
+  // The pending keys and count of the child frame that holds a tab's focus. While one is set it stands in for the top frame's own, which the tab's entry in `bars` may still hold.
+  const child_keys = new Map<string, Pick<BarFields, "pending" | "count">>();
   // Whether the bar is up: the settings are on and the module said in its hello that it built the bar. Pages ask on their first key, so they get this copy and no storage read.
   let bar_seen = false;
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
@@ -159,12 +161,18 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const set_bar_seen = (now: boolean): boolean => {
     if (now === bar_seen) return false;
     bar_seen = now;
-    if (!now) bars.clear();
+    if (!now) {
+      bars.clear();
+      child_keys.clear();
+    }
     deps.on_bar_change?.();
     return true;
   };
 
-  const tab_with_bar = (id: string, tab: TabState | undefined): TabState => ({ mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...bars.get(id) });
+  const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
+    const { pending: _, count: __, ...top } = bars.get(id) ?? {};
+    return { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
+  };
   // A tab that began a load shows no bar fields. A load that leaves the old page in place brings them back at its end, because the page's own report is kept and its content script has nothing new to send.
   const tab_of_record = (id: string, record: TabModeRecord): TabState => (record.awaiting_commit ? tab_state_of(record) : tab_with_bar(id, tab_state_of(record)));
 
@@ -271,22 +279,30 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (state === undefined) return;
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
-    if (record === undefined) bars.delete(tab_id);
+    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
     else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });
   };
 
-  // A content frame reports what the bar shows. The top frame's report replaces the tab's whole entry, except that one marked `child` leaves the pending keys and count as they are, because a child frame holds the focus and reports its own. A child frame only says what it has half-typed. `site` never reaches a private tab.
+  // A content frame reports what the bar shows. The top frame's report replaces the tab's entry and ends the child's keys, unless it is marked `child`: then a child frame holds the focus, the report has no keys of its own, and the child's keys stay. A child frame says only what it has half-typed. `site` never reaches a private tab.
   const bar_report_now = async (tab_id: string, frame_id: number, incognito: boolean, raw: Record<string, unknown>): Promise<void> => {
-    const { site, ...fields } = bar_fields_of(raw);
-    const given: BarFields = incognito || site === undefined ? fields : { ...fields, site };
-    const { pending: _, count: __, ...kept } = bars.get(tab_id) ?? {};
-    const prior = bars.get(tab_id) ?? {};
-    const next: BarFields = frame_id === 0 ? (raw.child === true ? { ...given, ...(prior.pending && { pending: prior.pending }), ...(prior.count && { count: prior.count }) } : given) : { ...kept, ...(given.pending && { pending: given.pending }), ...(given.count && { count: given.count }) };
-    if (JSON.stringify(next) === JSON.stringify(bars.get(tab_id) ?? {})) return;
-    if (Object.keys(next).length === 0) bars.delete(tab_id);
-    else bars.set(tab_id, next);
+    // A report in flight when the bar went away must not fill the maps again.
+    if (!bar_seen) return;
+    const { site, pending, count, ...rest } = bar_fields_of(raw);
+    const before = JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]);
+    if (frame_id !== 0) {
+      const keys = { ...(pending && { pending }), ...(count && { count }) };
+      if (Object.keys(keys).length === 0) child_keys.delete(tab_id);
+      else child_keys.set(tab_id, keys);
+    } else {
+      if (raw.child !== true) child_keys.delete(tab_id);
+      const own = raw.child === true ? {} : { ...(pending && { pending }), ...(count && { count }) };
+      const top: BarFields = { ...own, ...rest, ...(!incognito && site !== undefined && { site }) };
+      if (Object.keys(top).length === 0) bars.delete(tab_id);
+      else bars.set(tab_id, top);
+    }
+    if (JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]) === before) return;
     const state = await read_state();
     if (state === undefined || !(await deps.is_on())) return;
     if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return;
