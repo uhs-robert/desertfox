@@ -262,6 +262,7 @@ const GROUP_TITLES: Record<string, string> = {
   native: "Native host",
   open: "Open pages",
   page: "Page",
+  pane: "Panes",
   permissions: "Permissions",
   quickmark: "Quickmarks",
   register: "Registers",
