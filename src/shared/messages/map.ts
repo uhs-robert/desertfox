@@ -37,6 +37,7 @@ export type ContentRequests = Checked<{
   open_help: Entry<content.OpenHelp, Void>;
   record_step: Entry<content.RecordStep, Void>;
   read_keymap: Entry<content.ReadKeymap, string | undefined>;
+  read_keymap_state: Entry<content.ReadKeymapState, content.KeymapPageState | undefined>;
   replay_end: Entry<content.ReplayEnd, { ok: boolean }>;
   replay_stop: Entry<content.ReplayStop, Void>;
   find_scan: Entry<content.FindScan, content.FindScanAnswer>;

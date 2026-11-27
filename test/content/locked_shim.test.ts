@@ -7,6 +7,10 @@ import { BROWSER_MODULE_PROTOCOL_VERSION as V, MAX_KIND_BYTES } from "../../src/
 import type { SnapshotPart } from "../../src/shared/browser_module_protocol.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../../src/shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
+import { page_keymap_for } from "../../src/background/page_keymap.ts";
+import { compile_keymap } from "../../src/shared/keys/index.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY } from "../../src/shared/prefix_tree.ts";
+import type { CompiledKeymap } from "../../src/shared/prefix_tree.ts";
 
 // The shipped bundle, run as the browser module runs it: in a fresh global that holds only the transport.
 const bundle = (await build(release_options({ locked_shim: "src/content/locked_shim.ts" }))).outputFiles[0]!.text;
@@ -50,6 +54,15 @@ function load(snapshots: Partial<Record<SnapshotPart, unknown>> = {}) {
 }
 
 const snap = (value: unknown) => ({ v: V, value });
+
+const resolve = () => ({ runs_in: "content" as const, label: "x", count: "ignore" as const });
+const KEYMAP = { normal: { j: { id: "a.j" }, k: { id: "a.k" }, q: { id: "macro.record" }, ",i": { id: "a.i" } }, browser: {} };
+const SITE_RULES = [{ site: "https://pass.test/*", pass: "j" }, { site: "https://off.test/*", off: true }, { site: "https://only.test/*", only: "k" }, { site: "https://bind.test/*", bind: { j: { id: "a.bound" } } }];
+const stored_keymap = compile_keymap(KEYMAP as never, { site_rules: SITE_RULES } as never, resolve).compiled as CompiledKeymap;
+const keymap_snapshot = snap(JSON.stringify(stored_keymap));
+// What the background's `read_keymap_state` answers for a locked tab.
+const state_of = (state: Record<string, unknown>) => async () => JSON.stringify({ value: state });
+const storage_of = (keymap: CompiledKeymap) => ({ get: async () => ({ [COMPILED_KEYMAP_STORAGE_KEY]: keymap }) }) as never;
 // Values made in the shim's global have that global's prototypes.
 const plain = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
@@ -86,8 +99,10 @@ test("a message too large for its kind is refused here, before the transport", a
 
 test("read_keymap and the root which-key panel come from their snapshots, a bundle load from the module", async () => {
   const panel = { title: [], rows: [{ keys: "j", command: "scroll", description: "", more: false }], border: "square" };
-  const { browser, state, snapshots } = load({ keymap: snap('{"keymap":{}}'), which_key: snap(panel) });
-  assert.equal(await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "about:addons" }), '{"keymap":{}}');
+  const { browser, state, snapshots } = load({ keymap: keymap_snapshot, which_key: snap(panel) });
+  state.answer = state_of({ address: "https://example.test/" });
+  assert.ok(JSON.parse((await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "about:addons" })) as string).keymap.modes.normal);
+  state.calls.length = 0;
   assert.deepEqual(await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: [], url: "about:addons" }), panel);
   assert.deepEqual(state.calls, []);
   await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: ["g"], url: "about:addons" });
@@ -95,13 +110,100 @@ test("read_keymap and the root which-key panel come from their snapshots, a bund
   assert.deepEqual(plain(await browser.runtime.sendMessage({ type: "load_bundle", name: "hints" })), { ok: true });
   assert.deepEqual(state.bundles, ["hints"]);
   // A snapshot that fails its check serves nothing.
-  snapshots.keymap = { v: V + 1, value: '{"keymap":{}}' };
+  snapshots.keymap = { v: V + 1, value: JSON.stringify(stored_keymap) };
   assert.equal(await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "" }), undefined);
   snapshots.keymap = { v: V, value: { not: "text" } };
   assert.equal(await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "" }), undefined);
   snapshots.which_key = undefined;
   await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: [], url: "" });
   assert.equal(state.calls.length, 2, "no root snapshot, so the panel is a call");
+});
+
+const ask = async (browser: Shimmed, extra: Record<string, unknown> = {}) => {
+  const text = (await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "https://page.says/", ...extra })) as string | undefined;
+  return text === undefined ? undefined : (JSON.parse(text) as { all_off: boolean; recording?: string; join?: string; keymap: { bar?: boolean; mode_indicator?: string; modes: { normal: { children: Record<string, unknown> } } } });
+};
+
+test("read_keymap resolves the snapshot's site rules for the address the background names and asks for the state with the join flag only", async () => {
+  const { browser, state } = load({ keymap: keymap_snapshot });
+  state.answer = state_of({ address: "https://pass.test/a" });
+  assert.equal((await ask(browser))!.keymap.modes.normal.children["j"], undefined, "pass");
+  state.answer = state_of({ address: "https://off.test/a" });
+  assert.equal((await ask(browser))!.all_off, true, "off");
+  state.answer = state_of({ address: "https://only.test/a" });
+  assert.deepEqual(Object.keys((await ask(browser))!.keymap.modes.normal.children).includes("j"), false, "only");
+  state.answer = state_of({ address: "https://bind.test/a" });
+  assert.equal(JSON.stringify((await ask(browser))!.keymap.modes.normal.children["j"]).includes("a.bound"), true, "bind");
+  state.answer = state_of({ address: "https://example.test/" });
+  const plain = (await ask(browser))!;
+  assert.equal(plain.all_off, false);
+  assert.ok(plain.keymap.modes.normal.children["j"]);
+  assert.deepEqual(state.calls.slice(-1), ['{"type":"read_keymap_state","join":true}'], "the page's own url is not sent");
+  assert.equal(JSON.stringify((await ask(browser, { join: false }))).length > 0, true);
+  assert.equal(state.calls.slice(-1)[0], '{"type":"read_keymap_state","join":false}');
+});
+
+test("an address the page names is ignored: the background's address decides", async () => {
+  const { browser, state } = load({ keymap: keymap_snapshot });
+  state.answer = state_of({ address: "https://example.test/" });
+  assert.equal((await ask(browser, { url: "https://off.test/a", address: "https://off.test/a" }))!.all_off, false);
+  // A state with no address, or an address that is not text, gives no keymap rather than the page's own.
+  for (const bad of [{}, { address: 5 }, { address: { href: "https://off.test/a" } }]) {
+    state.answer = state_of(bad);
+    assert.equal(await ask(browser, { url: "https://off.test/a" }), undefined, JSON.stringify(bad));
+  }
+  state.answer = async () => JSON.stringify({});
+  assert.equal(await ask(browser), undefined, "a tab that is not locked gets no state");
+});
+
+test("recording, the insert join and the bar flag pass through; other joins and junk do not", async () => {
+  const { browser, state } = load({ keymap: keymap_snapshot });
+  state.answer = state_of({ address: "https://example.test/", recording: "a", join: "insert", bar: true });
+  const reply = (await ask(browser))!;
+  assert.equal(reply.recording, "a");
+  assert.equal(reply.join, "insert");
+  assert.deepEqual([reply.keymap.bar, reply.keymap.mode_indicator], [true, "off"]);
+  for (const [join, recording, bar] of [["media", 5, "yes"], ["item", {}, 1], [{}, [], null]]) {
+    state.answer = state_of({ address: "https://example.test/", join, recording, bar });
+    const junk = (await ask(browser))!;
+    assert.deepEqual([junk.join, junk.recording, junk.keymap.bar], [undefined, undefined, undefined], JSON.stringify([join, recording, bar]));
+  }
+});
+
+test("the shim's answer equals page_keymap_for for the same inputs", async () => {
+  const { browser, state } = load({ keymap: keymap_snapshot });
+  for (const address of ["https://example.test/", "https://pass.test/a", "https://off.test/a", "https://only.test/a", "https://bind.test/a"]) {
+    for (const extra of [{}, { recording: "a" }, { join: "insert" as const }, { bar: true }, { recording: "b", join: "insert" as const, bar: true }]) {
+      state.answer = state_of({ address, ...extra });
+      const expected = await page_keymap_for(storage_of(stored_keymap), [address], extra.recording, async () => extra.join, extra.bar);
+      assert.deepEqual(await ask(browser), plain(expected), JSON.stringify([address, extra]));
+    }
+  }
+});
+
+test("a keymap snapshot of the wrong shape gives no keymap and asks nothing", async () => {
+  const { browser, state, snapshots } = load({ keymap: keymap_snapshot });
+  state.answer = state_of({ address: "https://example.test/" });
+  const stale = { ...stored_keymap, format_version: stored_keymap.format_version + 1 };
+  for (const text of ["not json", "[1]", "null", JSON.stringify({ modes: 5, format_version: stored_keymap.format_version }), JSON.stringify(stale), JSON.stringify({ ...stored_keymap, modes: [] })]) {
+    snapshots.keymap = snap(text);
+    assert.equal(await ask(browser), undefined, text.slice(0, 40));
+  }
+  assert.deepEqual(state.calls, []);
+});
+
+test("tree_updated makes the page ask again, and the new answer reads the new snapshot and state", async () => {
+  const { browser, state, snapshots, changed } = load({ keymap: keymap_snapshot });
+  let updates = 0;
+  browser.runtime.onMessage.addListener(((message: { type?: string }) => void (message.type === "tree_updated" && updates++)) as never);
+  state.answer = state_of({ address: "https://example.test/" });
+  assert.equal((await ask(browser))!.recording, undefined);
+  state.answer = state_of({ address: "https://example.test/", recording: "a" });
+  snapshots.keymap = snap(JSON.stringify({ ...stored_keymap, item_navigator: true }));
+  changed("keymap");
+  assert.equal(updates, 1);
+  assert.equal((await ask(browser))!.recording, "a");
+  assert.equal(state.calls.length, 2);
 });
 
 test("storage.local serves the config status and the theme from snapshots and refuses every other key", async () => {

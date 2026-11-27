@@ -4,7 +4,7 @@ import { best_effort, keep_chain, warn_and_go } from "../shared/swallow.ts";
 import type { MergedConfig, SettingEdits } from "../shared/config.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { registry } from "../shared/registry/builtin.ts";
-import { container_names } from "./browser_deps.ts";
+import { container_names, send_to_tab } from "./browser_deps.ts";
 import { compile_config } from "./compile.ts";
 import type { CompileInput } from "./compile.ts";
 import type { KeymapState } from "./keymap_message.ts";
@@ -298,9 +298,8 @@ export function create_config_store(deps: Pick<Services, "snippets" | "autoconfi
 
   async function tell_tabs_tree_changed(): Promise<void> {
     const tabs = await browser.tabs.query({});
-    await Promise.all(
-      tabs.map((tab) => (tab.id === undefined ? undefined : best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))),
-    );
+    // Not awaited, for the reason `tell_tabs` in macro_recorder.ts gives.
+    for (const tab of tabs) if (tab.id !== undefined) void best_effort(send_to_tab(tab.id, { type: "tree_updated" }));
   }
 
   return {

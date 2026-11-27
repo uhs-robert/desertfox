@@ -26,7 +26,7 @@ import { browser_tab_action_deps } from "./tab_actions.ts";
 import { create_open_help } from "./open_help.ts";
 import { mark_list_rows, quickmark_list_rows } from "../shared/mark_text.ts";
 import { start_bridge } from "./bridge_browser.ts";
-import { item_start_for, media_quality_is_idle, read_keymap_reply } from "./page_keymap.ts";
+import { item_start_for, media_quality_is_idle } from "./page_keymap.ts";
 import { track_window_focus } from "./window_focus.ts";
 import { create_external_editor, make_editor_ext_for } from "./external_editor.ts";
 import { create_site_zoom, make_level_for } from "./site_zoom.ts";
@@ -304,7 +304,11 @@ const browser_module_rpc = create_browser_module_rpc({
   // The table is built below, after the last service it names. A call arrives only after the first turn.
   dispatch: (message, sender) => locked_page_dispatch(message, sender),
   read_part: {
-    keymap: () => read_keymap_reply(browser.storage.local, []),
+    // The whole stored keymap with its site rules: the shim resolves them for the tab address that `read_keymap_state` gives.
+    keymap: async () => {
+      const keymap = current_keymap(await stored_keymap(browser.storage.local));
+      return keymap && JSON.stringify(keymap);
+    },
     config: () => stored_value(CONFIG_STATUS_STORAGE_KEY),
     theme: () => stored_value(THEME_STORAGE_KEY),
     which_key: () => list_keys(browser.storage.local, (id) => registry.get(id), { mode: "normal", prefix: [] }),
@@ -323,7 +327,7 @@ const browser_module = create_browser_module({
   is_on: () => module_setting_on(browser.storage.local),
   read_bar_config: () => read_bar_config(browser.storage.local),
   read_theme: async () => (await browser.storage.local.get(THEME_STORAGE_KEY))[THEME_STORAGE_KEY],
-  on_bar_change: () => void browser.tabs.query({}).then((tabs) => tabs.forEach((tab) => tab.id === undefined || void best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))).catch(warn_and_go("browser_module.on_bar_change")),
+  on_bar_change: () => void browser.tabs.query({}).then((tabs) => tabs.forEach((tab) => tab.id === undefined || void best_effort(send_to_tab(tab.id, { type: "tree_updated" })))).catch(warn_and_go("browser_module.on_bar_change")),
   check_args: (id, args) => {
     const command = registry.get(id);
     const checked = command && check_args(command, args);
@@ -458,7 +462,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
 const handlers = {
   ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
-  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab }),
 } satisfies Handlers<keyof ToBackground>;
 browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
 // A locked page is never an extension page, whatever its message says.

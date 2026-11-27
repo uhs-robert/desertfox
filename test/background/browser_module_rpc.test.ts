@@ -35,6 +35,7 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
     run: { from: "any", run: record("run") },
     mode_changed: { from: "frame", run: (request: unknown, at: { sender: Sender }) => record("mode_changed")(request, at.sender) },
     register_read: { from: "any", run: record("register_read") },
+    read_keymap_state: { from: "any", run: record("read_keymap_state") },
     snippet_run: { from: "any", run: record("snippet_run") },
     change_setting: { from: "page", refused: { ok: false }, run: record("change_setting") },
   } as unknown as Handlers<keyof ToBackground>;
@@ -110,6 +111,19 @@ test("a spoofed tab id, frame, sender or address inside the message is ignored",
   assert.equal(sender.id, undefined);
   assert.equal(sender.url, PDF);
   assert.equal(message.url, PDF, "the address is the tab's");
+});
+
+test("read_keymap_state is a page call, answered from the tab's own address, and a setting that is off refuses it", async () => {
+  const { seen, answers, from_module, page_replies, config, base_replies } = setup();
+  answers["read_keymap_state"] = (message) => ({ address: message.url });
+  const request = call({ type: "read_keymap_state", join: true, url: "https://off.test/", address: "https://off.test/" });
+  await from_module([request]);
+  assert.equal(seen[0]?.sender.tab?.url, PDF);
+  assert.deepEqual(page_replies()[0]?.answer, { value: { address: PDF } }, "an address the page names is replaced by the tab's");
+  config.on = false;
+  await from_module([call({ type: "read_keymap_state", join: true })]);
+  assert.equal(seen.length, 1);
+  assert.equal(base_replies().at(-1)?.ok, false);
 });
 
 test("a mode report passes the frame guard with frame 0, and Reader View counts as a locked page", async () => {

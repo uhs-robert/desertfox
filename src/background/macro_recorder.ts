@@ -12,6 +12,7 @@ import { MACRO_RECORDING_PRIVATE_STORAGE_KEY, MACRO_RECORDING_STORAGE_KEY } from
 import { create_write_queue } from "./store_turns.ts";
 import { is_replaying } from "./macro_replay.ts";
 import { best_effort, refused_as } from "../shared/swallow.ts";
+import { send_to_tab } from "./browser_deps.ts";
 
 declare const browser: MessagingBrowser;
 
@@ -115,6 +116,7 @@ export const browser_macro_recorder = create_macro_recorder({
   is_replaying,
   tell_tabs: async () => {
     const tabs = await browser.tabs.query({});
-    await Promise.all(tabs.map((tab) => (tab.id === undefined ? undefined : best_effort(browser.tabs.sendMessage(tab.id, { type: "tree_updated" })))));
+    // Not awaited: a locked tab answers through the browser module, which can take a while or never, and a recording must not wait on it.
+    for (const tab of tabs) if (tab.id !== undefined) void best_effort(send_to_tab(tab.id, { type: "tree_updated" }));
   },
 });

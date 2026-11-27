@@ -314,6 +314,8 @@ export const LOCKED_PAGE_ROUTES = {
   open_help: "background",
   record_step: "background",
   read_keymap: "snapshot",
+  // The shim resolves the keymap snapshot itself and asks for what a snapshot cannot hold.
+  read_keymap_state: "background",
   replay_end: "background",
   replay_stop: "background",
   find_scan: "background",
