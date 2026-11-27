@@ -4,6 +4,7 @@ import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { evaluate_in_chrome } from "./rdp.mjs";
 import { module_steps } from "./browser_module_steps.mjs";
+import { spawn } from "node:child_process";
 
 export const areas = ["keys", "config", "tabs"];
 
@@ -33,11 +34,62 @@ export async function run_cases(context) {
     await sleep(600);
     return (await tabs_shown_since(switch_mark)).length > 0;
   };
+  // PROBE (dead-keys-flake): a timeline of run messages and activations in the background, CPU load during holds, and a revive check after a short hold.
+  const install_probe = () =>
+    in_background(`(() => {
+      if (!globalThis.dkf_log) {
+        globalThis.dkf_log = [];
+        const now = () => Math.round(performance.now());
+        browser.tabs.onActivated.addListener(({ tabId }) => globalThis.dkf_log.push([now(), "act", tabId]));
+        browser.tabs.onUpdated.addListener((tabId, info) => { if (info.status) globalThis.dkf_log.push([now(), info.status, tabId]); });
+        browser.runtime.onMessage.addListener((message, sender) => { if (message?.type === "run") globalThis.dkf_log.push([now(), message.repeat ? "rep" : "press", sender.tab?.id, message.invocations?.map((i) => i.id).join("+")]); return undefined; });
+      }
+      return globalThis.dkf_log.length;
+    })()`);
+  const probe_since = async (mark) => {
+    const names = await in_background(`browser.tabs.query({}).then((tabs) => Object.fromEntries(tabs.map((tab) => [tab.id, URL.canParse(tab.url) ? new URL(tab.url).searchParams.get("id") ?? tab.url : tab.url])))`);
+    const rows = await in_background(`globalThis.dkf_log.slice(${mark})`);
+    const t0 = rows[0]?.[0] ?? 0;
+    return rows.map(([t, what, tab, ids]) => `${t - t0}:${what}:${names[tab] ?? tab}${ids ? ":" + ids : ""}`).join(" ");
+  };
+  const chrome_state = () =>
+    evaluate_in_chrome(rdp, `(() => { const w = Services.wm.getMostRecentWindow("navigator:browser"), b = w.gBrowser.selectedBrowser, fm = Services.focus, el = fm.focusedElement, core = Services.desertfox_browser_module;
+      return { focused: el && (el.localName + "#" + el.id), is_selected: el === b, active: fm.activeWindow === w,
+        held_by: core?.keys_held_by?.(w) ?? null, pending: core?.module_pending?.(w) ?? null,
+        popups: [...w.document.querySelectorAll("panel, menupopup")].filter((p) => p.state === "open").map((p) => p.id || p.localName),
+        switcher: w.gBrowser._switcher ? [w.gBrowser._switcher.requestedTab?.label, w.gBrowser._switcher.visibleTab?.label] : null,
+        layers: [b.renderLayers, b.hasLayers, b.docShellIsActive], url: b.currentURI.spec }; })()`).catch((error) => `error ${error.message}`);
+  const load_n = Number(process.env.DKF_LOAD ?? 0);
   const hold = async (key, ms) => {
+    await install_probe();
+    const probe_mark = await install_probe();
     const switch_mark = await tab_switch_mark();
-    await send_keys("-M", "shift", "-P", key, "-s", String(ms), "-p", key, "-m", "shift");
-    await sleep(400);
-    return tabs_shown_since(switch_mark);
+    const burners = Array.from({ length: load_n }, () => spawn(process.execPath, ["-e", "for(;;){}"], { stdio: "ignore" }));
+    try {
+      await send_keys("-M", "shift", "-P", key, "-s", String(ms), "-p", key, "-m", "shift");
+      await sleep(400);
+    } finally {
+      for (const burner of burners) burner.kill("SIGKILL");
+    }
+    const shown = await tabs_shown_since(switch_mark);
+    const typed_per_tab = await in_background(`(async () => { const out = {}; for (const tab of await browser.tabs.query({ currentWindow: true })) { const [answer] = await browser.tabs.executeScript(tab.id, { code: 'JSON.stringify({ typed: [...document.querySelectorAll("input,[contenteditable]")].map((f) => f.value ?? f.textContent).join(""), focus: document.activeElement?.localName, mode: document.documentElement.getAttribute("data-desertfox-mode") })' }).catch(() => [""]); out[new URL(tab.url).searchParams.get("id")] = answer; } return out; })()`);
+    const typed_tabs = Object.entries(typed_per_tab).filter(([, answer]) => answer && JSON.parse(answer).typed);
+    if (typed_tabs.length) log(`PROBE typed in ${JSON.stringify(typed_tabs)}`);
+    log(`PROBE hold ${key} ${ms}ms load ${load_n}: ${shown.length} switches; timeline ${await probe_since(probe_mark)}`);
+    if (shown.length < 7) {
+      log(`PROBE stopped: active ${await page_id_now()} badge ${badge_of(await page_id_now())} page ${await page_state()} chrome ${JSON.stringify(await chrome_state())}`);
+      const fresh_mark = await tab_switch_mark();
+      const fresh_probe = await install_probe();
+      await press_keys("J");
+      await sleep(800);
+      log(`PROBE fresh J: ${(await tabs_shown_since(fresh_mark)).length} switches; timeline ${await probe_since(fresh_probe)}`);
+      const again_mark = await tab_switch_mark();
+      const again_probe = await install_probe();
+      await send_keys("-M", "shift", "-P", key, "-s", String(ms), "-p", key, "-m", "shift");
+      await sleep(400);
+      log(`PROBE hold again ${key}: ${(await tabs_shown_since(again_mark)).length} switches; timeline ${await probe_since(again_probe)}`);
+    }
+    return shown;
   };
   // Every tab in turn by the tab bar (the background), so a dead tab is found without DesertFox's own keys.
   const dead_tabs = async (prefix) => {
@@ -86,7 +138,7 @@ export async function run_cases(context) {
     let typed = "";
     await run_case(`${what}: held Shift+J and Shift+K keep switching and type nothing`, async () => {
       const order = await tab_order();
-      const forward = await hold("j", 1500);
+      const forward = await hold("j", discard ? 4000 : 1500);
       log(`J switched ${forward.length}: ${forward.join(",")}`);
       const back = await hold("k", 1500);
       log(`K switched ${back.length}: ${back.join(",")}`);
