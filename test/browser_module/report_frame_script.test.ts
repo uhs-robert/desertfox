@@ -128,6 +128,33 @@ test("a load window ignores user activation, as held Shift+J repeats give it, an
   assert.equal(frame.last_load_focus(), false);
 });
 
+test("a key or click between DOMContentLoaded and load keeps the load event from opening a new window", () => {
+  for (const [what, type, event] of [
+    ["a mouse press", "mousedown", {}],
+    ["a key", "keydown", { key: "j" }],
+  ] as const) {
+    const frame = report_frame();
+    frame.fire("DOMContentLoaded");
+    frame.fire(type, event);
+    frame.fire("load");
+    frame.focus_field();
+    assert.equal(frame.last_load_focus(), false, what);
+    assert.equal(frame.core_blurs(), 0, what);
+    frame.hide();
+    frame.show();
+    assert.equal(frame.last_load_focus(), true, `${what}: a later show still opens a switch window`);
+  }
+});
+
+test("a held key's repeat between DOMContentLoaded and load leaves the load window to open", () => {
+  const frame = report_frame();
+  frame.fire("DOMContentLoaded");
+  frame.fire("keydown", { key: "J", repeat: true });
+  frame.fire("load");
+  frame.focus_field();
+  assert.equal(frame.last_load_focus(), true);
+});
+
 test("a window blurs five times, then a page that takes the focus back keeps the field", () => {
   const frame = report_frame();
   frame.show();

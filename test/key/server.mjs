@@ -240,7 +240,7 @@ export function start_server() {
     if (url.pathname === "/refocus") {
       // A field the page fights to keep focused, as a login form or a chat prompt does. The id picks the ways it refocuses, each a word in the id:
       // `auto` an autofocus attribute, `login` a sign-in form with autocomplete, `vis` a focus on each show and on window focus,
-      // `blur` a focus inside the field's own blur handler, `blurt` the same a tick later, `loop` a focus every 30 ms for 3 s after a blur.
+      // `blur` a focus inside the field's own blur handler, `blurt` the same a tick later.
       // `ce` a contenteditable prompt in place of the input, as a chat page has, and `heavy` 40 ms of work per refocus, as a large app renders.
       // `window.refocus_count` counts the focus calls, so a test can see a blur and refocus loop.
       const has = (word) => id.split("_").includes(word);
@@ -260,7 +260,6 @@ export function start_server() {
         ${has("vis") ? 'document.addEventListener("visibilitychange", () => document.hidden || refocus()); addEventListener("focus", refocus);' : ""}
         ${has("blur") ? 'field.addEventListener("blur", refocus);' : ""}
         ${has("blurt") ? 'field.addEventListener("blur", () => setTimeout(refocus));' : ""}
-        ${has("loop") ? 'let loop_ends = 0; setInterval(() => Date.now() < loop_ends && document.activeElement !== field && refocus(), 30); field.addEventListener("blur", () => (loop_ends = Date.now() + 3000));' : ""}
         addEventListener("focusin", (event) => send("focused", { id: event.target.id }));
       </script>`;
       return response.end(page(`refocus ${id}`, `${field}${tall_filler}${script}`));

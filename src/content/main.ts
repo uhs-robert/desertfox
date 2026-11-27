@@ -184,7 +184,7 @@ function on_keydown(event: KeyboardEvent): void {
   cancelled_keys.saw_keydown_(event.code);
   if (!event.isTrusted) return;
   // Before the token filter: a key that starts a composition or has no token (Dead, Process) is the user typing too. A held key's repeats and a modifier alone are not.
-  if (!event.repeat && !/^(Shift|Control|Alt|Meta|AltGraph|OS|CapsLock)$/.test(event.key)) end_blur();
+  if (!event.repeat && !/^(Shift|Control|Alt|Meta|AltGraph|OS|CapsLock)$/.test(event.key)) end_blur_by_input();
   if (event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
@@ -300,6 +300,9 @@ let blurs_left = 0;
 // The focus_on_load element this window focused, whose own focusin is no page focus.
 let load_focus_given: Element | null = null;
 const end_blur = () => (blur_ends_ms = 0);
+// A key or click of the user's own, which no held key's repeat sets. Once set, no load window opens: input before the keymap reply must keep its field.
+let user_input_seen = false;
+const end_blur_by_input = () => ((user_input_seen = true), end_blur());
 // Whether a click or key has reached this window.
 const activated = (): boolean => navigator.userActivation.hasBeenActive;
 
@@ -369,7 +372,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   const first_install = !matcher_installed;
   matcher_installed = true;
   // A field the page focused before the reply came already put the frame in insert mode, and the blur's focusout takes it back.
-  if (first_install && (reply?.site_values?.blur_on_load || reply?.site_values?.focus_on_load)) {
+  if (first_install && !user_input_seen && (reply?.site_values?.blur_on_load || reply?.site_values?.focus_on_load)) {
     load_focus_selector = reply.site_values.focus_on_load ?? "";
     open_blur(false);
   }
@@ -432,7 +435,7 @@ function start(): void {
   watch_roots_around_focus();
   listen("pagehide", bundles.page_hidden_, false);
   listen("visibilitychange", on_visibility_change, false, document);
-  listen("mousedown", (event: MouseEvent) => (event.isTrusted && end_blur(), site_mode.end_on_input_()));
+  listen("mousedown", (event: MouseEvent) => (event.isTrusted && end_blur_by_input(), site_mode.end_on_input_()));
   site_mode.on_change_ = () => {
     install_tree();
     refresh_mode_indicator();

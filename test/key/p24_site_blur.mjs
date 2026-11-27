@@ -116,6 +116,49 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
     expect((await focused_id()) === "first", `the field lost the focus after the click: ${await page_state("blur_click")}`);
   });
 
+  await run_case("a click on a field before the keymap reply keeps the focus there, and typing reaches it", async () => {
+    // The same page lays out the same, so the field's place is read on a first copy, while the background still answers.
+    await open_page("controls", "blur_pre_layout", { new_tab: true });
+    const [x, y] = await in_active_tab(`(() => { const box = document.getElementById("first").getBoundingClientRect(); return [box.left + 10, box.top + box.height / 2]; })()`);
+    const url = url_of("controls", "blur_preclick");
+    const mark = events.length;
+    // A busy background holds the keymap reply back, while the page loads in its own process and takes the click.
+    const busy = in_background(`(() => { const until = Date.now() + 4000; while (Date.now() < until); return true; })()`);
+    await sleep(100);
+    const loaded = await evaluate_in_chrome(rdp, `(async () => {
+      const win = Services.wm.getMostRecentWindow("navigator:browser");
+      const browser = win.gBrowser.selectedBrowser;
+      win.gBrowser.fixupAndLoadURIString(${JSON.stringify(url)}, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      const until = Date.now() + 2000;
+      while ((!browser.currentURI.spec.includes("blur_preclick") || browser.webProgress.isLoadingDocument) && Date.now() < until) await new Promise((resolve) => win.setTimeout(resolve, 20));
+      return browser.currentURI.spec.includes("blur_preclick");
+    })()`);
+    expect(loaded === true, "the page did not load while the background was busy");
+    // A press of the first moments after the load can miss the page, so it repeats until the page reports the focus.
+    const click_seen = () => events.slice(mark).some((event) => event.type === "focused" && event.page_id === "blur_preclick" && event.id === "first");
+    for (let attempt = 0; attempt < 10 && !click_seen(); attempt++) {
+      await evaluate_in_chrome(rdp, `(async () => {
+        const win = Services.wm.getMostRecentWindow("navigator:browser");
+        const browser = win.gBrowser.selectedBrowser;
+        const box = browser.getBoundingClientRect();
+        const at = [(win.mozInnerScreenX + box.left + ${x}) * win.devicePixelRatio, (win.mozInnerScreenY + box.top + ${y}) * win.devicePixelRatio];
+        for (const message of [win.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, win.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
+          win.windowUtils.sendNativeMouseEvent(at[0], at[1], message, 0, 0, browser, null);
+          await new Promise((resolve) => win.setTimeout(resolve, 20));
+        }
+      })()`);
+      await sleep(150);
+    }
+    const replied_before_click = events.slice(mark).some((event) => event.type === "tree_read" && event.page_id === "blur_preclick");
+    expect(click_seen() && !replied_before_click, `the click came too late: seen ${click_seen()}, reply already in ${replied_before_click}`);
+    await busy;
+    await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "blur_preclick", "content script ready on blur_preclick", 6000);
+    await sleep(300);
+    expect((await focused_id()) === "first", `the field lost the focus the user clicked into: ${await page_state("blur_preclick")}`);
+    await press_keys("abc");
+    await with_state("blur_preclick", poll_until("typing in the clicked field", async () => (await in_active_tab(`document.getElementById("first").value`)) === "abc"));
+  });
+
   await run_case("a page reached from a page with user activation still blurs its field", async () => {
     await open_page("controls", "blur_from", { new_tab: true });
     // The key probe of open_page gave this page user activation. A navigation it starts must not hand that to the next page.
