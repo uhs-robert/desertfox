@@ -854,7 +854,7 @@ test("layout fallback: a key held before the keymap arrives reaches a sink with 
 
 test("before the keymap reply, a held key's repeat in a field is dropped unless the user has acted", () => {
   const { flow: fresh, ran } = make_flow(true);
-  assert.equal(fresh.handle_token_("J", true), "cancel", "a repeat in an autofocused field is cancelled");
+  assert.equal(fresh.handle_token_("j", true), "cancel", "a repeat in an autofocused field is cancelled");
   fresh.set_matcher_(create_matcher(keymap));
   assert.deepEqual(ran, [], "the dropped repeat is not held for replay");
   assert.equal(fresh.handle_token_("J", false), "pass", "a first press still reaches the field");
