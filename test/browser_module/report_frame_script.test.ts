@@ -115,12 +115,30 @@ test("the tab going hidden ends the switch window, so a blur that arrives late i
   assert.equal(frame.core_blurs(), 0);
 });
 
-test("a load window still refuses once the page has had a key or click", () => {
+test("a load window ignores user activation, as held Shift+J repeats give it, and ends on a key", () => {
   const frame = report_frame();
   frame.fire("DOMContentLoaded");
   frame.user_activation.hasBeenActive = true;
+  frame.fire("keydown", { key: "J", repeat: true });
+  frame.focus_field();
+  assert.equal(frame.last_load_focus(), true);
+  assert.equal(frame.core_blurs(), 1);
+  frame.fire("keydown", { key: "j" });
   frame.focus_field();
   assert.equal(frame.last_load_focus(), false);
+});
+
+test("a window blurs five times, then a page that takes the focus back keeps the field", () => {
+  const frame = report_frame();
+  frame.show();
+  for (let blur = 1; blur <= 5; blur++) {
+    frame.focus_field();
+    assert.equal(frame.last_load_focus(), true, `focus ${blur}`);
+    assert.equal(frame.core_blurs(), blur);
+  }
+  frame.focus_field();
+  assert.equal(frame.last_load_focus(), false);
+  assert.equal(frame.core_blurs(), 5, "a sixth blur is refused");
 });
 
 test("a blur marked escape works outside any window and after a key, but only for the same document and a field", () => {
