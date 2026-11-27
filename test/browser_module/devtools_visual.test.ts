@@ -2,6 +2,7 @@
 // It drives the key flow: `v` starts the mode in a text area or a code area, the mode's keys move the end of the selection, `y` copies, Escape and other keys end it, and each refusal.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import vm from "node:vm";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { create_firefox, key_event } from "./fake_firefox.ts";
@@ -439,5 +440,18 @@ test("the pref off ends the mode", async () => {
   press("v", output);
   firefox.set_pref(false);
   firefox.set_pref(true);
+  assert.equal(press("w", output).prevented, false);
+});
+
+test("the consent setting or the toolbar switch off ends the mode and its key hold, so it never resumes when the module comes back on", async () => {
+  const { ready, press, output, firefox, window } = started();
+  await ready();
+  press("v", output);
+  const core = firefox.Services.desertfox_browser_module as { keys_held_by(win: unknown): unknown };
+  const seen_window = vm.runInContext("globalThis", window.win.context!);
+  assert.equal(core.keys_held_by(seen_window), "devtools_visual");
+  firefox.write_state({ ...STATE, enabled: false });
+  assert.equal(core.keys_held_by(seen_window), undefined);
+  firefox.write_state(STATE);
   assert.equal(press("w", output).prevented, false);
 });

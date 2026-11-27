@@ -373,8 +373,8 @@ test("labels sit clear of what they mark: a markup line's left of the line, an i
   assert.deepEqual(at("f"), { left: "20px", top: "10px", transform: "translateX(-100%)" });
 });
 
-test("no labels within the time, a click, the pref off and a new hello each end the session", async () => {
-  for (const end of ["timer", "click", "pref", "hello"]) {
+test("no labels within the time, a click, the pref off, the toolbar switch off and a new hello each end the session", async () => {
+  for (const end of ["timer", "click", "pref", "switch", "hello"]) {
     const fixture = started();
     await settle();
     if (end === "timer") {
@@ -386,6 +386,7 @@ test("no labels within the time, a click, the pref off and a new hello each end 
       await fixture.drawn();
       if (end === "click") fixture.window.fire("mousedown");
       if (end === "pref") fixture.firefox.set_pref(false);
+      if (end === "switch") fixture.firefox.write_state({ ...STATE, enabled: false });
       if (end === "hello") {
         fixture.firefox.start_extension();
         fixture.firefox.write_state(STATE);

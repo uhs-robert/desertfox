@@ -62,6 +62,7 @@
     };
     const HINTS_START = "hints.start";
     const VISUAL_START = "visual.start";
+    const MODULE_STATE_KEY = "desertfox_browser_module_state";
     // Empty until the extension pushes a table, so a module with an older extension takes no key in DevTools.
     let actions = new Map();
     const in_editable = (node) =>
@@ -75,6 +76,12 @@
       actions = new Map();
       hints.end();
       visual.forget();
+    });
+    // The pref has its own observer in each feature. The consent setting and the toolbar switch reach the module only through the state, and then no key comes to end the hints or the mode.
+    core.watch_session([MODULE_STATE_KEY], (_key, state) => {
+      if (state?.enabled === true) return;
+      hints.end();
+      visual.end();
     });
 
     // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
@@ -684,6 +691,6 @@
     // Said last, so the extension sends the `v` row only to a module that runs the mode.
     core.set_hello_flag("devtools_visual", true);
 
-    return { start, answer_key, forget };
+    return { start, answer_key, end: () => end(false), forget };
   }
 })(this);
