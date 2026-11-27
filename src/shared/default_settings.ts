@@ -44,6 +44,7 @@ export const DEFAULT_BRIDGE: Settings["bridge"] = false;
 export const DEFAULT_BRIDGE_SHARE_TABS: Settings["bridge_share_tabs"] = false;
 export const DEFAULT_HOST_AUTO_UPDATE: Settings["host_auto_update"] = false;
 export const DEFAULT_BROWSER_MODULE: Settings["browser_module"] = false;
+export const DEFAULT_BROWSER_MODULE_PAGES: Settings["browser_module_pages"] = false;
 export const DEFAULT_COMPLETION_ALL_WINDOWS: Settings["completion_all_windows"] = false;
 export const DEFAULT_ITEM_NAVIGATOR: Settings["item_navigator"] = "shipped";
 export const DEFAULT_ITEM_HOVER: Settings["item_hover"] = true;
@@ -116,6 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bridge_share_tabs: DEFAULT_BRIDGE_SHARE_TABS,
   host_auto_update: DEFAULT_HOST_AUTO_UPDATE,
   browser_module: DEFAULT_BROWSER_MODULE,
+  browser_module_pages: DEFAULT_BROWSER_MODULE_PAGES,
   completion_all_windows: DEFAULT_COMPLETION_ALL_WINDOWS,
   item_navigator: DEFAULT_ITEM_NAVIGATOR,
   item_hover: DEFAULT_ITEM_HOVER,

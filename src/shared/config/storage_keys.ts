@@ -175,3 +175,9 @@ export const BROWSER_MODULE_STATUS_STORAGE_KEY = "desertfox_browser_module_statu
 // The two message lists of the channel (`browser_module_protocol.ts`). Each has one writer: chrome writes the first, the extension the second.
 export const BROWSER_MODULE_FROM_MODULE_STORAGE_KEY = "desertfox_browser_module_from_module";
 export const BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY = "desertfox_browser_module_from_extension";
+// The snapshots of read-only data for the in-page DesertFox on locked pages, one key per part, and the locked tabs it runs in (`background/browser_module_rpc.ts`). The extension writes all five.
+export const BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY = "desertfox_browser_module_snapshot_keymap";
+export const BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY = "desertfox_browser_module_snapshot_config";
+export const BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY = "desertfox_browser_module_snapshot_theme";
+export const BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY = "desertfox_browser_module_snapshot_which_key";
+export const BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY = "desertfox_browser_module_locked_tabs";

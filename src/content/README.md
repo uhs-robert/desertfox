@@ -27,6 +27,7 @@ Entries:
 - `badge_state.ts`, `mode_indicator.ts`: what the badge shows and the badge draw, top frame only.
 - `bundle_calls.ts`: type map of the handlers bundles call in each other. Types only.
 - `bundle_host.ts`, `bundles.ts`: load bundles on first use and keep what they register (`window.desertfox_host`).
+- `locked_shim.ts`: not in `content.js`. The `browser` global the browser module gives `content.js` and the bundles on a locked page. Its own build entry.
 - `relay.ts`: asks the background to run a handler in the top frame or another frame.
 - `run_content.ts`: runs an invocation or a list and answers an `Outcome` that never rejects.
 - `invocation_args.ts`: applies a command's count rule. Pure.

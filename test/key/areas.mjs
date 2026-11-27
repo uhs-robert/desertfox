@@ -55,6 +55,8 @@ export const area_rules = [
   { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
   { globs: ["src/background/browser_module.ts", "src/shared/browser_module_protocol.ts"], areas: ["keys", "tabs"] },
+  // DesertFox page code on a locked page (the PDF viewer, Reader View): the keys, hints and caret mode run there.
+  { globs: ["src/background/browser_module_rpc.ts", "src/content/locked_shim.ts"], areas: ["keys", "tabs", "hints", "caret"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },

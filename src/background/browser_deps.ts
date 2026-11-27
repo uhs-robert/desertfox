@@ -26,13 +26,25 @@ import { ask_page_bundle, ask_selection } from "./selection_ask.ts";
 import type { SelectionAskDeps } from "./selection_ask.ts";
 import { browser_jump_store } from "./jump_store.ts";
 import type { SnippetDeps } from "./snippets.ts";
-import { ignore_refusal } from "../shared/swallow.ts";
+import { ignore_refusal, refused_as } from "../shared/swallow.ts";
 
 declare const browser: MessagingBrowser;
 
+// A locked page has no content script, so a send to it fails first and then goes through the browser module (`browser_module_rpc.ts`). Unset while the module is not wired.
+type LockedTabs = { is_locked_tab: (tab_id: number) => Promise<boolean>; send_to_locked_tab: (tab_id: number, message: unknown, frame_id?: number) => Promise<unknown> };
+let locked_tabs: LockedTabs | undefined;
+export const reach_locked_tabs = (route: LockedTabs): void => {
+  locked_tabs = route;
+};
+
 // Without a frame id the message reaches every frame, which shows a toast in each.
-export function send_to_tab<R extends BackgroundToContent>(tab_id: number, message: R, frame_id?: number): Promise<TabAnswer<R>> {
-  return browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id });
+export async function send_to_tab<R extends BackgroundToContent>(tab_id: number, message: R, frame_id?: number): Promise<TabAnswer<R>> {
+  try {
+    return (await browser.tabs.sendMessage(tab_id, message, frame_id === undefined ? {} : { frameId: frame_id })) as TabAnswer<R>;
+  } catch (error) {
+    if (locked_tabs && (await refused_as(locked_tabs.is_locked_tab(tab_id), false))) return (await locked_tabs.send_to_locked_tab(tab_id, message, frame_id)) as TabAnswer<R>;
+    throw error;
+  }
 }
 
 // A warning, info or success toast on the command's tab, with the notification fallback a refusal has.
@@ -46,7 +58,7 @@ export async function has_content_script(tab_id: number): Promise<boolean> {
     await browser.tabs.sendMessage(tab_id, { type: "ping" });
     return true;
   } catch {
-    return false;
+    return locked_tabs ? refused_as(locked_tabs.is_locked_tab(tab_id), false) : false;
   }
 }
 

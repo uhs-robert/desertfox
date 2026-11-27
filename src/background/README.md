@@ -106,6 +106,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `quality_levels.ts`: the `quality` bundle seen from the background, and the injections of the probe and of the bundle into one frame.
 - `tab_actions.ts`: the one place that mutes, pins, moves and reopens tabs in a container, each over a list of ids.
 - `browser_module.ts`: the state writer and hello reader for the optional browser module, kept in `storage.session`.
+- `browser_module_rpc.ts`: the background end of DesertFox's page code on a locked page: page calls through the message table, pushes in place of `tabs.sendMessage`, the snapshots.
 - `native_client.ts`: the client for the native host.
 - `host_update.ts`, `host_update_browser.ts`: the host updater.
 - `bridge.ts`, `bridge_browser.ts`, `bridge_run.ts`: publish the mode to the bridge host over one `connectNative` port and answer its `run`, `list` and `theme` requests.

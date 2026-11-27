@@ -507,3 +507,45 @@ Measured in the key-test Firefox with the policy `script-src 'self'; object-src 
 - Tab favicon lengths as Firefox 160 hands them to an extension, all `data:` URLs (characters): google 1874, github 1306, youtube 1689, wikipedia 3401, facebook 3721, reddit 23682. The command line list cap is 32768. A fresh scratch profile with network also gave `data:` favicons for tabs restored by session restore (discarded) and after selecting them (google 1874, github 1306, reddit 23682, a DesertFox page 1022). `about:support`, `about:preferences` and `about:addons` gave `chrome:` icons.
 - Not measured: `img-src` after it dropped `https:` and `http:` (a remote `url()` image should now be blocked), and a `moz-icon:` address.
 - The CSP covers extension pages only. A surface that DesertFox draws inside a web page falls under the page's own CSP, so the user CSS check in `build_files_config` is the guard there.
+
+## Locked pages (locked-page-modes)
+
+Question: can DesertFox's own `content.js` and bundles run inside the pages an extension cannot reach (about:addons, about:preferences, the PDF viewer, Reader View), and what does the message channel to the background need to carry?
+
+Setup: Firefox 161.0, a private copy with a temporary profile, and the key-test build. Chrome code sent through the remote debugging protocol stood in for the browser module: a global frame script made the sandbox as Firefox makes a content script sandbox (the page window as prototype, Xrays, the extension id in the sandbox metadata), fetched `content.js` and the bundles from the extension's address and ran them there. A hidden extension page relayed messages to the background, so the round trips below are a lower bound for the `storage.session` channel.
+
+Principals, read from inside the sandbox and checked from the page:
+
+| Principal | about:addons, about:preferences | PDF viewer, Reader View |
+| --- | --- | --- |
+| The page's own (system on the about: pages) | reads and writes the DOM | reads and writes the DOM |
+| Expanded `[page]` | refused: a system principal cannot be part of an expanded one | works, closed shadow roots unreadable |
+| Expanded `[page, extension]`, as for content scripts | refused (same) | works, reads closed shadow roots |
+| Content principal of the page address, null principal | no access | no access |
+
+Results:
+- The PDF viewer and Reader View work under the expanded `[page, extension]` principal. The two about: pages work only under the system principal. So `browser_module_pages` runs DesertFox's page code on the PDF viewer and Reader View only, and the background refuses a page call from any other about: page. The rows below keep what the spike measured on all four.
+- On the PDF viewer and Reader View a page script sees nothing of the sandbox. On the two about: pages the sandbox shares the page's principal, so the globals `content.js` sets on `window` (`desertfox_host` and the load flags) show to the page's own scripts. `browser` and the transport stay on the sandbox global and do not show.
+- `content.js` loads on all four, and the keydown listener counts for the module's liveness check. `f` draws labels on all four (21 to 23 on the toolbars and lists, about 105 ms from key to labels, as on a web page), and a pick clicks. Adopted stylesheets work. `v`, `e`, `y` copies text. Item mode works on the about:addons list.
+- The command line iframe (`cmdline.html`) loads on the PDF viewer and Reader View. On the two about: pages the frame stays `about:blank`.
+- A round trip of `read_keymap` (20 runs): median 4.6 ms on about:addons, 12.7 ms on about:preferences (one run of 55.5 ms), 5 ms on the PDF viewer and 6 ms on Reader View. Making the sandbox and loading `content.js` took 5 to 48 ms.
+- Firefox will not inject the real content script there. Widening the policy's allowed origins makes `canAccessURI` true on all four, but no content script appears: the check runs in the content process on the document principal.
+- The pages that run in the parent process (the two about: pages) refuse a `data:` frame script and a script name that is not a file, resource or chrome address. Content process pages refuse a `file:` frame script.
+- A sandbox left on a page that went away kept a content process at 95% CPU and 1.6 GB. Nuking it on `pagehide` stopped that (4% CPU, 174 MB). On the about: pages one sandbox realm stayed in the parent after navigation and tab close, without growing over three attaches.
+- A cross-process navigation starts a new frame script instance, so a rule kept per browser element stops after the first navigation. Process-wide state keeps it.
+- The bundles call `storage.onChanged` (`src/shared/storage_watch.ts`). Without it the first `f` fails.
+
+Message sizes, as JSON text with the default config:
+
+| Message | Request bytes | Answer bytes |
+| --- | --- | --- |
+| `read_keymap` | 52 | 305,397 |
+| `list_keys`, normal mode, no prefix | 66 | 20,420 |
+| `list_keys`, prefix `g` | 69 | 3,645 |
+| `storage.local.get` of the config status | 60 | 1,855 |
+| `storage.local.get` of the theme | 50 | 1,206 |
+| pushes in a hint and which-key session | | 15 to 90 each |
+
+`hint_frames_start` carries the text of every candidate (about 30 characters each), and the register and editor messages carry free text. So the keymap, the config status, the theme and the root which-key list travel as snapshots, one `storage.session` key each with its own cap (`SNAPSHOT_PARTS` in `src/shared/browser_module_protocol.ts`), and each message kind has a size limit of at most 64 KB.
+
+Not measured: the real `storage.session` channel, a dark theme, scanned, large or form PDFs, real Reader View articles, and an IME.
