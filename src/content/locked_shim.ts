@@ -60,11 +60,17 @@ function locked_browser(transport: Transport) {
       refused = true;
       return undefined;
     }
-    const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
-    if (!is_record(state) || typeof state.address !== "string") return undefined;
-    const { address, recording, join, bar } = state;
-    const page = page_keymap_of(keymap, [address], { recording: typeof recording === "string" ? recording : undefined, join: join === "insert" ? join : undefined, bar: bar === true });
-    return page && JSON.stringify(page);
+    // The same stop for a state that fails or is malformed, or a row the resolver cannot read: an empty tree would leave the page with no keys.
+    try {
+      const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
+      if (!is_record(state) || typeof state.address !== "string") throw new Error("no state");
+      const { address, recording, join, bar } = state;
+      const page = page_keymap_of(keymap, [address], { recording: typeof recording === "string" ? recording : undefined, join: join === "insert" ? join : undefined, bar: bar === true });
+      return page && JSON.stringify(page);
+    } catch {
+      refused = true;
+      return undefined;
+    }
   }
 
   async function call(message: unknown): Promise<unknown> {

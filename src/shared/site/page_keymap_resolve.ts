@@ -1,7 +1,7 @@
 // The page's keymap from a stored keymap: the site table's columns applied, the mode trees grafted and rewritten, then the held-mode join, the macro stop key and the status bar flag. The background answers `read_keymap` with it, and the locked page shim runs the same code on the keymap snapshot, so a page gets the same keys either way.
 
 import { ANY_KEY, ITEM_SELECT_SITE_SETTINGS, PAGE_REPLY_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageKeymap, PageSiteMode, SiteBind, TreeBranch, TreeLeaf } from "../prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, FrameSiteValues, PageKeymap, PageSiteMode, SiteBind, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../default_settings.ts";
 import { is_default_value } from "../keys/compiler.ts";
 import { resolve_mode_parents } from "../keys/mode_parents.ts";
@@ -77,12 +77,26 @@ function with_stop_for_record(node: TreeBranch): TreeBranch {
 // While the browser module's status bar is up the page hides its own corner badge, which the reply says through the setting it already obeys, and reports what the bar shows.
 const with_bar = (reply: PageKeymap, bar: boolean): PageKeymap => (bar ? { ...reply, keymap: { ...reply.keymap, mode_indicator: "off", bar: true } } : reply);
 
+// The stop key of the normal tree, laid over the same place in a site mode's own tree: a mode bind on the record key would hide it, as it hides every key of the normal tree it shares.
+const with_stop_over = (mode_tree: Record<string, TreeNode>, stopped: TreeBranch): Record<string, TreeNode> =>
+  Object.fromEntries(
+    Object.entries(mode_tree).map(([token, node]) => {
+      const over = stopped.children[token];
+      if (over === STOP_LEAF) return [token, STOP_LEAF];
+      return [token, over?.kind === "branch" && node.kind === "branch" ? { ...node, children: with_stop_over(node.children, over) } : node];
+    }),
+  );
+
 // `recording` is the register a macro is being recorded into, or undefined.
 const with_recording = (reply: PageKeymap, recording: string): PageKeymap => {
   const normal = reply.keymap.modes.normal;
+  const stopped = normal && with_stop_for_record(normal);
   // A mode tree meets the stop key too: a mode bind under the record key would otherwise hide it.
-  const site_modes = reply.site_modes && Object.fromEntries(Object.entries(reply.site_modes).map(([name, mode]) => [name, { ...mode, tree: with_stop_for_record({ kind: "branch", children: mode.tree }).children }]));
-  return { ...reply, ...(site_modes && { site_modes }), keymap: normal ? { ...reply.keymap, modes: { ...reply.keymap.modes, normal: with_stop_for_record(normal) } } : reply.keymap, recording };
+  const site_modes = reply.site_modes && Object.fromEntries(Object.entries(reply.site_modes).map(([name, mode]) => {
+    const own = with_stop_for_record({ kind: "branch", children: mode.tree }).children;
+    return [name, { ...mode, tree: stopped ? with_stop_over(own, stopped) : own }];
+  }));
+  return { ...reply, ...(site_modes && { site_modes }), keymap: stopped ? { ...reply.keymap, modes: { ...reply.keymap.modes, normal: stopped } } : reply.keymap, recording };
 };
 
 // The stored keymap trimmed for the page's addresses: the table's columns are resolved away, so the content script holds no rule logic. Undefined when no usable keymap is stored.

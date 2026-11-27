@@ -142,13 +142,28 @@ test("an address the page names is ignored: the background's address decides", a
   const { browser, state } = load({ keymap: keymap_snapshot });
   state.answer = state_of({ address: "https://example.test/" });
   assert.equal((await ask(browser, { url: "https://off.test/a", address: "https://off.test/a" }))!.all_off, false);
-  // A state with no address, or an address that is not text, gives no keymap rather than the page's own.
-  for (const bad of [{}, { address: 5 }, { address: { href: "https://off.test/a" } }]) {
-    state.answer = state_of(bad);
-    assert.equal(await ask(browser, { url: "https://off.test/a" }), undefined, JSON.stringify(bad));
+});
+
+// An empty tree would leave the page with no keys, so a state the shim cannot use stops the page code as a missing keymap does.
+test("a state that fails, is missing or is malformed, or a row the resolver cannot read, stops the page code", async () => {
+  const broken_row = JSON.parse(JSON.stringify(stored_keymap)) as { site_rules: { keymap?: unknown }[] };
+  broken_row.site_rules[0]!.keymap = { visual: null };
+  const cases: { answer: () => Promise<string>; keymap?: unknown }[] = [
+    { answer: state_of({}) },
+    { answer: state_of({ address: 5 }) },
+    { answer: state_of({ address: { href: "https://off.test/a" } }) },
+    { answer: async () => JSON.stringify({}) },
+    { answer: async () => JSON.stringify({ error: "the page went away" }) },
+    { answer: () => Promise.reject(new Error("the module lost the call")) },
+    { answer: state_of({ address: "https://pass.test/a" }), keymap: snap(broken_row) },
+  ];
+  for (const { answer, keymap } of cases) {
+    const { browser, state } = load({ keymap: keymap ?? keymap_snapshot });
+    state.answer = answer;
+    assert.equal(await ask(browser), undefined);
+    assert.equal(browser.runtime.id, undefined, "the page code sees the extension gone");
+    await assert.rejects(browser.runtime.sendMessage({ type: "register_read", name: "a" }), /invalidated/);
   }
-  state.answer = async () => JSON.stringify({});
-  assert.equal(await ask(browser), undefined, "a tab that is not locked gets no state");
 });
 
 test("recording, the insert join and the bar flag pass through; other joins and junk do not", async () => {

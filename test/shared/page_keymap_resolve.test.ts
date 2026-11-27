@@ -20,6 +20,7 @@ const SITE_RULES = [
   { site: "https://bind.test/*", bind: { j: { id: "tab.next" } } },
   { site: "https://modes.test/*", modes: { visual: { label: "VISUAL", bind: { l: { id: "tab.next" } } } } },
   { site: "https://sticky.test/*", modes: { reading: { label: "READ", sticky: true, bind: { z: { id: "tab.prev" } } } } },
+  { site: "https://rec.test/*", modes: { rec: { label: "REC", bind: { q: { id: "tab.next" }, w: { id: "tab.prev" } } } } },
   { site: "https://zoom.test/*", blur_on_load: true, scroll_selector: "#pane" },
 ];
 
@@ -80,6 +81,14 @@ test("recording swaps the stop key into the normal tree and into site modes, and
   assert.equal(JSON.stringify(page_keymap_of(keymap, ["https://modes.test/a"])!.keymap.modes.normal?.children["q"]).includes("macro.stop"), false);
   assert.equal(page_keymap_of(keymap, ["https://off.test/a"], { join: "insert" })!.join, undefined);
   assert.equal(page_keymap_of(keymap, ["https://example.test/"], { join: "insert" })!.join, "insert");
+});
+
+test("while recording, a site mode that binds the record key still gets the stop key and keeps its other binds", () => {
+  const keymap = compiled_with({});
+  const mode_tree = (state: { recording?: string }) => page_keymap_of(keymap, ["https://rec.test/a"], state)!.site_modes!["rec"]!.tree;
+  assert.equal(JSON.stringify(mode_tree({})["q"]).includes("tab.next"), true, "not recording: the mode's own bind");
+  assert.equal(JSON.stringify(mode_tree({ recording: "a" })["q"]).includes("macro.stop"), true, "recording: the stop key");
+  assert.equal(JSON.stringify(mode_tree({ recording: "a" })["w"]).includes("tab.prev"), true);
 });
 
 test("no keymap gives no answer", () => {
