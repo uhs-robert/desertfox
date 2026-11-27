@@ -1,5 +1,6 @@
 // The browser module's DevTools tree keys: j, k, h and l in the Inspector markup, the Debugger sources, Storage and Network, docked and in a DevTools window.
 // Also what it leaves to DevTools: every other key, Escape (the split console), the console input, and every key with the setting browser_module off.
+// And hints in DevTools: f labels the tool tabs and the markup lines, a label picks, Escape ends them, docked and in a DevTools window, with a module that does not say devtools_hints and with a lost ask.
 import { module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
 
 export const areas = ["tabs", "keys"];
@@ -10,12 +11,50 @@ const DT = `const { require } = ChromeUtils.importESModule("resource://devtools/
 const TOOLBOX = `${DT} const tb = gDevTools.getToolboxForTab(${W}.gBrowser.selectedTab);`;
 // A trusted mouse press on an element's middle, as a user's click, so the focus moves through every frame on the way. A focus() call from chrome left the focus nowhere (measured).
 const CLICK = `const click = (element) => { const box = element.getBoundingClientRect(); const view = element.ownerDocument.defaultView; for (const [type, buttons] of [["mousedown", 1], ["mouseup", 0]]) view.synthesizeMouseEvent(type, box.left + Math.min(box.width / 2, 40), box.top + box.height / 2, { button: 0, buttons, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false }); };`;
+const HINT_HOST = "desertfox-devtools-hints";
+// Chrome code: every label of every DevTools hints layer under the toolbox, with the element it marks in its own document: the one in its row whose left edge (or an icon button's middle) is nearest the label's left edge, right edge or middle.
+const LABELS = `(async () => {
+  ${TOOLBOX}
+  const docs = [];
+  const walk = (doc) => { docs.push(doc); for (const frame of doc.querySelectorAll("iframe")) if (frame.contentDocument) walk(frame.contentDocument); };
+  walk(tb.doc);
+  const out = [];
+  for (const doc of docs) {
+    const candidates = [...doc.querySelectorAll(".devtools-tab, .tag-line, button, [role=tab]")];
+    for (const host of doc.querySelectorAll(".${HINT_HOST}")) {
+      for (const node of host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint")) {
+        const box = node.getBoundingClientRect();
+        let best, best_distance = Infinity;
+        for (const el of candidates) {
+          const r = el.getBoundingClientRect();
+          if (r.width === 0) continue;
+          const across = Math.min(Math.abs(r.left - box.left), Math.abs(r.left - box.right), r.width < 40 ? Math.abs(r.left + r.width / 2 - (box.left + box.width / 2)) : Infinity);
+          const distance = across + Math.abs(r.top + r.height / 2 - (box.top + box.height / 2));
+          if (distance < best_distance) [best, best_distance] = [el, distance];
+        }
+        const line = best?.classList.contains("tag-line");
+        out.push({
+          text: node.textContent,
+          target: best ? (!line && best.id) || best.textContent.trim().replace(/\\s+/g, " ").slice(0, 40) : "",
+          off: best_distance,
+          styled: doc.defaultView.getComputedStyle(node).borderRadius === "3px",
+          doc: docs.indexOf(doc),
+          box: [box.left, box.top, box.right, box.bottom].map(Math.round),
+          // A label over the first 40 px of its line hides the tag name there.
+          covers_tag: !!line && box.right > best.getBoundingClientRect().left + 1 && box.left < best.getBoundingClientRect().left + 40,
+        });
+      }
+    }
+  }
+  return out;
+})()`;
+const LAYER_COUNT = `(async () => { ${TOOLBOX} if (!tb) return 0; let count = 0; const walk = (doc) => { count += doc.querySelectorAll(".${HINT_HOST}").length; for (const frame of doc.querySelectorAll("iframe")) if (frame.contentDocument) walk(frame.contentDocument); }; walk(tb.doc); return count; })()`;
 const TREE_PAGE = `data:text/html,${encodeURIComponent("<!doctype html><title>tree</title><main><section><p>one</p><p>two</p></section><p>three</p></main><div style='height:4000px'></div>")}`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, on_teardown, run_line, sleep } = context;
+  const { run_case, setup, expect, poll_until, press_keys, on_teardown, run_line, sleep, take_shot } = context;
   const steps = module_steps(context);
-  const { chrome, session_value, module_status, home, open_tab, in_selected_page, page_scroll, switches_none, focus_page } = steps;
+  const { chrome, session_value, set_session_value, module_status, home, open_tab, in_selected_page, page_scroll, switches_none, focus_page } = steps;
 
   await setup("turn the module on", () => steps.turn_on_module());
 
@@ -99,8 +138,8 @@ export async function run_cases(context) {
     await poll_until("Escape to open the split console", () => chrome(`(async () => { ${TOOLBOX} return tb.splitConsole === true && !!tb.getPanel("webconsole")?.hud; })()`), { timeout_ms: 5000 });
     const console_text = () => chrome(`(async () => { ${TOOLBOX} return tb.getPanel("webconsole").hud.ui.outputNode.ownerDocument.querySelector(".jsterm-input-container")?.textContent ?? null; })()`);
     await chrome(`(async () => { ${TOOLBOX} const hud = tb.getPanel("webconsole").hud; hud.ui.outputNode.ownerDocument.defaultView.focus(); hud.ui.jsterm.focus(); })()`);
-    await press_keys("j", "k", "h", "l");
-    await poll_until("jkhl to type into the console input", async () => (await console_text())?.includes("jkhl"), { timeout_ms: 3000 });
+    await press_keys("j", "k", "h", "l", "f");
+    await poll_until("jkhlf to type into the console input", async () => (await console_text())?.includes("jkhlf"), { timeout_ms: 3000 });
     expect(JSON.stringify(await markup_state()) === JSON.stringify(["section", false]), `the console keys moved the markup tree: ${JSON.stringify(await markup_state())}`);
     // DevTools reopens the split console in the next toolbox, where it takes the focus a moment after the load.
     await chrome(`(async () => { ${TOOLBOX} await tb.closeSplitConsole(); })()`);
@@ -142,7 +181,7 @@ export async function run_cases(context) {
     await moves("k", selected_row, 1, "k selects the row before");
   });
 
-  await run_case("a DevTools window gets the same keys once it opens, j walks a context menu open there, and the window loses the listener when it closes", async () => {
+  await run_case("a DevTools window gets the same keys once it opens, j moves a context menu open there as its arrow does, and the window loses the listener when it closes", async () => {
     await home("bm_dt_window");
     await open_tab(TREE_PAGE);
     await show_tool("inspector");
@@ -202,6 +241,140 @@ export async function run_cases(context) {
     await poll_until("the section to be selected and collapsed again", async () => JSON.stringify(await markup_state()) === JSON.stringify(["section", false]));
     await focus_in_devtools();
     await moves("l", markup_state, ["section", true], "the setting on again: l expands");
+  });
+
+  // ---- Hints.
+
+  const labels_now = () => chrome(LABELS);
+  const layers = () => chrome(LAYER_COUNT);
+  const tool_now = () => chrome(`(async () => { ${TOOLBOX} return tb.currentToolId; })()`);
+  async function start_hints(what) {
+    on_teardown(async () => {
+      if ((await layers()) > 0) await press_keys("-k", "Escape");
+    });
+    await press_keys("f");
+    await poll_until(`${what}: the labels to show`, async () => (await labels_now()).length > 0, { timeout_ms: 4000 });
+    return labels_now();
+  }
+  const label_of = (labels, test, what) => {
+    const label = labels.find((each) => test(each.target));
+    expect(label, `${what}: no label marks it among ${JSON.stringify(labels.map(({ text, target }) => [text, target]))}`);
+    return label.text;
+  };
+  async function expect_no_layer(what) {
+    await poll_until(`${what}: the layers to go`, async () => (await layers()) === 0, { timeout_ms: 3000 });
+    await poll_until(`${what}: the extension to drop its session`, async () => (await session_value("desertfox_chrome_hints")) === null, { timeout_ms: 3000 });
+  }
+
+  await run_case("docked hints: f labels the tool tabs and each markup line, a tab's label opens its tool, and Escape ends the labels without the split console", async () => {
+    await home("bm_dt_hints");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    await markup_on_section();
+    await focus_in_devtools();
+    const labels = await start_hints("docked");
+    expect(labels.every(({ styled }) => styled), "a label lacks the label sheet");
+    expect(labels.filter(({ target }) => target.startsWith("<p>") || target.startsWith("p")).length >= 1, `no markup line has a label: ${JSON.stringify(labels)}`);
+    const covering = labels.filter(({ covers_tag }) => covers_tag);
+    expect(covering.length === 0, `a markup label covers its tag name: ${JSON.stringify(covering)}`);
+    // Labels in one row of a document keep at least 2 px apart, so a row of icon buttons reads as separate labels.
+    const crowded = labels.filter((a, i) => labels.some((b, j) => j !== i && a.doc === b.doc && a.box[1] < b.box[3] && b.box[1] < a.box[3] && a.box[0] < b.box[2] + 2 && b.box[0] < a.box[2] + 2));
+    expect(crowded.length === 0, `labels crowd each other: ${JSON.stringify(crowded.map(({ text, target, box }) => [text, target, box]))}`);
+    // The docked toolbox paints the labels a moment after they are in its documents (measured: none in a shot taken at once).
+    await sleep(700);
+    await take_shot("/tmp/desertfox-devtools-hints-docked.png");
+    const console_tab = label_of(labels, (target) => target === "toolbox-tab-webconsole", "the Console tab");
+    await press_keys(console_tab);
+    await poll_until("the Console tab's label to open the Console", async () => (await tool_now()) === "webconsole", { timeout_ms: 4000 });
+    await expect_no_layer("after the pick");
+    // Escape during the labels ends them, and DevTools never sees it.
+    await show_tool("inspector");
+    await markup_on_section();
+    await focus_in_devtools();
+    await start_hints("Escape");
+    await press_keys("-k", "Escape");
+    await expect_no_layer("Escape");
+    await sleep(NO_EFFECT_MS);
+    expect(!(await chrome(`(async () => { ${TOOLBOX} return tb.splitConsole; })()`)), "Escape opened the split console");
+  });
+
+  await run_case("docked hints: a markup line's label selects its node, and j then moves on from it", async () => {
+    await home("bm_dt_hints_markup");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    await markup_on_section();
+    await focus_in_devtools();
+    const labels = await start_hints("markup");
+    const three = label_of(labels, (target) => target.includes("three"), "the <p>three</p> line");
+    await press_keys(three);
+    await poll_until("the label to select the <p> after the section", async () => (await markup_state())[0] === "p", { timeout_ms: 4000 });
+    await expect_no_layer("after the markup pick");
+    await press_keys("j");
+    await poll_until("j to move the selection on from the picked node", async () => (await markup_state())[0] !== "p", { timeout_ms: 3000 });
+  });
+
+  await run_case("hints in a DevTools window of its own: f labels the tool tabs and a label opens its tool", async () => {
+    await home("bm_dt_hints_window");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    const windows_before = (await module_status()).windows;
+    await chrome(`(async () => { ${TOOLBOX} Services.desertfox_key_test_host = tb.switchHost("window").then(() => "window", (error) => String(error)); })()`);
+    on_teardown(() => chrome(`(async () => { ${TOOLBOX} delete Services.desertfox_key_test_host; if (tb?.hostType === "window") await tb.switchHost("bottom"); })()`));
+    await poll_until("the DevTools window to get the module", async () => (await module_status()).windows === windows_before + 1, { timeout_ms: 10000 });
+    await poll_until("the Inspector in the DevTools window", () => chrome(`(async () => { ${TOOLBOX} return tb.hostType === "window" && !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 10000 });
+    await chrome(`(async () => { ${TOOLBOX} tb.win.top.focus(); })()`);
+    await markup_on_section();
+    await focus_in_devtools();
+    const labels = await start_hints("DevTools window");
+    await take_shot("/tmp/desertfox-devtools-hints-window.png");
+    await press_keys(label_of(labels, (target) => target === "toolbox-tab-netmonitor", "the Network tab"));
+    await poll_until("the Network tab's label to open Network", async () => (await tool_now()) === "netmonitor", { timeout_ms: 4000 });
+    await expect_no_layer("after the pick in the window");
+  });
+
+  await run_case("a module whose hello does not say devtools_hints gets no hint key, so f stays DevTools' and the tree keys stay", async () => {
+    await home("bm_dt_hints_flag");
+    const HELLO_KEY = "desertfox_browser_module_hello";
+    const own_hello = await session_value(HELLO_KEY);
+    expect(own_hello?.devtools_hints === true, `the module's hello lacks devtools_hints: ${JSON.stringify(own_hello)}`);
+    const last_table = async () => ((await session_value("desertfox_browser_module_from_extension")) ?? []).filter((message) => message.kind === "devtools.keys").at(-1)?.args.keys.map(({ key }) => key).join("");
+    // Teardowns run at the piece's end, and the cases after this one need the hint key back.
+    try {
+      await set_session_value(HELLO_KEY, Object.fromEntries(Object.entries(own_hello).filter(([name]) => name !== "devtools_hints")));
+      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhl", { timeout_ms: 5000 });
+      await open_tab(TREE_PAGE);
+      await show_tool("inspector");
+      await markup_on_section();
+      await poll_until("the section to be selected and collapsed", async () => JSON.stringify(await markup_state()) === JSON.stringify(["section", false]));
+      await focus_in_devtools();
+      await press_keys("f");
+      await sleep(NO_EFFECT_MS);
+      expect((await layers()) === 0, "f showed labels with no hint key in the table");
+      await moves("l", markup_state, ["section", true], "the tree keys stay: l expands");
+    } finally {
+      await set_session_value(HELLO_KEY, own_hello);
+      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlf", { timeout_ms: 5000 });
+    }
+  });
+
+  await run_case("a lost ask, which a busy or restarted background never answers, drops the letters for its time and then gives them back", async () => {
+    await home("bm_dt_hints_unanswered");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    await markup_on_section();
+    await poll_until("the section to be selected and collapsed", async () => JSON.stringify(await markup_state()) === JSON.stringify(["section", false]));
+    await focus_in_devtools();
+    // The ask goes nowhere, as when the background is busy or restarts before it reads it.
+    await chrome(`(async () => { const core = Services.desertfox_browser_module; const send = core.send; Services.desertfox_key_test_send = send; core.send = (kind, ...rest) => (kind === "devtools_hints.ask" ? { ok: true, id: "dropped" } : send(kind, ...rest)); })()`);
+    try {
+      await press_keys("f");
+      await stays(["l"], markup_state, "l right after f is dropped");
+      await sleep(2000);
+      expect((await layers()) === 0, "labels showed with no answer");
+      await moves("l", markup_state, ["section", true], "after the ask's time l expands again");
+    } finally {
+      await chrome(`(async () => { Services.desertfox_browser_module.send = Services.desertfox_key_test_send; delete Services.desertfox_key_test_send; })()`);
+    }
   });
 
   await run_case("docked Debugger: j and k move through the sources tree, h and l collapse and expand", async () => {

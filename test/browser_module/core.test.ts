@@ -274,11 +274,11 @@ test("with the pref off the module loads no frame script and says no hello, and 
   assert.equal(firefox.hello(), undefined);
   firefox.set_pref(true);
   assert.equal(firefox.frame_scripts.length, 2);
-  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0" });
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true });
   firefox.set_pref(false);
   assert.equal(firefox.hello(), undefined, "the pref turned off takes the hello back");
   firefox.set_pref(true);
-  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0" }, "the pref turned on again says the hello again");
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true }, "the pref turned on again says the hello again");
   assert.equal(firefox.frame_scripts.length, 2);
 });
 
@@ -663,7 +663,7 @@ test("a DesertFox reload while the pref is off gets no hello, and the pref turne
   firefox.start_extension();
   assert.equal(firefox.hello(), undefined, "the module said its hello with the pref off");
   firefox.set_pref(true);
-  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0" });
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true });
 });
 
 test("a handler's error text loses control and bidi characters", async () => {

@@ -88,9 +88,16 @@ test("the consent setting off (no state), the toolbar switch off or the pref off
   assert.deepEqual(devtools.dispatched, []);
 });
 
-test("an untrusted key, such as the arrow the module dispatched, is never taken", async () => {
+test("an untrusted key is never taken", async () => {
   const { devtools, press } = await docked();
   assert.equal(press("j", { isTrusted: false }).prevented, false);
+  assert.deepEqual(devtools.dispatched, []);
+});
+
+// Chrome code makes the arrow, so Gecko marks it trusted (measured on Firefox 161), and it passes the core's key gate like a real arrow.
+test("the arrow the module dispatched comes back trusted, and no row takes it: it moves the tree only once", async () => {
+  const { devtools, press } = await docked();
+  for (const key of ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"]) assert.equal(press(key, { isTrusted: true }).prevented, false, key);
   assert.deepEqual(devtools.dispatched, []);
 });
 

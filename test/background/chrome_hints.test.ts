@@ -27,7 +27,7 @@ function make({ collect = { ok: true } as { ok: true } | { ok: false; error: str
     },
     call: async (kind, args) => {
       called.push({ kind, args: args as Sent["args"] });
-      return kind === "chrome_hints.collect" || kind === "chrome_hints.collect_here" ? collect : pick;
+      return kind === "chrome_hints.collect" || kind === "chrome_hints.collect_here" || kind === "devtools_hints.collect" ? collect : pick;
     },
     letters: async () => [...DEFAULT_HINT_LETTERS],
     colors,
@@ -236,4 +236,41 @@ test("a start whose colors read outlasts a newer start sends no collect, so the 
   assert.deepEqual(collected, [second_session], `the older start ${first_session} collected after the newer one`);
   assert.equal(session()!.session, second_session);
   assert.deepEqual(notes, []);
+});
+
+test("a DevTools ask starts a session on the DevTools kinds: the collect hands the ask back, and draw, pick and clear go to the DevTools file", async () => {
+  const { hints, called, pushed, session, notes } = make();
+  await hints.handlers["devtools_hints.ask"]({ ask: 77 });
+  const number = session()!.session;
+  assert.deepEqual(called, [{ kind: "devtools_hints.collect", args: { session: number, ask: 77, colors: "" } }]);
+  assert.ok(validate_message({ v: 1, id: "c1", kind: "devtools_hints.collect", args: called[0]!.args }, EXTENSION_TO_MODULE_KINDS).ok);
+  assert.equal("window_id" in session()!, false);
+  await hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0), row(2, 40, 0)]));
+  assert.deepEqual(pushed.map((sent) => sent.kind), ["devtools_hints.draw"]);
+  const first_label = (JSON.parse(pushed[0]!.args.labels as string) as LabelRow[])[0]![1];
+  for (const [seq, key] of [...first_label].entries()) await hints.handlers["chrome_hints.key"]({ session: number, seq: seq + 1, key });
+  await flush();
+  assert.deepEqual(called.at(-1), { kind: "devtools_hints.pick", args: { session: number, id: 1 } });
+  // A chrome start replaces the DevTools session, which the DevTools file clears.
+  await hints.handlers["devtools_hints.ask"]({ ask: 78 });
+  const second = session()!.session;
+  await hints.start(7);
+  assert.ok(pushed.some((sent) => sent.kind === "devtools_hints.clear" && sent.args.session === second), "the DevTools session was left showing");
+  assert.equal(pushed.some((sent) => sent.kind.startsWith("chrome_hints.")), false);
+  assert.deepEqual(notes, []);
+  assert.equal(MODULE_TO_EXTENSION_KINDS["devtools_hints.ask"]!.reply, true, "an ask read twice would clear the session it started");
+});
+
+test("a refused DevTools collect clears the DevTools session, tells the user why, and a stale ask ends silently", async () => {
+  const refused = make({ collect: { ok: false, error: "Nothing to hint here" } });
+  await refused.hints.handlers["devtools_hints.ask"]({ ask: 5 });
+  assert.deepEqual(refused.pushed, [{ kind: "devtools_hints.clear", args: { session: 100 } }]);
+  assert.deepEqual(refused.notes, ["Nothing to hint here"]);
+  assert.equal(refused.session(), undefined);
+  const stale = make({ collect: { ok: false, error: "The hint key is stale" } });
+  await stale.hints.handlers["devtools_hints.ask"]({ ask: 5 });
+  assert.deepEqual(stale.notes, []);
+  const junk = make();
+  await junk.hints.handlers["devtools_hints.ask"]({ ask: "5" });
+  assert.deepEqual(junk.called, []);
 });

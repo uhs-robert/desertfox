@@ -21,13 +21,13 @@ function started(options = {}) {
 
 test("the bar rewrites the core's hello with bar true, and a hello that comes later too", () => {
   const early = started();
-  assert.deepEqual(early.firefox.hello(), { v: 1, module_version: "1.0.0", bar: true });
+  assert.deepEqual(early.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true, bar: true });
 
   const late = create_bar_fixture();
   late.load();
   assert.equal(late.firefox.hello(), undefined);
   late.firefox.start_extension({ private_access: true });
-  assert.deepEqual(late.firefox.hello(), { v: 1, module_version: "1.0.0", bar: true });
+  assert.deepEqual(late.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true, bar: true });
 });
 
 test("the bar writes no hello of its own while the module is off", () => {
@@ -46,7 +46,7 @@ test("the kill pref of the bar takes bar true back out of the hello and hides th
   assert.equal(fixture.bar()!.hasAttribute("data-on"), true);
   fixture.firefox.set_named_pref("desertfox.browser_module.statusbar", false);
   fixture.run_frames();
-  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0" });
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true });
   assert.equal(fixture.bar()!.hasAttribute("data-on"), false);
   fixture.firefox.set_named_pref("desertfox.browser_module.statusbar", undefined);
   fixture.run_frames();
@@ -266,7 +266,7 @@ test("a missing browser area builds no bar and says nothing in the hello", () =>
   fixture.firefox.start_extension({ private_access: true });
   fixture.load();
   assert.equal(fixture.bar(), null);
-  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0" });
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true });
 });
 
 test("unload takes every listener, observer, sheet and the bar away", () => {
@@ -326,7 +326,7 @@ test("a draw that fails retracts bar true and hides the bar, so the corner badge
   fixture.run_frames();
   assert.equal(fixture.bar()!.hasAttribute("data-on"), false);
   assert.equal(fixture.root.style_values.get("--desertfox-statusbar-height"), "0px");
-  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0" });
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true });
   fixture.firefox.write_state(state_with({}));
   fixture.run_frames();
   assert.equal(fixture.bar()!.hasAttribute("data-on"), false, "the bar stays off for the session");

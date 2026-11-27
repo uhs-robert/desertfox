@@ -3,6 +3,7 @@
 // The module collects the targets and sends only ids and boxes. The extension makes the labels, narrows them as the user types and names the target to pick. The module draws what it is told and runs one fixed action per target kind.
 // Requests: chrome_hints.collect starts a session, chrome_hints.collect_here starts one where the user typed the binding, chrome_hints.draw shows labels, chrome_hints.pick runs a target, chrome_hints.clear ends it.
 // Pushes and calls back: chrome_hints.targets, chrome_hints.key, chrome_hints.end and chrome_hints.want.
+// It lends its label drawing (the layer, the label checks, a whole draw) to the DevTools hints through the core's `share_hint_drawing`.
 //
 // With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
 // It makes a token for each such key: used once, within START_TOKEN_MS, and only in the window where the key was typed. No other start opens a session outside a browser window in front.
@@ -306,21 +307,27 @@
       return `:host { ${block(colors.dark)} }\n@media (prefers-color-scheme: light) { :host { ${block(colors.light)} } }`;
     }
 
+    const label_style_url = () => ExtensionParent.GlobalManager.getExtension(EXTENSION_ID).baseURI.resolve(STYLE_FILE);
+
     // ---- The layer: a host in the window document for the toolbars, and one inside the panel for its rows.
 
-    function make_layer(doc, style_url, theme, fixed) {
+    // The theme goes in a constructed sheet: the DevTools toolbox and Storage documents ignore an inline style.
+    function make_layer(doc, style_url, theme, fixed, host_class = HOST_CLASS) {
       const host = doc.createElementNS(HTML, "div");
-      host.className = HOST_CLASS;
+      host.className = host_class;
       host.style.cssText = fixed ? "position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;" : "position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 2147483647;";
       const root = host.attachShadow({ mode: "closed" });
       const sheet = doc.createElementNS(HTML, "link");
       sheet.setAttribute("rel", "stylesheet");
       sheet.setAttribute("href", style_url);
-      const colors = doc.createElementNS(HTML, "style");
-      colors.textContent = theme;
       const box = doc.createElementNS(HTML, "div");
       box.className = "desertfox-hints";
-      root.append(sheet, colors, box);
+      root.append(sheet, box);
+      if (theme !== "") {
+        const colors = new doc.defaultView.CSSStyleSheet();
+        colors.replaceSync(theme);
+        root.adoptedStyleSheets = [colors];
+      }
       return { host, box };
     }
 
@@ -528,9 +535,9 @@
     }
 
     // Parts of at most PART_BYTES, each a list of [id, left, top, width, height] in CSS pixels of the window.
-    function target_parts() {
+    function target_parts(targets) {
       const parts = [[]];
-      for (const [id, target] of session.targets) {
+      for (const [id, target] of targets) {
         const row = [id, Math.round(target.box.left), Math.round(target.box.top), Math.round(target.box.width), Math.round(target.box.height)];
         const last = parts.at(-1);
         if (last.length > 0 && json_bytes([...last, row]) > PART_BYTES) parts.push([row]);
@@ -548,9 +555,8 @@
 
     function open_session(tag, win, found, colors, places) {
       if (found.length === 0) return { ok: false, error: "Nothing to hint here" };
-      const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
-      start_session(tag, win, found.slice(0, MAX_TARGETS), extension.baseURI.resolve(STYLE_FILE), theme_text(colors), places);
-      const parts = target_parts();
+      start_session(tag, win, found.slice(0, MAX_TARGETS), label_style_url(), theme_text(colors), places);
+      const parts = target_parts(session.targets);
       parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
       return { ok: true };
     }
@@ -599,12 +605,12 @@
 
     // ---- Draw.
 
-    // A label row from the extension: an id of this session and a short label of hint letters. Anything else drops the whole part.
-    function label_rows(text) {
+    // A label row from the extension: an id of the session's `targets` and a short label of hint letters. Anything else drops the whole part.
+    function label_rows(text, targets) {
       const rows = parse_json(text);
-      if (!Array.isArray(rows) || rows.length > session.targets.size) return undefined;
+      if (!Array.isArray(rows) || rows.length > targets.size) return undefined;
       for (const row of rows) {
-        if (!Array.isArray(row) || row.length !== 2 || !session.targets.has(row[0]) || typeof row[1] !== "string" || [...row[1]].length > MAX_LABEL_CHARS || !LABEL.test(row[1])) return undefined;
+        if (!Array.isArray(row) || row.length !== 2 || !targets.has(row[0]) || typeof row[1] !== "string" || [...row[1]].length > MAX_LABEL_CHARS || !LABEL.test(row[1])) return undefined;
       }
       return rows;
     }
@@ -644,30 +650,36 @@
     }
 
     // A draw comes in parts, and only a whole draw shows: a part that never comes leaves the labels before it, and the next draw replaces them. A part of an older draw is dropped.
-    function draw({ session: tag, gen, part, parts, typed, labels }) {
-      if (!session || session.tag !== tag) return { ok: true };
-      if (!Number.isInteger(gen) || gen <= session.drawn_gen || !Number.isInteger(parts) || parts < 1 || parts > MAX_PARTS || !Number.isInteger(part) || part < 0 || part >= parts) return { ok: true };
-      if (typeof typed !== "string" || [...typed].length > MAX_LABEL_CHARS) return { ok: true };
-      const rows = label_rows(labels);
-      if (!rows) return { ok: true };
-      if (session.pending?.gen !== gen) {
-        if (session.pending && session.pending.gen > gen) return { ok: true };
-        session.pending = { gen, parts, typed, got: new Map() };
+    // `owner` is a session with `targets`, `drawn_gen` and `pending`. Returns the rows of a whole draw once its last part is in, else undefined.
+    function whole_draw(owner, { gen, part, parts, typed, labels }) {
+      if (!Number.isInteger(gen) || gen <= owner.drawn_gen || !Number.isInteger(parts) || parts < 1 || parts > MAX_PARTS || !Number.isInteger(part) || part < 0 || part >= parts) return undefined;
+      if (typeof typed !== "string" || [...typed].length > MAX_LABEL_CHARS) return undefined;
+      const rows = label_rows(labels, owner.targets);
+      if (!rows) return undefined;
+      if (owner.pending?.gen !== gen) {
+        if (owner.pending && owner.pending.gen > gen) return undefined;
+        owner.pending = { gen, parts, typed, got: new Map() };
       }
-      const pending = session.pending;
-      if (pending.parts !== parts || pending.typed !== typed) return { ok: true };
+      const pending = owner.pending;
+      if (pending.parts !== parts || pending.typed !== typed) return undefined;
       pending.got.set(part, rows);
-      if (pending.got.size < parts) return { ok: true };
-      session.pending = undefined;
-      const rows_drawn = [...pending.got.keys()].sort((a, b) => a - b).flatMap((index) => pending.got.get(index));
+      if (pending.got.size < parts) return undefined;
+      owner.pending = undefined;
+      return [...pending.got.keys()].sort((a, b) => a - b).flatMap((index) => pending.got.get(index));
+    }
+
+    function draw(args) {
+      if (!session || session.tag !== args.session) return { ok: true };
+      const rows_drawn = whole_draw(session, args);
+      if (!rows_drawn) return { ok: true };
       // The extension never narrows to nothing, so a draw with no labels would only hold the keys with nothing shown.
       if (rows_drawn.length === 0) {
         end_session(true);
         return { ok: true };
       }
       const first = session.drawn_gen === 0;
-      session.drawn_gen = gen;
-      apply_draw(rows_drawn, [...typed].length);
+      session.drawn_gen = args.gen;
+      apply_draw(rows_drawn, [...args.typed].length);
       if (first) for (const key of session.early_keys.splice(0)) push_key(key);
       return { ok: true };
     }
@@ -882,10 +894,16 @@
     // ---- Pick.
 
     // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
+    // The drawn target a pick names in `owner`, the session the caller holds, or the refusal.
+    function drawn_target(owner, tag, id) {
+      if (!owner || owner.tag !== tag) return { error: "The hints have ended" };
+      const target = owner.targets.get(id);
+      return target?.drawn ? { target } : { error: "No such hint" };
+    }
+
     function pick({ session: tag, id }) {
-      if (!session || session.tag !== tag) return { ok: false, error: "The hints have ended" };
-      const target = session.targets.get(id);
-      if (!target?.drawn) return { ok: false, error: "No such hint" };
+      const { target, error } = drawn_target(session, tag, id);
+      if (error) return { ok: false, error };
       const { element, drawn } = target;
       const { win, look, keyed } = session;
       end_session(false);
@@ -902,10 +920,8 @@
       return { ok: true };
     }
 
-    function moved(win, element, drawn) {
-      const now = window_box(win, element);
-      return Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX;
-    }
+    const box_moved = (drawn, now) => Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX;
+    const moved = (win, element, drawn) => box_moved(drawn, window_box(win, element));
 
     function run_target(win, { element, kind }) {
       const tabs = win.gBrowser ?? win.wrappedJSObject?.gBrowser;
@@ -1044,5 +1060,7 @@
     core.register_kind("chrome_hints.draw", draw);
     core.register_kind("chrome_hints.pick", pick);
     core.register_kind("chrome_hints.clear", clear);
+    // The DevTools hints draw with these, so their label checks and layer stay one code.
+    core.share_hint_drawing({ MAX_TARGETS, label_style_url, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
   }
 })(this);

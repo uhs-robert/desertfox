@@ -12,7 +12,7 @@
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
   var PANE_DIRECTIONS = ["left", "right"];
-  var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand"];
+  var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start"];
   var MAX_DEVTOOLS_KEY_ROWS = 8;
   var is_devtools_key = (key) => typeof key === "string" && [...key].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(key);
   function devtools_keys_problem(value) {
