@@ -55,21 +55,26 @@ function refresh_mode_indicator(): void {
   // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
   const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
   show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
-  report_bar(pass_next_armed, site_label);
+  bar_flags = { ...(pass_next_armed && { pass: true as const }), ...(site_label && { site: site_label }) };
+  report_bar();
 }
 
 // The browser module's status bar is up, so the badge stays hidden and the bar hears what it shows. Only a change is sent.
 let bar_on = false;
 let bar_pending: PendingPrefix | undefined;
 let bar_sent = "";
-function report_bar(pass?: boolean, site?: string): void {
+let bar_flags: { pass?: true; site?: string } = {};
+function report_bar(): void {
   if (!bar_on) return;
   const { typed_ = [], count_ } = bar_pending ?? {};
-  const message = { type: "bar_state", ...(typed_.length && { pending: typed_.slice(-8) }), ...(count_ && { count: count_ }), ...(window === window.top && { ...(pass && { pass }), ...(site && { site }), ...(recording && { recording }) }) } satisfies ContentToBackground;
+  const keys = { ...(typed_.length && { pending: typed_ }), ...(count_ && { count: count_ }) };
+  // A child frame that holds the focus reports its own keys, so the top frame's say nothing about them.
+  const message = { type: "bar_state", ...(focused_frame_mode ? { child: true as const } : keys), ...(window === window.top && { ...bar_flags, ...(recording && { recording }) }) } satisfies ContentToBackground;
   const text = JSON.stringify(message);
   if (text === bar_sent) return;
   bar_sent = text;
-  void send_to_background(message);
+  // A report that failed is sent again at the next identical one.
+  void send_to_background(message).then((reply) => reply?.ok === false && (bar_sent = ""));
 }
 
 const script_started_ms = KEY_TEST_BUILD ? performance.now() : 0;
@@ -88,7 +93,7 @@ let which_key_skip: readonly string[] | undefined;
 // The timer lives in the `whichkey` bundle, so the first panel may appear late by the load.
 const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => {
   bar_pending = prefix;
-  report_bar(page_mode.is_pass_next_armed_(), site_mode.modes_?.[site_mode.name_ ?? ""]?.label);
+  report_bar();
   follow_which_key(bundles, prefix?.typed_.length ? prefix : undefined, at_once, which_key_delay_ms, which_key_skip);
 };
 

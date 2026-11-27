@@ -22,8 +22,9 @@ export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[
 // A site mode: its badge label and its own table of binds, in the same formats as `bind`.
 export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable; sticky?: boolean }>>;
 
-// The keymap modes a site row can bind keys in. `normal` is what the `bind` column writes in short form.
+// The items either side of the browser bar can list.
 export const BROWSER_BAR_WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"] as const;
+// The keymap modes a site row can bind keys in. `normal` is what the `bind` column writes in short form.
 export const SITE_KEYMAP_MODES = ["normal", "visual", "visual_line", "caret", "item"] as const;
 export type SiteKeymapMode = (typeof SITE_KEYMAP_MODES)[number];
 

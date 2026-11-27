@@ -134,7 +134,7 @@ test("a tab keeps the bar fields it has and drops one of the wrong shape without
   const junk = validate_module_state(state({ tabs: { "7": { mode: "normal", live: true, pending: ["a b"], count: 1.5, pass: "yes", site: "s".repeat(25), recording: "ab", extra: 1 } } }));
   assert.ok(junk.ok, "a bad bar field never takes the keys down");
   assert.deepEqual(junk.value.tabs["7"], { mode: "normal", live: true });
-  for (const pending of [Array.from({ length: 9 }, () => "g"), ["x".repeat(17)], "g", []]) {
+  for (const pending of [Array.from({ length: 33 }, () => "g"), ["x".repeat(17)], "g", []]) {
     const checked = validate_module_state(state({ tabs: { "7": { mode: "normal", live: true, pending } } }));
     assert.ok(checked.ok);
     assert.deepEqual(Object.keys(checked.value.tabs["7"]!), ["mode", "live"]);
@@ -168,4 +168,26 @@ test("a full bar state with the longest fields stays small beside the key rows",
 test("the hello's bar mark is kept only when it is true, and an older hello has none", () => {
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", bar: true }), { ok: true, value: { v: V, module_version: "1", bar: true } });
   for (const bar of ["yes", 1, false, undefined]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", bar }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+test("the bar settings need both lists of known items without repeats and a known border, else they are left out", () => {
+  const ok = validate_module_state(state({ bar: { left: ["mode", "pending"], right: [], border: "chamfer", extra: 1 } }));
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.value.bar, { left: ["mode", "pending"], right: [], border: "chamfer" });
+  for (const bar of [{ left: ["mode"], right: [] }, { left: ["mode", "mode"], right: [], border: "auto" }, { left: ["nope"], right: [], border: "auto" }, { left: [], right: [], border: "oval" }, "x", { left: "mode", right: [], border: "auto" }]) {
+    const checked = validate_module_state(state({ bar }));
+    assert.ok(checked.ok && checked.value.bar === undefined, JSON.stringify(bar));
+  }
+});
+
+test("format characters are refused in a site label and a pending key", () => {
+  const checked = validate_module_state(state({ tabs: { "7": { mode: "normal", live: true, site: "AB\u202eCD", pending: ["g\u202e"] } } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(Object.keys(checked.value.tabs["7"]!), ["mode", "live"]);
+});
+
+test("a long pending sequence keeps its last keys", () => {
+  const checked = validate_module_state(state({ tabs: { "7": { mode: "normal", live: true, pending: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] } } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.tabs["7"]!.pending, ["c", "d", "e", "f", "g", "h", "i", "j"]);
 });
