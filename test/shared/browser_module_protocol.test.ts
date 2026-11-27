@@ -12,6 +12,8 @@ import {
   MODULE_TO_EXTENSION_KINDS,
   status_of_hello,
   tab_state_in,
+  DEFAULT_MAX_AGE_MS,
+  is_too_old,
   validate_message,
   validate_message_list,
   validate_module_hello,
@@ -122,4 +124,21 @@ test("a list is capped in count and bytes, and a bad message never takes a good 
 
 test("an older module's list, with the fields of its own version only, still parses", () => {
   assert.ok(validate_message_list([{ v: V, id: "old", kind: "ask", args: { axis: "x" } }, { v: V, reply_to: "x1", ok: true }], KINDS).ok);
+});
+
+test("sent_at is optional: a missing one is accepted, a junk one fails, and a stale one is dropped at read time", () => {
+  const kinds = { ...KINDS, quick: { args: {}, reply: false, max_age_ms: 100 } };
+  assert.deepEqual(validate_message(msg({}), kinds), { ok: true, value: { v: V, id: "m1", kind: "ask", args: { axis: "x" } } }, "an older writer sends no sent_at");
+  assert.deepEqual(validate_message(msg({ sent_at: 5000 }), kinds), { ok: true, value: { v: V, id: "m1", kind: "ask", args: { axis: "x" }, sent_at: 5000 } });
+  for (const junk of ["5000", 1.5, -1, Number.NaN, Number.MAX_SAFE_INTEGER + 2, null]) assert.equal(validate_message(msg({ sent_at: junk }), kinds).ok, false, String(junk));
+
+  const now = 10_000;
+  const list = [msg({ id: "fresh", sent_at: now - DEFAULT_MAX_AGE_MS }), msg({ id: "stale", sent_at: now - DEFAULT_MAX_AGE_MS - 1 }), msg({ id: "old_writer" }), { v: V, id: "quick", kind: "quick", args: {}, sent_at: now - 101 }, { v: V, id: "stale_push", kind: "push", args: { n: 1 }, sent_at: 0 }];
+  const read = validate_message_list(list, kinds, now);
+  assert.ok(read.ok);
+  assert.deepEqual(read.value.messages.map((message) => ("id" in message ? message.id : "")), ["fresh", "old_writer"]);
+  assert.deepEqual(read.value.refused, [{ id: "stale", error: "the request is too old" }], "a stale request that expects a reply is refused, a stale push is dropped");
+  const own = validate_message_list(list, kinds);
+  assert.ok(own.ok && own.value.messages.length === 5, "the writer's own read keeps every request");
+  assert.equal(is_too_old({ v: V, id: "c", kind: "ask", args: {}, sent_at: now + 60_000 }, kinds, now), false, "a clock that went back counts as fresh");
 });

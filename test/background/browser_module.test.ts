@@ -6,7 +6,7 @@ import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
 import { MESSAGE_MIN_GAP_MS } from "../../src/shared/browser_module_protocol.ts";
-import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, DEFAULT_MAX_AGE_MS, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf, TreeNode } from "../../src/shared/prefix_tree.ts";
@@ -353,4 +353,21 @@ test("the message reads do not use up the hello's second", async () => {
   module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "session");
   await flush();
   assert.equal(status_of(data), "matched", "the first hello read runs at once, whatever the message reads did");
+});
+
+test("the extension stamps sent_at on its requests, and a module request older than its kind allows never runs", async () => {
+  const { data, config, module, flush, calls } = setup();
+  const sent = await module.send("note");
+  assert.ok(sent.ok);
+  assert.equal(outbox_of(data)[0]!.sent_at, config.now);
+  from_module(data, [
+    { v: 1, id: "old", kind: "ask", args: { axis: "x" }, sent_at: config.now - DEFAULT_MAX_AGE_MS - 1 },
+    { v: 1, id: "stale_push", kind: "push", args: { n: 1 }, sent_at: 0 },
+    { v: 1, id: "fresh", kind: "push", args: { n: 2 }, sent_at: config.now - 10 },
+    { v: 1, id: "older_writer", kind: "push", args: { n: 3 } },
+  ]);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.deepEqual(calls, [["push", { n: 2 }], ["push", { n: 3 }]]);
+  assert.deepEqual(outbox_of(data).filter((message) => "reply_to" in message), [{ v: 1, reply_to: "old", ok: false, error: "the request is too old" }]);
 });

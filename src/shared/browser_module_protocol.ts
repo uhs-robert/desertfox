@@ -145,13 +145,17 @@ export function status_of_hello(hello: unknown): ModuleStatus {
 // The two-way messages for later pieces. Either side may start a call. Each side owns one key and is its only writer: chrome writes the from-module list, the extension writes the from-extension list. A list holds at most MAX_MESSAGES messages and MAX_MESSAGE_LIST_BYTES bytes, newest last, and its writer rewrites it whole. A reader ignores a message it has already seen (by id) and any field it does not know, so a rewrite is safe and an older reader still parses a newer message.
 // A message is a request `{ v, id, kind, args }` or a reply `{ v, reply_to, ok, error? }`. A `kind` comes from a fixed allow list per direction, with the shape of its args. A request carries typed commands only, never code, selectors or URLs. Both lists are empty now, so every request is refused. Later pieces add kinds and nothing else.
 // A kind row gives the shape of its args and whether the sender expects a reply. A push has `reply: false`: the receiver runs it and says nothing.
-export type KindRow = { args: Record<string, ArgKind>; reply: boolean };
+// `max_age_ms` bounds how old a request of the kind may be when it is read (DEFAULT_MAX_AGE_MS when absent), so a key the user pressed long ago never runs late.
+export type KindRow = { args: Record<string, ArgKind>; reply: boolean; max_age_ms?: number };
 export type KindTable = Record<string, KindRow>;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {};
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {};
 
-export type ModuleRequest = { v: number; id: string; kind: string; args: ModuleArgs };
+export const DEFAULT_MAX_AGE_MS = 2000;
+
+// `sent_at` is ms since the epoch. A request from an older writer has none and is never too old.
+export type ModuleRequest = { v: number; id: string; kind: string; args: ModuleArgs; sent_at?: number };
 export type ModuleReply = { v: number; reply_to: string; ok: boolean; error?: string };
 export type ModuleMessage = ModuleRequest | ModuleReply;
 export const is_reply = (message: ModuleMessage): message is ModuleReply => "reply_to" in message;
@@ -170,6 +174,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
   }
   if (!is_message_id(value.id)) return bad("a request needs an id of 1 to 32 letters, digits, - or _");
   if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return bad("the kind is not on the allow list");
+  if (value.sent_at !== undefined && (typeof value.sent_at !== "number" || !Number.isSafeInteger(value.sent_at) || value.sent_at < 0)) return bad("sent_at must be whole ms since the epoch");
   const given = value.args ?? {};
   if (!is_record(given)) return bad("args must be a table");
   const args: ModuleArgs = {};
@@ -178,14 +183,19 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
     if (problem !== undefined) return bad(`${value.kind} ${name} ${problem}`);
     args[name] = given[name] as number | string;
   }
-  return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args } };
+  return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
 }
+
+// A request older than its kind allows at `now`. A clock that went back counts as fresh.
+export const is_too_old = (request: ModuleRequest, kinds: KindTable, now: number): boolean =>
+  request.sent_at !== undefined && now - request.sent_at > (kinds[request.kind]?.max_age_ms ?? DEFAULT_MAX_AGE_MS);
 
 // `refused` names each request that failed its check, still had a usable id and either names no listed kind or expects a reply, so its reader can answer with an error. A push that fails its check is dropped. A message with no usable id, or of another version, is dropped without a word.
 export type MessageList = { messages: ModuleMessage[]; refused: { id: string; error: string }[] };
 
 // A whole list from foreign or own storage: a size cap, a count cap, then message by message. The list fails only when it is not a list or is too big. A bad message is skipped and never takes a good one down.
-export function validate_message_list(value: unknown, kinds: KindTable): Checked<MessageList> {
+// With `now`, a request that is too old is dropped as well, and refused when it expects a reply. The writer's own read of its list passes no `now`.
+export function validate_message_list(value: unknown, kinds: KindTable, now?: number): Checked<MessageList> {
   if (!Array.isArray(value)) return bad("a message list must be a list");
   if (value.length > MAX_MESSAGES) return bad("a message list holds too many messages");
   let size: number;
@@ -198,7 +208,9 @@ export function validate_message_list(value: unknown, kinds: KindTable): Checked
   const list: MessageList = { messages: [], refused: [] };
   for (const item of value) {
     const checked = validate_message(item, kinds);
-    if (checked.ok) list.messages.push(checked.value);
+    if (checked.ok && now !== undefined && !is_reply(checked.value) && is_too_old(checked.value, kinds, now)) {
+      if (kinds[checked.value.kind]!.reply) list.refused.push({ id: checked.value.id, error: "the request is too old" });
+    } else if (checked.ok) list.messages.push(checked.value);
     else if (is_record(item) && item.v === BROWSER_MODULE_PROTOCOL_VERSION && item.reply_to === undefined && is_message_id(item.id) && (typeof item.kind !== "string" || !Object.hasOwn(kinds, item.kind) || kinds[item.kind]!.reply)) list.refused.push({ id: item.id, error: checked.problem.slice(0, MAX_ERROR_CHARS) });
   }
   return { ok: true, value: list };

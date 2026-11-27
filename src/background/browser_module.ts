@@ -155,7 +155,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   // Handles each message of the module list that is new, and writes the replies in one rewrite of the extension's list.
   const answer_module_messages = async (): Promise<void> => {
-    const checked = validate_message_list((await deps.session.get(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY))[BROWSER_MODULE_FROM_MODULE_STORAGE_KEY], kinds.from_module);
+    const checked = validate_message_list((await deps.session.get(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY))[BROWSER_MODULE_FROM_MODULE_STORAGE_KEY], kinds.from_module, deps.now());
     if (!checked.ok) return;
     const outbox = await read_outbox();
     const answered = new Set(outbox.flatMap((message) => ("reply_to" in message ? [message.reply_to] : [])));
@@ -224,7 +224,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // The extension starts a call. The kind must be on the extension's allow list and the args must pass its check. Nothing is written while the setting is off. The id comes back so a caller can match the reply.
   const send_now = async (kind: string, args: ModuleArgs): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
     if (!(await deps.is_on())) return { ok: false, problem: "the browser module setting is off" };
-    const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args };
+    const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args, sent_at: deps.now() };
     const checked = validate_message(request, kinds.from_extension);
     if (!checked.ok) return checked;
     await write_outbox([...(await read_outbox()), checked.value]);
