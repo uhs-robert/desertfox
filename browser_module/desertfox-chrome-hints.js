@@ -762,12 +762,15 @@
     const time_now = (win) => win.performance.timeOrigin + win.performance.now();
     const time_of = (event, win) => ((event.originalTarget?.ownerDocument ?? event.originalTarget)?.defaultView ?? win).performance.timeOrigin + event.timeStamp;
 
-    // Marks the control with a frame and a note, and holds the window's keys until Enter, another key or any end.
+    // Marks the control with a frame and a note, and holds the window's keys until Enter, another key or any end. False, with no mark, while another feature holds the window.
     function begin_confirm(win, target, look) {
       end_confirm();
       const shown_at = time_now(win);
       confirming = { win, target, identity: identity_of(win, target.element), shown_at, counts_at: shown_at + security_delay_ms(), undo: [] };
-      core.hold_keys(win, KEY_OWNER);
+      if (!core.hold_keys(win, KEY_OWNER)) {
+        end_confirm();
+        return false;
+      }
       confirming.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
         add_confirm_parts(win, target, look);
@@ -775,6 +778,7 @@
         end_confirm();
         throw error;
       }
+      return true;
     }
 
     function add_confirm_parts(win, target, { style_url, theme, panel, frame_win }) {
@@ -851,7 +855,7 @@
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
       if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
       if (grants(win, element)) {
-        begin_confirm(win, target, look);
+        if (!begin_confirm(win, target, look)) return { ok: false, error: "Another feature holds the window's keys" };
         return { ok: true };
       }
       if (prompt_waits(element)) return { ok: false, error: "The prompt is not ready yet" };

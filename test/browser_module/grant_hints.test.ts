@@ -224,6 +224,22 @@ test("Enter does nothing once another feature holds the window's keys", async ()
   assert.equal(marked(chrome), false);
 });
 
+test("a grant pick whose hold the core refuses shows no mark, is refused, and Enter then grants nothing", async () => {
+  const run = started((firefox) => browser_with_doorhanger(firefox));
+  const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+  run.firefox.chrome_now = 5000;
+  assert.equal((await collect(run, 5))?.ok, true);
+  const pick = await labelled(run, 5);
+  const core = run.firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): boolean };
+  const hold_keys = core.hold_keys;
+  core.hold_keys = (win, owner) => owner !== "chrome_hints" && hold_keys(win, owner);
+  assert.notEqual((await pick(chrome.allow))?.ok, true, "a confirm started without the window's keys held");
+  assert.equal(marked(chrome), false);
+  assert.equal(held(run), undefined);
+  chrome.press("Enter");
+  assert.equal(chrome.allow.clicks, 0);
+});
+
 test("any other key cancels and goes nowhere, and Shift or Ctrl with Enter cancels too", async () => {
   for (const [key, patch] of [["Escape", {}], ["a", {}], ["Tab", {}], ["Enter", { shiftKey: true }], ["Enter", { ctrlKey: true }]] as const) {
     const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
