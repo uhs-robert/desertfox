@@ -168,7 +168,11 @@
       if (where.problem) return refuse(where.problem);
       const sidebar = where.win.SidebarController;
       if (typeof sidebar?.isOpen !== "boolean" || !has_function(sidebar, "toggle")) return refuse(NOT_SUPPORTED);
-      if (!sidebar.isOpen) await sidebar.toggle();
+      if (!sidebar.isOpen) {
+        await sidebar.toggle();
+        // The panel loads before the toggle settles, and the user can switch windows meanwhile. The focus stays where they put it.
+        if (Services.focus?.activeWindow !== where.win) return refuse("The window lost the focus before the sidebar opened");
+      }
       if (!sidebar.isOpen) return refuse("The sidebar did not open");
       if (!has_function(sidebar.browser, "focus")) return refuse(NOT_SUPPORTED);
       sidebar.browser.focus();
@@ -185,9 +189,14 @@
       if (!toolbox) return refuse("DevTools is not open for this tab");
       if (toolbox.hostType === "window") return refuse("DevTools is in its own window, so it is not docked here");
       if (!DOCKED_HOSTS.includes(toolbox.hostType)) return refuse("DevTools is not docked in this window");
-      if (has_function(toolbox, "focusTool") && typeof toolbox.currentToolId === "string") toolbox.focusTool(toolbox.currentToolId);
-      else if (has_function(toolbox.win, "focus")) toolbox.win.focus();
-      else return refuse(NOT_SUPPORTED);
+      // focusTool throws while the toolbox closes (its document is gone) or before the tool's frame exists.
+      try {
+        if (has_function(toolbox, "focusTool") && typeof toolbox.currentToolId === "string") toolbox.focusTool(toolbox.currentToolId);
+        else if (has_function(toolbox.win, "focus")) toolbox.win.focus();
+        else return refuse(NOT_SUPPORTED);
+      } catch (_) {
+        return refuse("DevTools is not ready to take the focus");
+      }
       return done();
     }
 

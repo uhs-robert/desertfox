@@ -314,6 +314,26 @@ test("pane.focus_region sidebar refuses a sidebar that does not open, or no side
   assert.deepEqual(world.calls, ["toggle sidebar"]);
 });
 
+test("pane.focus_region sidebar steals no focus when the window lost it while the sidebar opened", async () => {
+  const world = pane_world();
+  world.sidebar.toggle = async () => {
+    world.calls.push("toggle sidebar");
+    world.sidebar.isOpen = true;
+    world.services.focus = { activeWindow: null };
+  };
+  assert.deepEqual(await world.ask("pane.focus_region", { region: "sidebar" }), refused("The window lost the focus before the sidebar opened"));
+  assert.deepEqual(world.calls, ["toggle sidebar"]);
+});
+
+test("pane.focus_region devtools refuses, never throws, when the toolbox cannot take the focus", async () => {
+  const world = pane_world();
+  world.toolbox.focusTool = () => {
+    throw new TypeError("this.doc is null");
+  };
+  assert.deepEqual(await world.ask("pane.focus_region", { region: "devtools" }), refused("DevTools is not ready to take the focus"));
+  assert.deepEqual(plain(world.firefox.errors), []);
+});
+
 test("pane.focus_region devtools focuses the current tool of a docked toolbox, else its window", async () => {
   const world = pane_world();
   for (const host of ["bottom", "left", "right"]) {
