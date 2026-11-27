@@ -7,7 +7,7 @@
 // With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
 // It makes a token for each such key: used once, within START_TOKEN_MS, and only in the window where the key was typed. No other start opens a session outside a browser window in front.
 //
-// A request alone never labels a control that grants: the module must have seen a whole `hint.browser` binding typed outside a field in that window just before (START_KEY_MS), as gB typed in the page.
+// A request alone never labels or marks a control that grants: the module must have seen a whole `hint.browser` binding typed outside a field in that window just before (START_KEY_MS), as gB typed in the page.
 // A pick of a control that grants something (Allow, unblock a download, send a client certificate) does not click. It marks the control and waits for Enter, typed by the user in that window and seen here.
 // No message can confirm, so a compromised extension that names the wrong target grants nothing on its own. `grants` holds the fixed table.
 
@@ -480,13 +480,14 @@
     }
 
     // `frame_win`: the window of the dialog the targets are in, whose close ends the session.
-    function start_session(tag, win, found, style_url, theme, { panel, frame_win, early_keys = [] } = {}) {
+    // `keyed`: a key of the user's began the session, so a pick may mark a control that grants.
+    function start_session(tag, win, found, style_url, theme, { panel, frame_win, early_keys = [], keyed = false } = {}) {
       // A start's and a confirm's ends release the same hold a session takes, so they end first.
       end_start();
       end_confirm();
       end_session(true);
       if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, look: { style_url, theme, panel, frame_win } };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, look: { style_url, theme, panel, frame_win } };
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
         add_session_parts(win, found, style_url, theme, panel, frame_win);
@@ -571,7 +572,7 @@
       const labels_a_grant = found.some(({ element }) => grants(win, element));
       // A compromised extension could otherwise mark Allow with no key from the user, and the user's next lone Enter would grant.
       if (labels_a_grant && !take_start_key(win)) return { ok: false, error: "Type the hint key to label the prompt" };
-      return open_session(tag, win, found, colors, places);
+      return open_session(tag, win, found, colors, { ...places, keyed: labels_a_grant });
     }
 
     // A start the user's key asked for in chrome. The token is spent here whatever the answer, so a second request with it finds nothing.
@@ -591,9 +592,9 @@
       if (!place) return { ok: false, error: "Nothing to hint here" };
       if (place.opened) {
         const { found, places } = panel_place(place.opened);
-        return open_session(tag, win, found, colors, { ...places, early_keys: asked.early_keys });
+        return open_session(tag, win, found, colors, { ...places, early_keys: asked.early_keys, keyed: true });
       }
-      return open_session(tag, win, control_targets(win, place.doc), colors, { frame_win: place.frame_win, early_keys: asked.early_keys });
+      return open_session(tag, win, control_targets(win, place.doc), colors, { frame_win: place.frame_win, early_keys: asked.early_keys, keyed: true });
     }
 
     // ---- Draw.
@@ -886,11 +887,13 @@
       const target = session.targets.get(id);
       if (!target?.drawn) return { ok: false, error: "No such hint" };
       const { element, drawn } = target;
-      const { win, look } = session;
+      const { win, look, keyed } = session;
       end_session(false);
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
       if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
       if (grants(win, element)) {
+        // A control can come to grant after the collect, as when a prompt's Remember is ticked.
+        if (!keyed) return { ok: false, error: "Type the hint key to pick this" };
         if (!begin_confirm(win, target, look)) return { ok: false, error: "Another feature holds the window's keys" };
         return { ok: true };
       }

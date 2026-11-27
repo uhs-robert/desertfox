@@ -330,6 +330,27 @@ test("a collect with no key during a confirm labels nothing and leaves the mark"
   assert.equal(chrome.allow.clicks, 1);
 });
 
+test("a session no key began never marks a control that came to grant after the collect", async () => {
+  const run = started((firefox) => {
+    const window = browser_with_doorhanger(firefox);
+    // A prompt that showed only its one-time Block when collected.
+    for (const node of [window.allow, window.remember, window.learn_more]) node.remove();
+    return window;
+  });
+  const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+  run.firefox.chrome_now = 5000;
+  assert.equal((await collect(run, 5, { typed: false }))?.ok, true, "a collect of no grant needed a key");
+  const pick = await labelled(run, 5);
+  // The prompt element now shows a prompt whose second button stays: Always Block.
+  chrome.prompt.setAttribute("popupid", "web-notifications");
+  const reply = await pick(chrome.block);
+  assert.equal(reply?.error, "Type the hint key to pick this");
+  assert.equal(marked(chrome), false, "an unkeyed session marked a grant");
+  assert.equal(held(run), undefined);
+  chrome.press("Enter");
+  assert.equal(chrome.block.clicks, 0);
+});
+
 test("a collect with no key still labels the window's own buttons, which grant nothing", async () => {
   const run = started((firefox) => {
     const nav_bar = new Node("toolbar", { id: "nav-bar", box: box(0, 0, 1200, 40) });
