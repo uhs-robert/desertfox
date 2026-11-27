@@ -126,6 +126,23 @@ test("on a page a site rule names, the root which-key panel comes from the backg
   assert.equal(state.calls.length, 1);
 });
 
+test("a new keymap snapshot sends the root panel to the background until a keymap read made on it finishes", async () => {
+  const panel = { title: [], rows: [], border: "square" };
+  const { browser, state, changed } = load({ keymap: keymap_snapshot, which_key: snap(panel) });
+  state.answer = state_of({ address: "https://example.test/" });
+  await browser.runtime.sendMessage({ type: "read_keymap", join: true });
+  assert.deepEqual(await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: [], url: "" }), panel, "no rule names the page");
+  // A read starts on the old snapshot, and a new one (which may name the site) lands before it ends.
+  let finish: (text: string) => void = () => undefined;
+  state.answer = () => new Promise((done) => (finish = done));
+  const stale_read = browser.runtime.sendMessage({ type: "read_keymap", join: true });
+  changed("keymap");
+  finish(JSON.stringify({ value: { address: "https://example.test/" } }));
+  await stale_read;
+  state.answer = async () => JSON.stringify({ value: { from: "background" } });
+  assert.deepEqual(plain(await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: [], url: "" })), { from: "background" });
+});
+
 const ask = async (browser: Shimmed, extra: Record<string, unknown> = {}) => {
   const text = (await browser.runtime.sendMessage({ type: "read_keymap", join: true, url: "https://page.says/", ...extra })) as string | undefined;
   return text === undefined ? undefined : (JSON.parse(text) as { all_off: boolean; recording?: string; join?: string; keymap: { bar?: boolean; mode_indicator?: string; modes: { normal: { children: Record<string, unknown> } } } });
