@@ -152,6 +152,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const bars = new Map<string, BarFields>();
   // The pending keys and count of the child frame that holds a tab's focus. While one is set it stands in for the top frame's own, which the tab's entry in `bars` may still hold.
   const child_keys = new Map<string, Pick<BarFields, "pending" | "count">>();
+  // The keys each child frame of a tab last reported, kept when the top frame's report ends the child's own entry. The focus coming back to the frame shows them again.
+  const frame_keys = new Map<string, Map<number, Pick<BarFields, "pending" | "count">>>();
   // Whether the bar is up: the settings are on and the module said in its hello that it built the bar. Pages ask on their first key, so they get this copy and no storage read.
   let bar_seen = false;
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
@@ -168,6 +170,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (!now) {
       bars.clear();
       child_keys.clear();
+      frame_keys.clear();
     }
     deps.on_bar_change?.();
     return true;
@@ -305,7 +308,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (state === undefined) return;
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
-    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id), loading.delete(tab_id));
+    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
     else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });
@@ -319,8 +322,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const before = JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]);
     if (frame_id !== 0) {
       const keys = { ...(pending && { pending }), ...(count && { count }) };
-      if (Object.keys(keys).length === 0) child_keys.delete(tab_id);
-      else child_keys.set(tab_id, keys);
+      set_child_keys(tab_id, keys);
+      const frames = frame_keys.get(tab_id) ?? new Map();
+      if (Object.keys(keys).length === 0) frames.delete(frame_id);
+      else frames.set(frame_id, keys);
+      frame_keys.set(tab_id, frames);
     } else {
       if (raw.child !== true) child_keys.delete(tab_id);
       const own = raw.child === true ? {} : { ...(pending && { pending }), ...(count && { count }) };
@@ -328,11 +334,29 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       if (Object.keys(top).length === 0) bars.delete(tab_id);
       else bars.set(tab_id, top);
     }
+    await publish_bar(tab_id, before);
+  };
+
+  const set_child_keys = (tab_id: string, keys: Pick<BarFields, "pending" | "count">): void => {
+    if (Object.keys(keys).length === 0) child_keys.delete(tab_id);
+    else child_keys.set(tab_id, keys);
+  };
+
+  // Writes the tab's entry when the bar fields differ from `before`.
+  const publish_bar = async (tab_id: string, before: string): Promise<void> => {
     if (JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]) === before) return;
     const state = await read_state();
     if (state === undefined || !(await deps.is_on())) return;
     if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return;
     await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, { mode: state.tabs[tab_id]?.mode ?? "normal", live: state.tabs[tab_id]?.live ?? false }) } });
+  };
+
+  // A child frame took the focus: its own half-typed keys, which the top frame's report may have dropped, show again. The frame's mode report says it, so it sends no second one.
+  const bar_focus_now = async (tab_id: string, frame_id: number): Promise<void> => {
+    if (!bar_seen || frame_id === 0) return;
+    const before = JSON.stringify([bars.get(tab_id), child_keys.get(tab_id)]);
+    set_child_keys(tab_id, frame_keys.get(tab_id)?.get(frame_id) ?? {});
+    await publish_bar(tab_id, before);
   };
 
   // The extension starts a call. The kind must be on the extension's allow list and the args must pass its check. Nothing is written while the setting is off. The id comes back so a caller can match the reply.
@@ -361,6 +385,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     sync,
     tab_changed,
     bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
+    bar_focus: (tab_id: number, frame_id: number) => enqueue(() => bar_focus_now(String(tab_id), frame_id)),
     bar_active: (): Promise<boolean> => Promise.resolve(bar_seen),
     send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => void) => enqueue(() => send_now(kind, args, on_id)),
     withdraw: (id: string) => enqueue(() => withdraw_now(id)),
