@@ -1,5 +1,5 @@
 // The fixed list of Firefox's own pages that `browser.open_firefox_page` (`:firefox`) opens. Every route takes only the name: the browser module, the native host and the clipboard each find the address in their own copy.
-// A page joins the list only when opening it changes nothing, and it joins every copy in one change: FIREFOX_PAGES in host/desertfox-host and the table in browser_module/desertfox-firefox-pages.js, which tests compare.
+// A page joins the list only when opening it changes nothing, and it joins every copy in one change: FIREFOX_PAGES in host/desertfox-host, the core's MODULE_FIREFOX_PAGES in browser_module/desertfox-browser.js and the PAGES table in browser_module/desertfox-firefox-pages.js, which tests compare.
 
 // The pages with an address, which every route can open.
 export const FIREFOX_PAGE_ADDRESSES = {
