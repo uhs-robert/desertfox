@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { make_article, module_steps } from "./browser_module_steps.mjs";
+import { make_article, make_linked_pdf, module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["hints", "caret", "bundles", "ui"];
 
@@ -56,29 +56,6 @@ const BAR_MODE = `(async () => {
   const bar = ${W}.document.getElementById("desertfox-statusbar");
   return bar?.hasAttribute("data-on") ? (bar.querySelector(".dfx-left")?.firstElementChild?.textContent ?? null) : null;
 })()`;
-
-// A PDF with a text line and a link annotation to `href`, which pdf.js draws as a link in its annotation layer.
-function make_linked_pdf(href) {
-  const text = "BT /F1 18 Tf 72 700 Td (The desert fox walks at night across the dunes) Tj ET\nBT /F1 18 Tf 72 640 Td (Follow the link below) Tj ET\nBT /F1 18 Tf 72 600 Td (The target link) Tj ET";
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>",
-    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
-    `<< /Type /Annot /Subtype /Link /Rect [70 590 300 620] /Border [0 0 0] /A << /S /URI /URI (${href}) >> >>`,
-  ];
-  let body = "%PDF-1.4\n";
-  const offsets = objects.map((object, index) => {
-    const offset = body.length;
-    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
-    return offset;
-  });
-  const xref = body.length;
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}`;
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return body;
-}
 
 // The long article Reader View takes, with one link to pick.
 const linked_article = () => make_article().replace("</article>", `<p>The end: <a href="/target">the target link</a>.</p></article>`);

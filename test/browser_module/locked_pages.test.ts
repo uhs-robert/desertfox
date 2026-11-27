@@ -236,6 +236,39 @@ test("with the setting off, the pref off, another protocol version or a private 
   assert.deepEqual(pref_off.frame.sent, [], "the frame asks nothing with the pref off");
 });
 
+test("the rule it lends the key taker: the PDF viewer and Reader View need the setting while it is off, an about: page never runs hints, and every other page gets no notice", () => {
+  const OFF_CONFIG = { v: V, value: { settings: { browser_module: true, browser_module_pages: false } } };
+  const reader = { principal: { ...PDF_PRINCIPAL, spec: "about:reader?url=http%3A%2F%2Fa.test%2F" }, uri: "about:reader?url=http%3A%2F%2Fa.test%2F", inner: 5 };
+  const { firefox, browser, set_page } = locked({ config: OFF_CONFIG, keymap: null });
+  const rule = (firefox.Services.desertfox_browser_module as { locked_page_rule(): { hint_notice(browser: unknown): unknown } }).locked_page_rule();
+  const notice_on = (page: Page) => (set_page(page), rule.hint_notice(browser));
+  assert.equal(notice_on({ principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 5 }), "pages_off");
+  assert.equal(notice_on(reader), "pages_off");
+  for (const uri of ["about:preferences", "about:addons", "about:config", "about:Preferences", "about:neterror?e=dnsNotFound"]) assert.equal(notice_on({ principal: SYSTEM_PRINCIPAL, uri, inner: 5 }), "not_here", uri);
+  const no_notice: Page[] = [
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "https://a.test/", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "about:blank" }, uri: "about:blank", inner: 5 },
+    // A web page's popup, under the page's principal, in any case Firefox keeps.
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "about:BLANK", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "about:srcdoc", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "about:SrcDoc", inner: 5 },
+    // An about:reader address that chrome does not read as Reader View.
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "about:reader?url=x", inner: 5 },
+    // A DevTools toolbox in a tab, from about:debugging.
+    { principal: SYSTEM_PRINCIPAL, uri: "about:devtools-toolbox?id=x&type=extension", inner: 5 },
+    { principal: SYSTEM_PRINCIPAL, uri: "about:DevTools", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/help.html", addonId: "desertfox@uhs-robert" }, uri: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/help.html", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", addonId: "other@example" }, uri: "about:x", inner: 5 },
+  ];
+  for (const page of no_notice) assert.equal(notice_on(page), undefined, page.uri);
+  // The setting turns on: the PDF viewer and Reader View step aside for page code at once, and about: pages still say no.
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, ON_CONFIG);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);
+  assert.equal(notice_on({ principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 5 }), undefined);
+  assert.equal(notice_on(reader), undefined);
+  assert.equal(notice_on({ principal: SYSTEM_PRINCIPAL, uri: "about:preferences", inner: 5 }), "not_here");
+});
+
 test("a page call goes out as the text it came as, with the tab and attach that chrome knows, and its answer comes back as it came", async () => {
   const { frame, load, from_module, extension_sends } = locked();
   await load();

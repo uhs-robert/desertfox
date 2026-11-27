@@ -359,7 +359,7 @@ const browser_module = create_browser_module({
   handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async () => {
     const tab = await router_deps.active_tab();
     if (tab) await router_deps.open_cmdline(tab.tab_id, 0, "");
-  } }), ...chrome_hints.handlers },
+  }, active_url: async () => (await router_deps.active_tab())?.url, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);

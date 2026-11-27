@@ -49,6 +49,8 @@
 //   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
 //   share_hint_drawing(drawing)  In the sandbox: chrome hints lend their label drawing (the layer, the label checks, a whole draw from its parts), so other hints draw alike. The first one stays.
 //   hint_drawing()             In the sandbox: that drawing, or undefined while no feature lent one.
+//   share_locked_page_rule(rule)  In the sandbox: the locked pages feature lends its page rule, rule = { hint_notice(browser) }, so the key taker knows where hints cannot run now. The first one stays.
+//   locked_page_rule()         In the sandbox: that rule, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -912,6 +914,7 @@
     const shut_down_steps = [];
     const key_holders = new WeakMap();
     let hint_drawing;
+    let locked_page_rule;
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -1051,6 +1054,11 @@
         else hint_drawing = Object.freeze({ ...drawing });
       },
       hint_drawing: () => hint_drawing,
+      share_locked_page_rule(rule) {
+        if (locked_page_rule) log_once("two feature files share a locked page rule, the first one stays");
+        else locked_page_rule = Object.freeze({ ...rule });
+      },
+      locked_page_rule: () => locked_page_rule,
       shut_down() {
         fail_awaited("the module shut down");
         try {

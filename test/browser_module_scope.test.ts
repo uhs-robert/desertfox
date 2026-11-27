@@ -68,6 +68,19 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
 });
 
+test("the tree names the hint keys of the user's keymap, which the module claims where hints cannot run now", () => {
+  for (const keys of ["f", "F", "; l", "w h"]) assert.ok(DEFAULT_TREE.hint_keys?.includes(keys), keys);
+  // `gB` hints Firefox itself in the module, and `;;` only opens the line with text.
+  for (const keys of ["g B", "; ;", "x x"]) assert.equal(DEFAULT_TREE.hint_keys?.includes(keys), false, keys);
+  const rebound = scope_tree_of(compiled({ normal: { f: null, e: { id: "hint.run", args: { action: "here" } } } } as KeymapConfig), allowed, real_check);
+  assert.ok(rebound.hint_keys?.includes("e"), "a remapped hint key");
+  assert.equal(rebound.hint_keys?.includes("f"), false, "an unbound default");
+  for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, hint_keys: [junk] }).ok, false, JSON.stringify(junk));
+  const refused = resolve_run(compiled(), "f", 0, allowed);
+  assert.deepEqual(refused, { ok: false, problem: "f needs a page DesertFox runs on", shown: true, hint: true });
+  assert.equal((resolve_run(compiled(), "i", 0, allowed) as { hint?: true }).hint, undefined, "a key that needs a page but starts no hints");
+});
+
 test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
   // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
   for (const keys of [":", "o", "T", "w w"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);

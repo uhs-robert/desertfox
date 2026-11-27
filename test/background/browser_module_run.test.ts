@@ -31,7 +31,7 @@ const DEFAULT = compiled();
 function run_setup(answer: RunResponse = { ok: true }) {
   const runs: RouteRequest[] = [];
   const shown: Refusal[] = [];
-  const state = { keymap: DEFAULT as CompiledKeymap | undefined };
+  const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false };
   const lines: number[] = [];
   const run = create_module_run({
     read_keymap: async () => state.keymap,
@@ -39,6 +39,8 @@ function run_setup(answer: RunResponse = { ok: true }) {
     run: async (request) => (runs.push(request), answer),
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
     open_line: async () => void lines.push(1),
+    active_url: async () => state.url,
+    pages_on: async () => state.pages_on,
   });
   return { run, runs, shown, state, lines };
 }
@@ -55,6 +57,22 @@ test("a run request runs its binding in the active tab, in normal mode, with the
   assert.deepEqual(shown, []);
 });
 
+test("a hint key says why hints do not run: the setting on the PDF viewer and Reader View, and the page anywhere else", async () => {
+  const { run, runs, shown, state } = run_setup();
+  const said = async (url: string | undefined, pages_on: boolean) => {
+    Object.assign(state, { url, pages_on });
+    await assert.rejects(run({ keys: "f", count: 0 }));
+    return shown.at(-1)?.message;
+  };
+  for (const url of ["https://example.org/paper.pdf", "file:///tmp/paper.pdf", "about:reader?url=https%3A%2F%2Fexample.org%2F"]) assert.equal(await said(url, false), "Hints here need :set browser_module_pages true", url);
+  for (const url of ["about:preferences", "about:addons", undefined]) assert.equal(await said(url, false), "Hints do not run on this page", String(url));
+  assert.equal(await said("about:reader?url=x", true), "Hints do not run on this page", "the setting is on already");
+  assert.equal(await said("about:preferences", false), "Hints do not run on this page");
+  await assert.rejects(run({ keys: "i", count: 0 }));
+  assert.equal(shown.at(-1)?.message, "i needs a page DesertFox runs on", "a key that starts no hints keeps its reason");
+  assert.deepEqual(runs, []);
+});
+
 test("a prompt key reaches the router with its prompt, and the router opens the address bar", async () => {
   const { run, runs } = run_setup();
   await run({ keys: "o", count: 0 });
@@ -65,7 +83,7 @@ test("a prompt key reaches the router with its prompt, and the router opens the 
 test("a forged key and a page key never reach the router, and the user sees why", async () => {
   const { run, runs, shown } = run_setup();
   await assert.rejects(run({ keys: "Q Q Q", count: 0 }), /not a key/);
-  await assert.rejects(run({ keys: "f", count: 0 }), /needs a page/);
+  await assert.rejects(run({ keys: "i", count: 0 }), /needs a page/);
   assert.equal(runs.length, 0);
   assert.equal(shown.length, 2);
   assert.ok(shown.every((refusal) => refusal.id === "browser_module.run"));
@@ -87,7 +105,7 @@ test("a count over the limit reaches the router, which refuses it before the com
     show_refusal: async (tab_id: number | undefined, refusal: Refusal) => void shown.push({ tab_id, refusal }),
     repeat_memory: { save: async () => undefined },
   } as never);
-  const run = create_module_run({ read_keymap: async () => DEFAULT, locked_commands, run: router.run, show_refusal: async () => assert.fail("the handler showed its own refusal"), open_line: async () => assert.fail("no line opens") });
+  const run = create_module_run({ read_keymap: async () => DEFAULT, locked_commands, run: router.run, show_refusal: async () => assert.fail("the handler showed its own refusal"), open_line: async () => assert.fail("no line opens"), active_url: async () => undefined, pages_on: async () => false });
   await assert.rejects(run({ keys: "x x", count: 21 }), /over the limit of 20/);
   assert.deepEqual(ran, []);
   assert.equal(shown.length, 1);

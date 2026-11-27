@@ -3,6 +3,7 @@
 // A forward leaf goes to the extension as a `run` request with the matched keys and the count. A native leaf runs here, through the command a feature file defined.
 // It also holds the per-tab ignore toggle, defines page.stop, and answers address_bar.open, the command line's stand-in on a page with no DesertFox page code.
 // After a forward leaf that opens the command line (the tree's `line_keys`) it holds the window's keys until the line has the focus, so a key typed meanwhile never runs on the page.
+// Where hints cannot run now (the locked pages feature's rule), it claims the tree's `hint_keys` too, and sends the first one per document as a `run`, which the extension refuses with the reason.
 
 import { validate_scope_tree } from "../../src/shared/browser_module_protocol.ts";
 import { matcher_keymap_of } from "../../src/shared/browser_module_scope.ts";
@@ -50,6 +51,31 @@ function define(core) {
   const holds = new Map();
 
   const is_ignored = (browser) => ignored.get(browser) === browser.innerWindowID;
+
+  // A hint key leaf, which only says why hints do not run here. Per tab browser, the document whose first hint key was sent, so the reason shows once per document.
+  const NOTICE_LEAF = "notice";
+  const noticed = new WeakMap();
+  const hint_notice_of = (browser) => core.locked_page_rule?.()?.hint_notice(browser);
+
+  // Each hint key path becomes a notice leaf, unless the tree binds a key on its way, so a tree binding always wins.
+  function with_notice_leaves(tree) {
+    for (const path of Array.isArray(tree.hint_keys) ? tree.hint_keys : []) {
+      const tokens = path.split(" ");
+      let node = tree;
+      for (const [index, token] of tokens.entries()) {
+        const child = Object.hasOwn(node.children, token) ? node.children[token] : undefined;
+        const last = index === tokens.length - 1;
+        if (child === undefined) {
+          const added = last ? NOTICE_LEAF : { children: {} };
+          // Defined, not assigned, so a `__proto__` token stays a key and sets no prototype.
+          Object.defineProperty(node.children, token, { value: added, enumerable: true, writable: true, configurable: true });
+          node = added;
+        } else if (!last && typeof child === "object" && "children" in child) node = child;
+        else break;
+      }
+    }
+    return tree;
+  }
 
   function end_hold(win) {
     holds.get(win)?.stop();
@@ -103,12 +129,14 @@ function define(core) {
     return text;
   }
 
-  function walk_for(win, browser, text) {
+  // A change of the notice, such as browser_module_pages turning on, starts a fresh walk, so the hint keys go to the page at once.
+  function walk_for(win, browser, text, notice) {
     const walk = walks.get(win);
-    if (walk?.text === text && walk.browser === browser && walk.inner === browser.innerWindowID) return walk;
-    const tree = JSON.parse(text);
+    if (walk?.text === text && walk.notice === notice && walk.browser === browser && walk.inner === browser.innerWindowID) return walk;
+    const parsed = JSON.parse(text);
+    const tree = notice === undefined ? parsed : with_notice_leaves(parsed);
     const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
-    const fresh = { text, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: undefined };
+    const fresh = { text, notice, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: undefined };
     walks.set(win, fresh);
     return fresh;
   }
@@ -135,6 +163,15 @@ function define(core) {
     return sent.ok;
   }
 
+  // The key stays claimed after the first, so a hint key never reaches the page while hints cannot run. A send that failed leaves the document unmarked, so the next hint key tries again.
+  function notice_once(result, browser) {
+    if (noticed.get(browser) === browser.innerWindowID) return true;
+    const sent = core.send("run", { keys: path_of(result).join(" "), count: 0 });
+    if (sent.ok) noticed.set(browser, browser.innerWindowID);
+    else core.log_once(`a hint key was not sent to DesertFox: ${sent.problem}`);
+    return true;
+  }
+
   function take_key(context) {
     const { window: win, browser, event, tree } = context;
     const token = event_to_token(event);
@@ -154,7 +191,7 @@ function define(core) {
       return true;
     }
     const text = tree === undefined ? "" : tree_text(tree);
-    const walk = text === "" ? undefined : walk_for(win, browser, text);
+    const walk = text === "" ? undefined : walk_for(win, browser, text, hint_notice_of(browser));
     // With no tree the single-key rows decide, and a row wins over the module's own keys as a tree binding does.
     if (!walk && context.row_runs) return undefined;
     const idle = walk === undefined || walk.pending === undefined;
@@ -182,6 +219,7 @@ function define(core) {
     // A register means nothing to the commands a locked page runs, so the keys do nothing.
     if (result.register_keys_ !== undefined) return true;
     if (leaf === "forward") return forward(result, walk, win);
+    if (leaf === NOTICE_LEAF) return notice_once(result, browser);
     return run_native(leaf, result, context);
   }
 

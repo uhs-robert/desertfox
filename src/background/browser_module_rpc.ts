@@ -3,7 +3,7 @@
 // Every call is foreign input from chrome storage: the base channel (`browser_module.ts`) checks the envelope and the size, this file checks the message and builds the sender itself.
 
 import type { ModuleArgs, ModuleReply, ModuleStatus, PageAnswer, SnapshotPart } from "../shared/browser_module_protocol.ts";
-import { BROWSER_MODULE_PROTOCOL_VERSION, locked_route_of, MAX_ERROR_CHARS, MAX_STATE_TABS, SNAPSHOT_PART_NAMES, SNAPSHOT_PARTS, validate_snapshot } from "../shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION, json_bytes, locked_route_of, MAX_ERROR_CHARS, MAX_STATE_TABS, snapshot_cap, SNAPSHOT_PART_NAMES, SNAPSHOT_PARTS, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, CONFIG_STATUS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
@@ -245,6 +245,17 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     return answer;
   };
 
+  // A dropped keymap or config part stops the page code, so the first drop of each part says so once instead of failing silently. A keymap with many site rules comes close to its cap.
+  const warned_over_cap = new Set<SnapshotPart>();
+  const warn_if_over_cap = (part: SnapshotPart, snapshot: unknown): void => {
+    const size = json_bytes(snapshot);
+    const cap = snapshot_cap(part);
+    if (size === undefined || size <= cap || warned_over_cap.has(part)) return;
+    warned_over_cap.add(part);
+    const effect = part === "keymap" || part === "config" ? "DesertFox's page code stops on the PDF viewer and Reader View" : "the PDF viewer and Reader View go without it";
+    console.warn(`desertfox: the ${part} snapshot for locked pages is ${size} bytes, over its cap of ${cap}, so ${effect}`);
+  };
+
   // A part that fails its own check (over its cap) is removed, so the page reads nothing rather than an old copy.
   const write_parts = async (parts: readonly SnapshotPart[]): Promise<void> => {
     if (!(await deps.is_on())) {
@@ -257,7 +268,10 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       const value = await deps.read_part[part]();
       const snapshot = { v: BROWSER_MODULE_PROTOCOL_VERSION, ...(value !== undefined && { value }) };
       if (validate_snapshot(part, snapshot).ok) await deps.session.set({ [SNAPSHOT_PARTS[part].key]: snapshot });
-      else await deps.session.remove(SNAPSHOT_PARTS[part].key);
+      else {
+        warn_if_over_cap(part, snapshot);
+        await deps.session.remove(SNAPSHOT_PARTS[part].key);
+      }
     }
   };
   const sync_parts = (parts: readonly SnapshotPart[]): Promise<void> => in_turn(() => write_parts(parts));
