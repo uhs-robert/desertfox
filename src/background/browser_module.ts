@@ -169,12 +169,19 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     return true;
   };
 
+  // The tabs whose record says a load began and no page has taken over yet.
+  const loading = new Set<string>();
   const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
+    if (loading.has(id)) return { mode: tab?.mode ?? "normal", live: tab?.live ?? false };
     const { pending: _, count: __, ...top } = bars.get(id) ?? {};
     return { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
   };
-  // A tab that began a load shows no bar fields. A load that leaves the old page in place brings them back at its end, because the page's own report is kept and its content script has nothing new to send.
-  const tab_of_record = (id: string, record: TabModeRecord): TabState => (record.awaiting_commit ? tab_state_of(record) : tab_with_bar(id, tab_state_of(record)));
+  // A tab that began a load shows no bar fields, from a record change or from a report. A load that leaves the old page in place brings them back at its end, because the page's own report is kept and its content script has nothing new to send.
+  const tab_of_record = (id: string, record: TabModeRecord): TabState => {
+    if (record.awaiting_commit) loading.add(id);
+    else loading.delete(id);
+    return tab_with_bar(id, tab_state_of(record));
+  };
 
   const kinds = deps.kinds ?? { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS };
   // Ids of messages of the module that were handled, kept to skip them when the module rewrites its list. A copy: the replies in the extension's own list say the same for the requests that expect one.
@@ -279,7 +286,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (state === undefined) return;
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
-    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id));
+    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id), loading.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
     else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });

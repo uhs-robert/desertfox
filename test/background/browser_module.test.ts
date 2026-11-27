@@ -580,3 +580,15 @@ test("a report that arrives after the bar went away is dropped", async () => {
   await flush();
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true }, "nothing came back");
 });
+
+test("a report that arrives while a load runs stays out of the state and shows when the old page stays", async () => {
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar();
+  await module.tab_changed("3", { top_mode: "normal", live: true, awaiting_commit: true });
+  await module.bar_report(3, 0, false, { pending: ["g"] });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true }, "hidden while the load runs");
+  await module.tab_changed("3", { top_mode: "normal", live: true });
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"] }, "the kept report returns");
+});
