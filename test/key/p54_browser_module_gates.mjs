@@ -1,12 +1,15 @@
 // What keeps the browser module out: its pref, the toolbar switch, another protocol version, no state (an extension reload empties it), DevTools, and a document that replaced a DesertFox page.
 // Also that it follows a remapped key and that a second window gets it once and loses it on close.
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { module_files } from "./firefox_copy.mjs";
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["tabs", "keys", "toolbar"];
 
 const STATE_KEY = "desertfox_browser_module_state";
+const MODULE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../browser_module");
 const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 const W = `Services.wm.getMostRecentWindow("navigator:browser")`;
 
@@ -139,7 +142,9 @@ export async function run_cases(context) {
     await home("bm_windows");
     const frame_scripts = () => chrome(`(async () => Services.mm.getDelayedFrameScripts().filter(([url]) => decodeURIComponent(url).includes("desertfox-browser-module")).length)()`);
     const scripts_before = await frame_scripts();
-    expect(scripts_before === 2, `the module registered ${scripts_before} frame scripts, not 2`);
+    // The core's report script, and one per feature file that adds its own.
+    const expected = 1 + module_files().filter((name) => readFileSync(join(MODULE_DIR, name), "utf8").includes("core.add_frame_script(")).length;
+    expect(scripts_before === expected, `the module registered ${scripts_before} frame scripts, not ${expected}`);
     const windows_before = (await module_status()).windows;
     await chrome(`(async () => { const w = ${W}.OpenBrowserWindow(); await new Promise((resolve) => Services.obs.addObserver(function seen(subject) { if (subject === w) { Services.obs.removeObserver(seen, "browser-delayed-startup-finished"); resolve(); } }, "browser-delayed-startup-finished")); })()`);
     await poll_until("the new window to get the module", async () => (await module_status()).windows === windows_before + 1);

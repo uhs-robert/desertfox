@@ -383,13 +383,13 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   };
 
   // The extension starts a call. The kind must be on the extension's allow list and the args must pass its check. Nothing is written while the setting is off. The id comes back so a caller can match the reply.
-  // `on_id` hears the id before the request is written, so a caller can wait for its reply before the module can answer.
-  const send_now = async (kind: string, args: ModuleArgs, on_id?: (id: string) => void): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
+  // `on_id` hears the id before the request is written, so a caller can wait for its reply before the module can answer. It returns false to take the request back unwritten, for a caller whose reason to send went away while the send waited its turn.
+  const send_now = async (kind: string, args: ModuleArgs, on_id?: (id: string) => boolean | void): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
     if (!(await deps.is_on())) return { ok: false, problem: "the browser module setting is off" };
     const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args, sent_at: deps.now() };
     const checked = validate_message(request, kinds.from_extension);
     if (!checked.ok) return checked;
-    on_id?.(request.id);
+    if (on_id?.(request.id) === false) return { ok: false, problem: "the caller took the request back" };
     await write_outbox([...(await read_outbox()), checked.value]);
     return { ok: true, id: request.id };
   };
@@ -410,7 +410,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
     bar_focus: (tab_id: number, frame_id: number) => enqueue(() => bar_focus_now(String(tab_id), frame_id)),
     bar_active: (): Promise<boolean> => Promise.resolve(bar_seen),
-    send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => void) => enqueue(() => send_now(kind, args, on_id)),
+    send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => boolean | void) => enqueue(() => send_now(kind, args, on_id)),
     withdraw: (id: string) => enqueue(() => withdraw_now(id)),
     // Ask for a read. Each has its own limiter, which decides when it runs.
     read_hello: request_hello_read,

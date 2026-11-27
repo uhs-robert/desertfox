@@ -288,6 +288,9 @@ export const MAX_KIND_BYTES = 64 * 1024;
 export const MESSAGE_ENVELOPE_BYTES = 512;
 // The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
 export const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
+const PAGE_MAX_AGE_MS = 10000;
+const PAGE_GONE_BYTES = 256;
+const PAGE_GONE_MAX_AGE_MS = 60000;
 const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
@@ -299,8 +302,10 @@ export const CHROME_HINT_MAX_PARTS = 32;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
-  // A message of the page for the background. `document_id` names the page's document (chrome's inner window id), so a call from a document that a load left is refused.
-  page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
+  // A message of the page for the background. `document_id` names one attach of the page code (the module counts them), so a call from a document that a load left is refused, and a page that Back restores from the cache attaches again under a new id. A page waits on its first calls while it starts, so they may be older than the default.
+  page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
+  // Chrome's word that the page code of `document_id` ended: its document hid or went away. A late one only ends a lock that already ended, so it keeps a long age.
+  page_gone: { args: { tab_id: "int", document_id: "int" }, reply: false, max_bytes: PAGE_GONE_BYTES, max_age_ms: PAGE_GONE_MAX_AGE_MS },
   // A forward leaf of the tree matched: `keys` holds the tokens of its path, joined by one space, and `count` the typed count or 0 for none. The background matches the keys again against its own tree and runs the binding in the active tab. Chrome names no tab.
   run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
   // One part of a session's targets: `targets` is a list of [id, left, top, width, height] in CSS pixels.
@@ -311,8 +316,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
-  // A message of the background for the page, in place of `tabs.sendMessage`.
-  page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
+  // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
+  page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
   // The pane calls change the window, so each expects a reply: the module answers with its refusal text when it cannot do the call. A resize step is 5 percent of the panel area. Each message is tiny, so one limit covers all.
   "pane.split_new_tab": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.split_next_tab": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
