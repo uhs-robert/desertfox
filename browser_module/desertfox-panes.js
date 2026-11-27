@@ -1,4 +1,4 @@
-// DesertFox browser module, the pane feature: it answers the extension's pane.* requests (split, unsplit, close both, resize, focus a region) in the focused browser window. See docs/design/interfaces_tabs.md, "Split view".
+// DesertFox browser module, the pane feature: it answers the extension's pane.* requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused browser window. See docs/design/interfaces_tabs.md, "Split view".
 // The core (desertfox-browser.js, which sorts first) reads and checks the requests. In a window this file asks the core to load it into the core sandbox, where it registers its kinds once per process.
 // Each handler reaches Firefox internals only when it runs and feature-detects each one, so a Firefox that changed them gets a refusal, never a module turned off at start.
 
@@ -131,14 +131,32 @@
       const area = tabpanels.clientWidth;
       const min = parseFloat(win.getComputedStyle(first).minWidth) || 0;
       const current = first.getBoundingClientRect().width;
-      const width = Math.round(Math.min(Math.max(current + steps * STEP_SHARE * area, min), Math.max(min, area - min)));
-      first.setAttribute("width", String(width));
-      first.style.setProperty("width", `${width}px`);
+      set_first_width(where, first, Math.min(Math.max(current + steps * STEP_SHARE * area, min), Math.max(min, area - min)));
+      return done();
+    }
+
+    // Equal widths are half of the two panels together, which leaves the splitter out. The width goes in as a resize writes it, so Firefox keeps it across a tab switch.
+    function equalize() {
+      const where = selected_split();
+      if (where.problem) return refuse(where.problem);
+      const { win, gBrowser, split } = where;
+      const panel_ids = gBrowser.tabpanels?.splitViewPanels;
+      if (!Array.isArray(panel_ids) || panel_ids.length !== 2 || gBrowser.activeSplitView !== split) return refuse(NOT_SUPPORTED);
+      const [first, second] = panel_ids.map((id) => win.document.getElementById(id));
+      if (!first || !second) return refuse(NOT_SUPPORTED);
+      set_first_width(where, first, (first.getBoundingClientRect().width + second.getBoundingClientRect().width) / 2);
+      return done();
+    }
+
+    function set_first_width({ gBrowser, split }, first, width) {
+      const rounded = Math.round(width);
+      first.setAttribute("width", String(rounded));
+      first.style.setProperty("width", `${rounded}px`);
       if (has_function(split, "resetRightPanelWidth")) split.resetRightPanelWidth();
+      const tabpanels = gBrowser.tabpanels;
       if (has_function(tabpanels, "updateSplitterAriaAttributes")) {
         Promise.resolve(tabpanels.updateSplitterAriaAttributes()).catch((error) => core.log_once(`the splitter's aria values were not updated: ${error}`));
       }
-      return done();
     }
 
     function focus_page() {
@@ -183,12 +201,21 @@
     function focus_devtools() {
       const where = focused_window();
       if (where.problem) return refuse(where.problem);
+      const { toolbox, problem } = docked_toolbox(where.tab);
+      return problem ? refuse(problem) : focus_toolbox(toolbox);
+    }
+
+    function docked_toolbox(tab) {
       const shim = export_of("chrome://devtools-startup/content/DevToolsShim.sys.mjs", "DevToolsShim");
-      if (!has_function(shim, "isInitialized") || !has_function(shim, "getToolboxForTab")) return refuse(NOT_SUPPORTED);
-      const toolbox = shim.isInitialized() ? shim.getToolboxForTab(where.tab) : null;
-      if (!toolbox) return refuse("DevTools is not open for this tab");
-      if (toolbox.hostType === "window") return refuse("DevTools is in its own window, so it is not docked here");
-      if (!DOCKED_HOSTS.includes(toolbox.hostType)) return refuse("DevTools is not docked in this window");
+      if (!has_function(shim, "isInitialized") || !has_function(shim, "getToolboxForTab")) return { problem: NOT_SUPPORTED };
+      const toolbox = shim.isInitialized() ? shim.getToolboxForTab(tab) : null;
+      if (!toolbox) return { problem: "DevTools is not open for this tab" };
+      if (toolbox.hostType === "window") return { problem: "DevTools is in its own window, so it is not docked here" };
+      if (!DOCKED_HOSTS.includes(toolbox.hostType)) return { problem: "DevTools is not docked in this window" };
+      return { toolbox };
+    }
+
+    function focus_toolbox(toolbox) {
       // focusTool throws while the toolbox closes (its document is gone) or before the tool's frame exists.
       try {
         if (has_function(toolbox, "focusTool") && typeof toolbox.currentToolId === "string") toolbox.focusTool(toolbox.currentToolId);
@@ -200,6 +227,53 @@
       return done();
     }
 
+    // The page's neighbours on one side, nearest first: the other split pane, then DevTools docked on that side, then the sidebar on that side.
+    // From the right pane the sidebar on the left is two moves away, through the left pane.
+    async function focus_direction({ direction }) {
+      const where = focused_window();
+      if (where.problem) return refuse(where.problem);
+      const { win, gBrowser, tab } = where;
+      if (!split_supported(tab)) return refuse(NOT_SUPPORTED);
+      if (tab.splitview) {
+        const pane = pane_toward(win, tab, direction);
+        if (pane.problem) return refuse(pane.problem);
+        if (pane.tab) {
+          gBrowser.selectedTab = pane.tab;
+          pane.tab.linkedBrowser.focus();
+          return done();
+        }
+      }
+      const { toolbox, problem } = docked_toolbox(tab);
+      if (problem === NOT_SUPPORTED) return refuse(NOT_SUPPORTED);
+      if (toolbox?.hostType === direction) return focus_toolbox(toolbox);
+      const sidebar_side = sidebar_side_of(win);
+      if (sidebar_side === undefined) return refuse(NOT_SUPPORTED);
+      if (sidebar_side === direction) return focus_sidebar();
+      return refuse(`Nothing to focus on the ${direction}`);
+    }
+
+    // The panes by where they show, so a right-to-left window needs no special case.
+    function pane_toward(win, tab, direction) {
+      const other = Array.isArray(tab.splitview.tabs) ? tab.splitview.tabs.find((each) => each !== tab) : undefined;
+      const left_edge = (each) => win.document.getElementById(each?.linkedPanel)?.getBoundingClientRect?.().left;
+      const [own_left, other_left] = [left_edge(tab), left_edge(other)];
+      if (typeof own_left !== "number" || typeof other_left !== "number" || !has_function(other.linkedBrowser, "focus")) return { problem: NOT_SUPPORTED };
+      const other_is_left = other_left < own_left;
+      return (direction === "left") === other_is_left ? { tab: other } : {};
+    }
+
+    // Firefox's sidebar sits at the start of the window unless moved to the end, and the start is the right side in a right-to-left window.
+    function sidebar_side_of(win) {
+      if (typeof win.RTL_UI !== "boolean") return undefined;
+      let at_start;
+      try {
+        at_start = Services.prefs.getBoolPref("sidebar.position_start", true);
+      } catch (_) {
+        return undefined;
+      }
+      return at_start !== win.RTL_UI ? "left" : "right";
+    }
+
     const focus_by_region = { page: focus_page, split: focus_split, sidebar: focus_sidebar, devtools: focus_devtools };
 
     core.register_kind("pane.split_new_tab", split_new_tab);
@@ -207,6 +281,8 @@
     core.register_kind("pane.unsplit", unsplit);
     core.register_kind("pane.close_both", close_both);
     core.register_kind("pane.resize", resize);
+    core.register_kind("pane.equalize", equalize);
+    core.register_kind("pane.focus_direction", focus_direction);
     core.register_kind("pane.focus_region", ({ region }) => (Object.hasOwn(focus_by_region, region) ? focus_by_region[region]() : refuse(NOT_SUPPORTED)));
   }
 })(this);
