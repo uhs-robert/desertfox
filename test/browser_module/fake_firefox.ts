@@ -27,7 +27,7 @@ export type FakeEvent = {
   isComposing: boolean;
   keyCode: number;
   repeat: boolean;
-  // When the key was pressed, on the clock of the window's `performance.now()`. Unset, it counts as now.
+  // When the key was pressed, on the clock of `performance.now()` of the target's window. Unset, a chrome window's `press` takes its clock's now.
   timeStamp?: number;
   defaultPrevented: boolean;
   target: unknown;
@@ -148,6 +148,12 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         if (!prefs.has(name)) return fallback;
         const value = prefs.get(name);
         if (typeof value !== "boolean") throw new Error("NS_ERROR_UNEXPECTED");
+        return value;
+      },
+      getIntPref(name: string, fallback: number) {
+        if (!prefs.has(name)) return fallback;
+        const value = prefs.get(name);
+        if (typeof value !== "number") throw new Error("NS_ERROR_UNEXPECTED");
         return value;
       },
       addObserver(_name: string, observer: () => void) {
@@ -438,7 +444,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   };
 
   // Any pref but the module's own switch. The observers hear every change, as they do for the switch.
-  const set_named_pref = (name: string, value: boolean | string | undefined) => {
+  const set_named_pref = (name: string, value: boolean | string | number | undefined) => {
     if (value === undefined) prefs.delete(name);
     else prefs.set(name, value);
     [...pref_observers].forEach((observer) => observer());

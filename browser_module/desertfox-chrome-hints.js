@@ -751,10 +751,14 @@
       return READY;
     }
 
+    // Times in ms since the epoch. An event's timeStamp counts from the start of its target's window, and a dialog frame's window starts long after the browser window that shows the mark.
+    const time_now = (win) => win.performance.timeOrigin + win.performance.now();
+    const time_of = (event, win) => ((event.originalTarget?.ownerDocument ?? event.originalTarget)?.defaultView ?? win).performance.timeOrigin + event.timeStamp;
+
     // Marks the control with a frame and a note, and holds the window's keys until Enter, another key or any end.
     function begin_confirm(win, target, look) {
       end_confirm();
-      confirming = { win, target, identity: identity_of(win, target.element), shown_at: win.performance.now(), undo: [] };
+      confirming = { win, target, identity: identity_of(win, target.element), shown_at: time_now(win), undo: [] };
       core.hold_keys(win, KEY_OWNER);
       confirming.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
@@ -815,7 +819,7 @@
       if (!event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (event.repeat || event.timeStamp < confirming.shown_at) return;
+      if (event.repeat || time_of(event, confirming.win) < confirming.shown_at) return;
       if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return end_confirm();
       const asked = confirming;
       const state = confirm_state(asked);

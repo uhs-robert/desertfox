@@ -46,6 +46,10 @@ export function chrome_document(root: Node, view: unknown, url = "chrome://test/
   return { document, focus: (node: Node | undefined) => (focused = node), own: () => own(root) };
 }
 
+// Where each window's `performance` clock starts, in ms since the epoch. A dialog frame's window loads later than the browser window, so its clock reads less at the same moment.
+export const WINDOW_ORIGIN = 1_700_000_000_000;
+export const DIALOG_LOADED_MS = 60_000;
+
 // A top-level chrome window of `type`. `build` fills its document element.
 export function chrome_window(firefox: Firefox, type: string, build: (root: Node) => void) {
   const root = new Node("window");
@@ -84,7 +88,7 @@ export function chrome_window(firefox: Firefox, type: string, build: (root: Node
     gBrowser: type === "navigator:browser" ? { selectedTab: null } : undefined,
     setTimeout: (run: () => void) => timers.push({ run, live: true }) - 1,
     clearTimeout: (handle: number) => void (timers[handle] && (timers[handle]!.live = false)),
-    performance: { now: () => clock.now },
+    performance: { timeOrigin: WINDOW_ORIGIN, now: () => clock.now },
     MutationObserver,
   });
   const doc = chrome_document(root, win);
@@ -92,7 +96,7 @@ export function chrome_window(firefox: Firefox, type: string, build: (root: Node
   doc.own();
   const id = firefox.windows_by_id.size + 1;
   firefox.windows_by_id.set(id, win);
-  const press = (key: string, patch: Partial<FakeEvent> = {}) => window_root.fire("keydown", key_event(key, patch));
+  const press = (key: string, patch: Partial<FakeEvent> = {}) => window_root.fire("keydown", key_event(key, { timeStamp: clock.now, ...patch }));
   const layers = () => root.children.filter((child) => child.className === "desertfox-chrome-hints");
   const labels = () => layers().flatMap((host) => host.shadow!.children.find((child) => child.className === "desertfox-hints")!.children.map((node) => ({ text: node.textContent, left: node.style.left, top: node.style.top })));
   const fire_timers = () => timers.filter((timer) => timer.live).forEach((timer) => ((timer.live = false), timer.run()));
@@ -132,7 +136,7 @@ export function browser_with_dialog(firefox: Firefox, { nested = false, url = PR
   const window = chrome_window(firefox, "navigator:browser", (root) => root.append(button("reload-button", 10)));
   const outer = nested ? new Node("browser", { box: box(0, 80, 1200, 700) }) : undefined;
   const frame = Object.assign(new Node("browser", { box: box(300, 200, 400, 200) }), { classList: { contains: (name: string) => name === "dialogFrame" }, clientLeft: 0, clientTop: 0 });
-  const dialog_view = Object.assign(new Node("#dialogwindow"), { browsingContext: { embedderElement: frame } });
+  const dialog_view = Object.assign(new Node("#dialogwindow"), { browsingContext: { embedderElement: frame }, performance: { timeOrigin: WINDOW_ORIGIN + DIALOG_LOADED_MS, now: () => window.clock.now - DIALOG_LOADED_MS } });
   const dialog_root = new Node("window");
   const field = new Node("input", { id: "loginTextbox", box: box(20, 60, 200) });
   const dialog = new Node("dialog", { id: "commonDialog", box: box(0, 0, 400, 200) });
@@ -157,7 +161,9 @@ export function browser_with_dialog(firefox: Firefox, { nested = false, url = PR
   } else window.root.append(frame);
   window.own();
   window.focus(accept);
-  return { ...window, frame, dialog_view, field, accept, cancel, dialog_doc };
+  // A key typed in the dialog has a target there, so its time is on the dialog's clock.
+  const press = (key: string, patch: Partial<FakeEvent> = {}) => window.press(key, { originalTarget: accept, timeStamp: dialog_view.performance.now(), ...patch });
+  return { ...window, press, frame, dialog_view, field, accept, cancel, dialog_doc };
 }
 
 export function started(make: (firefox: Firefox) => ReturnType<typeof chrome_window> & Record<string, unknown>, { walk = false, state = STATE as unknown } = {}) {
