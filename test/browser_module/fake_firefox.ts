@@ -27,6 +27,8 @@ export type FakeEvent = {
   isComposing: boolean;
   keyCode: number;
   repeat: boolean;
+  // When the key was pressed, on the clock of the window's `performance.now()`. Unset, it counts as now.
+  timeStamp?: number;
   defaultPrevented: boolean;
   target: unknown;
   originalTarget: unknown;
@@ -109,6 +111,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     sandboxes: 0,
     // The windows `windowTracker.getWindow` finds, by id. A feature that reads windows by id gets its own stand-ins here.
     windows_by_id: new Map<number, unknown>(),
+    chrome_now: 0,
   };
 
   // The file a load runs, so Components.stack names it as Firefox does.
@@ -195,6 +198,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     },
   };
   const ChromeUtils = {
+    // The parent process clock a doorhanger's `timeShown` is on. A test moves it with `firefox.chrome_now`.
+    now: () => firefox.chrome_now,
     generateQI: (names: string[]) => () => names,
     importESModule(url: string) {
       if (firefox.fail_import) throw new Error(`no module ${url}`);

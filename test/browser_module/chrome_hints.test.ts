@@ -427,12 +427,13 @@ test("a key after DesertFox stops acting in the window ends the session and goes
   assert.equal(held(), undefined);
 });
 
-test("the downloads panel gets no labels yet: with it open the window's buttons are the targets", async () => {
-  const { collect, chrome, target_ids } = started();
+test("a request alone labels nothing while the downloads panel is open, since a pick there opens a file", async () => {
+  const { collect, chrome, target_ids, held } = started();
   chrome.downloads_panel.state = "open";
-  await collect(1);
-  assert.equal(target_ids().length, 5);
+  assert.equal((await collect(1))?.error, "Type the hint key in the panel");
+  assert.equal(target_ids().length, 0);
   assert.equal(chrome.downloads_panel.children[0]!.children.length, 0, "a layer went into the downloads panel");
+  assert.equal(held(), undefined);
 });
 
 test("labels of any hint letters the settings allow show, up to 400 targets with two letters", async () => {

@@ -1,11 +1,14 @@
 // DesertFox browser module, hints over Firefox's own UI: the nav bar, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, the rows of an open app menu,
-// and the controls of a tab's prompt, a settings sub-dialog, the Library and Page Info.
+// a permission prompt (doorhanger) and the downloads panel, and the controls of a tab's prompt, a settings sub-dialog, the Library and Page Info.
 // The module collects the targets and sends only ids and boxes. The extension makes the labels, narrows them as the user types and names the target to pick. The module draws what it is told and runs one fixed action per target kind.
 // Requests: chrome_hints.collect starts a session, chrome_hints.collect_here starts one where the user typed the binding, chrome_hints.draw shows labels, chrome_hints.pick runs a target, chrome_hints.clear ends it.
 // Pushes and calls back: chrome_hints.targets, chrome_hints.key, chrome_hints.end and chrome_hints.want.
 //
 // With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
 // It makes a token for each such key: used once, within START_TOKEN_MS, and only in the window where the key was typed. No other start opens a session outside a browser window in front.
+//
+// A pick of a control that grants something (Allow, unblock a download, send a client certificate) does not click. It marks the control and waits for Enter, typed by the user in that window and seen here.
+// No message can confirm, so a compromised extension that names the wrong target grants nothing on its own. `grants` holds the fixed table.
 
 (function desertfox_browser_module_chrome_hints(scope) {
   "use strict";
@@ -59,19 +62,22 @@
     const WATCHED_TYPES = new Set([BROWSER, LIBRARY, PAGE_INFO]);
     // The controls of a dialog, the Library and Page Info. No text field is one: a label never types into a field.
     const CONTROLS = "button, toolbarbutton, checkbox, radio, menulist:not([editable]), menu, label.text-link, moz-button, moz-checkbox, moz-toggle, moz-radio, input[type=checkbox], input[type=radio], input[type=button], input[type=submit]";
-    // Left to a later confirm key, as the permission prompts are: the Library's download rows can unblock a download, and Page Info's permission rows grant a permission at once.
-    const LEFT_OUT = "#downloadsListBox, #permList";
-    // The dialogs in a `dialogFrame` that get labels: the settings sub-dialogs, and the tab prompts but those that ask for a site's password, whose OK sends the filled-in login.
-    // Others are left out until a confirm key exists: the external protocol prompt opens an application with a URL the page chose, and the client certificate prompt sends the user's certificate to the site.
-    // A tab prompt names its kind on its dialog element once loaded (CommonDialog.sys.mjs). One with no kind yet gets no labels.
-    const AUTH_PROMPTS = new Set(["prompt:promptUserAndPass", "prompt:promptPassword"]);
+    // The rows of the Library's downloads list and of the downloads panel.
+    const DOWNLOAD_ROWS = "#downloadsListBox > richlistitem";
+    const PROMPT_URL = "chrome://global/content/commonDialog.xhtml";
+    const PREFERENCES_DIALOGS = "chrome://browser/content/preferences/dialogs/";
+    // The external protocol prompt opens an application with a URL the page chose. The client certificate prompt sends the user's certificate to the site.
+    const EXTERNAL_PROTOCOL_URL = "chrome://mozapps/content/handling/permissionDialog.xhtml";
+    const CLIENT_CERT_URL = "chrome://pippki/content/clientauthask.xhtml";
+    const EXCEPTIONS_URL = `${PREFERENCES_DIALOGS}permissions.xhtml`;
+    // The dialogs in a `dialogFrame` that get labels. Any other stays unlabelled, so a new grant dialog in a later Firefox gets no one-key pick.
+    // A tab prompt names its kind on its dialog element once loaded (CommonDialog.sys.mjs). One with no kind yet gets no labels, since `grants` reads that kind.
     function labelled_dialog(doc) {
       const url = String(doc.documentURI);
-      if (url.startsWith("chrome://browser/content/preferences/dialogs/")) return true;
-      if (url !== "chrome://global/content/commonDialog.xhtml") return false;
-      const kind = doc.getElementById("commonDialog")?.getAttribute("windowtype") ?? "";
-      return kind.startsWith("prompt:") && !AUTH_PROMPTS.has(kind);
+      if (url.startsWith(PREFERENCES_DIALOGS) || url === EXTERNAL_PROTOCOL_URL || url === CLIENT_CERT_URL) return true;
+      return url === PROMPT_URL && prompt_kind(doc).startsWith("prompt:");
     }
+    const prompt_kind = (doc) => doc.getElementById("commonDialog")?.getAttribute("windowtype") ?? "";
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
     const WINDOW_GROUPS = [
@@ -83,9 +89,12 @@
       { root: "sidebar-main", take: "moz-button, button", shadow: true },
     ];
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
-    // The downloads panel is left out: a click on its row does nothing, and its blocked-download buttons need a confirm key first.
+    // `layer_in`: where in the shown view the labels go, when not the view itself. Firefox reads the doorhanger panel's first child as a prompt, so its labels go inside the prompt shown.
+    // `user_start_only`: only the binding typed in the panel labels it, never a request alone, because a pick there opens a downloaded file. The panel takes the focus, so no page hears the binding meanwhile.
     const PANELS = [
       { id: "appMenu-popup", take: "toolbarbutton, button" },
+      { id: "notification-popup", take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
+      { id: "downloadsPanel", take: "richlistitem, button, toolbarbutton", user_start_only: true },
     ];
 
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -134,9 +143,11 @@
       return false;
     }
 
-    // The fixed action of each target: a tab is selected, a menu, a drop-down or a bookmarks folder opens, a button runs its command or is clicked.
+    // The fixed action of each target: a tab is selected, a menu, a drop-down or a bookmarks folder opens, a download row is chosen as a click on it would, a radio is chosen, a button runs its command or is clicked.
     function kind_of(element) {
       if (element.localName === "tab") return "tab";
+      if (element.localName === "richlistitem" && element.parentNode?.id === "downloadsListBox") return "download";
+      if (element.localName === "radio") return "radio";
       if (element.localName === "menu" || element.localName === "menulist" || (element.localName === "toolbarbutton" && element.getAttribute("type") === "menu")) return "menu";
       return "button";
     }
@@ -177,13 +188,7 @@
       return views.at(-1) ?? panel;
     }
 
-    function open_panel(doc) {
-      for (const row of PANELS) {
-        const panel = doc.getElementById(row.id);
-        if (panel?.state === "open") return { panel, row };
-      }
-      return undefined;
-    }
+    const open_panels = (doc) => PANELS.map((row) => ({ panel: doc.getElementById(row.id), row })).filter(({ panel }) => panel?.state === "open");
 
     function panel_targets(panel, row) {
       const view = shown_view(panel);
@@ -194,7 +199,8 @@
         const box = box_of(element);
         if (big_enough(box) && within(box, area)) found.push({ element, box, place: "panel" });
       }
-      return { view, found };
+      const layer_in = row.layer_in ? row.layer_in(view) : view;
+      return { view: layer_in, found: layer_in ? found : [] };
     }
 
     // The elements under `root` that match, in its shadow roots too.
@@ -228,8 +234,8 @@
       const view = { left: 0, top: 0, width: win.innerWidth, height: win.innerHeight };
       const found = [];
       const seen = new Set();
-      for (const element of deep_all(doc, CONTROLS)) {
-        if (seen.has(element) || element.closest?.(LEFT_OUT) || !usable(element)) continue;
+      for (const element of [...deep_all(doc, CONTROLS), ...doc.querySelectorAll(DOWNLOAD_ROWS)]) {
+        if (seen.has(element) || !usable(element)) continue;
         seen.add(element);
         const inner = box_of(element);
         if (!big_enough(inner) || !shows_at_its_box(element.ownerDocument, element, inner)) continue;
@@ -240,6 +246,11 @@
     }
 
     const window_type = (win) => win.document?.documentElement?.getAttribute("windowtype") ?? "";
+    // Whether `node` sits under `root`, through the shadow roots between them: a doorhanger's focused button is inside its moz-button.
+    function holds(root, node) {
+      for (let at = node; at; at = at.parentNode ?? at.host) if (at === root) return true;
+      return false;
+    }
 
     // Where the focus sits in chrome, when it is a place this file labels: a tab's prompt or a settings sub-dialog (both a `dialogFrame`), an open panel this file labels, or the Library or Page Info.
     // Undefined with the focus in a page, whose content script takes the keys, or anywhere else.
@@ -251,9 +262,10 @@
       const doc = focused?.ownerDocument;
       if (!doc) return undefined;
       if (doc !== win.document && doc.defaultView?.browsingContext?.embedderElement?.classList?.contains("dialogFrame")) return labelled_dialog(doc) ? { doc, frame_win: doc.defaultView } : undefined;
-      const opened = open_panel(win.document);
-      if (opened?.panel.contains(focused)) return { opened };
-      return undefined;
+      // A panel view that slid in, such as the blocked-download view, can leave no element focused. The keys then go to the window's own document, under the open panel.
+      const nothing_focused = focused === win.document.documentElement || focused === win.document.body;
+      const opened = open_panels(win.document).find(({ panel }) => holds(panel, focused) || nothing_focused);
+      return opened ? { opened } : undefined;
     }
 
     // A XUL menu holds the keys while it is open, so a session would fight it. Tooltips and the address bar's results are popups too, but hold no keys.
@@ -314,18 +326,23 @@
       return sent.ok;
     };
 
-    // Ends the session and takes away everything it added: the layers, the listeners and the timer. `tell` pushes the end to the extension, for an end the extension did not ask for.
-    function end_session(tell) {
-      const ended = session;
-      if (!ended) return;
-      session = null;
-      for (const stop of ended.undo.splice(0)) {
+    // Runs each step that takes away what a session, a start or a confirm added. One failed step leaves the rest to run.
+    function undo_all(owner) {
+      for (const stop of owner.undo.splice(0)) {
         try {
           stop();
         } catch (error) {
           core.log_once(`a chrome hints cleanup step failed: ${error}`);
         }
       }
+    }
+
+    // Ends the session and takes away everything it added: the layers, the listeners and the timer. `tell` pushes the end to the extension, for an end the extension did not ask for.
+    function end_session(tell) {
+      const ended = session;
+      if (!ended) return;
+      session = null;
+      undo_all(ended);
       if (tell) send("chrome_hints.end", { session: ended.tag });
     }
 
@@ -382,13 +399,7 @@
       const ended = starting;
       if (!ended) return;
       starting = null;
-      for (const stop of ended.undo.splice(0)) {
-        try {
-          stop();
-        } catch (error) {
-          core.log_once(`a chrome hints cleanup step failed: ${error}`);
-        }
-      }
+      undo_all(ended);
     }
 
     // The window's keys are held from the binding's last key on, so the labels' letters never reach the popup walk or the dialog.
@@ -438,10 +449,11 @@
 
     // `frame_win`: the window of the dialog the targets are in, whose close ends the session.
     function start_session(tag, win, found, style_url, theme, { panel, frame_win, early_keys = [] } = {}) {
-      // A start's end releases the same hold a session takes, so it ends first.
+      // A start's and a confirm's ends release the same hold a session takes, so they end first.
       end_start();
+      end_confirm();
       end_session(true);
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, look: { style_url, theme, panel, frame_win } };
       core.hold_keys(win, KEY_OWNER);
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
@@ -521,7 +533,8 @@
       if (!win) return { ok: false, error: problem };
       const refused = start_problem(win);
       if (refused) return { ok: false, error: refused };
-      const opened = open_panel(win.document);
+      const opened = open_panels(win.document)[0];
+      if (opened?.row.user_start_only) return { ok: false, error: "Type the hint key in the panel" };
       const { found, places } = opened ? panel_place(opened) : { found: window_targets(win), places: {} };
       return open_session(tag, win, found, colors, places);
     }
@@ -623,25 +636,243 @@
       return { ok: true };
     }
 
+    // ---- Grants: the fixed table of the controls whose pick waits for Enter.
+
+    // The doorhangers whose second button denies: Firefox's permission prompts, where it reads Block, Don't allow or Not now. Another doorhanger's second button waits for Enter, as an unknown control does.
+    const DENYING_PROMPTS = new Set(["geolocation", "xr", "web-notifications", "persistent-storage", "midi", "storage-access", "local-network", "loopback-network", "webRTC-shareDevices"]);
+    // The tab prompt types that send a login to the site.
+    const LOGIN_PROMPTS = new Set(["prompt:promptUserAndPass", "prompt:promptPassword"]);
+    // The Exceptions dialog's buttons that let a site do more: allow it, allow its cookies for the session, or turn a protection off for it.
+    const EXCEPTION_GRANTS = new Set(["btnAllow", "btnCookieSession", "btnDisableETP", "btnHttpsOnlyOff", "btnHttpsOnlyOffTmp"]);
+    // Page Info's permission radios are `<permission>#<state>`. These states deny: Block (2) and Always Ask (3).
+    const DENYING_STATE = /#[23]$/;
+    // A download row's button by its icon: cancel (also delete a blocked file), retry, and the arrow to the blocked-download view. Show in folder is a fourth, but a blocked row's button with that icon asks to open or allow the file.
+    const AT_ONCE_DOWNLOAD_ICONS = ["downloadIconCancel", "downloadIconRetry", "downloadIconSubviewArrow"];
+    const SECURITY_DELAY_PREF = "security.notification_enable_delay";
+
+    const has_class = (element, name) => element.classList?.contains(name) ?? false;
+    // The nearest of `element` and its ancestors, through shadow roots, that passes `test`.
+    function closest_of(element, test) {
+      for (let at = element; at; at = at.parentNode ?? at.host) if (test(at)) return at;
+      return null;
+    }
+    const prompt_of = (element) => closest_of(element, (at) => at.localName === "popupnotification");
+    const notification_of = (prompt) => prompt.notification ?? prompt.wrappedJSObject?.notification;
+
+    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions and the two grant dialogs), a control the table does not name grants.
+    function grants(win, element) {
+      const prompt = prompt_of(element);
+      if (prompt) return prompt_grants(prompt, element);
+      if (closest_of(element, (at) => at.id === "downloadsListBox" || at.id === "downloadsPanel")) return download_grants(win, element);
+      if (closest_of(element, (at) => at.id === "permList")) return !(element.localName === "radio" && DENYING_STATE.test(element.id));
+      const url = String(element.ownerDocument?.documentURI ?? "");
+      const button_type = element.getAttribute("dlgtype");
+      // A drop-down only opens: the user then chooses in it with the keys.
+      if (url === EXTERNAL_PROTOCOL_URL || url === CLIENT_CERT_URL) return !(button_type === "cancel" || element.localName === "menulist");
+      // A tab prompt's checkbox either stops the site's prompts or, on a prompt from a background tab, lets the site take the focus to its tab. Both read alike in the DOM, so each waits.
+      if (url === PROMPT_URL) return (button_type === "accept" && LOGIN_PROMPTS.has(prompt_kind(element.ownerDocument))) || element.id === "checkbox";
+      if (url === EXCEPTIONS_URL) return EXCEPTION_GRANTS.has(element.id);
+      return false;
+    }
+
+    function prompt_grants(prompt, element) {
+      if (has_class(element, "popup-notification-closebutton") || has_class(element, "popup-notification-learnmore-link") || element.localName === "menulist") return false;
+      if (has_class(element, "popup-notification-secondary-button")) return !DENYING_PROMPTS.has(prompt.getAttribute("popupid"));
+      return true;
+    }
+
+    // A pick of a Library row only chooses it. A pick of a panel row opens its file, or the blocked-download view for a row Firefox holds back.
+    function download_grants(win, element) {
+      if (element.id === "downloadsHistory" || element.id === "downloadsPanel-blockedSubview-deleteButton" || has_class(element, "subviewbutton-back")) return false;
+      const row = closest_of(element, (at) => at.localName === "richlistitem");
+      if (!row) return true;
+      const blocked = row.hasAttribute("verdict");
+      if (element === row) return window_type(win) === BROWSER && blocked && !has_class(row, "temporary-block");
+      if (!has_class(element, "downloadButton")) return true;
+      return !(AT_ONCE_DOWNLOAD_ICONS.some((icon) => has_class(element, icon)) || (has_class(element, "downloadIconShow") && !blocked));
+    }
+
+    // Firefox ignores a doorhanger button for a moment after the prompt shows, and each early click makes that wait longer. Its Block buttons skip the wait.
+    function prompt_waits(element) {
+      const prompt = prompt_of(element);
+      if (!prompt) return false;
+      const notification = notification_of(prompt);
+      if (!notification) return true;
+      const action = has_class(element, "popup-notification-primary-button") ? notification.mainAction : has_class(element, "popup-notification-secondary-button") ? notification.secondaryActions?.[0] : undefined;
+      if (!action || action.disableSecurityDelay) return false;
+      let delay_ms;
+      try {
+        delay_ms = Services.prefs.getIntPref(SECURITY_DELAY_PREF, 500);
+      } catch (_) {
+        delay_ms = 500;
+      }
+      return !(ChromeUtils.now() - (notification.timeShown ?? Infinity) >= delay_ms);
+    }
+
+    // ---- Confirm: a grant waits for the user's Enter in its window.
+
+    const CONFIRM_MS = 15000;
+    // Short enough to sit above the control inside its prompt: a longer note runs past the panel's edge, which cuts it.
+    const CONFIRM_TEXT = "Enter";
+    // The height of the note above a marked control: a label of the hint sheet with its padding.
+    const NOTE_PX = 20;
+    let confirming = null;
+
+    function end_confirm() {
+      const ended = confirming;
+      if (!ended) return;
+      confirming = null;
+      undo_all(ended);
+    }
+
+    // What a grant must still be when Enter comes: the same prompt, the same download in the blocked-download view, and the same control and row state.
+    function identity_of(win, element) {
+      const prompt = prompt_of(element);
+      const row = closest_of(element, (at) => at.localName === "richlistitem");
+      const in_blocked_view = closest_of(element, (at) => at.id === "downloadsPanel-blockedSubview");
+      return {
+        notification: prompt ? notification_of(prompt) : undefined,
+        download: in_blocked_view ? win.document.getElementById("downloadsListBox")?.selectedItem : undefined,
+        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), row?.getAttribute("state"), row?.getAttribute("verdict")]),
+      };
+    }
+
+    const READY = "ready";
+    const WAITS = "waits";
+    const GONE = "gone";
+    function confirm_state({ win, target, identity }) {
+      const { element, drawn } = target;
+      if (win.closed || Services.focus.activeWindow !== win || !enabled_by_pref() || !core.may_act(win)) return GONE;
+      if (!element.isConnected || element.hidden || !element.checkVisibility()) return GONE;
+      const now = identity_of(win, element);
+      if (now.notification !== identity.notification || now.download !== identity.download || now.text !== identity.text || moved(win, element, drawn)) return GONE;
+      // A dialog keeps its accept button disabled for a moment, as a doorhanger ignores its own: Enter then does nothing, and the next Enter tries again.
+      if (!usable(element) || prompt_waits(element)) return WAITS;
+      return READY;
+    }
+
+    // Marks the control with a frame and a note, and holds the window's keys until Enter, another key or any end.
+    function begin_confirm(win, target, look) {
+      end_confirm();
+      confirming = { win, target, identity: identity_of(win, target.element), shown_at: win.performance.now(), undo: [] };
+      core.hold_keys(win, KEY_OWNER);
+      confirming.undo.push(() => core.release_keys(win, KEY_OWNER));
+      try {
+        add_confirm_parts(win, target, look);
+      } catch (error) {
+        end_confirm();
+        throw error;
+      }
+    }
+
+    function add_confirm_parts(win, target, { style_url, theme, panel, frame_win }) {
+      const doc = win.document;
+      const in_panel = target.place === "panel" && panel !== undefined;
+      const layer = make_layer(doc, style_url, theme, !in_panel);
+      if (in_panel) panel.view.prepend(layer.host);
+      else doc.documentElement.append(layer.host);
+      confirming.undo.push(() => layer.host.remove());
+      const box = window_box(win, target.element);
+      const origin = in_panel ? layer.host.getBoundingClientRect() : { left: 0, top: 0 };
+      const position = in_panel ? "absolute" : "fixed";
+      const left = Math.round(box.left - origin.left);
+      const top = Math.round(box.top - origin.top);
+      const frame = doc.createElementNS(HTML, "div");
+      frame.className = "desertfox-confirm";
+      frame.style.cssText = `position: ${position}; left: ${left}px; top: ${top}px; width: ${Math.round(box.width)}px; height: ${Math.round(box.height)}px; outline: 3px solid var(--primary); outline-offset: 2px; border-radius: 3px;`;
+      const note = label_node(doc, CONFIRM_TEXT, 0);
+      note.style.position = position;
+      // The layer inside a panel has no width, so a note that may wrap breaks after each word.
+      note.style.whiteSpace = "nowrap";
+      note.style.left = `${Math.max(0, left)}px`;
+      // Above the control, inside the panel or dialog it sits in: below it the panel's edge cuts the note, and on it the note hides what Enter grants.
+      note.style.top = `${Math.max(0, top - NOTE_PX)}px`;
+      layer.box.replaceChildren(frame, note);
+
+      const ends = () => end_confirm();
+      for (const type of ["mousedown", "deactivate", "resize", "unload", "TabSelect"]) listen(confirming, win, type, ends);
+      if (frame_win) for (const type of ["mousedown", "unload"]) listen(confirming, frame_win, type, ends);
+      if (panel) listen(confirming, panel.panel, "popuphidden", (event) => event.target === panel.panel && end_confirm(), false);
+      // A download that finishes or is unblocked elsewhere changes its row, and a doorhanger reuses its element for the next prompt.
+      const observer = new win.MutationObserver(ends);
+      const { element } = target;
+      const row = closest_of(element, (at) => at.localName === "richlistitem");
+      if (row === element) observer.observe(element, { attributes: true, attributeFilter: ["state", "verdict", "hidden"] });
+      else {
+        observer.observe(element, { attributes: true, attributeFilter: ["class", "command", "hidden", "id"] });
+        if (row) observer.observe(row, { attributes: true, attributeFilter: ["state", "verdict"] });
+      }
+      const prompt = prompt_of(element);
+      if (prompt) observer.observe(prompt, { attributes: true, attributeFilter: ["popupid", "hidden"] });
+      confirming.undo.push(() => observer.disconnect());
+      const timer = win.setTimeout(ends, CONFIRM_MS);
+      confirming.undo.push(() => win.clearTimeout(timer));
+    }
+
+    // While a grant waits, each key in its window is the confirm's: Enter confirms, any other key cancels, and none goes on to Firefox or the page.
+    // Only the user's own key counts. A key a script made is not trusted. A key pressed before the mark showed, or held down since, does nothing.
+    function on_confirm_key(event) {
+      if (!event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.repeat || event.timeStamp < confirming.shown_at) return;
+      if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return end_confirm();
+      const asked = confirming;
+      const state = confirm_state(asked);
+      if (state === WAITS) return;
+      end_confirm();
+      if (state === READY) run_target(asked.win, asked.target);
+    }
+
     // ---- Pick.
 
+    // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
     function pick({ session: tag, id }) {
       if (!session || session.tag !== tag) return { ok: false, error: "The hints have ended" };
       const target = session.targets.get(id);
       if (!target?.drawn) return { ok: false, error: "No such hint" };
-      const { element, kind, drawn } = target;
-      const win = session.win;
+      const { element, drawn } = target;
+      const { win, look } = session;
       end_session(false);
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
+      if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
+      if (grants(win, element)) {
+        begin_confirm(win, target, look);
+        return { ok: true };
+      }
+      if (prompt_waits(element)) return { ok: false, error: "The prompt is not ready yet" };
+      run_target(win, target);
+      return { ok: true };
+    }
+
+    function moved(win, element, drawn) {
       const now = window_box(win, element);
-      if (Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX) return { ok: false, error: "The hint's target moved" };
+      return Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX;
+    }
+
+    function run_target(win, { element, kind }) {
       const tabs = win.gBrowser ?? win.wrappedJSObject?.gBrowser;
       if (kind === "tab" && tabs) tabs.selectedTab = element;
       else if (kind === "menu") element.open = true;
+      else if (kind === "download") choose_download(win, element);
+      // The radio's <command> reads the group's choice, so the radio is chosen first. Page Info's permission rows work this way.
+      else if (kind === "radio" && command_of(element)) {
+        element.radioGroup.selectedItem = element;
+        element.doCommand();
+      }
       // A click on a button with a stale `disabled` does nothing, so a button that runs a <command> runs it.
       else if (command_of(element)) element.doCommand();
       else element.click();
-      return { ok: true };
+    }
+
+    // The downloads panel acts on a click in a row's main area, on the row the list has chosen, and only with the focus in the list. A click on the row itself does nothing.
+    // The Library acts on a double click, so a pick there only chooses the row, and Enter then opens it.
+    function choose_download(win, row) {
+      const list = row.parentNode;
+      if (!holds(list, core.focused_element(win))) list.focus();
+      list.selectedItem = row;
+      if (window_type(win) === BROWSER) row.querySelector(".downloadMainArea")?.click();
+      else list.ensureElementIsVisible?.(row);
     }
 
     function clear({ session: tag }) {
@@ -661,7 +892,8 @@
       const record = { held: [] };
       const keydown = (event) => {
         try {
-          if (session?.win === win) on_key(event);
+          if (confirming?.win === win) on_confirm_key(event);
+          else if (session?.win === win) on_key(event);
           else if (starting?.win === win) on_start_key(event);
           else on_free_key(win, record, event);
         } catch (error) {
@@ -720,11 +952,13 @@
     const on_pref = () => {
       if (enabled_by_pref()) return;
       end_start();
+      end_confirm();
       end_session(false);
     };
 
     function stop_all() {
       end_start();
+      end_confirm();
       end_session(false);
       Services.prefs.removeObserver(ENABLED_PREF, on_pref);
       try {
