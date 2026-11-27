@@ -19,6 +19,7 @@ type Listener = (event: Record<string, unknown>) => void;
 
 // An element of a DevTools document: a tag, classes or an id for `closest`, children, and text nodes as `text` children.
 class El {
+  readonly nodeType = 1;
   localName: string;
   classes: string[];
   id: string;
@@ -77,6 +78,7 @@ class El {
 }
 
 class Text {
+  readonly nodeType = 3;
   data: string;
   parentNode: El | null = null;
   constructor(data: string) {
@@ -95,6 +97,8 @@ class Selection {
   focusOffset = 0;
   next_focus: Text | null = null;
   text = "selected";
+  // CodeMirror's own selection, as the DOM shows it while the editor has the focus.
+  isCollapsed = false;
   get rangeCount() {
     return this.focusNode ? 1 : 0;
   }
@@ -134,8 +138,10 @@ function make_document(url: string, toolbox_doc: unknown) {
     commands,
     listeners,
     querySelector: (selector: string) => doc.documentElement.querySelector(selector),
-    createTreeWalker: (root: El) => {
-      const nodes = root.descendants().filter((node) => node instanceof Text);
+    // A filter's reject leaves out an element with all it holds, as a DOM tree walker does.
+    createTreeWalker: (root: El, _what: number, filter?: { acceptNode(node: El | Text): number }) => {
+      const walk = (element: El): (El | Text)[] => element.children.flatMap((child) => (filter?.acceptNode(child) === 2 ? [] : child instanceof El ? walk(child) : [child]));
+      const nodes = walk(root);
       let index = -1;
       return { nextNode: () => nodes[++index] ?? null };
     },
@@ -210,6 +216,8 @@ function started({ table = TABLE as unknown, visual_table = protocol.DEVTOOLS_VI
   // The breakpoint condition: an editor that types, drawn inside the source's own content.
   const condition = (source.add(new El(debugger_doc, "div", { classes: ["cm-editor"] })) as El).add(new El(debugger_doc, "div", { classes: ["cm-content"] })) as El;
   condition.isContentEditable = true;
+  // The logpoint's stack trace checkbox, in the same panel but outside the condition's editor.
+  const stacktrace = source.add(new El(debugger_doc, "input")) as El;
 
   // The Network response: a CodeMirror editor and the filter box in one panel.
   const network_doc = panel("chrome://devtools/content/netmonitor/index.html");
@@ -238,7 +246,7 @@ function started({ table = TABLE as unknown, visual_table = protocol.DEVTOOLS_VI
     if (visual_table !== null) await push("devtools.visual_keys", visual_table);
     if (table !== null) await push("devtools.keys", table);
   };
-  return { firefox, window, copied, press, push, ready, markup_doc, console_doc, output, messages, input, inspector_doc, rules, rule, toolbar_text, debugger_doc, source, condition, filter, response_source };
+  return { firefox, window, copied, press, push, ready, markup_doc, console_doc, output, messages, input, inspector_doc, rules, rule, toolbar_text, debugger_doc, source, condition, stacktrace, filter, response_source };
 }
 
 test("the hello says devtools_visual, so the extension may push the v row and the mode's keys", async () => {
@@ -266,6 +274,14 @@ test("v starts at the focused message when the focus sits inside the area", asyn
   await ready();
   press("v", messages[2]);
   assert.equal(console_doc.selection.calls[0], "collapse second line@0");
+});
+
+test("the area pass skips the focused message it already searched, so its blank text counts once against the limit", async () => {
+  const { ready, press, messages, console_doc } = started();
+  await ready();
+  for (let index = 0; index < 3000; index++) messages[0]!.add(new Text(" "));
+  assert.ok(press("v", messages[0]).prevented);
+  assert.equal(console_doc.selection.calls[0], "collapse first line@0");
 });
 
 test("with the document itself focused, v starts at the area's current row, as the markup view marks it", async () => {
@@ -350,13 +366,25 @@ test("the Debugger source gets CodeMirror's own Shift+arrow keys, its keys pass 
   assert.equal(debugger_doc.listeners.get("copy")?.size ?? 0, 0, "the copy listener went");
 });
 
-test("v in a field inside a code area types there: the Debugger's breakpoint condition and the response filter box", async () => {
-  const { ready, press, source, condition, filter, response_source } = started();
+test("v in a field inside a code area types there: the Debugger's breakpoint condition, its stack trace checkbox and the response filter box", async () => {
+  const { ready, press, source, condition, stacktrace, filter, response_source } = started();
   await ready();
   assert.equal(press("v", condition).prevented, false, "the condition editor");
+  assert.equal(press("v", stacktrace).prevented, false, "the checkbox");
   assert.equal(press("v", filter).prevented, false, "the filter box");
   assert.deepEqual([source.dispatched, condition.dispatched, response_source.dispatched], [[], [], []]);
   assert.ok(press("v", response_source).prevented, "the response editor itself still starts the mode");
+});
+
+test("y with CodeMirror's selection empty copies nothing, so the editor never copies its whole line", async () => {
+  const { ready, press, source, debugger_doc } = started();
+  await ready();
+  press("v", source);
+  press("h", source);
+  debugger_doc.selection.isCollapsed = true;
+  assert.ok(press("y", source).prevented);
+  assert.deepEqual(debugger_doc.commands, []);
+  assert.equal(press("w", source).prevented, false, "the mode ended");
 });
 
 test("Escape in a code area drops CodeMirror's selection with a plain arrow", async () => {
@@ -378,6 +406,33 @@ test("a copy over the cap copies nothing, in a text area and in a code area", as
   debugger_doc.copy_text = "x".repeat(1_000_001);
   press("y", source);
   assert.equal(debugger_doc.cleared, 1);
+});
+
+test("a key in a field outside the mode's area ends the mode and types there, Escape too", async () => {
+  for (const key of ["w", "Escape"]) {
+    const { ready, press, output, input, console_doc } = started();
+    await ready();
+    press("v", output);
+    console_doc.selection.calls = [];
+    assert.equal(press(key, input).prevented, false, key);
+    assert.deepEqual(console_doc.selection.calls, [], `${key} moved or dropped the selection`);
+    assert.equal(press("w", output).prevented, false, `${key} left the mode on`);
+  }
+});
+
+test("a copy that fails still ends the mode and lets its keys go", async () => {
+  const { ready, press, output, firefox } = started();
+  await ready();
+  firefox.Components.classes["@mozilla.org/widget/clipboardhelper;1"] = {
+    getService: () => ({
+      copyString: () => {
+        throw new Error("NS_ERROR_FAILURE");
+      },
+    }),
+  };
+  press("v", output);
+  press("y", output);
+  assert.equal(press("w", output).prevented, false);
 });
 
 test("v in the console input, an editable field of no area, types there", async () => {

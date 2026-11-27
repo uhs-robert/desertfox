@@ -230,7 +230,11 @@ export async function run_cases(context) {
       await open_tab(RULE_PAGE);
       await show_tool("inspector");
       await rule_view("flag off");
+      // DevTools gets v: the module took no key, so the rule view's own document sees it.
+      await chrome(`(async () => { ${TOOLBOX} ${INSPECTOR} const seen = (Services.desertfox_key_test_keys = []); const listener = (event) => seen.push(event.key); doc.addEventListener("keydown", listener); Services.desertfox_key_test_keys_off = () => doc.removeEventListener("keydown", listener); })()`);
+      on_teardown(() => chrome(`(async () => { Services.desertfox_key_test_keys_off?.(); delete Services.desertfox_key_test_keys_off; delete Services.desertfox_key_test_keys; })()`));
       await press_keys("v", "w", "w");
+      await poll_until("v to reach the rule view", () => chrome(`(async () => Services.desertfox_key_test_keys.includes("v"))()`), { timeout_ms: 3000 });
       await sleep(NO_EFFECT_MS);
       const selection = await selection_of(INSPECTOR, "#ruleview-container");
       expect(selection.text === "", `v started the mode with no v row: ${JSON.stringify(selection)}`);
@@ -262,5 +266,14 @@ export async function run_cases(context) {
     await press_keys("v", "y");
     const again = await copied("the Debugger source again");
     expect(again.length === 1, `the next v did not start with one character: ${JSON.stringify(again.slice(0, 300))}`);
+    // h takes the selection back to empty, and y then copies nothing: CodeMirror would copy the whole line. The v and y after it prove the keys arrived.
+    await set_clipboard();
+    await press_keys("v", "h", "y");
+    await sleep(NO_EFFECT_MS);
+    const kept = await clipboard();
+    expect(kept === SENTINEL, `y with an empty selection copied ${JSON.stringify(kept.slice(0, 300))}`);
+    await press_keys("v", "y");
+    const after = await copied("the Debugger source after the empty copy");
+    expect(after.length === 1, `v after the empty copy did not select one character: ${JSON.stringify(after.slice(0, 300))}`);
   });
 }
