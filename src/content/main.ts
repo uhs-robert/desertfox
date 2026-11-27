@@ -196,6 +196,7 @@ function on_keydown(event: KeyboardEvent): void {
   const target = press_target(event);
   const press: HeldPress = { keyup_seen_: false };
   // A replayed key the keymap passes ends the site mode after the page has the key, because ending it replays the keys behind.
+  const dropped = key_flow.drops_repeat_(event.repeat);
   const decision = key_flow.handle_token_(
     token,
     event.repeat,
@@ -205,7 +206,7 @@ function on_keydown(event: KeyboardEvent): void {
     },
     physical_token(event),
   );
-  cancelled_keys.record_keydown_(event.code, decision, press);
+  cancelled_keys.record_keydown_(event.code, decision, dropped ? undefined : press);
   if (decision === "cancel") cancel(event);
   else site_mode.end_on_input_();
 }
