@@ -20,6 +20,10 @@ import {
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
   is_sidebar_command_id,
+  CHROME_HINT_COMMAND_ID,
+  chrome_hint_keys_of,
+  MAX_CHROME_HINT_BINDINGS,
+  MAX_CHROME_HINT_KEY_TOKENS,
   MAX_SIDEBAR_KEY_TOKENS,
   sidebar_keys_of,
   MAX_KEY_ROWS,
@@ -79,6 +83,24 @@ export function sidebar_rows_of(keymap: CompiledKeymap | undefined, check_args: 
   walk(sidebar_tree, []);
   const sorted = rows.sort((a, b) => (a.keys.join(" ") < b.keys.join(" ") ? -1 : 1)).slice(0, MAX_KEY_ROWS);
   return sidebar_keys_of(sorted) ?? [];
+}
+
+// The normal-mode bindings that run `hint.browser` alone, as key token lists in key order. The module takes them with the focus in Firefox's own dialogs and windows, where no content script hears them.
+export function chrome_hint_keys_of_keymap(keymap: CompiledKeymap | undefined): string[][] {
+  const bindings: string[][] = [];
+  const walk = (node: TreeNode | undefined, keys: string[]): void => {
+    if (node === undefined) return;
+    if (node.kind === "branch") {
+      if (keys.length < MAX_CHROME_HINT_KEY_TOKENS) for (const [key, child] of Object.entries(node.children)) walk(child, [...keys, key]);
+      return;
+    }
+    if (keys.length === 0 || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) return;
+    const { invocation, capture, register } = node.steps[0]!;
+    if (capture === undefined && register === undefined && invocation.prompt === undefined && invocation.id === CHROME_HINT_COMMAND_ID) bindings.push(keys);
+  };
+  walk(keymap?.modes.normal, []);
+  const sorted = bindings.sort((a, b) => (a.join(" ") < b.join(" ") ? -1 : 1)).slice(0, MAX_CHROME_HINT_BINDINGS);
+  return chrome_hint_keys_of(sorted) ?? [];
 }
 
 export const tab_state_of = (record: TabModeRecord): TabState => ({ mode: mode_of_record(record), live: record.live === true });
@@ -319,7 +341,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const tree = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, deps.check_args);
     const fits = tree && validate_scope_tree(tree).ok;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }) });
+    const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }) });
     request_hello_read();
     request_messages_read();
   };

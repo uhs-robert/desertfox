@@ -1,0 +1,142 @@
+// A small stand-in for the chrome DOM the chrome hints feature reads: elements with boxes, shadow roots and listeners. `query` answers querySelectorAll by selector text.
+import { key_event } from "./fake_firefox.ts";
+import type { FakeEvent } from "./fake_firefox.ts";
+
+export type Box = { left: number; top: number; width: number; height: number };
+export type Handler = (event: FakeEvent & { target?: unknown }) => void;
+
+// An element with the parts of the DOM the feature uses. `query` answers querySelectorAll by selector text.
+export class Node {
+  localName: string;
+  id = "";
+  hidden = false;
+  disabled = false;
+  visible = true;
+  box: Box = { left: 0, top: 0, width: 0, height: 0 };
+  children: Node[] = [];
+  parentNode: Node | null = null;
+  shadow: Node | null = null;
+  shadowRoot: Node | null = null;
+  // A closed shadow root of Firefox's own, which only chrome code reads.
+  openOrClosedShadowRoot: Node | null = null;
+  // Set on a shadow root: the element that holds it.
+  host: Node | null = null;
+  query: Record<string, Node[]> = {};
+  attrs = new Map<string, string>();
+  style: Record<string, string> = {};
+  className = "";
+  text = "";
+  clicks = 0;
+  commands = 0;
+  ownerDocument: { getElementById(id: string): Node | null } | null = null;
+  open = false;
+  state = "closed";
+  listeners = new Map<string, Set<Handler>>();
+  constructor(local_name: string, props: Partial<Node> = {}) {
+    this.localName = local_name;
+    Object.assign(this, props);
+  }
+  get isConnected(): boolean {
+    let node: Node | null = this;
+    while (node?.parentNode ?? node?.host) node = node.parentNode ?? node.host;
+    return node?.localName === "#root";
+  }
+  get textContent(): string {
+    return this.text + this.children.map((child) => child.textContent).join("");
+  }
+  set textContent(text: string) {
+    this.text = text;
+  }
+  checkVisibility() {
+    return this.visible;
+  }
+  getBoundingClientRect() {
+    return this.box;
+  }
+  getAttribute(name: string) {
+    return this.attrs.get(name) ?? null;
+  }
+  hasAttribute(name: string) {
+    return this.attrs.has(name);
+  }
+  setAttribute(name: string, value: string) {
+    this.attrs.set(name, value);
+  }
+  // A selector a test did not set: "*" gives every element below, a list of ids or tag names gives those that match one of them.
+  querySelectorAll(selector: string): Node[] {
+    if (this.query[selector]) return this.query[selector]!;
+    const below = this.descendants();
+    if (selector === "*") return below;
+    return below.filter((node) => node.matches(selector));
+  }
+  descendants(): Node[] {
+    return this.children.flatMap((child) => [child, ...child.descendants()]);
+  }
+  matches(selector: string) {
+    return selector.split(",").some((part) => {
+      const one = part.trim();
+      if (one.startsWith("#")) return this.id === one.slice(1);
+      const tag = /^[a-z-]+/.exec(one)?.[0];
+      const type = /\[type=([a-z]+)\]/.exec(one)?.[1];
+      if (type !== undefined && this.getAttribute("type") !== type) return false;
+      return tag === this.localName && !(one.includes(":not([editable])") && this.attrs.has("editable"));
+    });
+  }
+  closest(selector: string) {
+    for (let node: Node | null = this; node; node = node.parentNode) if (node.matches(selector)) return node;
+    return null;
+  }
+  contains(other: Node | null | undefined) {
+    for (let node = other ?? null; node; node = node.parentNode) if (node === this) return true;
+    return false;
+  }
+  append(...nodes: Node[]) {
+    for (const node of nodes) {
+      node.remove();
+      node.parentNode = this;
+      this.children.push(node);
+    }
+  }
+  prepend(...nodes: Node[]) {
+    for (const node of nodes.reverse()) {
+      node.remove();
+      node.parentNode = this;
+      this.children.unshift(node);
+    }
+  }
+  replaceChildren(...nodes: Node[]) {
+    for (const child of this.children) child.parentNode = null;
+    this.children = [];
+    this.append(...nodes);
+  }
+  remove() {
+    if (!this.parentNode) return;
+    this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+    this.parentNode = null;
+  }
+  attachShadow() {
+    this.shadow = new Node("#shadow");
+    return this.shadow;
+  }
+  click() {
+    this.clicks++;
+  }
+  doCommand() {
+    this.commands++;
+  }
+  addEventListener(type: string, handler: Handler) {
+    this.listeners.set(type, (this.listeners.get(type) ?? new Set()).add(handler));
+  }
+  removeEventListener(type: string, handler: Handler) {
+    this.listeners.get(type)?.delete(handler);
+  }
+  fire(type: string, event: Partial<FakeEvent> & { target?: unknown } = {}) {
+    const full = Object.assign(key_event("", { target: this }), event, { stopImmediatePropagation() { full.stopped = true; } });
+    for (const handler of [...(this.listeners.get(type) ?? [])]) handler(full);
+    return full;
+  }
+  listener_total() {
+    return [...this.listeners.values()].reduce((sum, set) => sum + set.size, 0);
+  }
+}
+

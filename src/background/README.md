@@ -125,7 +125,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `settings_file.ts`, `toml_key_edit.ts`, `toml_table_edit.ts`: a setting written into, or removed from, settings.toml. `config_setting_writes.ts` runs the write.
 - `autoconfig_mirror.ts`: writes a comment line, then all stored key edits as keymap.d mode tables, to `autoconfig.toml` through the host, one write at a time.
 - `hint_frames.ts`: one label set across the frames of a tab, for `hint --all-frames`.
-- `chrome_hints.ts`: the extension's half of hints over Firefox's own UI: labels from the module's targets, the narrowing per typed key, the pick.
+- `chrome_hints.ts`: the extension's half of hints over Firefox's own UI: the start (also one the module asks for), the labels, the narrowing per typed key, the pick.
 - `inspect_relay.ts`: hands a hint pick (`inspect_pick` from the `hints` bundle) to the devtools page of the picked tab.
 - `rank_service.ts`, `rank_worker.ts`, `rank_index.ts`, `completion_rank.ts`: history ranking for `open`, `history` and the finder, in a Worker that holds the only copy of the history rows.
 - `find_scan.ts`: answers `find_scan` from the `caret` bundle.

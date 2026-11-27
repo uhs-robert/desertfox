@@ -29,6 +29,7 @@
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
 //   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
+//   chrome_hint_keys(win)      In the sandbox: the key token lists of the `hint.browser` bindings, or [] whenever may_act(win) is false.
 //   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
@@ -98,6 +99,8 @@
     const FROM_MODULE_STORAGE_KEY = "desertfox_browser_module_from_module";
     const MAX_KEY_ROWS = 32;
     const MAX_SIDEBAR_KEY_TOKENS = 2;
+    const MAX_CHROME_HINT_BINDINGS = 4;
+    const MAX_CHROME_HINT_KEY_TOKENS = 4;
     const MAX_STATE_TABS = 1024;
     const MAX_MESSAGES = 16;
     const MAX_MESSAGE_LIST_BYTES = 4096;
@@ -120,6 +123,7 @@
       "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: 4096 },
       "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+      "chrome_hints.collect_here": { args: { session: "int", start: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
@@ -131,6 +135,7 @@
       "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: 4096 },
       "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: 256 },
       "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
+      "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
@@ -218,7 +223,16 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys) };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys) };
+    }
+
+    // chrome_hint_keys_of: a bad list leaves chrome focus without the hint start and the rest of the state alone.
+    function read_chrome_hint_keys(value) {
+      if (!Array.isArray(value) || value.length > MAX_CHROME_HINT_BINDINGS) return [];
+      if (!value.every((keys) => Array.isArray(keys) && keys.length > 0 && keys.length <= MAX_CHROME_HINT_KEY_TOKENS && keys.every((key) => typeof key === "string" && KEY_TOKEN.test(key)))) return [];
+      const joined = value.map((keys) => keys.join(" "));
+      if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return [];
+      return value.map((keys) => [...keys]);
     }
 
     // sidebar_keys_of: a bad table leaves the sidebar without keys and the rest of the state alone. Each row's key prefix maps to { prefix: true }.
@@ -926,6 +940,7 @@
       },
       may_act: (win) => state_for(win) !== undefined,
       sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),
+      chrome_hint_keys: (win) => state_for(win)?.chrome_hint_keys ?? [],
       token_of,
       is_field,
       deep_active,

@@ -6,120 +6,12 @@ import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_S
 import { create_firefox, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 import { label_parts } from "../../src/background/chrome_hints.ts";
 import { make_labels } from "../../src/shared/hints/labels.ts";
+import { Node } from "./chrome_dom.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
 
 const FILE = "desertfox-chrome-hints.js";
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-type Box = { left: number; top: number; width: number; height: number };
-type Handler = (event: FakeEvent & { target?: unknown }) => void;
-
-// An element with the parts of the DOM the feature uses. `query` answers querySelectorAll by selector text.
-class Node {
-  localName: string;
-  id = "";
-  hidden = false;
-  disabled = false;
-  visible = true;
-  box: Box = { left: 0, top: 0, width: 0, height: 0 };
-  children: Node[] = [];
-  parentNode: Node | null = null;
-  shadow: Node | null = null;
-  shadowRoot: Node | null = null;
-  query: Record<string, Node[]> = {};
-  attrs = new Map<string, string>();
-  style: Record<string, string> = {};
-  className = "";
-  text = "";
-  clicks = 0;
-  commands = 0;
-  ownerDocument: { getElementById(id: string): Node | null } | null = null;
-  open = false;
-  state = "closed";
-  listeners = new Map<string, Set<Handler>>();
-  constructor(local_name: string, props: Partial<Node> = {}) {
-    this.localName = local_name;
-    Object.assign(this, props);
-  }
-  get isConnected(): boolean {
-    let node: Node | null = this;
-    while (node?.parentNode) node = node.parentNode;
-    return node?.localName === "#root";
-  }
-  get textContent(): string {
-    return this.text + this.children.map((child) => child.textContent).join("");
-  }
-  set textContent(text: string) {
-    this.text = text;
-  }
-  checkVisibility() {
-    return this.visible;
-  }
-  getBoundingClientRect() {
-    return this.box;
-  }
-  getAttribute(name: string) {
-    return this.attrs.get(name) ?? null;
-  }
-  hasAttribute(name: string) {
-    return this.attrs.has(name);
-  }
-  setAttribute(name: string, value: string) {
-    this.attrs.set(name, value);
-  }
-  querySelectorAll(selector: string) {
-    return this.query[selector] ?? [];
-  }
-  append(...nodes: Node[]) {
-    for (const node of nodes) {
-      node.remove();
-      node.parentNode = this;
-      this.children.push(node);
-    }
-  }
-  prepend(...nodes: Node[]) {
-    for (const node of nodes.reverse()) {
-      node.remove();
-      node.parentNode = this;
-      this.children.unshift(node);
-    }
-  }
-  replaceChildren(...nodes: Node[]) {
-    for (const child of this.children) child.parentNode = null;
-    this.children = [];
-    this.append(...nodes);
-  }
-  remove() {
-    if (!this.parentNode) return;
-    this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
-    this.parentNode = null;
-  }
-  attachShadow() {
-    this.shadow = new Node("#shadow");
-    return this.shadow;
-  }
-  click() {
-    this.clicks++;
-  }
-  doCommand() {
-    this.commands++;
-  }
-  addEventListener(type: string, handler: Handler) {
-    this.listeners.set(type, (this.listeners.get(type) ?? new Set()).add(handler));
-  }
-  removeEventListener(type: string, handler: Handler) {
-    this.listeners.get(type)?.delete(handler);
-  }
-  fire(type: string, event: Partial<FakeEvent> & { target?: unknown } = {}) {
-    const full = Object.assign(key_event("", { target: this }), event, { stopImmediatePropagation() { full.stopped = true; } });
-    for (const handler of [...(this.listeners.get(type) ?? [])]) handler(full);
-    return full;
-  }
-  listener_total() {
-    return [...this.listeners.values()].reduce((sum, set) => sum + set.size, 0);
-  }
-}
 
 const button = (id: string, left: number, props: Partial<Node> = {}) => new Node("toolbarbutton", { id, box: { left, top: 10, width: 24, height: 24 }, ...props });
 
@@ -197,8 +89,8 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
   const labels = () => layers().flatMap((host) => host.shadow!.children.find((child) => child.className === "desertfox-hints")!.children.map((node) => ({ text: node.textContent, typed: node.children[0]!.textContent, left: node.style.left, top: node.style.top, position: node.style.position ?? "" })));
   const fire_timers = () => timers.filter((timer) => timer.live).forEach((timer) => ((timer.live = false), timer.run()));
   const open_panel = () => (panel.state = "open");
-  // The feature's own listeners while no session runs: the key listener on the window root and the unload listener that drops it.
-  const session_listeners = () => window_root.listener_total() + win.listener_total() - 2;
+  // The feature's own listeners while no session runs: the key listener on the window root, and the deactivate and unload listeners of the window.
+  const session_listeners = () => window_root.listener_total() + win.listener_total() - 3;
   const focus = (node: Node | undefined) => (focused = node);
   const finish_load = () => {
     win.location.href = "chrome://browser/content/browser.xhtml";
@@ -357,7 +249,7 @@ test("a key with Ctrl, a click, the window leaving the front, a resize and the w
     else chrome.win.fire(end);
     assert.deepEqual(pushes("chrome_hints.end"), [{ session: 1 }], end);
     assert.equal(chrome.layers().length, 0, end);
-    assert.equal(end === "unload" ? chrome.session_listeners() + 2 : chrome.session_listeners(), 0, end);
+    assert.equal(end === "unload" ? chrome.session_listeners() + 3 : chrome.session_listeners(), 0, end);
     assert.equal(held(), undefined, end);
   }
 });
