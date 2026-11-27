@@ -658,6 +658,25 @@ test("the top frame's count does not show for a child frame, whichever comes fir
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
 });
 
+test("a child frame that gets the focus back shows the keys it still holds", async () => {
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar();
+  await module.bar_report(3, 7, false, { pending: ["g"], count: 2 });
+  // The focus leaves the child: the top frame's report drops the child's keys from the entry.
+  await module.bar_report(3, 0, false, {});
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
+  await module.bar_focus(3, 7);
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], count: 2 });
+  // A frame with nothing half typed shows nothing, and a closed tab forgets its frames.
+  await module.bar_focus(3, 9);
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
+  await module.tab_changed("3", undefined);
+  await module.bar_focus(3, 7);
+  assert.equal(state_of(data).tabs["3"], undefined);
+});
+
 test("a report that arrives after the bar went away is dropped", async () => {
   const { data, config, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
   await module.sync();

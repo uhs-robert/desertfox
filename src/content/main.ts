@@ -437,8 +437,7 @@ function start(): void {
   // Showing a tab fires focus on the top window too while a child frame holds the focus, so the report reads who holds it and does not assume this frame does.
   // A child frame also reports on blur, so its claim on the focus ends. A claim it sent from a field's blur can reach the background after the report of the frame that took the focus, which would leave the badge on FRAME.
   // The top frame needs no blur report: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
-  // The background drops a child's keys when the top frame reports, so a frame that gets the focus back says its keys again.
-  listen("focus", () => ((bar_sent = ""), report_bar(), report_mode()), false);
+  listen("focus", report_mode, false);
   if (window !== window.top) listen("blur", report_mode, false);
   // A hold lives in one frame and one page, so it ends when the focus leaves the frame or the page goes into the back-forward cache.
   for (const type of ["blur", "pagehide"]) listen(type, () => void key_flow.end_hold_(), false);
