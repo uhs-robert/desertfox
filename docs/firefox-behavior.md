@@ -476,6 +476,22 @@ Measured in Firefox 161.0 in the key test (`p55_panes`), through the pane keys, 
 - `E=` after a widen made the two panels equal within 2 px. `E<Space><<<` narrowed the first panel three steps of 5 percent. `El` and `Eh` moved between the panes of a split.
 - Not measured: the sidebar focus, DevTools docked left or right, and a split in a private window.
 
+## Sidebar keys (sidebar-keys)
+
+Measured in Firefox 161.0 in the key test, with a probe piece that opened each panel through `SidebarController.show(id)`, pressed real keys and logged keydown at the window root, the window (capture, bubble and the system group) and the panel's own window. The chrome source read is the 161.0 build. Firefox 153 to 160 were not run.
+
+- Defaults: `sidebar.revamp` true, `sidebar.verticalTabs` false. The panel ids are `viewHistorySidebar`, `viewBookmarksSidebar`, `viewTabsSidebar` (synced tabs) and `viewOpenTabsSidebar`. The open tabs panel exists only with `sidebar.openTabsPanel.enabled` (default false). The bookmarks panel is the older places tree (`chrome://browser/content/places/bookmarksSidebar.xhtml`) unless `sidebar.updatedBookmarks.enabled` (default false). An add-on's panel loads `chrome://browser/content/webext-panels.xhtml`.
+- The panel is an in-process chrome document in `<browser id="sidebar">` (not remote). The browser window's root and its capture listener see every key pressed in a panel, before the panel does. `event.target` is the panel's root element (`sidebar-history`, `sidebar-opentabs`, or the focused element in the places page), and `event.originalTarget` is the focused element itself, inside shadow roots too.
+- `show()` puts the focus in the panel's search box: the `input` inside the `moz-input-search` shadow root. `document.activeElement` of the window is the sidebar `<browser>`, and `commandDispatcher.focusedElement` is that `input`. The window's `IMEStatus` is enabled there. A letter types into the box and nothing prevents it.
+- In the revamped panels' search box ArrowDown does nothing, and Tab goes to the panel's menu button, not to the list. In the places page Tab goes to the tree (`tree#bookmarks-view`), whose arrow keys Firefox prevents (handled). Escape, `/` and the letters are not handled by any panel.
+- The revamped panels' list is a tree view (`SidebarTreeView`). It reads `event.code` for ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home and End. A row (`sidebar-tab-row`) opens on Enter. An open tabs row holds its tab as `tabElement`, and its close button calls `gBrowser.removeTabs([tab])`.
+- With vertical tabs on, `tabContainer.verticalMode` is true. A focused tab is the window's focused element, inside `#tabbrowser-tabs`. Plain ArrowDown there is handled by Firefox. Ctrl+ArrowDown moves the strip's keyboard focus (`ariaFocusedItem` over `ariaFocusableItems`, public). `gTabsPanel.showAllTabsPanel()` exists. Firefox's own strip listeners take only Ctrl, Ctrl+Shift, Enter and Space, so a letter reaches a window listener unhandled.
+- `SidebarController.sidebarMain.focusButtonGroup()` puts the focus on a launcher button inside `sidebar-main`'s shadow root.
+- Arrow keys, Home, End and Enter typed through `nsITextInputProcessor` after the key event (the browser module's `type_key`) reach the focused row and move, open and fold as real keys do (key test `p56_sidebar_keys`). A typed key passes the window root's listeners again, as a trusted keydown.
+- `sidebar.leave` back to the page: `gBrowser.selectedBrowser.focus()` makes the selected `<browser>` the window's `activeElement`.
+
+Not measured: the updated bookmarks panel, synced tabs, tab groups and a split view pair in the strip, a right-to-left window, and an add-on's panel with real keys.
+
 ## The Navigation API in a content script (jump-list)
 
 Measured in Firefox 160 in the key test, with a throwaway piece that listened from the content script world (`executeScript`) on same-origin test pages.

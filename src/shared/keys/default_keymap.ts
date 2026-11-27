@@ -194,6 +194,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ES: { id: "pane.focus", args: { region: "sidebar" } },
     ED: { id: "pane.focus", args: { region: "devtools" } },
     gF: { id: "frame.exit" },
+    gB: { id: "hint.browser" },
     g0: { id: "tab.goto", args: { index: 1 }, label: "First tab" },
     g$: { id: "tab.goto", args: { index: -1 }, label: "Last tab" },
     T: { id: "tab.switch", prompt: { param: "tab" } },

@@ -27,6 +27,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `help_tab.ts`: `open_help_url`, which opens a help page URL beside the asking tab or navigates in place. Shared by the help and native commands.
 - `hint.ts`: `hint.run`. The code sits in the `hints` bundle.
 - `hint_text.ts`: `hint.key`, the binding that holds Tab, Enter, Space and Slash while the hints bundle loads.
+- `hint_browser.ts`: `hint.browser`, hints over Firefox's own buttons through the browser module, and the background instance of `chrome_hints.ts`.
 - `history.ts`: `history.open`.
 - `issue.ts`: `help.issue` (`:issue`): opens the prefilled GitHub new-issue form, or with `--copy` copies the report.
 - `jump.ts`: `page.jump` (`<C-o>`, `<C-i>`), in the `page` bundle.

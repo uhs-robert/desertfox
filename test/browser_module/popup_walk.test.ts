@@ -442,3 +442,18 @@ test("the focus is read through a frame of this process, and a frame with no foc
   assert.equal(browser.press("j").prevented, false);
   assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"]);
 });
+
+test("the walk leaves a window's keys alone while another feature holds them in the core", () => {
+  const { firefox, browser, tab, typed, run_timers } = setup();
+  const core = firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): void; release_keys(win: unknown, owner: string): void };
+  browser.focus(tab.browser as Node);
+  browser.show(popup("menupopup"));
+  core.hold_keys(browser.win, "chrome_hints");
+  assert.equal(browser.press("j").prevented, false, "the walk took a key another feature holds");
+  core.release_keys(browser.win, "popup_walk");
+  assert.equal(browser.press("j").prevented, false, "another owner's release ended the hold");
+  core.release_keys(browser.win, "chrome_hints");
+  assert.ok(browser.press("j").prevented, "the walk stayed off after the hold ended");
+  run_timers();
+  assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"]);
+});

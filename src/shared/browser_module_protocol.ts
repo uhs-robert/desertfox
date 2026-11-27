@@ -50,6 +50,14 @@ export const MODULE_COMMAND_ARGS = {
   "scroll.to": { percent: "number", axis: "axis" },
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
+// The commands of Firefox's own sidebar. The module runs them only with the focus in the vertical tab strip or in the history, bookmarks or open tabs panel. None takes args.
+export const SIDEBAR_COMMAND_IDS = ["sidebar.down", "sidebar.up", "sidebar.first", "sidebar.last", "sidebar.open", "sidebar.expand", "sidebar.collapse", "sidebar.close_item", "sidebar.filter", "sidebar.leave"] as const;
+export type SidebarCommandId = (typeof SIDEBAR_COMMAND_IDS)[number];
+export const is_sidebar_command_id = (id: unknown): id is SidebarCommandId => (SIDEBAR_COMMAND_IDS as readonly unknown[]).includes(id);
+// `gg` needs two keys. The module holds one pending key, so no row is longer.
+export const MAX_SIDEBAR_KEY_TOKENS = 2;
+export type SidebarKeyRow = { keys: string[]; id: SidebarCommandId };
+
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;
 export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleCommandId[];
 
@@ -67,7 +75,7 @@ export type BarTheme = { dark: BarColors; light: BarColors };
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[] };
 // The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
@@ -189,6 +197,19 @@ export function bar_config_of(value: unknown): BarConfig | undefined {
   return left && right && (BROWSER_BAR_BORDERS as readonly unknown[]).includes(value.border) ? { left, right, border: value.border as BarConfig["border"] } : undefined;
 }
 
+// The sidebar table, or undefined when any part of it is bad: then the sidebar has no keys, and the tab and scroll keys stay. A row may not begin another row, because the module would never see the longer one.
+export function sidebar_keys_of(value: unknown): SidebarKeyRow[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_KEY_ROWS) return undefined;
+  const rows: SidebarKeyRow[] = [];
+  for (const row of value) {
+    if (!is_record(row) || !is_sidebar_command_id(row.id) || !Array.isArray(row.keys) || row.keys.length === 0 || row.keys.length > MAX_SIDEBAR_KEY_TOKENS || !row.keys.every(is_key_token)) return undefined;
+    rows.push({ keys: [...(row.keys as string[])], id: row.id });
+  }
+  const joined = rows.map((row) => row.keys.join(" "));
+  if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return undefined;
+  return rows;
+}
+
 export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
@@ -222,7 +243,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   // A bad tree fails the state, as a bad key row does: the module must not take keys from half a tree.
   const tree = value.tree === undefined ? undefined : validate_scope_tree(value.tree);
   if (tree && !tree.ok) return tree;
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }) } };
+  const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -262,7 +284,7 @@ export const MAX_KIND_BYTES = 64 * 1024;
 // Room for the envelopes of the other messages beside the largest one.
 export const MESSAGE_ENVELOPE_BYTES = 512;
 // The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
-const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
+export const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 const PAGE_MAX_AGE_MS = 10000;
 const PAGE_GONE_BYTES = 256;
 const PAGE_GONE_MAX_AGE_MS = 60000;
@@ -270,6 +292,10 @@ const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
+// The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
+export const CHROME_HINT_PART_BYTES = 4096;
+// The most parts a session's targets or one draw may come in. The module keeps the same number.
+export const CHROME_HINT_MAX_PARTS = 32;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
@@ -279,6 +305,12 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   page_gone: { args: { tab_id: "int", document_id: "int" }, reply: false, max_bytes: PAGE_GONE_BYTES, max_age_ms: PAGE_GONE_MAX_AGE_MS },
   // A forward leaf of the tree matched: `keys` holds the tokens of its path, joined by one space, and `count` the typed count or 0 for none. The background matches the keys again against its own tree and runs the binding in the active tab. Chrome names no tab.
   run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
+  // One part of a session's targets: `targets` is a list of [id, left, top, width, height] in CSS pixels.
+  "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // A key typed while the labels show. `seq` counts up per session, so a key read twice runs once.
+  "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // The session ended in chrome: Escape, a click, the window left the front or closed, or no labels came.
+  "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document.
@@ -294,6 +326,14 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "pane.equalize": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
   "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
+  // Starts a session in the window, which must be in front. `colors` is JSON text of the theme's dark and light hex colors, or "". The reply refuses when there is nothing to hint.
+  "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+  // One part of the labels to show: `labels` is a list of [id, label]. Only a draw whose parts all came shows, and it replaces the one before.
+  "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // Runs the target's fixed action. The reply refuses an id of another session and a target that is gone or moved.
+  "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  // Ends the session in chrome. The extension sends it after a failed collect, whose lost reply can hide a session that started.
+  "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
