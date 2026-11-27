@@ -9,6 +9,7 @@ import type { TreeBranch, TreeLeaf, TreeNode } from "../../src/shared/prefix_tre
 import { resolve_mode_parents } from "../../src/shared/keys/mode_parents.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { panel_after_prefix } from "../../src/background/list_keys.ts";
+import { sidebar_rows_of } from "../../src/background/browser_module.ts";
 import { check_args } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 
@@ -442,4 +443,44 @@ test("the E group is named Pane and binds the split commands that gp and gP also
   assert.equal(bound("E="), "pane.equalize {}");
   assert.equal(bound("Eh"), 'pane.focus_side {"direction":"left"}');
   assert.equal(bound("El"), 'pane.focus_side {"direction":"right"}');
+});
+
+test("the sidebar mode binds the ten keys of the browser module, and ,e focuses the sidebar through the pane command", () => {
+  const sidebar = DEFAULT_KEYMAP.sidebar! as Record<string, { id: string }>;
+  assert.deepEqual(Object.entries(sidebar).map(([key, binding]) => `${key} ${binding.id}`), [
+    "j sidebar.down",
+    "k sidebar.up",
+    "gg sidebar.first",
+    "G sidebar.last",
+    "<Enter> sidebar.open",
+    "l sidebar.expand",
+    "h sidebar.collapse",
+    "d sidebar.close_item",
+    "/ sidebar.filter",
+    "<Escape> sidebar.leave",
+  ]);
+  const normal = DEFAULT_KEYMAP.normal! as Record<string, { id: string; args?: Record<string, unknown> }>;
+  assert.deepEqual(normal[",e"], { id: "pane.focus", args: { region: "sidebar" }, label: "Focus the sidebar" });
+  assert.deepEqual(registry.get("pane.focus")?.runs_in, "background");
+});
+
+test("the default keymap gives the browser module one sidebar row per sidebar key", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  const rows = sidebar_rows_of(compiled, (id, args) => {
+    const command = registry.get(id);
+    const checked = command && check_args(command, args);
+    return checked?.ok ? checked.args : undefined;
+  });
+  assert.deepEqual(rows.map((row) => `${row.keys.join(" ")} ${row.id}`).sort(), [
+    "<Enter> sidebar.open",
+    "<Escape> sidebar.leave",
+    "G sidebar.last",
+    "d sidebar.close_item",
+    "g g sidebar.first",
+    "h sidebar.collapse",
+    "j sidebar.down",
+    "k sidebar.up",
+    "l sidebar.expand",
+    "/ sidebar.filter",
+  ].sort());
 });
