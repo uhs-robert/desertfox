@@ -6,7 +6,7 @@ import type { KeymapConfig, KeymapMode } from "../../src/shared/keymap.ts";
 import { print_command } from "../../src/shared/registry/print_command.ts";
 import { cell, code } from "./splice.ts";
 
-const MODE_ORDER: readonly KeymapMode[] = ["normal", "media", "item", "item_visual", "grab", "hint", "cmdline", "caret", "visual", "visual_line", "insert", "ignore", "browser"];
+const MODE_ORDER: readonly KeymapMode[] = ["normal", "media", "item", "item_visual", "grab", "sidebar", "hint", "cmdline", "caret", "visual", "visual_line", "insert", "ignore", "browser"];
 
 type Lookup = { get(id: string): CommandDef | undefined };
 

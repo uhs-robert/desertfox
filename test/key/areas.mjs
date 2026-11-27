@@ -54,7 +54,7 @@ export const area_rules = [
   // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
   { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
-  { globs: ["src/background/browser_module.ts", "src/background/browser_module_call.ts", "src/background/browser_module_run.ts", "src/shared/browser_module_protocol.ts", "src/shared/browser_module_scope.ts"], areas: ["keys", "tabs"] },
+  { globs: ["src/background/browser_module.ts", "src/commands/sidebar.ts", "src/background/browser_module_call.ts", "src/background/browser_module_run.ts", "src/shared/browser_module_protocol.ts", "src/shared/browser_module_scope.ts"], areas: ["keys", "tabs"] },
   // DesertFox page code on a locked page (the PDF viewer, Reader View): the keys, hints and caret mode run there.
   { globs: ["src/background/browser_module_rpc.ts", "src/content/locked_shim.ts"], areas: ["keys", "tabs", "hints", "caret"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.

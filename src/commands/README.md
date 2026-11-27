@@ -22,6 +22,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.
 - `firefox_page.ts`: the handler and page table of `browser.open_firefox_page`: it asks the native host to open an `about:` page.
 - `grab.ts`: the keys of grab mode (`grab.move`, `grab.step`, `grab.drop`, `grab.cancel`). The `grab` bundle runs them.
+- `sidebar.ts`: the `sidebar.*` commands of the sidebar mode. The browser module runs them in Firefox's own sidebar. The extension refuses them.
 - `heading.ts`: `heading.go`. The code sits in a bundle.
 - `help.ts`: `help.open`, `help.key` and `help.whichkey`. It builds the `:help` choices from the registry, so `command_modules.ts` imports it last.
 - `help_tab.ts`: `open_help_url`, which opens a help page URL beside the asking tab or navigates in place. Shared by the help and native commands.

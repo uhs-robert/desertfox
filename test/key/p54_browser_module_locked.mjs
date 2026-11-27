@@ -139,15 +139,14 @@ export async function run_cases(context) {
   await run_case("on a DesertFox page J switches exactly one tab: DesertFox takes it and the module stays out", async () => {
     await home("bm_df_a");
     await context.open_page("page", "bm_df_b", { new_tab: true });
-    await switches_one("J on a DesertFox page");
     // The module claims in the parent's capture phase, so a key it took never reaches the content script. The background times each command it runs, so a tab.next there is DesertFox's.
-    // The timings are a ring of the last 300, so a count of it can stand still. The case empties it, after the first switch's timing has landed, and looks for the new entry.
+    // The timings are a ring of the last 300, so a count of it can stand still. The case empties it first, and both switches must land in it.
     const timed_switches = async () => ((await in_background(`browser.storage.session.get("desertfox_timings").then((got) => got.desertfox_timings ?? [])`)) ?? []).filter(([id]) => id === "tab.next").length;
-    await poll_until("the background to time the first tab.next", async () => (await timed_switches()) > 0);
-    await sleep(200);
     await in_background(`browser.storage.session.set({ desertfox_timings: [] })`);
+    await switches_one("J on a DesertFox page");
     await switches_one("J on a DesertFox page, again");
-    await poll_until("the background to time the tab.next it ran", async () => (await timed_switches()) > 0);
+    await poll_until("the background to time both tab.next runs", async () => (await timed_switches()) === 2);
     await sleep(200);
+    expect((await timed_switches()) === 2, `the background timed ${await timed_switches()} tab.next runs, not 2`);
   });
 }

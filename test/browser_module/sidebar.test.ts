@@ -165,10 +165,10 @@ function setup({ written = state() as unknown, vertical = false, panel_url = HIS
   });
   Object.assign(main_doc, { readyState: "complete", documentElement: { getAttribute: (name: string) => (name === "windowtype" ? "navigator:browser" : null) }, commandDispatcher: { focusedElement: null } });
   win.document = main_doc;
+  // The fake window reads its selected tab through getters, which Object.assign cannot write.
+  Object.defineProperties(win.gBrowser, { selectedTab: { value: tab, writable: true }, selectedBrowser: { value: page, writable: true } });
   Object.assign(win.gBrowser, {
     tabContainer: tab_container,
-    selectedTab: tab,
-    selectedBrowser: page,
     removeTab: (each: unknown) => removed.push(each),
     removeTabs: (list: unknown[]) => removed.push(...list),
     getBrowserContainer: (each: unknown) => containers.get(each),
@@ -302,6 +302,16 @@ test("nothing is taken with the module off, without a sidebar table, or while a 
     assert.equal(press("j").prevented, false, `j was taken under ${owner.id}`);
     popups.pop();
   }
+});
+
+test("the sidebar takes no key while another feature holds the window's keys, and takes them again after the release", () => {
+  const { firefox, win, panel_doc, focus, press } = setup();
+  focus(panel_row(panel_doc));
+  const core = firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): void; release_keys(win: unknown, owner: string): void };
+  core.hold_keys(win, "chrome_hints");
+  assert.equal(press("j").prevented, false, "j was taken while a hint session held the keys");
+  core.release_keys(win, "chrome_hints");
+  assert.ok(press("j").prevented, "j was not taken after the release");
 });
 
 test("gg needs both keys: a g then another key runs that key alone, and Escape, a focus move or a window blur drop the g", () => {

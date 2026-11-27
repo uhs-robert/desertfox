@@ -46,7 +46,7 @@ test("the locked-page set: background commands that need no page, minus the deny
     "tabgroup.add", "tabgroup.close", "tabgroup.collapse", "tabgroup.color", "tabgroup.expand", "tabgroup.name", "tabgroup.next", "tabgroup.prev", "tabgroup.remove", "tabgroup.toggle",
     "url.increment", "url.parent", "url.root", "window.close", "window.new", "window.undo_close", "zoom.by", "zoom.set",
   ]);
-  for (const id of ["media.act", "frame.exit", "macro.record", "mode.insert", "hint.run", "scroll.lines", "page.stop"]) assert.equal(allowed.has(id), false, id);
+  for (const id of ["media.act", "frame.exit", "macro.record", "mode.insert", "hint.run", "scroll.lines", "page.stop", "sidebar.down", "sidebar.leave"]) assert.equal(allowed.has(id), false, id);
   assert.equal(runs_on_locked_pages({ id: "x.y", runs_in: "background", needs: ["content"] }), false);
 });
 

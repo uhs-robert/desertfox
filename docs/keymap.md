@@ -20,7 +20,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 523 (normal 280, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -47,7 +47,7 @@ bound: 523 (normal 280, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `R` | `page.reload --hard` | Hard reload | yes |
 | `rc` | `page.reload --site` | Clear site data, reload | yes |
 | `rC` | `page.reload --all` (prompts) | Clear all data, reload | yes |
-| `xp` | `page.stop` | Stop loading |  |
+| `xp` | `page.stop` | Stop loading | yes |
 | `gh` | `page.home` | Home page | yes |
 | `gH` | `page.home --tab` | Home page | yes |
 | `]]` | `page.follow --next` | Next page |  |
@@ -236,6 +236,7 @@ bound: 523 (normal 280, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `,i` | `mode ignore` | Set mode |  |
 | `,,` | `anything` (prompts) | Find anything | yes |
 | `,b` | `page.blur` | Blur |  |
+| `,e` | `pane.focus sidebar` | Focus the sidebar | yes |
 | `,?` | `help.whichkey` | Which key |  |
 | `<A-?>` | `help.whichkey` | Show the keys |  |
 | `,"` | `registers` (prompts) | List registers | yes |
@@ -450,6 +451,21 @@ Every key of item mode that this table does not bind also works here: it switche
 | `<C-[>` | `grab.cancel` | Cancel the grab |
 | `?` | `help.whichkey` | Show the keys |
 | `<A-?>` | `help.whichkey` | Show the keys |
+
+### sidebar
+
+| Key | Command | Label |
+| --- | --- | --- |
+| `j` | `sidebar_down` | Next row |
+| `k` | `sidebar_up` | Previous row |
+| `gg` | `sidebar_first` | First row |
+| `G` | `sidebar_last` | Last row |
+| `<Enter>` | `sidebar_open` | Open the row |
+| `l` | `sidebar_expand` | Expand the row |
+| `h` | `sidebar_collapse` | Collapse the row |
+| `d` | `sidebar_close_item` | Close the tab |
+| `/` | `sidebar_filter` | Filter the list |
+| `<Escape>` | `sidebar_leave` | Leave the sidebar |
 
 ### hint
 

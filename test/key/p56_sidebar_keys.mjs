@@ -1,23 +1,11 @@
 // The browser module's sidebar keys with real keys: j, k, Enter, d, / and Escape in the history and open tabs panels and in the vertical tab strip.
-// The extension's keymap has no sidebar mode yet, so each case writes the sidebar table into the state itself.
+// The sidebar table is the one the extension builds from the default keymap's sidebar mode.
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["keys", "tabs"];
 
 const W = `Services.wm.getMostRecentWindow("navigator:browser")`;
 const STATE_KEY = "desertfox_browser_module_state";
-const SIDEBAR_KEYS = [
-  { keys: ["j"], id: "sidebar.down" },
-  { keys: ["k"], id: "sidebar.up" },
-  { keys: ["g", "g"], id: "sidebar.first" },
-  { keys: ["G"], id: "sidebar.last" },
-  { keys: ["<Enter>"], id: "sidebar.open" },
-  { keys: ["l"], id: "sidebar.expand" },
-  { keys: ["h"], id: "sidebar.collapse" },
-  { keys: ["d"], id: "sidebar.close_item" },
-  { keys: ["/"], id: "sidebar.filter" },
-  { keys: ["<Escape>"], id: "sidebar.leave" },
-];
 // Names an element for a failure message and for comparing two focus reads.
 const HELPERS = `
   const w = ${W};
@@ -30,10 +18,9 @@ export async function run_cases(context) {
   const steps = module_steps(context);
   const { chrome, session_value, set_session_value, module_status } = steps;
 
-  // The background writes the state without a sidebar table, so each case adds one. A tab change keeps it.
-  async function write_sidebar_table() {
-    const state = await session_value(STATE_KEY);
-    await set_session_value(STATE_KEY, { ...state, sidebar_keys: SIDEBAR_KEYS });
+  // The background writes the table with the state once the module is on.
+  async function sidebar_table_ready() {
+    await poll_until("the state to carry the sidebar table", async () => ((await session_value(STATE_KEY))?.sidebar_keys?.length ?? 0) === 10, { timeout_ms: 5000 });
   }
 
   const focus = () =>
@@ -93,7 +80,7 @@ export async function run_cases(context) {
   });
 
   await run_case("in the history panel a typed j stays text, Escape moves to the list and / focuses the search box", async () => {
-    await write_sidebar_table();
+    await sidebar_table_ready();
     await show_panel("viewHistorySidebar");
     await press_keys("j");
     await poll_until("j to type into the search box", async () => (await focus()).value === "j");
@@ -104,7 +91,7 @@ export async function run_cases(context) {
   });
 
   await run_case("in the history panel j and k move, Enter opens a page and Escape goes back to the page", async () => {
-    await write_sidebar_table();
+    await sidebar_table_ready();
     await chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; })()`);
     await show_panel("viewHistorySidebar");
     await into_list();
@@ -128,7 +115,7 @@ export async function run_cases(context) {
   });
 
   await run_case("in the open tabs panel d closes the row's tab", async () => {
-    await write_sidebar_table();
+    await sidebar_table_ready();
     await open_page("page", "p56_close", { new_tab: true });
     await chrome(`(async () => { Services.prefs.setBoolPref("sidebar.openTabsPanel.enabled", true); })()`);
     on_teardown(() => chrome(`(async () => Services.prefs.clearUserPref("sidebar.openTabsPanel.enabled"))()`));
@@ -142,7 +129,7 @@ export async function run_cases(context) {
   });
 
   await run_case("in the vertical tab strip j moves the strip's focus, Enter selects the tab and Escape goes back to the page", async () => {
-    await write_sidebar_table();
+    await sidebar_table_ready();
     await chrome(`(async () => { Services.prefs.setBoolPref("sidebar.verticalTabs", true); })()`);
     on_teardown(() => chrome(`(async () => Services.prefs.clearUserPref("sidebar.verticalTabs"))()`));
     await poll_until("the strip to turn vertical", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === true)()`));
