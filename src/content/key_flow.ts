@@ -100,12 +100,19 @@ export function create_key_flow(deps: KeyFlowDeps) {
   // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
   const listed = (keys: string[]) => (register === '"' ? [register] : keys);
 
+  // What the last report said. Backspace shows it again, so the count its retyped keys left in the matcher stays on show.
+  let shown_prefix: PendingPrefix | undefined;
+  const show_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => {
+    shown_prefix = prefix;
+    deps.on_prefix_(prefix, at_once);
+  };
+
   const reset_sequence_ = () => {
     matcher?.reset();
     typed = [];
     register = undefined;
     sequence_in_progress = awaiting_argument = holding = false;
-    deps.on_prefix_(undefined);
+    show_prefix(undefined);
   };
 
   // The `browser` chords run in normal and insert mode only. In every other mode the chord is Firefox's.
@@ -170,8 +177,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
       const kept = at_hold ? keys : keys.slice(0, -1);
       reset_sequence_();
       for (const key of kept) step(active, key, false);
-      const shown = listed(typed);
-      deps.on_prefix_(shown.length > 0 ? { mode, typed_: shown } : undefined, true);
+      show_prefix(shown_prefix, true);
       return "cancel";
     }
     // The auto-repeat of the Space that opened the hold must not end it: only a distinct press does.
@@ -188,11 +194,11 @@ export function create_key_flow(deps: KeyFlowDeps) {
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);
     // A leaf run in a hold leaves the panel up: it shows again once the leaf has run.
-    if (!(result.kind_ === "match" && holding)) deps.on_prefix_(result.kind_ === "pending" && (listing.length > 0 || result.count) ? { mode, typed_: listing, ...(result.count && { count_: result.count }), ...(holding && { held_: true as const }) } : undefined, holding);
+    if (!(result.kind_ === "match" && holding)) show_prefix(result.kind_ === "pending" && (listing.length > 0 || result.count) ? { mode, typed_: listing, ...(result.count && { count_: result.count }), ...(holding && { held_: true as const }) } : undefined, holding);
     if (result.kind_ === "match") {
       const passed = deps.run_leaf_(result.leaf, result.count, repeat);
       // A leaf that changed the mode has reset the sequence, so the hold is gone.
-      if (holding && sequence_in_progress) deps.on_prefix_({ mode, typed_: result.held_!, held_: true }, true);
+      if (holding && sequence_in_progress) show_prefix({ mode, typed_: result.held_!, held_: true }, true);
       return passed ? "pass" : "cancel";
     }
     if (result.kind_ === "no_match" && result.ended_) return "cancel";
