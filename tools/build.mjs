@@ -9,7 +9,7 @@ import { CMDLINE_STYLE } from "../src/cmdline/style.ts";
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use. Raise one only as AGENTS.md, "Content script size", says, and name the feature in the commit.
 const MAX_BYTES = {
   // Key listener, prefix tree, modes and scrolling. Runs on every page and frame (admission rule in AGENTS.md, "Content script size").
-  "content.js": 22.5 * 1024,
+  "content.js": 23 * 1024,
   // Link hints and the grab target pass. Loads on the first hint command, not on every page.
   "hints.js": 52.75 * 1024,
   // Caret and visual mode.

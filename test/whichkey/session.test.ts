@@ -43,3 +43,13 @@ test("a prefix show stays tied to the timer's own is_current_ check", async () =
   await shown;
   assert.deepEqual(drawn, []);
 });
+
+test("a held prefix shows in insert mode, a plain one does not", async () => {
+  const { session, drawn, answer } = make_session();
+  await session.show_prefix_({ mode: "insert", typed_: ["g"] }, () => true);
+  assert.deepEqual(drawn, []);
+  const shown = session.show_prefix_({ mode: "insert", typed_: ["g"], held_: true }, () => true);
+  answer(0);
+  await shown;
+  assert.deepEqual(drawn, ["keys"]);
+});

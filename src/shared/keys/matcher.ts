@@ -72,10 +72,11 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
 
     // A branch with an `ANY_KEY` child waits for one printable key, and a space counts. Any other token breaks the sequence, as a stray key would.
     const typed_char = token === "<Space>" ? " " : token;
-    // A branch that binds Space or takes any key as its argument keeps Space for itself. In a held group a second Space ends the hold.
+    // A branch that binds Space or takes any key as its argument keeps Space for itself. While a hold is on, a second Space ends it, at any depth of the group.
     if (token === "<Space>" && typed.length > 0 && !count_digits && !register_keys_ && !node.children[token] && !node.children[ANY_KEY]) {
-      if (held?.node === node) return reset(), { kind_: "no_match", ended_: true };
-      held = { node, typed, keys };
+      if (held) return reset(), { kind_: "no_match", ended_: true };
+      // The hold Space stays out of `keys`, so Backspace types the group again without reopening the hold.
+      held = { node, typed, keys: (keys = keys.slice(0, -1)) };
       return { kind_: "pending", node, typed_: typed, keys, held_: typed };
     }
     const next = node.children[token] ?? ([...typed_char].length === 1 ? node.children[ANY_KEY] : undefined);
@@ -117,7 +118,7 @@ export function create_matcher(keymap: CompiledKeymap, frees?: (token: string) =
       result = feed(mode, key);
     }
     [walk_mode, node, typed, count_digits, register_keys_, keys, held] = saved;
-    return result.kind_ !== "no_match";
+    return result.kind_ !== "no_match" || !!result.ended_;
   };
 
   return { feed, reset, binds_after_, passes_ };
