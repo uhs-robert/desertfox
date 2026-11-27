@@ -52,8 +52,8 @@ const MAX_BYTES = {
   "rank_worker.js": 11.5 * 1024,
   // The devtools page.
   "devtools.js": 2 * 1024,
-  // The extension API stand-in that the browser module runs before content.js on a locked page. It loads once per locked page, not in every frame. About 6 KB of it is settings_table.ts, which the protocol imports for the status bar and the bundler keeps whole.
-  "locked_shim.js": 12.5 * 1024,
+  // The extension API stand-in that the browser module runs before content.js on a locked page. It loads once per locked page, not in every frame. About 7 KB is the site resolver that the shim runs on the keymap snapshot.
+  "locked_shim.js": 17 * 1024,
 };
 
 // The content.js guard (its MAX_BYTES entry) may rise in steps, never past this. See AGENTS.md, "Content script size".

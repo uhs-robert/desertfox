@@ -3,6 +3,10 @@
 // Every message goes past the allow list (`LOCKED_PAGE_ROUTES`) and a size cap here, and again in the background (`browser_module_rpc.ts`), which never trusts this file.
 
 import type { PageAnswer, SnapshotPart } from "../shared/browser_module_protocol.ts";
+import type { KeymapPageState } from "../shared/messages/content.ts";
+import { current_keymap } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import { page_keymap_of } from "../shared/site/page_keymap_resolve.ts";
 import { EXTENSION_TO_MODULE_KINDS, json_bytes, locked_route_of, MESSAGE_ENVELOPE_BYTES, MODULE_TO_EXTENSION_KINDS, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -34,12 +38,41 @@ const is_record = (value: unknown): value is Record<string, unknown> => typeof v
 function locked_browser(transport: Transport) {
   const message_listeners = new Set<Listener>();
   const change_listeners = new Set<Listener>();
-  const alive = (): boolean => transport.alive();
+  let refused = false;
+  const alive = (): boolean => !refused && transport.alive();
 
   const snapshot_value = (part: SnapshotPart): unknown => {
     const checked = validate_snapshot(part, transport.snapshot(part));
     return checked.ok ? checked.value.value : undefined;
   };
+
+  // The keymap snapshot is the stored keymap object, with its site rules. It is chrome-readable storage, so `validate_snapshot` checked its outline and `current_keymap` checks its version before the resolver reads it.
+  const snapshot_keymap = (): CompiledKeymap | undefined => {
+    const value = snapshot_value("keymap");
+    return is_record(value) && is_record(value.modes) ? current_keymap(value as unknown as CompiledKeymap) : undefined;
+  };
+
+  const refuse = (): undefined => {
+    refused = true;
+    return undefined;
+  };
+
+  // The page's keymap as the background would answer `read_keymap`: the snapshot resolved for the tab's own address. The page's `url` is not read, because the page is not trusted with its address.
+  async function read_keymap(message: unknown): Promise<string | undefined> {
+    const keymap = snapshot_keymap();
+    // No usable keymap (over its cap, never written, another version): the page code would run with no keys at all, so it stops and the module's own keys stay in use, as when the extension unloads.
+    if (keymap === undefined) return refuse();
+    // The same stop for a state that fails or is malformed, or a row the resolver cannot read: an empty tree would leave the page with no keys.
+    try {
+      const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
+      if (!is_record(state) || typeof state.address !== "string") return refuse();
+      const { address, recording, join, bar } = state;
+      const page = page_keymap_of(keymap, [address], { recording: typeof recording === "string" ? recording : undefined, join: join === "insert" ? join : undefined, bar: bar === true });
+      return page && JSON.stringify(page);
+    } catch {
+      return refuse();
+    }
+  }
 
   async function call(message: unknown): Promise<unknown> {
     const text = JSON.stringify(message);
@@ -60,7 +93,7 @@ function locked_browser(transport: Transport) {
     const type = is_record(message) ? message.type : undefined;
     const route = locked_route_of(type);
     if (route === "module") return loaded_bundle(await transport.load_bundle(String((message as { name?: unknown }).name)));
-    if (route === "snapshot") return snapshot_value("keymap");
+    if (route === "snapshot") return read_keymap(message);
     if (type === "list_keys" && is_root_panel(message as Record<string, unknown>)) {
       const panel = snapshot_value("which_key");
       if (panel !== undefined) return panel;

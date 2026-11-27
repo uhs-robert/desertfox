@@ -6,7 +6,7 @@ import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
 import type { ContentRequests } from "./messages/map.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
-import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./settings_table.ts";
+import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -387,6 +387,8 @@ export const LOCKED_PAGE_ROUTES = {
   open_help: "background",
   record_step: "background",
   read_keymap: "snapshot",
+  // The shim resolves the keymap snapshot itself and asks for what a snapshot cannot hold.
+  read_keymap_state: "background",
   replay_end: "background",
   replay_stop: "background",
   find_scan: "background",
@@ -431,8 +433,8 @@ export const MAX_SNAPSHOT_BYTES = 512 * 1024;
 
 type SnapshotRow = { key: string; max_bytes: number; value_ok: (value: unknown) => boolean };
 export const SNAPSHOT_PARTS: Record<SnapshotPart, SnapshotRow> = {
-  // The `read_keymap` answer, already JSON text. The default keymap's is about 300 KB.
-  keymap: { key: BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, max_bytes: MAX_SNAPSHOT_BYTES, value_ok: (value) => typeof value === "string" },
+  // The stored compiled keymap with its site rules, as an object, so storage holds it with no escaping. Only the outline is checked here: the shim runs `current_keymap` on it before use.
+  keymap: { key: BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, max_bytes: MAX_SNAPSHOT_BYTES, value_ok: (value) => is_record(value) && typeof value.format_version === "number" && is_record(value.modes) && (value.site_rules === undefined || Array.isArray(value.site_rules)) },
   // The stored config status (CONFIG_STATUS_STORAGE_KEY).
   config: { key: BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, max_bytes: 64 * 1024, value_ok: is_record },
   // The stored theme (THEME_STORAGE_KEY).

@@ -71,6 +71,7 @@ The detail of the long entries is in the "Shared files for ..." sections of thes
 - `key_test_build.ts`: `KEY_TEST_BUILD`, true only in the build the key test loads. The page-readable test attributes sit behind it.
 - `layers.ts`: the `z-index` of each surface the content script draws, bottom to top: hints, mode badge, toast, which-key panel, command line.
 - `config.ts`: the merged config file and the settings in force. `apply_edits` puts the saved and then the temp browser edits over the config's settings.
+- `browser_bar_lists.ts`: the names the browser module's status bar offers, apart from the settings table so the protocol and the locked page shim stay small.
 - `settings_table.ts`: every setting as one row of data, its kind, values and default. The `Settings` type follows from it. Start here to add a setting.
 - `settings_plan.ts`: the pure planners of `set`, `toggle` and `unset`: the edits to keep and the toast that answers. The `settings` commands and the settings page message run them.
 - `settings_schema.ts`: what each setting accepts, derived from its table row. The build tool and `set` share it. The content script and the command line page must not import it.

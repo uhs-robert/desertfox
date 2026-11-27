@@ -322,6 +322,15 @@ export type ReadKeymap = {
   url: string;
 };
 
+// A locked page (the PDF viewer, Reader View) resolves its keymap itself from the keymap snapshot. It asks the background only for what the snapshot cannot hold: the tab's address as the browser reports it, the macro being recorded, the held mode a late frame joins, and whether the module's status bar is up. `join` is set on the page's first ask only, as for `ReadKeymap`.
+export type ReadKeymapState = {
+  type: "read_keymap_state";
+  join: boolean;
+};
+
+// The answer to `ReadKeymapState`. `address` is the tab's, never one the page names. Undefined for a tab that is not locked.
+export type KeymapPageState = { address: string; recording?: string; join?: "insert"; bar?: true };
+
 // Sent by a page held for a macro replay. Answered when the outermost replay ends: ok when it finished, not ok when a step failed, a pick was cancelled or Escape stopped it. Answered at once when no replay runs.
 export type ReplayEnd = {
   type: "replay_end";

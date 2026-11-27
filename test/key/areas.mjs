@@ -17,10 +17,10 @@ const shared_files = [
   "src/content/{ask_keymap,cancelled_keys,editable,handler_map,invocation_args,key_flow,main,mode_state,page_mode,replay_key,run_content,run_leaf,shadow,shown,site_mode,site_rule}.ts",
   "src/content/handlers/{focus,mode,stop,types}.ts",
   "src/content/page/copy.ts",
-  "src/shared/{command,index,key_test_build,load_commands,swallow}.ts",
+  "src/shared/{browser_bar_lists,command,index,key_test_build,load_commands,swallow}.ts",
   "src/shared/messages/*.ts",
   "src/shared/copy/link_escape.ts",
-  "src/shared/site/site_columns.ts",
+  "src/shared/site/{site_columns,page_keymap_resolve,item_select_rewrite}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
 

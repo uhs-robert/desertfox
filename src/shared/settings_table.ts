@@ -9,6 +9,7 @@ import { GRAB_STEPS_PX } from "./grab_steps.ts";
 import { BUILT_IN_PAGE, DEFAULT_SITE_ROW_NAMES, FALLBACK_ENGINE_NAME } from "./table_constants.ts";
 import { BUILT_IN_THEME_NAMES } from "./theme_names.ts";
 import { DESKTOP_THEME, LIGHT_INTENSITIES } from "./theme/roles.ts";
+import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 
 type EnumValue = string | number | boolean;
 
@@ -22,9 +23,7 @@ export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[
 // A site mode: its badge label and its own table of binds, in the same formats as `bind`.
 export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable; sticky?: boolean }>>;
 
-// The items either side of the browser bar can list.
-export const BROWSER_BAR_BORDERS = ["auto", "square", "round", "chamfer"] as const;
-export const BROWSER_BAR_WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"] as const;
+export { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS };
 // The keymap modes a site row can bind keys in. `normal` is what the `bind` column writes in short form.
 export const SITE_KEYMAP_MODES = ["normal", "visual", "visual_line", "caret", "item"] as const;
 export type SiteKeymapMode = (typeof SITE_KEYMAP_MODES)[number];
