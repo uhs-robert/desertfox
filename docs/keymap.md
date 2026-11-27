@@ -443,10 +443,10 @@ Every key of item mode that this table does not bind also works here: it switche
 | `<Escape>` | `mode.escape` | Escape |
 | `<C-[>` | `mode.escape` | Escape |
 | `/` | `hint.key slash` | Type link text |
-| `<Tab>` | `hint.key tab` | Next match, or label every element |
-| `<S-Tab>` | `hint.key shift_tab` | Previous match |
+| `<Tab>` | `hint.key tab` | Next match, or turn overlapping labels (every element in a grab drop) |
+| `<S-Tab>` | `hint.key shift_tab` | Previous match, or turn overlapping labels back |
 | `<Enter>` | `hint.key enter` | Pick the active match |
-| `<Space>` | `hint.key space` | Turn overlapping labels |
+| `<Space>` | `hint.key space` | Rapid on or off (in label mode) |
 
 ### cmdline
 

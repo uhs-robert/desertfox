@@ -256,6 +256,12 @@ type PickArgs = Pick<Session, "args" | "action" | "rapid" | "collected_" | "with
 // `hand_over` is for a pick another frame owns: the text that would be copied, or the line that would open, goes to the keyboard frame instead.
 type HandOver = (text: string, what?: string) => void;
 
+// Space turns rapid on for these actions only. A mode action ends hint mode on its first pick, and a prompt, a list and a media pick start something that one more round has no use for.
+const can_repeat = (action: HintAction): boolean => !starts_mode(action) && action !== "prompt" && action !== "enter_item" && action !== "enter_media";
+
+// A pick that focuses a field hands the keyboard to it, so rapid mode ends there and the user can type.
+const focuses_field = (action: HintAction, element: Element): boolean => (action === "here" || action === "focus") && takes_typing(element as HTMLElement);
+
 // Set while a pick performs, so the address change the pick makes (a table-of-contents anchor) does not end the session that made it.
 let picking = false;
 
@@ -455,7 +461,7 @@ function register(host: PageHostApi): void {
     }
     const view = create_view();
     view.show(found.map((item, own) => ({ found: item, text: labeled.own_labels[own]! })));
-    if (key_line_setting !== false) view.add_key_line_(current.filter === "drop");
+    if (key_line_setting !== false) view.add_key_line_({ widens: current.filter === "drop", rapid: can_repeat(current.action) ? (current.rapid ? "on" : "off") : undefined });
     // Read when text mode first needs the texts, once for this build. Across frames the background already holds every frame's texts.
     let texts: readonly (string | undefined)[] | undefined;
     const text_of_found_ = () => (texts ??= labeled.texts_ ?? labels.map((_label, index) => text_of(found[own_of_(index)!]!.element)));
@@ -484,9 +490,11 @@ function register(host: PageHostApi): void {
   function pick(current: Session, index: number): void {
     const ready = current.ready!;
     delete current.settling_;
-    const { run, left } = pick_run(current, ready, index, !current.rapid);
+    const own = ready.own_of_(index);
+    const rapid = current.rapid && !(own !== undefined && focuses_field(current.action, ready.found[own]!.element));
+    const { run, left } = pick_run(current, ready, index, !rapid);
     const performed = begin_pick(current);
-    if (!current.rapid) {
+    if (!rapid) {
       leave_with_keys(current, () => performed(run), left);
       return;
     }
@@ -520,6 +528,7 @@ function register(host: PageHostApi): void {
   function handle_token(current: Session, token: string, physical?: string | null): "handled" | "pass" {
     if (current.settling_) return is_hint_char(token) || is_text_key(token) ? "handled" : "pass";
     const ready = current.ready!;
+    // Tab widens first. The filter is then `every`, so the next Tab turns labels.
     if (token === "<Tab>" && current.filter === "drop" && !ready.picker.in_text_mode_()) {
       widen_drop(current, ready);
       return "handled";
@@ -527,7 +536,12 @@ function register(host: PageHostApi): void {
     const outcome = ready.picker.on_token_(token, physical);
     if (outcome.kind === "pass") return "pass";
     if (outcome.kind === "rotate") {
-      ready.view.rotate_overlaps_();
+      ready.view.rotate_overlaps_(outcome.back);
+      return "handled";
+    }
+    if (outcome.kind === "rapid") {
+      if (!can_repeat(current.action)) create_view().show_message_("This hint action does not repeat");
+      else ready.view.set_rapid_((current.rapid = !current.rapid) ? "on" : "off");
       return "handled";
     }
     show_outcome(ready, outcome);

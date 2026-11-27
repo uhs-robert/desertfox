@@ -4,13 +4,16 @@ import { LAYERS } from "../../shared/layers.ts";
 import { create_surface, mount_surface } from "../surface.ts";
 import type { Found } from "../lib/candidates.ts";
 import { anchor_box } from "../lib/visible.ts";
-import { overlap_groups, rotate } from "../../shared/hints/labels.ts";
+import { overlap_groups, rotate, rotate_back } from "../../shared/hints/labels.ts";
 
 const MESSAGE_MS = 1500;
 
 // Hard-coded: the hints bundle does not see the keymap, and these keys are read as literals in pick.ts.
-export const KEY_LINE_LABELS = "/: type text \u00b7 Space: turn labels";
-export const KEY_LINE_WIDEN = " \u00b7 Tab: every element";
+// `rapid` is "off" or "on" where Space can turn rapid mode on or off, and undefined where the action never repeats.
+export type KeyLineState = { widens?: boolean; rapid?: "off" | "on" | undefined };
+export const label_key_line = ({ widens = false, rapid }: KeyLineState): string =>
+  ["/: type text", ...(rapid ? [rapid === "on" ? "Space: stop rapid" : "Space: rapid"] : []), widens ? "Tab: every element" : "Tab: turn labels"].join(" \u00b7 ");
+export const KEY_LINE_LABELS = label_key_line({ rapid: "off" });
 export const KEY_LINE_TEXT = "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels";
 
 // The overlay text font. A user `--desertfox-font` replaces all of it.
@@ -110,6 +113,7 @@ export function create_view() {
   let key_line: HTMLElement | undefined;
   // A narrowed drop pass adds the key that widens it.
   let labels_line = KEY_LINE_LABELS;
+  let line_state: KeyLineState = {};
   function show_key_line(text: string | undefined): void {
     if (key_line === undefined) return;
     key_line.textContent = text === undefined ? labels_line : KEY_LINE_TEXT;
@@ -137,8 +141,9 @@ export function create_view() {
       reposition();
     },
     reposition,
-    add_key_line_: (widens = false): void => {
-      labels_line = widens ? KEY_LINE_LABELS + KEY_LINE_WIDEN : KEY_LINE_LABELS;
+    add_key_line_: (state: KeyLineState = {}): void => {
+      line_state = state;
+      labels_line = label_key_line(state);
       key_line = document.createElement("div");
       key_line.className = "desertfox-hint-keys";
       surface.text.prepend(key_line);
@@ -155,13 +160,20 @@ export function create_view() {
       show_text_mode(text);
       show_key_line(text);
     },
-    // Turns the stacking order of every set of overlapping labels by one, so a covered label comes to the top. Overlaps are read again on each call, because scrolling changes them.
-    rotate_overlaps_: (): void => {
+    // The Space words follow the run: it says which of the two Space does.
+    set_rapid_: (rapid: "off" | "on"): void => {
+      line_state = { ...line_state, rapid };
+      labels_line = label_key_line(line_state);
+      show_key_line(undefined);
+    },
+    // Turns the stacking order of every set of overlapping labels by one, so a covered label comes to the top (`back`: the bottom one comes up). Overlaps are read again on each call, because scrolling changes them.
+    rotate_overlaps_: (back = false): void => {
       const shown = Array.from(surface.text.querySelectorAll<HTMLElement>(".desertfox-hint")).filter((node) => node.style.display !== "none" && node.style.visibility !== "hidden");
       const boxes = shown.map((node) => node.getBoundingClientRect());
       for (const group of overlap_groups(boxes)) {
         const stack = group.map((index) => shown[index]!);
-        stack[0]!.before(rotate(stack)[0]!);
+        if (back) stack[stack.length - 1]!.after(rotate_back(stack)[stack.length - 1]!);
+        else stack[0]!.before(rotate(stack)[0]!);
       }
     },
     show_message_: (message: string): void => {

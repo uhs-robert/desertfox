@@ -12,6 +12,8 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   const paste_ctrl_v = ["-M", "ctrl", "v", "-m", "ctrl"];
   const wait_for_labels = (what) => poll_until(`the hint labels after ${what}`, async () => (await hint_label_count()) > 0);
   const wait_for_label_count = (count, what) => poll_until(`${count} hint labels ${what}`, async () => (await hint_label_count()) === count);
+  const hint_labels_in_order = () => in_active_tab(`[...document.documentElement.children].map((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => node.textContent).join(",")).join("")`);
+  const text_box_text = () => in_active_tab(`[...document.documentElement.children].map((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint-text")?.textContent ?? "").join("")`);
   const wait_for_tab_count = (count, what) => poll_until(what, async () => (await tab_count()) === count);
 
   const run_hint = (args) => in_active_tab(`browser.runtime.sendMessage({ type: "run", invocations: [{ id: "hint.run", args: ${JSON.stringify(args)} }], mode: "normal" }); 0`);
@@ -282,7 +284,6 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
   });
 
   // / inside hint mode switches from typing a label to typing the link text. The fixture links are "one" (label a) and "two" (label s).
-  const hint_labels_in_order = () => in_active_tab(`[...document.documentElement.children].map((child) => [...(child.openOrClosedShadowRoot?.querySelectorAll(".desertfox-hint") ?? [])].map((node) => node.textContent).join(",")).join("")`);
   const text_box_shown = () => in_active_tab(`[...document.documentElement.children].some((child) => child.openOrClosedShadowRoot?.querySelector(".desertfox-hint-text"))`);
 
   await run_case("/ then text then Enter picks the best match", async () => {
@@ -333,15 +334,120 @@ export async function run_cases({ rdp, extension_id, run_case, send_keys, press_
     await wait_event(mark, loaded("hint_two"), "label s to pick the second link");
   });
 
-  await run_case("Space turns overlapping labels, and keeps hint mode", async () => {
+  await run_case("Tab and Shift+Tab turn overlapping labels, and Space leaves them alone", async () => {
     await open_page("hints", "p6_space_rotate", { new_tab: true });
     await in_active_tab(`for (const link of document.querySelectorAll("a[href*=hint_]")) Object.assign(link.style, { position: "fixed", left: "50px", top: "50px", display: "block" }); 0`);
     await press_keys(";l");
     await wait_for_labels(";l");
     const before = await hint_labels_in_order();
-    await press_keys("-k", "space");
+    await press_keys("-k", "Tab");
     await poll_until("the label order to change", async () => (await hint_labels_in_order()) !== before);
-    expect((await hint_label_count()) === 2, "Space left hint mode or changed the labels");
+    expect((await hint_label_count()) === 2, "Tab left hint mode or changed the labels");
+    await press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
+    await poll_until("the label order to come back", async () => (await hint_labels_in_order()) === before);
+    await press_keys("-k", "space");
+    await sleep(300);
+    expect((await hint_labels_in_order()) === before && (await hint_label_count()) === 2, "Space turned the labels or left hint mode");
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+  });
+
+  await run_case("F then Space keeps the picks coming: three background tabs from three picks", async () => {
+    await open_page("hints", "p6_space_rapid", { new_tab: true });
+    const tabs_before = await tab_count();
+    const switch_mark = await tab_switch_mark();
+    await press_keys("F");
+    await wait_for_labels("F");
+    await press_keys("-k", "space");
+    await sleep(150);
+    for (const [index, label] of ["a", "s", "a"].entries()) {
+      await press_keys(label);
+      await wait_for_tab_count(tabs_before + index + 1, `pick ${index + 1} to open a tab`);
+      await wait_for_labels(`pick ${index + 1}`);
+    }
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+    await barrier("p6_space_rapid");
+    await expect_no_tab_shown(switch_mark, "a background tab came to the front");
+    await close_tabs_with("hint_one");
+    await close_tabs_with("hint_two");
+  });
+
+  await run_case("a second Space turns rapid off again, and the next pick ends hint mode", async () => {
+    await open_page("hints", "p6_space_twice", { new_tab: true });
+    const tabs_before = await tab_count();
+    await press_keys("F");
+    await wait_for_labels("F");
+    await press_keys("-k", "space");
+    await sleep(150);
+    await press_keys("-k", "space");
+    await sleep(150);
+    await press_keys("a");
+    await wait_for_tab_count(tabs_before + 1, "the pick to open a tab");
+    await wait_for_label_count(0, "gone after the one pick");
+    await close_tabs_with("hint_one");
+  });
+
+  await run_case(";yl then Space collects a list of the picks on the clipboard", async () => {
+    await open_page("hints", "p6_space_list", { new_tab: true });
+    await background(`navigator.clipboard.writeText("seed").then(() => true)`);
+    await press_keys(";yl");
+    await wait_for_labels(";yl");
+    await press_keys("-k", "space");
+    await sleep(150);
+    await press_keys("a");
+    await wait_for_labels("the first pick");
+    await press_keys("s");
+    let lines = [];
+    await poll_until("the clipboard to hold two lines", async () => (lines = (await background(`navigator.clipboard.readText()`)).split("\n")).length === 2);
+    expect(lines[0] !== lines[1] && lines[0] !== "seed", `the clipboard holds ${JSON.stringify(lines)}`);
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+  });
+
+  await run_case(";v then Space shows that the action does not repeat, and the pick still happens once", async () => {
+    await open_page("hints", "p6_space_visual", { new_tab: true });
+    await press_keys(";v");
+    await wait_for_labels(";v");
+    // The notice has its own host in the hints layer, so the count reads every host.
+    const labels_everywhere = () => in_active_tab(`[...document.documentElement.children].filter((child) => child.getAttribute("data-desertfox-layer") === "${2147483647 - 4}").reduce((sum, host) => sum + host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint").length, 0)`);
+    const shown_before = await labels_everywhere();
+    await press_keys("-k", "space");
+    await poll_until("the refusal", async () => (await notice_text()).includes("does not repeat"));
+    expect((await labels_everywhere()) === shown_before, "the labels went with the refusal");
+    await press_keys("a");
+    await wait_for_label_count(0, "gone after the one pick");
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("Space in text mode types a space and does not turn rapid on", async () => {
+    await open_page("hints", "p6_space_text", { new_tab: true });
+    await in_active_tab(`[["hint_one", "big apple"], ["hint_two", "big pear"]].forEach(([id, text]) => (document.querySelector("a[href*=" + id + "]").textContent = text)); 0`);
+    await press_keys(";l");
+    await wait_for_labels(";l");
+    await press_keys("/", "b", "i", "g", "-k", "space");
+    await sleep(300);
+    expect((await text_box_text()) === "text: big ", `the text box reads "${await text_box_text()}"`);
+    await press_keys("-k", "Escape");
+    await wait_for_label_count(0, "gone after Escape");
+  });
+
+  // The drop pass of a grab: the first Tab labels every element, the next ones turn overlapping labels. Every element of the board nests, so labels overlap.
+  await run_case("Tab in a grab drop pass widens first, then turns the overlapping labels", async () => {
+    await open_page("drag", "kanban", { new_tab: true });
+    await press_keys(";gg");
+    await wait_for_labels(";gg");
+    const first = (await hint_labels_in_order()).split(",")[0];
+    await press_keys(first);
+    await poll_until("the drop pass labels", async () => (await hint_label_count()) > 0 && (await hint_labels_in_order()) !== "");
+    const narrowed = await hint_label_count();
+    await press_keys("-k", "Tab");
+    await poll_until("the labels of every element", async () => (await hint_label_count()) > narrowed);
+    const widened = await hint_label_count();
+    const before = await hint_labels_in_order();
+    await press_keys("-k", "Tab");
+    await poll_until("the second Tab to turn the labels", async () => (await hint_labels_in_order()) !== before);
+    expect((await hint_label_count()) === widened, "the second Tab changed the label count");
     await press_keys("-k", "Escape");
     await wait_for_label_count(0, "gone after Escape");
   });

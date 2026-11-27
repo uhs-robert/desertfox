@@ -129,6 +129,22 @@ export async function run_cases({ run_case, press_keys, poll_until, open_page, w
     await wait_for_no_labels("the labels to go after Escape");
   });
 
+  await run_case("Space in the keyboard frame turns rapid on while the other frames hold labels, and the copy list takes picks from both", async () => {
+    await open_page("frames_hints", "fh_space_rapid", { new_tab: true });
+    await in_background(`navigator.clipboard.writeText("seed").then(() => true)`);
+    await run_line("hint --links --all-frames --copy-text");
+    let labels = await wait_for_labels("the labels of every frame", 6);
+    await press_keys("-k", "space");
+    await press_keys(labels.cross[0]);
+    labels = await wait_for_labels("the labels again after the cross-origin pick", 6);
+    await press_keys(labels.top[0]);
+    let lines = [];
+    await poll_until("the clipboard to hold two lines", async () => (lines = (await clipboard_text()).split("\n")).length === 2);
+    expect(lines[0] !== lines[1] && lines[0] !== "seed", `the clipboard holds ${JSON.stringify(lines)}, expected two different picks`);
+    await press_keys("-k", "Escape");
+    await wait_for_no_labels("the labels to go after Escape");
+  });
+
   await run_case("a pick of a field in the cross-origin frame focuses it there, and the keys typed after it reach the field", async () => {
     await open_page("frames_field", "fh_field", { new_tab: true });
     await run_line("hint --inputs --all-frames");
