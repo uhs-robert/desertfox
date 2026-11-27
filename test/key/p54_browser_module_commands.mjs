@@ -56,15 +56,19 @@ export async function run_cases(context) {
     ["Reader View", reader_url],
   ]) {
     const id = page.replace(/\W+/g, "_");
-    await run_case(`on ${page}: xx and u, H and L, gt, tn, 5J, <<, zi, wn, and : with df`, async () => {
-      await home(`bmc_${id}`);
-      // A page before this one, so H has somewhere to go, and a second tab of the page, so xx leaves the selection on it.
+    // A page before this one, so H has somewhere to go, and a second tab of the page, so xx leaves the selection on it.
+    const two_tabs = async (name) => {
+      await home(`bmc_${id}_${name}`);
       await open_tab(url);
       await page_ready(page);
       await open_tab("about:robots");
       await load_in_tab(url);
       await page_ready(page);
+    };
+    const close_others = () => chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); })()`);
 
+    await run_case(`on ${page}: H and L go back and forward, xx closes the tab and u brings it back`, async () => {
+      await two_tabs("history");
       await press_keys("H");
       await poll_until(`H to go back to about:robots from ${page}`, async () => (await selected_spec()) === "about:robots");
       await focus_page();
@@ -81,7 +85,11 @@ export async function run_cases(context) {
       await sleep(300);
       expect((await tab_count()) === tabs, `u left ${await tab_count()} tabs, not ${tabs}`);
       await page_ready(page);
+      await close_others();
+    });
 
+    await run_case(`on ${page}: gt, tn and 5J switch tabs, and << moves the tab`, async () => {
+      await two_tabs("switch");
       const here = await selected_index();
       await switches_one(`gt on ${page}`, ["gt"]);
       await select_index(here);
@@ -100,7 +108,11 @@ export async function run_cases(context) {
       await press_keys("<<");
       await poll_until(`<< to move the tab of ${page} left`, async () => (await selected_index()) === here - 1);
       await focus_page();
+      await close_others();
+    });
 
+    await run_case(`on ${page}: zi zooms, wn opens a window, and : opens the address bar with df`, async () => {
+      await two_tabs("bar");
       const zoom_before = await zoom();
       on_teardown(() => chrome(`(async () => { for (const w of Services.wm.getEnumerator("navigator:browser")) for (const tab of w.gBrowser.tabs) w.FullZoom.reset(tab.linkedBrowser); })()`));
       await press_keys("zi");
@@ -135,7 +147,7 @@ export async function run_cases(context) {
       await press_keys("-k", "Return");
       await poll_until(`df tab.next from ${page} to switch the tab`, async () => (await steps.switch_count()) === 1, { timeout_ms: 5000 });
 
-      await chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); })()`);
+      await close_others();
     });
   }
 
