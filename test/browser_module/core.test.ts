@@ -49,7 +49,7 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
   assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
-  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
   assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
   assert.deepEqual(plain(vm.runInNewContext(/const PANE_REGIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PANE_REGIONS);
   assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);

@@ -50,6 +50,14 @@ export const MODULE_COMMAND_ARGS = {
   "scroll.to": { percent: "number", axis: "axis" },
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
+// The commands of Firefox's own sidebar. The module runs them only with the focus in the vertical tab strip or in the history, bookmarks or open tabs panel. None takes args.
+export const SIDEBAR_COMMAND_IDS = ["sidebar.down", "sidebar.up", "sidebar.first", "sidebar.last", "sidebar.open", "sidebar.expand", "sidebar.collapse", "sidebar.close_item", "sidebar.filter", "sidebar.leave"] as const;
+export type SidebarCommandId = (typeof SIDEBAR_COMMAND_IDS)[number];
+export const is_sidebar_command_id = (id: unknown): id is SidebarCommandId => (SIDEBAR_COMMAND_IDS as readonly unknown[]).includes(id);
+// `gg` needs two keys. The module holds one pending key, so no row is longer.
+export const MAX_SIDEBAR_KEY_TOKENS = 2;
+export type SidebarKeyRow = { keys: string[]; id: SidebarCommandId };
+
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;
 export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleCommandId[];
 
@@ -67,7 +75,7 @@ export type BarTheme = { dark: BarColors; light: BarColors };
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; sidebar_keys?: SidebarKeyRow[] };
 // `bar` says the module built its status bar.
 export type ModuleHello = { v: number; module_version: string; bar?: true };
 
@@ -153,6 +161,19 @@ export function bar_config_of(value: unknown): BarConfig | undefined {
   return left && right && (BROWSER_BAR_BORDERS as readonly unknown[]).includes(value.border) ? { left, right, border: value.border as BarConfig["border"] } : undefined;
 }
 
+// The sidebar table, or undefined when any part of it is bad: then the sidebar has no keys, and the tab and scroll keys stay. A row may not begin another row, because the module would never see the longer one.
+export function sidebar_keys_of(value: unknown): SidebarKeyRow[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_KEY_ROWS) return undefined;
+  const rows: SidebarKeyRow[] = [];
+  for (const row of value) {
+    if (!is_record(row) || !is_sidebar_command_id(row.id) || !Array.isArray(row.keys) || row.keys.length === 0 || row.keys.length > MAX_SIDEBAR_KEY_TOKENS || !row.keys.every(is_key_token)) return undefined;
+    rows.push({ keys: [...(row.keys as string[])], id: row.id });
+  }
+  const joined = rows.map((row) => row.keys.join(" "));
+  if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return undefined;
+  return rows;
+}
+
 export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
@@ -183,7 +204,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);
   const bar = bar_config_of(value.bar);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }) } };
+  const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(sidebar_keys && { sidebar_keys }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.

@@ -5,7 +5,7 @@
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, TabState } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, TabState } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -21,6 +21,9 @@ import {
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
   is_module_command_id,
+  is_sidebar_command_id,
+  MAX_SIDEBAR_KEY_TOKENS,
+  sidebar_keys_of,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
   status_of_hello,
@@ -62,6 +65,25 @@ export function key_rows_of(keymap: CompiledKeymap | undefined, check_args: Chec
   const children = keymap?.modes.normal?.children ?? {};
   const rows = Object.entries(children).flatMap(([key, node]) => row_of(key, node, check_args) ?? []);
   return rows.sort((a, b) => (a.key < b.key ? -1 : 1)).slice(0, MAX_KEY_ROWS);
+}
+
+// The sidebar mode's keys of one or two tokens (`gg`) whose leaf runs one sidebar command, in key order. The rest of the mode stays out: the module runs nothing else there.
+export function sidebar_rows_of(keymap: CompiledKeymap | undefined, check_args: CheckCommandArgs): SidebarKeyRow[] {
+  const sidebar_tree = (keymap?.modes as Record<string, TreeNode | undefined> | undefined)?.sidebar;
+  const rows: SidebarKeyRow[] = [];
+  const walk = (node: TreeNode | undefined, keys: string[]): void => {
+    if (node === undefined) return;
+    if (node.kind === "branch") {
+      if (keys.length < MAX_SIDEBAR_KEY_TOKENS) for (const [key, child] of Object.entries(node.children)) walk(child, [...keys, key]);
+      return;
+    }
+    if (keys.length === 0 || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) return;
+    const { invocation, capture, register } = node.steps[0]!;
+    if (capture === undefined && register === undefined && invocation.prompt === undefined && is_sidebar_command_id(invocation.id) && check_args(invocation.id, invocation.args)) rows.push({ keys, id: invocation.id });
+  };
+  walk(sidebar_tree, []);
+  const sorted = rows.sort((a, b) => (a.keys.join(" ") < b.keys.join(" ") ? -1 : 1)).slice(0, MAX_KEY_ROWS);
+  return sidebar_keys_of(sorted) ?? [];
 }
 
 export const tab_state_of = (record: TabModeRecord): TabState => ({ mode: mode_of_record(record), live: record.live === true });
@@ -292,7 +314,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     }
     const bar_theme = bar_theme_of(await deps.read_theme?.());
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}) });
+    const keymap = disabled ? undefined : await deps.read_keymap();
+    const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}) });
     request_hello_read();
     request_messages_read();
   };
