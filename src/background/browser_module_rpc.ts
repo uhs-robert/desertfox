@@ -197,9 +197,12 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     const load_at_start = loads.get(tab_id) ?? 0;
     const epoch_at_start = epoch;
     const page_left = () => (loads.get(tab_id) ?? 0) !== load_at_start || epoch !== epoch_at_start;
+    // The document whose first call locked the tab. None once chrome said it is gone.
+    const document_id = (await read_locked())[tab_id]?.document_id;
+    if (document_id === undefined) throw new Error("the page went away");
     let answer: Promise<unknown> | undefined;
     // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none and leaves the push unwritten, so the next document never gets it.
-    const sent = await deps.send("page_push", { tab_id, message: JSON.stringify(message) }, (id) => {
+    const sent = await deps.send("page_push", { tab_id, document_id, message: JSON.stringify(message) }, (id) => {
       if (page_left()) return false;
       answer = new Promise<unknown>((resolve, reject) => waiting.set(id, { tab_id, resolve, reject }));
       // A load can reject it before this function hands it back. The caller still gets the rejection.

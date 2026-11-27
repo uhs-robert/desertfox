@@ -87,7 +87,7 @@
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
     const EXTENSION_TO_MODULE_KINDS = {
-      page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
+      page_push: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
       "pane.split_next_tab": { args: {}, reply: true, max_bytes: 256 },
       "pane.unsplit": { args: {}, reply: true, max_bytes: 256 },

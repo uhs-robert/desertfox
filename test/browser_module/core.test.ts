@@ -647,7 +647,7 @@ test("the real page_push kind with no feature to answer it gets an error reply",
   const firefox = create_firefox();
   firefox.start_extension();
   firefox.make_window().load();
-  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [request("p1", "page_push", { tab_id: 3, message: "{}" })]);
+  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [request("p1", "page_push", { tab_id: 3, document_id: 1, message: "{}" })]);
   await settle();
   assert.deepEqual(plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)), [{ v: 1, reply_to: "p1", ok: false, error: "no handler for this kind" }]);
   assert.ok(protocol.validate_message_list(plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);

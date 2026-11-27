@@ -77,9 +77,12 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   const message_listeners = new Map<string, ((message: { target: unknown; data: unknown }) => void)[]>();
   const sent_to_frames: { browser: unknown; name: string; data: unknown }[] = [];
   const broadcasts: string[] = [];
+  // Every tab's frame scripts hear a broadcast. A test adds the frames it wires up.
+  const frames = new Set<(name: string, data: unknown) => void>();
   const tab_ids = new Map<unknown, number>();
   const tab_of_browser = new Map<unknown, unknown>();
   let next_tab_id = 1;
+  let next_browser_id = 100;
   const firefox = {
     extension: undefined as FakeExtension | undefined,
     fail_import: false,
@@ -89,6 +92,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     module_exports: {} as Record<string, unknown>,
     errors,
     broadcasts,
+    frames,
     frame_scripts,
     sent_to_frames,
     sandboxes: 0,
@@ -138,8 +142,9 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       removeMessageListener(name: string, listener: (message: { target: unknown; data: unknown }) => void) {
         message_listeners.set(name, (message_listeners.get(name) ?? []).filter((each) => each !== listener));
       },
-      broadcastAsyncMessage(name: string) {
+      broadcastAsyncMessage(name: string, data?: unknown) {
         broadcasts.push(name);
+        for (const frame of [...frames]) frame(name, data);
       },
     },
     scriptSecurityManager: { getSystemPrincipal: () => ({}) },
@@ -275,7 +280,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       }
     };
     const add_tab = () => {
-      const browser = { localName: "browser", innerWindowID: 10, messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) } };
+      const browser = { localName: "browser", innerWindowID: 10, browserId: ++next_browser_id, messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) } };
       const tab = { browser, linkedBrowser: browser };
       tabs.set(tab, tab);
       tab_of_browser.set(browser, tab);
@@ -296,6 +301,14 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     for (const listener of message_listeners.get(name) ?? []) listener({ target: browser, data });
   };
   const report = (browser: unknown, data: unknown) => from_frame("desertfox-browser-module:report", browser, data);
+
+  // A tab moved to another window: a new <browser> takes over the tab's frame and keeps its browserId, and the tab keeps its id.
+  const move_tab = (tab: { linkedBrowser: unknown }, browser: Record<string, unknown>) => {
+    const old = tab.linkedBrowser as { browserId: number };
+    tab_of_browser.delete(old);
+    tab_of_browser.set(browser, tab);
+    tab.linkedBrowser = Object.assign(browser, { browserId: old.browserId });
+  };
 
   const set_pref = (value: boolean | string | undefined) => {
     if (value === undefined) prefs.delete("desertfox.browser_module.enabled");
@@ -321,6 +334,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     make_window,
     report,
     from_frame,
+    move_tab,
     set_pref,
     start_extension,
     write_state,

@@ -41,6 +41,7 @@
       push: "desertfox-browser-module:locked-push",
       push_answer: "desertfox-browser-module:locked-push-answer",
       snapshot: "desertfox-browser-module:locked-snapshot",
+      ask: "desertfox-browser-module:locked-ask",
     };
     const WENT_AWAY = "the page went away";
 
@@ -59,12 +60,18 @@
       }
     };
 
-    // Each attach of page code to a document, by its <browser>. The id is the page call's `document_id`: one per attach, never reused in the session, so a call from a document a load left is refused and a page Back restores from the cache attaches again.
+    // Each attach of page code to a document, by its tab's `browserId`. A tab moved to another window keeps that id under a new <browser>, and no element of a closed window stays held. The id is the page call's `document_id`: one per attach, never reused in the session, so a call from a document a load left is refused and a page Back restores from the cache attaches again.
     const attached = new Map();
     let last_attach_id = 0;
     // The pushes on their way to a page, by push id: the core's reply waits on `resolve`.
     const pushes = new Map();
     let last_push_id = 0;
+    // One mark per extension object in this session. A page in the back-forward cache comes back only under the mark it started with, so Back never revives the code of a DesertFox that reloaded or updated since.
+    const marks = new WeakMap();
+    let last_mark = 0;
+    const mark_of = (extension) => marks.get(extension) ?? (marks.set(extension, ++last_mark), last_mark);
+    // The core shut down for the session: nothing attaches again.
+    let stopped = false;
 
     const session_value = (extension, key) => {
       const holder = extensionStorageSession.get(extension, [key])[key];
@@ -74,7 +81,7 @@
 
     // The `browser_module_pages` setting, as the extension's config snapshot says. The extension writes the snapshots only while it is on, and removes them when it goes off. A snapshot of another protocol version counts as off, so a mismatched extension gets no page code.
     function pages_on(extension, config = session_value(extension, SNAPSHOT_KEYS.config)) {
-      if (!module_on() || !extension) return false;
+      if (stopped || !module_on() || !extension) return false;
       const settings = is_record(config) && config.v === PROTOCOL_VERSION && is_record(config.value) ? config.value.settings : undefined;
       return is_record(settings) && settings.browser_module === true && settings.browser_module_pages === true && session_value(extension, SNAPSHOT_KEYS.keymap)?.v === PROTOCOL_VERSION;
     }
@@ -101,116 +108,141 @@
 
     const send_to = (browser, name, data) => {
       try {
-        browser.messageManager?.sendAsyncMessage(name, data);
+        browser?.messageManager?.sendAsyncMessage(name, data);
       } catch (_) {
         // A tab that closed has no frame to tell.
       }
     };
 
-    function end_pushes(browser) {
+    // The <browser> that shows the attach's tab now, or undefined once the tab closed.
+    function element_of(browser_id) {
+      const attach = attached.get(browser_id);
+      const browser = attach && browser_of_tab(attach.tab_id);
+      return browser?.browserId === browser_id ? browser : undefined;
+    }
+
+    function end_pushes(browser_id) {
       for (const [id, push] of pushes) {
-        if (browser !== undefined && push.browser !== browser) continue;
+        if (browser_id !== undefined && push.browser_id !== browser_id) continue;
         pushes.delete(id);
         push.resolve({ ok: false, error: WENT_AWAY });
       }
     }
 
-    function forget(browser) {
-      attached.delete(browser);
-      end_pushes(browser);
+    function forget(browser_id) {
+      attached.delete(browser_id);
+      end_pushes(browser_id);
     }
 
     // The extension ends the tab's lock only on this word, because a tab's load events also fire for a document that stays (a PDF reports two).
-    function end_attach(browser) {
-      const attach = attached.get(browser);
+    function end_attach(browser_id) {
+      const attach = attached.get(browser_id);
       if (!attach) return;
-      forget(browser);
-      const tab_id = tab_id_of(browser);
-      if (attach.extension === desertfox() && Number.isSafeInteger(tab_id) && tab_id >= 0) core.send("page_gone", { tab_id, document_id: attach.attach_id });
+      forget(browser_id);
+      if (attach.extension === desertfox()) core.send("page_gone", { tab_id: attach.tab_id, document_id: attach.attach_id });
     }
 
-    // The setting or the pref went off, or DesertFox changed: every page drops its code.
+    // The setting or the pref went off, or DesertFox changed: every page drops its code, and so does every page in the back-forward cache, which no attach names.
     function detach_all() {
-      for (const browser of [...attached.keys()]) {
-        send_to(browser, MESSAGE.detach, {});
-        forget(browser);
-      }
+      Services.mm.broadcastAsyncMessage(MESSAGE.detach, {});
+      attached.clear();
       end_pushes(undefined);
     }
 
-    const on = (name, handler) =>
-      Services.mm.addMessageListener(name, (message) => {
+    // Each tab asks again for its shown page, so a PDF or Reader View that was open while page code was off gets it with no reload.
+    function ask_all(extension) {
+      if (pages_on(extension)) Services.mm.broadcastAsyncMessage(MESSAGE.ask, { mark: mark_of(extension) });
+    }
+
+    const listeners = [];
+    const on = (name, handler) => {
+      const listener = (message) => {
         try {
           if (is_record(message.data)) handler(message.target, message.data);
         } catch (error) {
           core.log_once(`a locked page message was dropped after an error: ${error}`);
         }
-      });
+      };
+      Services.mm.addMessageListener(name, listener);
+      listeners.push([name, listener]);
+    };
 
+    // A refused page drops whatever page code its tab still holds, a cached page included.
     on(MESSAGE.attach, (browser, { inner }) => {
       const extension = desertfox();
-      for (const each of [...attached.keys()]) if (!each.isConnected) forget(each);
-      if (!Number.isSafeInteger(inner) || !pages_on(extension) || !page_kind_of(browser, inner)) return;
+      for (const each of [...attached.keys()]) if (!element_of(each)) forget(each);
+      const refuse = () => send_to(browser, MESSAGE.detach, {});
+      if (!Number.isSafeInteger(inner) || !pages_on(extension) || !page_kind_of(browser, inner)) return refuse();
       const tab_id = tab_id_of(browser);
-      if (!Number.isSafeInteger(tab_id) || tab_id < 0) return;
-      if (PrivateBrowsingUtils.isBrowserPrivate(browser) && !extension.privateBrowsingAllowed) return;
-      end_attach(browser);
+      if (!Number.isSafeInteger(tab_id) || tab_id < 0) return refuse();
+      if (PrivateBrowsingUtils.isBrowserPrivate(browser) && !extension.privateBrowsingAllowed) return refuse();
+      const browser_id = browser.browserId;
+      const current = attached.get(browser_id);
+      // A second ask for the same document, as `ask_all` and the page's own load can both send.
+      if (current?.inner === inner && current.extension === extension) return;
+      end_attach(browser_id);
       const attach_id = ++last_attach_id;
-      attached.set(browser, { attach_id, inner, extension });
-      send_to(browser, MESSAGE.attached, { inner, attach_id, base_url: extension.baseURI.spec, snapshots: snapshots_of(extension) });
+      attached.set(browser_id, { attach_id, inner, extension, tab_id });
+      send_to(browser, MESSAGE.attached, { inner, attach_id, mark: mark_of(extension), base_url: extension.baseURI.spec, snapshots: snapshots_of(extension) });
     });
 
     on(MESSAGE.gone, (browser, { attach_id }) => {
-      if (attached.get(browser)?.attach_id === attach_id) end_attach(browser);
+      if (attached.get(browser.browserId)?.attach_id === attach_id) end_attach(browser.browserId);
     });
 
     // A page call: its text goes out as it came, with the tab and the attach that chrome knows.
     on(MESSAGE.call, (browser, { attach_id, call_id, message }) => {
       if (!Number.isSafeInteger(call_id)) return;
-      const answer = (fields) => send_to(browser, MESSAGE.answer, { attach_id, call_id, ...fields });
-      const attach = attached.get(browser);
-      if (attach?.attach_id !== attach_id || attach.extension !== desertfox() || typeof message !== "string") return answer({ ok: false, error: WENT_AWAY });
-      const sent = core.send("page_call", { tab_id: tab_id_of(browser), document_id: attach_id, message }, (reply) => {
-        if (attached.get(browser) !== attach) return;
-        answer(reply.ok && typeof reply.value === "string" ? { ok: true, value: reply.value } : { ok: false, error: reply.error ?? "the call failed" });
+      const browser_id = browser.browserId;
+      const answer = (to, fields) => send_to(to, MESSAGE.answer, { attach_id, call_id, ...fields });
+      const attach = attached.get(browser_id);
+      if (attach?.attach_id !== attach_id || attach.extension !== desertfox() || typeof message !== "string") return answer(browser, { ok: false, error: WENT_AWAY });
+      const sent = core.send("page_call", { tab_id: attach.tab_id, document_id: attach_id, message }, (reply) => {
+        if (attached.get(browser_id) !== attach) return;
+        answer(element_of(browser_id), reply.ok && typeof reply.value === "string" ? { ok: true, value: reply.value } : { ok: false, error: reply.error ?? "the call failed" });
       });
-      if (!sent.ok) answer({ ok: false, error: sent.problem });
+      if (!sent.ok) answer(browser, { ok: false, error: sent.problem });
     });
 
-    // A push: the page's answer text becomes the reply's value, as it came.
-    core.register_kind("page_push", ({ tab_id, message }) => {
+    // A push: the page's answer text becomes the reply's value, as it came. It goes only to the document the extension named, never to the one that replaced it in the tab.
+    core.register_kind("page_push", ({ tab_id, document_id, message }) => {
       const browser = browser_of_tab(tab_id);
-      const attach = browser && attached.get(browser);
-      if (!attach || attach.extension !== desertfox() || !pages_on(attach.extension)) return { ok: false, error: WENT_AWAY };
+      const browser_id = browser?.browserId;
+      const attach = browser && attached.get(browser_id);
+      if (!attach || attach.attach_id !== document_id || attach.extension !== desertfox() || !pages_on(attach.extension)) return { ok: false, error: WENT_AWAY };
       const push_id = ++last_push_id;
       return new Promise((resolve) => {
-        pushes.set(push_id, { browser, resolve });
+        pushes.set(push_id, { browser_id, resolve });
         send_to(browser, MESSAGE.push, { attach_id: attach.attach_id, push_id, message });
       });
     });
 
     on(MESSAGE.push_answer, (browser, { push_id, ok, text, error }) => {
       const push = pushes.get(push_id);
-      if (push?.browser !== browser) return;
+      if (push?.browser_id !== browser.browserId) return;
       pushes.delete(push_id);
       push.resolve(ok === true && typeof text === "string" ? { ok: true, value: text } : { ok: false, error: typeof error === "string" ? error : "the page refused the message" });
     });
 
-    // A snapshot changed: each page of this DesertFox gets the new copy, and a page of an older DesertFox drops its code.
+    // A snapshot changed: each page of this DesertFox gets the new copy, every page drops the code of an older DesertFox, and the open pages ask again.
     core.watch_session(Object.values(SNAPSHOT_KEYS), (key, value) => {
       const extension = desertfox();
       if (key === SNAPSHOT_KEYS.config && !pages_on(extension, value)) return detach_all();
+      if ([...attached.values()].some((attach) => attach.extension !== extension)) detach_all();
       const part = Object.keys(SNAPSHOT_KEYS).find((name) => SNAPSHOT_KEYS[name] === key);
-      for (const [browser, attach] of [...attached]) {
-        if (attach.extension !== extension) {
-          send_to(browser, MESSAGE.detach, {});
-          forget(browser);
-        } else send_to(browser, MESSAGE.snapshot, { attach_id: attach.attach_id, part, snapshot: value });
-      }
+      for (const [browser_id, attach] of [...attached]) send_to(element_of(browser_id), MESSAGE.snapshot, { attach_id: attach.attach_id, part, snapshot: value });
+      ask_all(extension);
     });
 
-    Services.prefs.addObserver(ENABLED_PREF, () => {
-      if (!module_on()) detach_all();
+    const on_pref_change = () => (module_on() ? ask_all(desertfox()) : detach_all());
+    Services.prefs.addObserver(ENABLED_PREF, on_pref_change);
+
+    // The core turned off for the session after a failure: every page drops its code, and no message, pref change or tab attaches again.
+    core.on_shut_down(() => {
+      stopped = true;
+      for (const [name, listener] of listeners.splice(0)) Services.mm.removeMessageListener(name, listener);
+      Services.prefs.removeObserver(ENABLED_PREF, on_pref_change);
+      detach_all();
     });
 
     core.add_frame_script(locked_pages_frame_script);
@@ -231,6 +263,7 @@
       push: "desertfox-browser-module:locked-push",
       push_answer: "desertfox-browser-module:locked-push-answer",
       snapshot: "desertfox-browser-module:locked-snapshot",
+      ask: "desertfox-browser-module:locked-ask",
     };
     // The only files the sandbox runs, from the extension's own base address: the shim, then content.js, then a bundle when the page code asks for it by name.
     // BUNDLE_NAMES copies src/shared/bundles.ts, and test/browser_module/locked_pages.test.ts keeps it equal.
@@ -263,8 +296,10 @@
     const inner_of = (win) => win?.windowGlobalChild?.innerWindowId;
     const is_top_document = (event) => !!content && event.target === content.document;
 
+    // With the pref off, a page Back restores drops the code it held instead of asking.
     function ask_to_attach() {
-      if (!module_on() || !is_locked_page(content.document)) return;
+      if (!is_locked_page(content.document)) return;
+      if (!module_on()) return drop(pages.get(inner_of(content)));
       sendAsyncMessage(MESSAGE.attach, { inner: inner_of(content) });
     }
 
@@ -313,7 +348,7 @@
       );
     }
 
-    function start(win, { attach_id, base_url, snapshots }) {
+    function start(win, { attach_id, mark, base_url, snapshots }) {
       const page_principal = win.document.nodePrincipal;
       // An expanded principal refuses the system principal, so this sandbox never gets more than the page and the extension's own files.
       const extension_principal = Services.scriptSecurityManager.createContentPrincipal(Services.io.newURI(base_url), page_principal.originAttributes);
@@ -329,7 +364,7 @@
         // The core's report counts a keydown listener of this sandbox as DesertFox's, so the module leaves the keys to the page code.
         metadata: { addonId: EXTENSION_ID, "inner-window-id": inner_of(win) },
       });
-      const current = { attach_id, inner: inner_of(win), base_url, sandbox, snapshots: is_snapshots(snapshots) ? snapshots : {}, calls: new Map(), pushes: new Set(), loaded: new Set(), suspended: false, on_push: null, on_snapshot: null };
+      const current = { attach_id, mark, inner: inner_of(win), base_url, sandbox, snapshots: is_snapshots(snapshots) ? snapshots : {}, calls: new Map(), pushes: new Set(), loaded: new Set(), suspended: false, on_push: null, on_snapshot: null };
       if (pages.size === 0) Services.obs.addObserver(on_window_destroyed, "inner-window-destroyed");
       pages.set(current.inner, current);
       // Waived, so the property lands on the sandbox's own global and not on this script's view of it. The page's window is only the sandbox's prototype and never sees it.
@@ -383,8 +418,8 @@
       try {
         if (!module_on() || inner_of(content) !== data.inner || !BASE_URL.test(data.base_url) || !is_locked_page(content.document)) return;
         const cached = pages.get(data.inner);
-        if (cached?.suspended) {
-          // Back brought the document out of the cache: the same sandbox goes on under the new attach, with fresh snapshots.
+        if (cached?.suspended && cached.mark === data.mark) {
+          // Back brought the document out of the cache: the same sandbox goes on under the new attach, with fresh snapshots. Code of a DesertFox that reloaded since has another mark and starts again.
           Object.assign(cached, { attach_id: data.attach_id, suspended: false, snapshots: is_snapshots(data.snapshots) ? data.snapshots : {} });
           for (const part of SNAPSHOT_PARTS) cached.on_snapshot?.(part);
           return;
@@ -398,6 +433,12 @@
 
     addMessageListener(MESSAGE.detach, () => {
       for (const current of [...pages.values()]) drop(current, "the browser_module_pages setting is off");
+    });
+
+    addMessageListener(MESSAGE.ask, ({ data }) => {
+      const current = content && pages.get(inner_of(content));
+      if (current && !current.suspended && current.mark === data.mark) return;
+      if (content?.document) ask_to_attach();
     });
 
     addMessageListener(MESSAGE.answer, ({ data }) => {

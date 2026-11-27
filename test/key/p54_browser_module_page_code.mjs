@@ -215,6 +215,59 @@ export async function run_cases(context) {
     await poll_until("no page code realm once the tab closed", async () => (await page_code_realms()).length === 0, { timeout_ms: 8000 });
   });
 
+  await run_case("a PDF tab moved to another window keeps its page code, and a pick still follows its link", async () => {
+    await home("pc_moved");
+    await open_locked("the PDF viewer");
+    context.on_teardown(() => chrome(`(async () => { const w = Services.desertfox_key_test_moved_window; delete Services.desertfox_key_test_moved_window; if (w && !w.closed) w.close(); })()`));
+    await chrome(`(async () => {
+      const w = ${W}.gBrowser.replaceTabWithWindow(${W}.gBrowser.selectedTab);
+      Services.desertfox_key_test_moved_window = w;
+      await new Promise((resolve) => Services.obs.addObserver(function seen(subject) { if (subject === w) { Services.obs.removeObserver(seen, "browser-delayed-startup-finished"); resolve(); } }, "browser-delayed-startup-finished"));
+    })()`);
+    await poll_until("the PDF in the new window", () => in_selected_page(pages["the PDF viewer"].ready), { timeout_ms: 10000 });
+    await focus_page();
+    await pick_hint_at(".annotationLayer a[href]", "the moved PDF");
+    await poll_until("the pick in the moved tab to follow the link", async () => (await selected_spec()) === `${origin}/target`, { timeout_ms: 5000 });
+    await chrome(`(async () => ${W}.close())()`);
+  });
+
+  await run_case("an open PDF gets its page code back with no reload when the setting or the module pref turns on again", async () => {
+    await home("pc_again");
+    await open_locked("the PDF viewer");
+    const snapshot = await session_value(CONFIG_SNAPSHOT_KEY);
+    context.on_teardown(() => set_session_value(CONFIG_SNAPSHOT_KEY, snapshot));
+    await set_session_value(CONFIG_SNAPSHOT_KEY, { ...snapshot, value: { ...snapshot.value, settings: { ...snapshot.value.settings, browser_module_pages: false } } });
+    await poll_until("the page code to go with the setting off", async () => (await listeners()) === 0, { timeout_ms: 5000 });
+    await set_session_value(CONFIG_SNAPSHOT_KEY, snapshot);
+    await poll_until("the page code back with the setting on", async () => (await listeners()) > 0, { timeout_ms: 8000 });
+    await steps.set_pref(false);
+    await poll_until("the page code to go with the pref off", async () => (await listeners()) === 0, { timeout_ms: 5000 });
+    await steps.set_pref(true);
+    await poll_until("the page code back with the pref on", async () => (await listeners()) > 0, { timeout_ms: 8000 });
+    await focus_page();
+    await press_keys("f");
+    await poll_until("hint labels on the PDF that got its code back", async () => (await hint_labels()).length > 0, { timeout_ms: 5000 });
+    await press_keys("-k", "Escape");
+    await close_selected_tab();
+  });
+
+  await run_case("Back after the setting went off shows the PDF with no page code", async () => {
+    await home("pc_back_off");
+    await open_locked("the PDF viewer");
+    await chrome(`(async () => { const b = ${W}.gBrowser.selectedBrowser; b.loadURI(Services.io.newURI("${origin}/away_off"), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); })()`);
+    await steps.wait_loaded((spec) => spec.endsWith("/away_off"));
+    const snapshot = await session_value(CONFIG_SNAPSHOT_KEY);
+    context.on_teardown(() => set_session_value(CONFIG_SNAPSHOT_KEY, snapshot));
+    await set_session_value(CONFIG_SNAPSHOT_KEY, { ...snapshot, value: { ...snapshot.value, settings: { ...snapshot.value.settings, browser_module_pages: false } } });
+    await poll_until("no page code realm once the setting went off", async () => (await page_code_realms()).length === 0, { timeout_ms: 8000 });
+    await chrome(`(async () => ${W}.gBrowser.selectedBrowser.goBack())()`);
+    await poll_until("the PDF viewer again", () => in_selected_page(pages["the PDF viewer"].ready), { timeout_ms: 10000 });
+    await sleep(1500);
+    expect((await listeners()) === 0, "Back revived page code from before the setting went off");
+    await set_session_value(CONFIG_SNAPSHOT_KEY, snapshot);
+    await close_selected_tab();
+  });
+
   await run_case("about:addons gets no page code", async () => {
     await home("pc_addons");
     await open_tab("about:addons");

@@ -97,42 +97,50 @@ function frame_of(frame_source: string, to_parent: (name: string, data: unknown)
   return { frame, show, fire, deliver, sandboxes, nuked, loaded, observers, sent, transport };
 }
 
-// One window, one tab showing a PDF, DesertFox running with both settings on, and the frame script of that tab wired to the parent half.
+// One window, one tab showing a PDF, DesertFox running with both settings on, and the frame script of that tab wired to the parent half. `add_tab` opens one more such tab in the same Firefox.
 function locked({ config = ON_CONFIG as unknown, keymap = KEYMAP as unknown, page = { principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 5 } as Page, private_browser = false, private_access = false } = {}) {
   const firefox = create_firefox({ extra_files: { [LOCKED_FILE]: source } });
   const extension = firefox.start_extension({ private_access });
   const window = firefox.make_window();
   window.load();
-  const { tab, browser } = window.add_tab() as { tab: unknown; browser: Record<string, unknown> };
   if (config !== null) firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, config);
   if (keymap !== null) firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, keymap);
   const frame_url = firefox.frame_scripts.find((url) => decodeURIComponent(url).includes("locked_pages_frame_script"));
   assert.ok(frame_url, "the feature adds its frame script");
   const frame_source = decodeURIComponent(frame_url.slice(frame_url.indexOf(",") + 1));
-  const frame = frame_of(frame_source, (name, data) => firefox.from_frame(name, browser, data));
-  const shown = { ...page };
-  const set_page = (next: Page) => {
-    Object.assign(shown, next);
-    frame.show(next);
+  const add_tab = (shown_first: Page) => {
+    const { tab } = window.add_tab() as { tab: { linkedBrowser: Record<string, unknown> } };
+    // The frame speaks through whichever <browser> shows the tab now, as a frame that moved to another window does.
+    const frame = frame_of(frame_source, (name, data) => firefox.from_frame(name, tab.linkedBrowser, data));
+    firefox.frames.add(frame.deliver);
+    const shown = { ...shown_first };
+    const set_page = (next: Page) => {
+      Object.assign(shown, next);
+      frame.show(next);
+    };
+    const wire = (browser: Record<string, unknown>) =>
+      Object.assign(browser, {
+        private_browser,
+        browsingContext: { get currentWindowGlobal() { return { innerWindowId: shown.inner, documentPrincipal: shown.principal, documentURI: { spec: shown.uri } }; } },
+        messageManager: { sendAsyncMessage: (name: string, data: unknown) => frame.deliver(name, data) },
+      });
+    wire(tab.linkedBrowser);
+    set_page(shown_first);
+    const move_to_another_window = () => firefox.move_tab(tab, wire({ localName: "browser" }));
+    const load = async () => {
+      frame.fire("DOMContentLoaded");
+      await settle();
+    };
+    return { tab, browser: tab.linkedBrowser, frame, set_page, load, move_to_another_window };
   };
-  Object.assign(browser, {
-    private_browser,
-    isConnected: true,
-    browsingContext: { get currentWindowGlobal() { return { innerWindowId: shown.inner, documentPrincipal: shown.principal, documentURI: { spec: shown.uri } }; } },
-    messageManager: { sendAsyncMessage: (name: string, data: unknown) => frame.deliver(name, data) },
-  });
-  set_page(page);
+  const first = add_tab(page);
   const from_module = () => (plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)) ?? []) as Record<string, unknown>[];
   const extension_sends = (list: unknown[]) => firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, list);
-  const load = async () => {
-    frame.fire("DOMContentLoaded");
-    await settle();
-  };
-  return { firefox, extension, tab, browser, frame, set_page, from_module, extension_sends, load };
+  return { firefox, extension, ...first, from_module, extension_sends, add_tab };
 }
 
 const gone_of = (list: Record<string, unknown>[]) => list.filter((message) => message.kind === "page_gone").map((message) => message.args);
-const push_request = (id: string, tab_id: number, message: string) => ({ v: V, id, kind: "page_push", args: { tab_id, message }, sent_at: Date.now() });
+const push_request = (id: string, tab_id: number, message: string, document_id = 1) => ({ v: V, id, kind: "page_push", args: { tab_id, document_id, message }, sent_at: Date.now() });
 
 test("the feature's copies of the snapshot keys, the version and the bundle names equal src/shared, and its two halves name the same messages", () => {
   const keys = new Function(`return ${/const SNAPSHOT_KEYS = (\{[^}]*\});/.exec(source)![1]}`)();
@@ -361,4 +369,157 @@ test("a reply to a call the module started reaches its on_reply once, and watch_
   firefox.extension_writes("watched", { a: 1 });
   firefox.extension_writes("other", { a: 2 });
   assert.deepEqual(heard, [["watched", { a: 1 }]]);
+});
+
+test("the core's fail-safe shut down drops every page's code, a cached one too, and takes the feature's listeners down", async () => {
+  const { firefox, frame, load, add_tab } = locked();
+  await load();
+  const cached = add_tab({ principal: PDF_PRINCIPAL, uri: "file:///tmp/c.pdf", inner: 7 });
+  await cached.load();
+  cached.frame.fire("pagehide", true);
+  const observers_before = firefox.pref_observer_count();
+  (firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
+  assert.equal(frame.nuked.length, 1, "the shown page");
+  assert.equal(cached.frame.nuked.length, 1, "the cached page");
+  assert.equal(firefox.message_listener_count(), 0, "the feature's message listeners are gone, as are the core's");
+  assert.ok(firefox.pref_observer_count() < observers_before, "its pref observer is gone");
+  const later = add_tab({ principal: PDF_PRINCIPAL, uri: "file:///tmp/d.pdf", inner: 9 });
+  await later.load();
+  assert.equal(later.frame.sandboxes.length, 0, "no page attaches after the shut down");
+});
+
+test("a tab moved to another window keeps its page code: calls, pushes and the end of the attach go through the new <browser>", async () => {
+  const { frame, load, move_to_another_window, from_module, extension_sends } = locked();
+  await load();
+  const heard: string[] = [];
+  frame.transport()!.on_push(async (text) => (heard.push(text), "answer"));
+  move_to_another_window();
+  const answered = frame.transport()!.call("after the move");
+  const request = from_module().find((message) => message.kind === "page_call");
+  assert.deepEqual(request?.args, { tab_id: 1, document_id: 1, message: "after the move" });
+  extension_sends([{ v: V, reply_to: request!.id, ok: true, value: "reached" }]);
+  assert.equal(await answered, "reached");
+  extension_sends([push_request("x1", 1, "a push")]);
+  await settle();
+  assert.deepEqual(heard, ["a push"]);
+  assert.deepEqual(from_module().find((message) => message.reply_to === "x1"), { v: V, reply_to: "x1", ok: true, value: "answer" });
+  frame.fire("pagehide");
+  assert.deepEqual(gone_of(from_module()), [{ tab_id: 1, document_id: 1 }]);
+});
+
+test("turning the setting or the pref off drops a page in the back-forward cache, so Back never revives it", async () => {
+  for (const turn_off of ["setting", "pref"] as const) {
+    const { firefox, frame, load } = locked();
+    await load();
+    frame.fire("pagehide", true);
+    if (turn_off === "setting") firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, { v: V, value: { settings: { browser_module: true, browser_module_pages: false } } });
+    else firefox.set_pref(false);
+    assert.equal(frame.nuked.length, 1, `the ${turn_off} off nukes the cached page`);
+    frame.fire("pageshow", true);
+    await settle();
+    assert.equal(frame.sandboxes.length, 1, `Back after the ${turn_off} went off starts nothing`);
+  }
+});
+
+test("Back drops a cached page whose attach is refused, or that the frame finds with the pref off", async () => {
+  const refused = locked();
+  await refused.load();
+  refused.frame.fire("pagehide", true);
+  // A config snapshot removed without a watcher's word, as when DesertFox goes away.
+  refused.firefox.extension!.bucket.delete(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY);
+  refused.frame.fire("pageshow", true);
+  await settle();
+  assert.equal(refused.frame.nuked.length, 1, "a refused attach drops the cached page");
+  const pref_off = locked();
+  await pref_off.load();
+  pref_off.frame.fire("pagehide", true);
+  pref_off.frame.frame.pref = false;
+  pref_off.frame.fire("pageshow", true);
+  assert.equal(pref_off.frame.nuked.length, 1, "the frame drops it itself with the pref off");
+});
+
+test("Back never revives the page code of a DesertFox that reloaded since: the cached sandbox goes and a new one starts", async () => {
+  const { firefox, frame, load } = locked();
+  await load();
+  frame.fire("pagehide", true);
+  firefox.start_extension();
+  frame.fire("pageshow", true);
+  await settle();
+  assert.equal(frame.sandboxes.length, 1, "no snapshots yet, so nothing attaches");
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, ON_CONFIG);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);
+  await settle();
+  assert.equal(frame.nuked.length, 1, "the old code is cut off");
+  assert.equal(frame.sandboxes.length, 2, "the new DesertFox's code starts");
+});
+
+test("an open PDF gets page code again with no reload once the setting, the pref or DesertFox comes back", async () => {
+  const { firefox, frame, load } = locked();
+  await load();
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, { v: V, value: { settings: { browser_module: true, browser_module_pages: false } } });
+  assert.equal(frame.nuked.length, 1);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, ON_CONFIG);
+  await settle();
+  assert.equal(frame.sandboxes.length, 2, "the setting on again");
+  // More snapshot writes ask again, and a page that already runs this DesertFox's code keeps it.
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, { v: V, value: { dark: {}, light: {} } });
+  await settle();
+  assert.equal(frame.sandboxes.length, 2, "no second sandbox for the same document");
+  firefox.set_pref(false);
+  firefox.set_pref(true);
+  await settle();
+  assert.equal(frame.sandboxes.length, 3, "the pref on again");
+  firefox.start_extension();
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, ON_CONFIG);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);
+  await settle();
+  assert.equal(frame.nuked.length, 3, "the reloaded DesertFox's pages drop the old code");
+  assert.equal(frame.sandboxes.length, 4, "and get the new one");
+  assert.equal(frame.transport()!.base_url, firefox.extension!.baseURI.spec);
+});
+
+test("an open PDF that loaded while the setting was off gets page code once it turns on", async () => {
+  const { firefox, frame, load } = locked({ config: null });
+  await load();
+  assert.equal(frame.sandboxes.length, 0);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, ON_CONFIG);
+  await settle();
+  assert.equal(frame.sandboxes.length, 1);
+});
+
+test("a push for a document that a reload replaced never reaches the new document", async () => {
+  const { frame, load, set_page, from_module, extension_sends } = locked();
+  await load();
+  set_page({ principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 6 });
+  await load();
+  const heard: string[] = [];
+  frame.transport()!.on_push(async (text) => (heard.push(text), "answer"));
+  extension_sends([push_request("old", 1, "for document 1", 1)]);
+  await settle();
+  assert.deepEqual(heard, []);
+  assert.deepEqual(from_module().find((message) => message.reply_to === "old"), { v: V, reply_to: "old", ok: false, error: "the page went away" });
+  extension_sends([push_request("new", 1, "for document 2", 2)]);
+  await settle();
+  assert.deepEqual(heard, ["for document 2"]);
+});
+
+test("one tab's frame can neither end another tab's attach, call under it, nor answer its push", async () => {
+  const a = locked();
+  await a.load();
+  const b = a.add_tab({ principal: PDF_PRINCIPAL, uri: "file:///tmp/b.pdf", inner: 8 });
+  await b.load();
+  a.frame.transport()!.on_push(() => new Promise(() => undefined));
+  a.extension_sends([push_request("to_a", 1, "{}", 1)]);
+  await settle();
+  assert.equal(a.from_module().find((message) => message.reply_to === "to_a"), undefined, "tab A's push waits on its page");
+  // Tab B's frame names tab A's attach (1) and push (1).
+  a.firefox.from_frame("desertfox-browser-module:locked-push-answer", b.browser, { push_id: 1, ok: true, text: "forged" });
+  a.firefox.from_frame("desertfox-browser-module:locked-call", b.browser, { attach_id: 1, call_id: 99, message: "forged call" });
+  a.firefox.from_frame("desertfox-browser-module:locked-gone", b.browser, { attach_id: 1 });
+  await settle();
+  assert.equal(a.from_module().find((message) => message.reply_to === "to_a"), undefined, "B's answer does not settle A's push");
+  assert.deepEqual(a.from_module().filter((message) => message.kind === "page_call"), [], "B's call under A's attach goes nowhere");
+  assert.deepEqual(gone_of(a.from_module()), [], "B cannot end A's attach");
+  void a.frame.transport()!.call("A still calls");
+  assert.deepEqual(a.from_module().find((message) => message.kind === "page_call")?.args, { tab_id: 1, document_id: 1, message: "A still calls" }, "A's attach still stands");
 });

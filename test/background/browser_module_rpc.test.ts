@@ -381,6 +381,18 @@ test("each snapshot part is written whole, rewritten on its own change, and remo
   assert.equal(data.has(SNAPSHOT_PARTS.theme.key), false);
 });
 
+test("a push names the document whose call locked the tab, and once chrome says it is gone no push goes out", async () => {
+  const { rpc, from_module, pushes } = setup();
+  await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 3 })]);
+  void rpc.send_to_locked_tab(7, { type: "ping" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((pushes().at(-1)!.args as { document_id?: number }).document_id, 3, "the module refuses it when another document holds the tab");
+  await from_module([gone(7, 3)]);
+  const sent = pushes().length;
+  await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
+  assert.equal(pushes().length, sent);
+});
+
 test("a reply that comes before the send returns settles the push", async () => {
   const { rpc, from_module, config } = setup();
   await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
