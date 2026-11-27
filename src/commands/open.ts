@@ -28,7 +28,7 @@ async function open_url_target(ctx: CommandContext, text: string): Promise<strin
 const FIREFOX_PAGE_COMMAND = "browser.open_firefox_page";
 const FIREFOX_PAGE_HINT = "Use :firefox to open Firefox's own pages";
 
-// Typed text that equals the address of a page `:firefox` opens runs that command, here or in a tab. Text a page sent never does, and the bridge refuses every about: address before the handler runs.
+// Typed text that equals the address of a page `:firefox` opens runs that command, here or in a tab. The bridge refuses every about: address before the handler runs, and a page that sent the request does not change that.
 async function open_typed_firefox_page(ctx: CommandContext, page: NonNullable<ReturnType<typeof firefox_page_at>>, where: Where, container: string | undefined): Promise<void> {
   if (where !== "here" && where !== "tab") throw new RuntimeRefusal("Firefox pages open here or in a tab");
   if (container !== undefined) throw new RuntimeRefusal("Firefox pages open with no container");
@@ -58,7 +58,7 @@ define("open.url", {
   bridge: true,
   runs_in: "background",
   run: async (ctx, args) => {
-    const page = ctx.from_page ? undefined : firefox_page_at(args.url);
+    const page = firefox_page_at(args.url);
     if (page !== undefined) return open_typed_firefox_page(ctx, page, args.where, container_of(args));
     await open_in(ctx, await open_url_target(ctx, args.url), args.where, container_of(args));
   },
