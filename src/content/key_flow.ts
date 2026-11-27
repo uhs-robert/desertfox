@@ -93,6 +93,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let awaiting_argument = false;
   // A Space in a group keeps it open (see the matcher). Backspace in a hold types the group's keys again without Space, so it ends the hold and keeps the group.
   let holding = false;
+  // The walk stands in the held group itself. Backspace there leaves the hold and keeps the group.
+  let at_hold = false;
 
   // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
   const listed = (keys: string[]) => (register === '"' ? [register] : keys);
@@ -164,13 +166,15 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const was_in_progress = sequence_in_progress;
     // Backspace drops the last key of a half-typed sequence. The matcher cannot step back, so the shorter prefix is typed again.
     if (was_in_progress && token === "<Backspace>") {
-      const kept = keys.slice(0, -1);
+      const kept = at_hold ? keys : keys.slice(0, -1);
       reset_sequence_();
       for (const key of kept) step(active, key, false);
       const shown = listed(typed);
       deps.on_prefix_(shown.length > 0 ? { mode, typed_: shown } : undefined, true);
       return "cancel";
     }
+    // The auto-repeat of the Space that opened the hold must not end it: only a distinct press does.
+    if (repeat && holding && token === "<Space>") return "cancel";
     let result = active.feed(mode, token);
     // A find key waits for its target, unless a find is live: then the same press repeats it.
     if (result.kind_ === "pending" && result.node.children[LIVE_KEY] && deps.sink_of_(mode)?.live_?.()) result = active.feed(mode, LIVE_KEY);
@@ -178,6 +182,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     sequence_in_progress = result.kind_ === "pending" || holding;
     if (result.kind_ === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
     else if (result.kind_ === "match" && holding) keys = result.keys!;
+    at_hold = holding && (result.kind_ === "match" || typed.length === (result as { held_: string[] }).held_.length);
     awaiting_argument = result.kind_ === "pending" && (register === '"' || !!result.node.children[ANY_KEY]);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);

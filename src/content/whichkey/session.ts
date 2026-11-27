@@ -17,7 +17,7 @@ export function create_which_key_session(
   // Every hide and every manual show moves this on, so an older manual answer finds itself stale.
   let manual_epoch = 0;
 
-  async function show(prefix: PendingPrefix, is_current: () => boolean, drawn?: () => void, modes = MODES_WITH_PAUSE_PANEL): Promise<void> {
+  async function show(prefix: PendingPrefix, is_current: () => boolean, drawn?: () => void, modes = prefix.held_ ? MODES_WITH_PANEL : MODES_WITH_PAUSE_PANEL): Promise<void> {
     if (!modes.includes(prefix.mode)) return;
     const panel = await fetch_panel(prefix.mode, prefix.typed_);
     // The next key may have arrived while the background answered.

@@ -469,3 +469,10 @@ test("matcher: binds_after_ leaves a hold as it was", () => {
   assert.equal(matcher.binds_after_("normal", [], "i"), true);
   assert.equal(matcher.feed("normal", "i").kind_ === "match" && true, true);
 });
+
+test("matcher: binds_after_ counts a Space that ends a hold as binding", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" } } });
+  walk(matcher, "normal", ["z", "<Space>"]);
+  assert.equal(matcher.binds_after_("normal", [], "<Space>"), true);
+  assert.equal(matcher.binds_after_("normal", ["i"], "<Space>"), true);
+});
