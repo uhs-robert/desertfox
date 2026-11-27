@@ -240,6 +240,18 @@ test("in the search box only Escape is taken, and it moves the focus to the list
   assert.equal(row.focused, 1);
 });
 
+test("Escape in the search box goes to the page when the list has no row that takes the focus", () => {
+  const empty = setup();
+  empty.focus(make_node(empty.panel_doc, "input", { type: "search" }));
+  assert.ok(empty.press("Escape").prevented);
+  assert.equal(empty.page.focused, 1);
+  const hidden = setup();
+  const row = panel_row(hidden.panel_doc, { focus: () => (row.focused += 1) });
+  hidden.focus(make_node(hidden.panel_doc, "input", { type: "search" }));
+  assert.ok(hidden.press("Escape").prevented);
+  assert.deepEqual([row.focused, hidden.page.focused], [1, 1]);
+});
+
 test("a field inside a shadow root counts as a field", () => {
   const { panel_doc, focus, press } = setup();
   const inner = make_node(panel_doc, "input", { type: "text" });

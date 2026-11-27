@@ -193,12 +193,14 @@
     }
 
     // Escape in the search box goes to the list. Anywhere else it goes back to the page region that had the focus before the sidebar.
+    // An empty list, or a row that cannot take the focus, leaves the focus in the box, and Firefox does nothing with Escape there. Then it goes to the page too.
     function leave(win, place) {
       if (place.field) {
         const list = list_of(place.doc);
-        if (!has_function(list, "focus")) return false;
-        list.focus();
-        return true;
+        if (has_function(list, "focus")) {
+          list.focus();
+          if (!is_field(deep_active(place.doc))) return true;
+        }
       }
       return leave_to_page(win);
     }
