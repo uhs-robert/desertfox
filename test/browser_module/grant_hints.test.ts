@@ -533,13 +533,37 @@ test("the external protocol prompt's remember checkbox waits for Enter, a click 
   void checkbox;
 });
 
-test("the Exceptions dialog: Allow and Allow for Session wait for Enter, Block clicks at once", async () => {
-  const url = "chrome://browser/content/preferences/dialogs/permissions.xhtml";
-  const make = () => ["btnBlock", "btnCookieSession", "btnAllow"].map((id, index) => new Node("moz-button", { id, box: box(20 + index * 100, 100) }));
-  for (const [id, waits] of [["btnBlock", false], ["btnCookieSession", true], ["btnAllow", true]] as const) {
-    const { chrome, element } = await dialog_pick(url, id, { extra: make() });
-    assert.equal(element.clicks, waits ? 0 : 1, id);
-    assert.equal(marked(chrome), waits, id);
+test("the Exceptions and site permissions dialogs: only Block, Cancel and a drop-down click at once, and every other control waits for Enter", async () => {
+  const exceptions = "chrome://browser/content/preferences/dialogs/permissions.xhtml";
+  const site_permissions = "chrome://browser/content/preferences/dialogs/sitePermissions.xhtml";
+  const make = () => [
+    ...["btnBlock", "btnAllow", "btnAdd", "removePermission", "removeAllPermissions"].map((id, index) => new Node("moz-button", { id, box: box(20 + index * 70, 100) })),
+    new Node("checkbox", { id: "permissionsDisableCheckbox", box: box(20, 130) }),
+    new Node("menulist", { id: "siteStatus", box: box(200, 130) }),
+  ];
+  const cases: [string, string, boolean][] = [
+    [exceptions, "btnBlock", false],
+    [exceptions, "cancel", false],
+    [exceptions, "btnAllow", true],
+    [exceptions, "btnAdd", true],
+    [exceptions, "removePermission", true],
+    [exceptions, "removeAllPermissions", true],
+    [exceptions, "accept", true],
+    [site_permissions, "cancel", false],
+    [site_permissions, "siteStatus", false],
+    [site_permissions, "removePermission", true],
+    [site_permissions, "removeAllPermissions", true],
+    [site_permissions, "permissionsDisableCheckbox", true],
+    [site_permissions, "accept", true],
+  ];
+  for (const [url, id, waits] of cases) {
+    const { chrome, element } = await dialog_pick(url, id, { extra: make(), windowtype: "" });
+    const what = `${url.split("/").at(-1)} ${id}`;
+    assert.equal(element.clicks + (element.open ? 1 : 0), waits ? 0 : 1, what);
+    assert.equal(marked(chrome), waits, what);
+    if (!waits) continue;
+    chrome.press("Enter");
+    assert.equal(element.clicks, 1, what);
   }
 });
 
