@@ -291,3 +291,14 @@ test("a panel that is up follows the next prefix key even when that prefix is on
   await sleep(DELAY_MS / 3);
   assert.deepEqual(page.shown, ["normal:g", "normal:gx"]);
 });
+
+test("a held prefix opens the panel even when the delay is zero", async () => {
+  const shown: string[] = [];
+  const follow = create_which_key_timer(() => 0, (prefix) => void (prefix && shown.push(prefix.typed_.join(""))));
+  follow({ mode: "normal", typed_: ["z"] }, true);
+  await sleep(5);
+  assert.deepEqual(shown, []);
+  follow({ mode: "normal", typed_: ["z"], held_: true }, true);
+  await sleep(5);
+  assert.deepEqual(shown, ["z"]);
+});

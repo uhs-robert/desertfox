@@ -21,7 +21,7 @@ export function create_which_key_session(
     if (!modes.includes(prefix.mode)) return;
     const panel = await fetch_panel(prefix.mode, prefix.typed_);
     // The next key may have arrived while the background answered.
-    if (is_current() && panel.rows.length > 0) (draw(panel), drawn?.());
+    if (is_current() && panel.rows.length > 0) (draw(prefix.held_ ? { ...panel, held: true } : panel), drawn?.());
   }
 
   return {
