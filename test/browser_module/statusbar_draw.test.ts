@@ -244,6 +244,8 @@ test("a chamfer bar is clipped to the chamfer shape, and its border widths agree
   assert.match(chamfer, /overflow:\s*visible/);
   const fallbacks = new Set([...css.matchAll(/var\(--tf-border-width,\s*([^)]*)\)/g)].map((match) => match[1]));
   assert.equal(fallbacks.size, 1);
+  const plain = css.match(/#desertfox-statusbar:not\(\[data-textfox\]\)\[data-corner="chamfer"\]::after\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(plain, /inset:\s*calc\(-1 \* var\(--dfx-bw\)\) 0 0/);
 });
 
 test("a private window without private access draws nothing", () => {
