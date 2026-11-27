@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 507 (normal 264, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 509 (normal 266, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -83,6 +83,8 @@ bound: 507 (normal 264, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `gL` | `tab.alternate_any_window` | Last used tab, any window |
 | `gp` | `tab.split_other` | Other pane |
 | `gP` | `tab.split_swap` | Swap panes |
+| `Ep` | `tab.split_other` | Other pane |
+| `Es` | `tab.split_swap` | Swap panes |
 | `gF` | `frame.exit` | Focus top page |
 | `g0` | `tab.goto 1` | First tab |
 | `g$` | `tab.goto -1` | Last tab |
@@ -308,6 +310,7 @@ Which-key group names:
 - `tu`: Unload tabs
 - `tU`: Load tabs
 - `w`: Windows
+- `E`: Pane
 - `y`: Copy
 - `b`: Bookmark
 - `z`: Zoom and scroll

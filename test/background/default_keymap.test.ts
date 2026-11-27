@@ -424,3 +424,10 @@ test("which-key rows for the guarded tree keys carry their chain, and the unguar
   const h = panel_after_prefix(compiled.modes.item, [], (id) => registry.get(id) as never).rows.find((row) => row.keys === "h");
   assert.equal(h?.chain?.otherwise?.label, "Item to the left, or scroll left");
 });
+
+test("the E group is named Pane and binds the two split commands that gp and gP also reach", () => {
+  assert.equal(DEFAULT_KEYMAP.group_names?.E, "Pane");
+  const normal = DEFAULT_KEYMAP.normal!;
+  assert.deepEqual([(normal.Ep as { id: string }).id, (normal.Es as { id: string }).id], ["tab.split_other", "tab.split_swap"]);
+  assert.deepEqual(Object.keys(normal).filter((key) => key.startsWith("E")), ["Ep", "Es"]);
+});
