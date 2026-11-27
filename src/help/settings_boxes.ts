@@ -6,6 +6,8 @@ import type { Route } from "../shared/page/help_route.ts";
 import { effective_settings } from "../shared/config.ts";
 import { load_effective_config } from "../shared/config/config_load.ts";
 import { QUICKMARK_STORAGE_KEY } from "../shared/config/storage_keys.ts";
+import { BROWSER_MODULE_STATUS_STORAGE_KEY } from "../shared/browser_module_protocol.ts";
+import type { ModuleStatus } from "../shared/browser_module_protocol.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import type { HelpModel } from "./model.ts";
 import { mount_settings } from "./settings_page.ts";
@@ -50,8 +52,10 @@ export type SettingsBox = {
   mount: (box: HTMLElement, context: BoxContext) => BoxHandle | void;
 };
 
+const read_module_status = async (): Promise<ModuleStatus | undefined> => ((await browser.storage.session.get(BROWSER_MODULE_STATUS_STORAGE_KEY))[BROWSER_MODULE_STATUS_STORAGE_KEY] as ModuleStatus | undefined);
+
 export const SETTINGS_BOXES: SettingsBox[] = [
-  { box_class: BOX_CLASS.settings, mount: (box, c) => ({ stop: mount_settings(box, c.send, c.engines, c.on_changed, c.model.keys.reload, c.model.resolve_keys) }) },
+  { box_class: BOX_CLASS.settings, mount: (box, c) => ({ stop: mount_settings(box, c.send, c.engines, c.on_changed, c.model.keys.reload, c.model.resolve_keys, read_module_status) }) },
   {
     box_class: BOX_CLASS.site_keys,
     mount: (box, c) => mount_site_keys(box, { send: c.send, read_rules: async () => effective_settings((await load_effective_config()).config.settings).site_rules }, c.route.site_keys, c.key_capture, c.on_changed),

@@ -14,8 +14,9 @@ const TOP_FRAME = 0;
 // Only two frames matter: the top frame, which draws the badge, and the child frame that holds the focus, if any.
 // `awaiting_commit` is set from the start of a load until its new page replaces the old one. See `forget_on_navigation`.
 // `parked` is the cross-origin child frame that took the focus on load and was handed back to the top page. `focused_once` holds every child frame that has had its first focus, parked or not: a frame is parked at that first focus only, so a frame that takes the focus back after a park, or a user's Tab into it, enters frame mode. A frame keeps its id through its own navigations, so a reloaded frame stays in `focused_once` until the top page navigates and the record goes.
+// `live` is set by the top frame's report (its content script runs in the shown document) and goes with the record at the next load start, so the browser module (`browser_module.ts`) never takes a key for a page whose content script may be about to run.
 // `entering` marks a focus the extension is about to move into a frame (`;ff`, a hint pick), so that frame's first focus is the user's own and is not parked. `frame_id` names the frame when the frame itself asked, and is absent when the top page asked, because it cannot read the id of a frame of another site. Only a first focus spends the mark.
-export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; parked_blurred?: true; focused_once?: number[]; entering?: { ms: number; frame_id?: number } };
+export type TabModeRecord = { top_mode?: Mode; focused_child?: { frame_id: number; mode: Mode }; awaiting_commit?: true; parked?: number; parked_blurred?: true; focused_once?: number[]; entering?: { ms: number; frame_id?: number }; live?: true };
 
 // `ModeChanged` in src/shared/messages/content.ts, with the frame that sent it. `cross_origin` is the background's own reading of the frame's address against the tab's.
 export type ModeReport = { frame_id: number; mode: Mode; focus: boolean; activated?: boolean; in_field?: boolean; cross_origin?: boolean; now?: number };
@@ -81,6 +82,7 @@ export function apply_mode_report(record: TabModeRecord, report: ModeReport): Ta
   }
   if (frame_id === TOP_FRAME) {
     next.top_mode = mode;
+    next.live = true;
     // The top frame without the focus says nothing about the child frames: one of them may hold it, or the window may be in the background.
     if (focus) delete next.focused_child;
   } else if (focus) next.focused_child = { frame_id, mode };

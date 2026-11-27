@@ -4,7 +4,7 @@ Guidance for coding agents in this repository. `CLAUDE.md` points here. Keep the
 
 ## Overview
 
-DesertFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host.
+DesertFox is a keyboard-first Firefox extension built around one command registry. Every command is defined once, and keys, the command line, completion, help and which-key all read that definition. It works on its own. Oasis Dots integration is optional, through a native host. A second optional tier, the browser module, is a script that the user installs with sudo into Firefox's own startup folder. It takes the tab and scroll keys on pages an extension cannot reach.
 
 ## Where to look
 
@@ -31,6 +31,7 @@ If the behavior of the code and the design disagree, stop and ask the maintainer
 - Keep the content script within the size guard and admission rule in "Content script size", with no runtime dependency. Load anything else on first use.
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
+- Keep the browser module a second optional tier beside the native host. It is not in the xpi, and the extension and the host never install, download or load it. It stays off until the consent setting `browser_module` is on. Send it only typed, validated requests: a fixed command enum with checked arguments, defined in `src/shared/browser_module_protocol.ts`. Never send code, eval strings, selectors or URLs for it to run or load with browser privileges. The module is a thin executor and the extension stays the engine. Keep the protocol backward compatible: add only optional fields, make validators ignore unknown fields, and keep an older module working with a newer extension and the reverse degrading gracefully. Bump `v` only for a breaking change, with a release note that tells users to rerun the module install script. Read its one input, the hello, as foreign input: a size cap, only the fields it reads, a rate limit.
 - Put no test hooks in `src/`. Tests drive the extension through its public surface. The exceptions are the `data-desertfox-tree-read-ms`, `data-desertfox-mode` and `data-desertfox-whichkey*` attributes, which the key test reads (the first as the signal that the content script is ready). They exist only in the key-test build (`just build-key-test`), behind `KEY_TEST_BUILD` from `src/shared/key_test_build.ts`, so a page cannot read them in a release.
 - Keep no state only in memory. Store it, so a later move to Manifest V3 stays small. A copy of stored state may sit in memory when it refills from storage and drops on `storage.onChanged` (see `src/background/keymap_source.ts`).
 - Write a migration for every change to stored data: extension storage, config files and exported zips. An installed copy keeps working after an update.
@@ -60,7 +61,7 @@ This repository is public.
   - Carve-out: `tools/measure/rivals/` names the rival extensions it benchmarks (store ids, version pins, hint selectors). This applies to that folder only. Every other file, the `just` recipe name and commit and PR text outside that folder keep the rule.
 - Public files (docs, READMEs, code comments, commit and PR text) never mention who owns the project, anyone's approvals or internal planning.
 - Never commit private config or personal data, for example personal site helpers or snippets.
-- Never assume a personal toolset (Oasis, Hyprland, a particular terminal). Oasis features stay optional behind the native host.
+- Never assume a personal toolset (Oasis, Hyprland, a particular terminal). Oasis features stay optional behind the native host or the browser module.
 
 ## Code style
 

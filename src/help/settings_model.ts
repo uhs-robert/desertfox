@@ -3,6 +3,8 @@
 import type { ChangeSetting, ChangeSettingAnswer, ListSettingsAnswer, SettingListRow } from "../shared/messages/page.ts";
 import type { Ask, PageRequests } from "../shared/messages/map.ts";
 import type { SettingTag } from "../shared/setting_list.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION } from "../shared/browser_module_protocol.ts";
+import type { ModuleStatus } from "../shared/browser_module_protocol.ts";
 import { SETTING_DOCS, SETTING_HELP } from "../shared/settings_docs.ts";
 import { FILE_WRITTEN_SETTINGS, is_setting_name, SETTING_SPECS } from "../shared/settings_schema.ts";
 
@@ -21,6 +23,17 @@ export const GROUPS: { title: string; intro: string; prefixes: string[] }[] = [
 
 export function group_of(name: string): string {
   return (GROUPS.find((group) => group.prefixes.some((prefix) => name.startsWith(prefix))) ?? GROUPS.at(-1)!).title;
+}
+
+// The line under the browser module row: what became of the module's hello. Nothing before the setting is on.
+export function module_status_text(status: ModuleStatus | undefined): string {
+  if (status === undefined) return "";
+  switch (status.result) {
+    case "waiting": return "No hello from the module yet. If you installed it, restart Firefox.";
+    case "matched": return `The module (version ${status.module_version}) is connected.`;
+    case "mismatch": return `The module speaks version ${status.module_v} of the channel, DesertFox speaks version ${BROWSER_MODULE_PROTOCOL_VERSION}. The module stays idle. Update whichever is older.`;
+    case "invalid": return `DesertFox ignored the module's hello: ${status.problem}.`;
+  }
 }
 
 // What the page draws for a setting.

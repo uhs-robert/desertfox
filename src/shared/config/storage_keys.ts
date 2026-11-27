@@ -167,3 +167,8 @@ export const CMDLINE_TARGET_STORAGE_PREFIX = "desertfox_cmdline_target_";
 
 // The font names the font settings offer (`font_names.ts`): `{ host, names }`, the last answer of the host's `list_fonts` and the names in use, which are the host list when the host answers and the probe list otherwise. A cache that refills when absent or malformed.
 export const FONT_NAMES_STORAGE_KEY = "desertfox_font_names";
+
+// The browser module channel in `storage.session` (`browser_module_protocol.ts`). The extension writes the state and the status, the module writes the hello.
+export const BROWSER_MODULE_STATE_STORAGE_KEY = "desertfox_browser_module_state";
+export const BROWSER_MODULE_HELLO_STORAGE_KEY = "desertfox_browser_module_hello";
+export const BROWSER_MODULE_STATUS_STORAGE_KEY = "desertfox_browser_module_status";

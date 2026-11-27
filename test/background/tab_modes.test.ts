@@ -46,7 +46,7 @@ test("starting the background clears every tab mode and nothing else", async () 
 
 test("a clear queued at start never removes a report that arrives during it", async () => {
   const storage = fake_storage();
-  await storage.set({ desertfox_tab_mode_4: { top_mode: "ignore" } });
+  await storage.set({ desertfox_tab_mode_4: { top_mode: "ignore", live: true } });
   const modes = create_tab_modes(storage);
   const cleared = modes.forget_all();
   const reported = modes.report(5, { frame_id: TOP, mode: "insert", focus: true });
@@ -241,7 +241,7 @@ test("a load that ends with no new page keeps the mode through the old page's ne
   await modes.forget_on_navigation(4, { status: "loading" });
   await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
   await modes.forget_on_navigation(4, { status: "complete" });
-  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "ignore" } });
+  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "ignore", live: true } });
   await modes.forget_on_navigation(4, { status: "complete", url: "https://example.org/pushed" });
   await modes.forget_on_navigation(4, { status: "loading", url: "https://example.org/pushed" });
   assert.equal(await modes.recall(4), "ignore");
@@ -294,7 +294,7 @@ test("a focused child frame that claims during a load keeps its claim through th
   await modes.report(4, { frame_id: CHILD, mode: "insert", focus: true });
   await modes.forget_on_navigation(4, { status: "complete" });
   assert.equal(await modes.recall(4), "insert", "the end of the load dropped the focused child frame");
-  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "normal", focused_once: [CHILD], focused_child: { frame_id: CHILD, mode: "insert" } } });
+  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "normal", live: true, focused_once: [CHILD], focused_child: { frame_id: CHILD, mode: "insert" } } });
 });
 
 // Known gap, not a fix: this pins what the record does if Firefox sends the load start of a restore after the pageshow reports. Whether it does is unmeasured (see #414). The record forgets the child, and the top frame hears nothing until its own next report.

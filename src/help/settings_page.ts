@@ -3,8 +3,10 @@
 import { el } from "./dom.ts";
 import { site_rule_effects } from "./site_rule_effect.ts";
 import type { SiteRuleRow } from "../shared/match_pattern.ts";
-import { can_reset, create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
+import { can_reset, create_settings_session, GROUPS, is_changed, LAYER_LABEL, LAYER_TITLE, module_status_text, read_only_note, text_of_value, value_of_text } from "./settings_model.ts";
 import { parse_font_family } from "../shared/theme/font_family.ts";
+import { BROWSER_MODULE_STATUS_STORAGE_KEY } from "../shared/browser_module_protocol.ts";
+import type { ModuleStatus } from "../shared/browser_module_protocol.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import { FILE_WRITTEN_SETTINGS } from "../shared/settings_schema.ts";
 import type { Control, Field, SessionDeps, SettingsSession } from "./settings_model.ts";
@@ -269,6 +271,8 @@ function show_preview(preview: HTMLElement, name: string, value: unknown): void 
   if (family !== undefined) preview.style.fontFamily = family || (name === "font_family_mono" ? "monospace" : "");
 }
 
+const MODULE_SETTING = "browser_module";
+
 const RESET_TITLE_FILE_WRITTEN = "Remove the setting from settings.toml and drop your browser changes. A value set in a settings.d file stays: Reset drops only your browser changes, or with none it changes nothing and names the file. Change that value in the file.";
 const RESET_TITLE_BROWSER_ONLY = "Drop your browser changes. This setting is kept in the browser, and settings.toml stays as it is. The setting goes back to its default, or to the value in your config files.";
 
@@ -324,7 +328,7 @@ export function update_row(row: Row, field: Field): void {
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
 // Loads the settings into `container` and keeps them current: a change in another tab refreshes the rows the reader is not editing. The returned function stops the listening. The router calls it before it rebuilds the body.
-export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents, reload_key: string, resolve_keys: SessionDeps["resolve_keys"]): () => void {
+export function mount_settings(container: HTMLElement, send: SessionDeps["send"], engines: string[], storage_changed: StorageChangedEvents, reload_key: string, resolve_keys: SessionDeps["resolve_keys"], read_module_status?: () => Promise<ModuleStatus | undefined>): () => void {
   const rows = new Map<string, Row>();
   const show_site_rules = (fields: Field[], session: SettingsSession) => {
     const box = container.querySelector<HTMLElement>(`[data-setting="${SITE_RULES}"]`);
@@ -343,11 +347,16 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
           rows.set(field.row.name, row);
           row.widget?.write(field.row.value);
           update_row(row, field);
+          if (field.row.name === MODULE_SETTING && module_line) row.node.append(module_line);
           return row.node;
         }),
       );
     }
   };
+  // The browser module row also shows what became of the module's hello. It sits in the session area, which the settings listener ignores.
+  const module_line = read_module_status ? el("div", "desertfox-help-muted desertfox-settings-module-status") : undefined;
+  module_line?.setAttribute("role", "status");
+  const show_module_status = () => void read_module_status?.().then((status) => void (module_line && (module_line.textContent = module_status_text(status))));
   const session: SettingsSession = create_settings_session({
     send,
     engines,
@@ -363,6 +372,8 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
   });
   const listener = (changes: Record<string, unknown>, area: string) => {
     if (touches_settings(changes, area)) void session.refresh();
+    if (area === "session" && BROWSER_MODULE_STATUS_STORAGE_KEY in changes) show_module_status();
+    if (touches_settings(changes, area)) show_module_status();
   };
   let stopped = false;
   const stop = () => {
@@ -371,7 +382,10 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
   };
   void session.load().then((loaded) => {
     if (stopped) return;
-    if (loaded) storage_changed.addListener(listener);
+    if (loaded) {
+      storage_changed.addListener(listener);
+      show_module_status();
+    }
     else container.prepend(el("p", "desertfox-settings-error", "The settings could not be loaded."));
   });
   return stop;
