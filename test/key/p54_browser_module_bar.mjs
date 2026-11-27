@@ -62,7 +62,7 @@ export async function run_cases(context) {
     await open_tab("about:support");
     await focus_page();
     await poll_until("Top in the bar", async () => (await bar_now())?.right.includes("Top"), { timeout_ms: 8000 });
-    await press_keys("j", "j", "j", "j");
+    await press_keys("j");
     await poll_until("a percent in the bar", async () => (await bar_now())?.right.some((text) => /^\d+%$/.test(text)));
     await shot("locked-scroll");
     await close_selected_tab();
