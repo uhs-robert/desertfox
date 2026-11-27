@@ -1,5 +1,5 @@
 // Hints on the surfaces that grant (browser_module/desertfox-chrome-hints.js): a permission prompt and the downloads panel.
-// A pick of a control that denies, closes or only shows something clicks at once. A pick of a control that grants marks it, and only Enter typed by the user then clicks it.
+// A pick of a control that denies, closes or only shows something clicks at once. A pick of a control that grants or opens a file marks it, and only Enter typed by the user then clicks it.
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["hints", "toolbar"];
@@ -180,7 +180,7 @@ export async function run_cases(context) {
       }
     });
 
-  await downloads_case("in the downloads panel gB labels the rows, and a row pick opens its download at once through Firefox's own click", async () => {
+  await downloads_case("in the downloads panel gB labels the rows, and a row pick opens its download only after Enter, through Firefox's own click", async () => {
     await home("gh_downloads_open");
     // The open is recorded here, not run: the nested session must not start another application.
     await chrome(`(async () => {
@@ -195,9 +195,14 @@ export async function run_cases(context) {
     await press_keys("g", "B");
     const labels = await wait_labels(ROW_TARGETS("finished"), ["row", "history"], "the downloads panel");
     await take_shot("/tmp/desertfox-grant-hints-downloads.png");
+    const opened = () => chrome(`(async () => Services.desertfox_key_test_opened.length)()`);
     await press_keys(...label_for(labels, "row").split(""));
-    await poll_until("the row's download to open", async () => (await chrome(`(async () => Services.desertfox_key_test_opened.length)()`)) === 1, { timeout_ms: 5000 });
-    expect(!(await chrome(confirm_shown)), "a row pick waited for Enter");
+    await poll_until("the confirm mark to show", () => chrome(confirm_shown), { timeout_ms: 3000 });
+    await sleep(600);
+    expect((await opened()) === 0, "the pick alone opened the download");
+    await press_keys("-k", "Return");
+    await poll_until("the row's download to open", async () => (await opened()) === 1, { timeout_ms: 5000 });
+    expect(!(await chrome(confirm_shown)), "the mark stayed after Enter");
     await expect_ended("a row pick");
   });
 
