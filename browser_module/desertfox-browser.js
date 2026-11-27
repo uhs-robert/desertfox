@@ -23,6 +23,7 @@
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
+//   ime_in_field(win)          In the sandbox: whether the window's input state says a text field has the focus, which covers a field in a page of another process.
 //   type_key(win, key, still_holds)  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
 //   hold_keys(win, owner)      In the sandbox: claim every key of `win` for the feature named `owner`. A feature's key listener leaves a key alone while another owner holds its window.
@@ -801,6 +802,7 @@
       is_field,
       deep_active,
       focused_element,
+      ime_in_field,
       type_key,
       on_shut_down(fn) {
         shut_down_steps.push(fn);
