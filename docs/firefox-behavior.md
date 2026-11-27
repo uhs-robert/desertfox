@@ -468,9 +468,12 @@ Measured in Firefox 161.0 in the key test (`p55_panes`), through the pane keys, 
 | Focus the page, the other pane | `gBrowser.selectedBrowser.focus()`. Selecting the partner tab keeps the split and moves the focus to its page. |
 | Focus the sidebar | `SidebarController.isOpen`, `toggle()` (opens the panel shown last) and `SidebarController.browser.focus()`. |
 | Focus DevTools | `DevToolsShim` from `chrome://devtools-startup/content/DevToolsShim.sys.mjs`: `isInitialized()` says whether DevTools loaded, so the call never loads it, then `getToolboxForTab(tab)`. `toolbox.hostType` is `bottom`, `left` or `right` when docked and `window` when detached. `toolbox.focusTool(toolbox.currentToolId)` focuses the current tool's frame. |
+| Equal widths | The first panel's width set to half of the two panels' `getBoundingClientRect().width` together, written as for a resize, then `resetRightPanelWidth()`. |
+| Focus left or right | The panes compare the left edges of `document.getElementById(tab.linkedPanel)`. DevTools counts when `toolbox.hostType` is that side. The sidebar is on the left when `sidebar.position_start` differs from the window global `RTL_UI`, as `SidebarController` labels its own move button. |
 
 - One `E>` widened the first panel by 5 percent of the panel area, within 2 px, and `E<` narrowed it back. A widen of 20 steps stopped the first panel at the area minus its `min-width`.
 - After `Ej` with the console docked at the bottom, the window's focused window was the toolbox's.
+- `E=` after a widen made the two panels equal within 2 px. `E<Space><<<` narrowed the first panel three steps of 5 percent. `El` and `Eh` moved between the panes of a split.
 - Not measured: the sidebar focus, DevTools docked left or right, and a split in a private window.
 
 ## The Navigation API in a content script (jump-list)

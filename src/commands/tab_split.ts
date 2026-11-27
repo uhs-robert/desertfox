@@ -3,7 +3,7 @@ import { browser_tab_split_deps, focus_other_pane, swap_panes } from "../backgro
 import { browser_module_call } from "../background/browser_module_call.ts";
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import { MAX_RESIZE_STEPS, PANE_REGIONS } from "../shared/browser_module_protocol.ts";
+import { MAX_RESIZE_STEPS, PANE_DIRECTIONS, PANE_REGIONS } from "../shared/browser_module_protocol.ts";
 import { require_tab_id } from "./open_target.ts";
 
 define("tab.split_other", {
@@ -73,4 +73,21 @@ define("pane.focus", {
   bridge: false,
   runs_in: "background",
   run: (_ctx, args) => pane_call("pane.focus_region", { region: args.region }),
+});
+
+define("pane.equalize", {
+  label: "Equal panes",
+  intent: "Give the two panes of the split view equal widths. Needs the browser module.",
+  bridge: false,
+  runs_in: "background",
+  run: () => pane_call("pane.equalize"),
+});
+
+define("pane.focus_side", {
+  label: "Focus left or right",
+  intent: "Focus the pane, DevTools or sidebar on that side. Needs the browser module.",
+  params: [{ name: "direction", type: "enum", values: PANE_DIRECTIONS, description: { left: "Focus what is on the left.", right: "Focus what is on the right." } }],
+  bridge: false,
+  runs_in: "background",
+  run: (_ctx, args) => pane_call("pane.focus_direction", { direction: args.direction }),
 });

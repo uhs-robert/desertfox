@@ -1,4 +1,4 @@
-// The pane keys on the browser module (desertfox-panes.js): En opens a split with a new tab, EN splits with the next tab, Eu unsplits, E> and E< resize the left pane, Ej focuses the docked toolbox and Ex closes both tabs.
+// The pane keys on the browser module (desertfox-panes.js): En opens a split with a new tab, EN splits with the next tab, Eu unsplits, E> and E< resize the left pane, E= makes the panes equal, Eh and El move between panes, E<Space> holds the group, Ej and ES focus DevTools and the sidebar, and Ex closes both tabs.
 // Each key runs in the extension, which sends the request to the module, so every case also crosses the from-extension and from-module lists in a real Firefox.
 import { module_steps } from "./browser_module_steps.mjs";
 
@@ -52,6 +52,12 @@ export async function run_cases(context) {
     await poll_until("the module's refusal", async () => (await last_reply())?.error === "This tab is not in a split view");
   });
 
+  await run_case("El with no split view and nothing docked on the right is refused, as the sidebar sits on the left", async () => {
+    await select_page("p55_a");
+    await press_keys("El");
+    await poll_until("the module's refusal", async () => (await last_reply())?.error === "Nothing to focus on the right");
+  });
+
   await run_case("EN splits the tab with the tab after it", async () => {
     await select_page("p55_a");
     await press_keys("EN");
@@ -71,6 +77,38 @@ export async function run_cases(context) {
     await poll_until("the left pane to come back", async () => Math.abs((await widths()).first - start.first) <= 2);
     await press_keys("20E>");
     await poll_until("the left pane to stop at the limit", async () => Math.abs((await widths()).first - (start.area - start.min)) <= 2);
+  });
+
+  await run_case("E= gives the two panes equal widths after a resize", async () => {
+    await select_page("p55_a");
+    const second_width = () => chrome(`(async () => { const w = ${W}; return w.document.getElementById(w.gBrowser.tabpanels.splitViewPanels[1]).getBoundingClientRect().width; })()`);
+    const start = await widths();
+    // The case before leaves the left pane at its widest, so this one narrows it.
+    await press_keys("E<");
+    await poll_until("the left pane to narrow", async () => (await widths()).first < start.first - 10);
+    await press_keys("E=");
+    await poll_until("the panes to have equal widths", async () => Math.abs((await widths()).first - (await second_width())) <= 2);
+  });
+
+  await run_case("E<Space> holds the Pane group, so <<< narrows the left pane three steps", async () => {
+    await select_page("p55_a");
+    const start = await widths();
+    on_teardown(() => press_keys("-k", "Escape"));
+    await press_keys("E", " ");
+    for (let step = 1; step <= 3; step++) {
+      await press_keys("<");
+      await poll_until(`the left pane to narrow ${step} steps`, async () => Math.abs((await widths()).first - (start.first - step * 0.05 * start.area)) <= 2 * step);
+    }
+    await press_keys("-k", "Escape");
+  });
+
+  await run_case("Eh and El move the focus between the split panes", async () => {
+    await select_page("p55_a");
+    await press_keys("El");
+    await poll_until("the right pane to be selected", async () => (await tab_of("p55_b"))?.selected === true);
+    await settle_focus();
+    await press_keys("Eh");
+    await poll_until("the left pane to be selected", async () => (await tab_of("p55_a"))?.selected === true);
   });
 
   await run_case("Ej puts the focus in the docked toolbox", async () => {

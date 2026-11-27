@@ -7,7 +7,7 @@ const PANES_FILE = "desertfox-panes.js";
 const NOT_SUPPORTED = "Not supported in this Firefox version";
 const NOT_SPLIT = "This tab is not in a split view";
 
-type FakeTab = { name: string; pinned: boolean; hidden: boolean; splitview: FakeSplit | null; linkedBrowser: { focus(): void } };
+type FakeTab = { name: string; pinned: boolean; hidden: boolean; splitview: FakeSplit | null; linkedPanel: string; linkedBrowser: { focus(): void } };
 type FakeSplit = { tabs: FakeTab[]; unsplitTabs?(): void; close?(): void; resetRightPanelWidth?(): void };
 type AddSplit = (pair: FakeTab[], options: { insertBefore?: FakeTab }) => FakeSplit | null;
 type Reply = { reply_to: string; ok: boolean; error?: string };
@@ -19,9 +19,12 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
   const window = firefox.make_window({ private_window });
   window.load();
   const calls: string[] = [];
-  const tabs: FakeTab[] = names.map((name) => ({ name, pinned: false, hidden: false, splitview: null, linkedBrowser: { focus: () => calls.push(`focus page ${name}`) } }));
+  const tabs: FakeTab[] = names.map((name) => ({ name, pinned: false, hidden: false, splitview: null, linkedPanel: `tab-panel-${name}`, linkedBrowser: { focus: () => calls.push(`focus page ${name}`) } }));
 
-  const panel = { width: 500, min_width: "200px", attributes: new Map<string, string>(), inline_width: "" };
+  const panel = { width: 500, second_width: 494, min_width: "200px", attributes: new Map<string, string>(), inline_width: "" };
+  // Where each tab's panel shows, by its left edge. The first two sit side by side as a split shows them.
+  const panel_left = new Map(names.map((name, index) => [`tab-panel-${name}`, index * 500]));
+  const second_panel = { getBoundingClientRect: () => ({ width: panel.second_width }) };
   const first_panel = {
     getBoundingClientRect: () => ({ width: panel.width }),
     setAttribute: (name: string, value: string) => panel.attributes.set(name, value),
@@ -101,7 +104,7 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
       // Firefox's flow: a new picker tab beside the selected tab, split with it and selected.
       addTabSplitView: () => {
         calls.push("new split");
-        const picker: FakeTab = { name: "picker", pinned: false, hidden: false, splitview: null, linkedBrowser: { focus: () => calls.push("focus page picker") } };
+        const picker: FakeTab = { name: "picker", pinned: false, hidden: false, splitview: null, linkedPanel: "tab-panel-picker", linkedBrowser: { focus: () => calls.push("focus page picker") } };
         tabs.push(picker);
         make_split([selected, picker]);
         selected = picker;
@@ -109,10 +112,15 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
     } as Record<string, unknown>,
     getComputedStyle: () => ({ minWidth: panel.min_width }),
     closed: false,
+    RTL_UI: false,
   });
   Object.assign(window.win.document, {
     documentElement: { getAttribute: (name: string) => (name === "windowtype" ? "navigator:browser" : null) },
-    getElementById: (id: string) => (id === "panel-first" ? first_panel : null),
+    getElementById: (id: string) => {
+      if (id === "panel-first") return first_panel;
+      if (id === "panel-second") return second_panel;
+      return panel_left.has(id) ? { getBoundingClientRect: () => ({ left: panel_left.get(id) }) } : null;
+    },
   });
   const services = firefox.Services as Record<string, unknown>;
   services.focus = { activeWindow: win };
@@ -129,7 +137,7 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
     return rest;
   }
   const split_first_two = () => make_split([tab_at(0), tab_at(1)]);
-  return { firefox, win, gBrowser, tab: tab_at, calls, panel, tabpanels, sidebar, toolbox, shim, services, ask, split_first_two, select: (tab: FakeTab) => (selected = tab) };
+  return { firefox, win, gBrowser, tab: tab_at, calls, panel, panel_left, tabpanels, sidebar, toolbox, shim, services, ask, split_first_two, select: (tab: FakeTab) => (selected = tab) };
 }
 
 // Values made inside a vm context have that context's prototypes, which a strict deep equal tells apart.
@@ -378,6 +386,8 @@ test("every pane op refuses with no focused browser window, and never reaches an
     ["pane.focus_region", { region: "split" }],
     ["pane.focus_region", { region: "sidebar" }],
     ["pane.focus_region", { region: "devtools" }],
+    ["pane.focus_direction", { direction: "left" }],
+    ["pane.equalize", {}],
   ] as const;
   world.split_first_two();
   for (const active of [null, { ...world.win, closed: true }, { ...world.win, document: { documentElement: { getAttribute: () => "devtools:toolbox" } } }]) {
@@ -402,4 +412,74 @@ test("a private window takes pane ops only when DesertFox may run in private win
   assert.deepEqual(shut_out.calls, []);
   const allowed = pane_world({ private_window: true, private_access: true });
   assert.deepEqual(await allowed.ask("pane.focus_region", { region: "page" }), OK);
+});
+
+test("pane.equalize sets the first panel to half of the two panels together, as a resize writes it", async () => {
+  const world = pane_world();
+  world.split_first_two();
+  world.panel.width = 700;
+  world.panel.second_width = 294;
+  assert.deepEqual(await world.ask("pane.equalize"), OK);
+  assert.equal(world.panel.attributes.get("width"), "497");
+  assert.equal(world.panel.inline_width, "497px");
+  assert.deepEqual(world.calls, ["reset right", "aria"]);
+});
+
+test("pane.equalize refuses a tab outside a split view and a split whose panels are missing", async () => {
+  const world = pane_world();
+  assert.deepEqual(await world.ask("pane.equalize"), refused(NOT_SPLIT));
+  world.split_first_two();
+  world.tabpanels.splitViewPanels = ["panel-first", "gone"];
+  assert.deepEqual(await world.ask("pane.equalize"), refused(NOT_SUPPORTED));
+  world.tabpanels.splitViewPanels = ["panel-first"];
+  assert.deepEqual(await world.ask("pane.equalize"), refused(NOT_SUPPORTED));
+  assert.deepEqual(world.calls, []);
+});
+
+test("pane.focus_direction moves to the split pane on that side first, by where the panes show", async () => {
+  const world = pane_world();
+  world.split_first_two();
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), OK);
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), OK);
+  // A right-to-left window shows the first panel on the right.
+  world.panel_left.set("tab-panel-a", 500);
+  world.panel_left.set("tab-panel-b", 0);
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), OK);
+  assert.deepEqual(world.calls, ["select b", "focus page b", "select a", "focus page a", "select b", "focus page b"]);
+});
+
+test("pane.focus_direction with no pane that way goes to DevTools docked on that side, then the sidebar on that side", async () => {
+  const world = pane_world();
+  world.toolbox.hostType = "right";
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), OK);
+  // The sidebar sits at the start, which is the left in a left-to-right window. It opens when closed.
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), OK);
+  world.split_first_two();
+  // From the left pane, left has no pane, so the sidebar comes next.
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), OK);
+  assert.deepEqual(world.calls, ["focus tool webconsole", "toggle sidebar", "focus sidebar", "focus sidebar"]);
+});
+
+test("pane.focus_direction finds the sidebar's side from its start or end place and the window's direction", async () => {
+  const world = pane_world();
+  world.shim.initialized = false;
+  world.win.RTL_UI = true;
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), refused("Nothing to focus on the left"));
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), OK);
+  assert.deepEqual(world.calls, ["toggle sidebar", "focus sidebar"]);
+});
+
+test("pane.focus_direction refuses when nothing is on that side, and when the panes, the window direction or the tab's split field are missing", async () => {
+  const world = pane_world();
+  world.shim.initialized = false;
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), refused("Nothing to focus on the right"));
+  world.win.RTL_UI = undefined;
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), refused(NOT_SUPPORTED));
+  world.win.RTL_UI = false;
+  world.split_first_two();
+  world.panel_left.delete("tab-panel-b");
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), refused(NOT_SUPPORTED));
+  delete (world.tab(0) as Partial<FakeTab>).splitview;
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), refused(NOT_SUPPORTED));
+  assert.deepEqual(world.calls, []);
 });
