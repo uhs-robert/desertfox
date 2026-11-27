@@ -59,7 +59,8 @@ export async function run_cases(context) {
       const [a, b] = [await tab_of("p55_a"), await tab_of("p55_b")];
       return a.split > 0 && a.split === b.split;
     });
-  });
+    // The resize, focus and close cases act on this split.
+  }, { setup: true });
 
   await run_case("E> widens the left pane by 5 percent of the panel area, E< narrows it back, and a long widen stops at the other pane's min-width", async () => {
     await select_page("p55_a");
@@ -85,6 +86,19 @@ export async function run_cases(context) {
     expect(!/devtools/.test(await focused()), `the focus is in DevTools before Ej: ${await focused()}`);
     await press_keys("Ej");
     await poll_until("the focus to move into DevTools", async () => /devtools/.test(await focused()));
+  });
+
+  await run_case("ES opens the closed sidebar and puts the focus in it", async () => {
+    const sidebar_open = () => chrome(`(async () => ${W}.SidebarController.isOpen)()`);
+    on_teardown(() => chrome(`(async () => { const w = ${W}; if (w.SidebarController.isOpen) w.SidebarController.hide(); })()`));
+    await chrome(`(async () => { ${DEVTOOLS} for (const tab of ${W}.gBrowser.tabs) await gDevTools.closeToolboxForTab(tab); const w = ${W}; if (w.SidebarController.isOpen) w.SidebarController.hide(); })()`);
+    await poll_until("the sidebar to be closed", async () => (await sidebar_open()) === false);
+    await select_page("p55_a");
+    await press_keys("ES");
+    const focus_in_sidebar = () => chrome(`(async () => { const w = ${W}; const active = w.document.activeElement; return !!active && !!w.document.getElementById("sidebar")?.contains(active); })()`);
+    await poll_until("the sidebar to open with the focus in it", async () => (await sidebar_open()) && (await focus_in_sidebar()));
+    // The sidebar runs no content script and the module takes single keys only, so no E key reaches DesertFox from there. The next case needs the page focused.
+    await chrome(`(async () => { const w = ${W}; w.SidebarController.hide(); w.gBrowser.selectedBrowser.focus(); })()`);
   });
 
   await run_case("Ex closes both tabs of the split view", async () => {
