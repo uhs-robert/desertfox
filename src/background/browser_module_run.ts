@@ -7,6 +7,7 @@ import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts"
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
 import type { CallResult } from "./browser_module_call.ts";
+import { warn_and_go } from "../shared/swallow.ts";
 
 export type ModuleRunDeps = {
   read_keymap: () => Promise<CompiledKeymap | undefined>;
@@ -55,7 +56,8 @@ export const with_address_bar = (
       return await open_in_page(tab_id, frame_id, text);
     } catch (error) {
       if (await has_content_script(tab_id)) throw error;
-      if (!(await open_panel(tab_id, text))) {
+      // A panel that broke on our side still leaves the address bar.
+      if (!(await open_panel(tab_id, text).catch(warn_and_go("open_panel", false)))) {
         const opened = await call("address_bar.open", { text, tab_id });
         if (!opened.ok) throw error;
       }

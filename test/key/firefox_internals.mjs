@@ -60,6 +60,29 @@ const CHECKS = [
     })()`,
   },
   {
+    name: "ExtensionParent.apiManager has a listener for extension-browser-inserted",
+    used_for: "the browser module's command line panel emits it so Firefox wires the panel's browser to the extension, as for a toolbar popup",
+    code: `ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.has("extension-browser-inserted")`,
+  },
+  {
+    name: "ExtensionPopups.sys.mjs waits for XULFrameLoaderCreated, closes on DOMWindowClose and emits extension-browser-inserted",
+    used_for: "the browser module's command line panel copies these steps of Firefox's toolbar popup: it loads its page after XULFrameLoaderCreated and closes on the page's window.close()",
+    code: `(() => {
+      const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
+      const stream = NetUtil.newChannel({ uri: "resource:///modules/ExtensionPopups.sys.mjs", loadUsingSystemPrincipal: true }).open();
+      const text = NetUtil.readInputStreamToString(stream, stream.available());
+      return ["XULFrameLoaderCreated", "DOMWindowClose", "extension-browser-inserted"].every((name) => text.includes(name));
+    })()`,
+  },
+  {
+    name: "gBrowser.addTabsProgressListener and removeTabsProgressListener, nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT and Services.uuid.generateUUID",
+    used_for: "the browser module's command line panel closes when its tab loads another page, and keys the page it loads",
+    code: `(() => {
+      const gBrowser = Services.wm.getMostRecentWindow("navigator:browser").gBrowser;
+      return typeof gBrowser.addTabsProgressListener === "function" && typeof gBrowser.removeTabsProgressListener === "function" && Number.isInteger(Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT) && /^\\{[0-9a-f-]{36}\\}$/.test(Services.uuid.generateUUID().toString());
+    })()`,
+  },
+  {
     name: "window.document.getElementById(\"mainPopupSet\"), a panel's openPopup and moveToAnchor, and a browser's fixupAndLoadURIString",
     used_for: "the browser module's command line panel and the key test's reads of it",
     code: `(() => {

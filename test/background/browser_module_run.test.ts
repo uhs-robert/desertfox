@@ -225,6 +225,12 @@ test("the panel, then the address bar, stand in for the command line only on a t
   assert.equal(await with_address_bar(async () => "opened", async () => false, panel(true), call)(4, 0, "open "), "opened");
   assert.equal(calls.length, 1);
   assert.equal(panels.length, 3);
+  // A panel attempt that throws falls back too.
+  const broken = async () => {
+    throw new Error("storage is gone");
+  };
+  assert.deepEqual(await with_address_bar(fails, async () => false, broken, call)(4, 0, "open "), { ok: true, cancelled: true });
+  assert.deepEqual(calls.at(-1), ["address_bar.open", { text: "open ", tab_id: 4 }]);
   // The kind takes text, within its cap.
   assert.ok(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open " } }, EXTENSION_TO_MODULE_KINDS).ok);
   assert.deepEqual(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open ", tab_id: 4 } }, EXTENSION_TO_MODULE_KINDS), { ok: true, value: { v: 1, id: "a", kind: "address_bar.open", args: { text: "open ", tab_id: 4 } } });

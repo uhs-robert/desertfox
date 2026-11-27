@@ -46,6 +46,14 @@ test("a call resolves ok when the module answers ok, and cancels its timer", asy
   assert.equal(timers[0]!.cancelled, true);
 });
 
+test("a call hands on the text value of an ok answer", async () => {
+  const { calls } = make(matched);
+  const done = calls.call("cmdline_panel.open", { tab_id: 7 });
+  await flush();
+  calls.hear({ ...ok("x1"), value: "{}" });
+  assert.deepEqual(await done, { ok: true, value: "{}" });
+});
+
 test("a call carries the module's refusal text", async () => {
   const { calls } = make(matched);
   const done = calls.call("pane.resize", { steps: 1 });

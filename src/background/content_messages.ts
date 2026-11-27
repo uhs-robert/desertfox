@@ -84,7 +84,7 @@ export type ContentDeps = {
   media_quality: ReturnType<typeof create_media_quality>;
   browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active" | "bar_focus">;
   is_locked_tab: (tab_id: number) => Promise<boolean>;
-  cmdline_panel: Pick<CmdlinePanel, "opened" | "asker_of">;
+  cmdline_panel: Pick<CmdlinePanel, "opened" | "asker_of" | "closed">;
 };
 
 // The messages content scripts, bundles and the command line page send, one entry per type. A handler that checks its own sender or request (`inspect_pick`, `find_scan`) is `any`: the other guards can only answer nothing.
@@ -102,6 +102,8 @@ export const content_handlers = (deps: ContentDeps) => {
         return get_config().then(async (config) => {
           // The panel's line has no tab, and runs its command from the tab it was opened over.
           const panel_tab_id = sender.tab === undefined && request.from_line === true ? (await asker_of(sender))?.tab_id : undefined;
+          // Enter ends the panel's line. Its command can open a new panel, which the record must not outlive.
+          if (panel_tab_id !== undefined) await deps.cmdline_panel.closed(sender);
           const tab_id = sender.tab?.id ?? panel_tab_id;
           await macro_replay.wait_unless_from(tab_id);
           // A line drawn in the top frame for a subframe's keys runs its command in that subframe, if that frame is still there.
@@ -195,7 +197,15 @@ export const content_handlers = (deps: ContentDeps) => {
     },
     open_cmdline: { from: "any", run: (request, sender) => get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true, request.mode)) },
     open_panel_cmdline: { from: "any", run: (_request, sender) => get_config().then(() => deps.cmdline_panel.opened(sender)) },
-    record_cmdline: { from: "any", run: async (request, sender) => cmdline.record(request.text, (await asker_of(sender))?.incognito ?? sender.tab?.incognito === true) },
+    close_panel_cmdline: { from: "any", run: (_request, sender) => deps.cmdline_panel.closed(sender) },
+    record_cmdline: {
+      from: "any",
+      run: async (request, sender) => {
+        // A panel page whose record is gone cannot say whether its window is private, so its line is not kept.
+        const incognito = sender.tab ? sender.tab.incognito : (await asker_of(sender))?.incognito;
+        if (incognito !== undefined) await cmdline.record(request.text, incognito);
+      },
+    },
     complete_items: { from: "any", run: async (request, sender) => complete_items.answer(request.kind, await asker_of(sender)) },
     tab_rows_action: { from: "any", run: async (request, sender) => complete_items.tab_rows_action(request.action, request.tab_ids, await asker_of(sender), request.cookie_store_id) },
     open_help: {

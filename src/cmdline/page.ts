@@ -99,6 +99,9 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
 // The panel over a locked page: no host and no page under the line, so this page plays the host's part. It ends the line by closing its window, which closes the panel.
 // The background answers only the panel it asked the browser module for, once. A command line only: a locked page has no text to search.
 async function panel_line(): Promise<void> {
+  // Keys typed before the line has its data land in the field, and the line starts with them.
+  const input = document.querySelector<HTMLInputElement>("#line")!;
+  input.focus();
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
     ask_background<PanelCmdlineOpened | undefined>({ type: "open_panel_cmdline" }),
@@ -107,16 +110,18 @@ async function panel_line(): Promise<void> {
   // Firefox sizes the panel to the page's height, so the page takes only the height of its line and list.
   for (const element of [document.documentElement, document.body]) element.style.height = "auto";
   let to_line: ((message: HostToPage) => void) | undefined;
+  const close_window = () => window.close();
   tell_host = (message) => {
     // The keys go straight to this page, so the line takes them as soon as it opened.
     if (message.kind === "opened") to_line?.({ kind: "focused" });
-    else if (message.kind === "close") window.close();
+    // The line closes whether or not the background heard it.
+    else if (message.kind === "close") void ask_background({ type: "close_panel_cmdline" }).then(close_window, close_window);
     else if (message.kind === "submit") {
       void ask_background({ type: "run", invocations: [message.invocation], mode: "normal", from_line: true });
       window.close();
     } else if (message.kind === "list_headings") to_line?.({ kind: "headings", items: [] });
   };
-  start_line({ kind: "start", ticket: "", text: opened.text, tokens: [], mode: opened.mode }, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
+  start_line({ kind: "start", ticket: "", text: opened.text + input.value, tokens: [], mode: opened.mode }, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
     to_line = on_message;
   });
 }

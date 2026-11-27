@@ -142,7 +142,7 @@ export function panel_steps({ rdp, poll_until, press_keys }, { chrome }) {
   async function wait_open(what) {
     await poll_until(`${what} to open the command line panel`, async () => {
       const shown = await state();
-      return shown.state === "open" && shown.url?.endsWith("/cmdline.html") && shown.focused && (await in_panel(`(win) => win.document.hasFocus() && win.document.activeElement?.id === "line"`)) === true;
+      return shown.state === "open" && /\/cmdline\.html\?panel=[0-9a-f-]{36}$/.test(shown.url ?? "") && shown.focused && (await in_panel(`(win) => win.document.hasFocus() && win.document.activeElement?.id === "line"`)) === true;
     }, { timeout_ms: 8000 });
     // A key typed just after the panel took the focus can miss the line. A probe key that nothing binds shows when the keys arrive.
     const before = await line_text();

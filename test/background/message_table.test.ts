@@ -189,7 +189,7 @@ test("the guard of each content type is the one the chain had", () => {
     const expected = FRAME_TYPES.includes(type) ? "frame" : TAB_TYPES.includes(type) ? "tab" : "any";
     assert.equal(from, expected, type);
   }
-  assert.equal(Object.keys(content).length, 47);
+  assert.equal(Object.keys(content).length, 48);
 });
 
 test("a frame handler needs both a tab id and a frame id", () => {

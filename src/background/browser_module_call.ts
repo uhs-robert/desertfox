@@ -6,7 +6,8 @@ import { BROWSER_MODULE_STATUS_STORAGE_KEY, EXTENSION_TO_MODULE_KINDS } from "..
 export const NEEDS_MODULE = "Needs the browser module";
 export const MODULE_ANSWER_MS = 2000;
 
-export type CallResult = { ok: true } | { ok: false; error: string };
+// `value` is the module's text answer, foreign input for the caller to check.
+export type CallResult = { ok: true; value?: string } | { ok: false; error: string };
 
 export type ModuleCallDeps = {
   send: (kind: string, args: ModuleArgs, on_id?: (id: string) => void) => Promise<{ ok: true; id: string } | { ok: false; problem: string }>;
@@ -32,7 +33,7 @@ export function create_module_call(deps: ModuleCallDeps) {
 
   return {
     hear(reply: ModuleReply): void {
-      settle(reply.reply_to, reply.ok ? { ok: true } : { ok: false, error: reply.error ?? "The browser module refused" });
+      settle(reply.reply_to, reply.ok ? { ok: true, ...(reply.value !== undefined && { value: reply.value }) } : { ok: false, error: reply.error ?? "The browser module refused" });
     },
     // The module is gone or off: every call still waiting ends with NEEDS_MODULE.
     clear(): void {

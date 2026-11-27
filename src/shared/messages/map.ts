@@ -32,6 +32,7 @@ export type ContentRequests = Checked<{
   frame_cue: Entry<content.FrameCue, Void>;
   open_cmdline: Entry<content.OpenCmdline, content.CmdlineOpened | undefined>;
   open_panel_cmdline: Entry<content.OpenPanelCmdline, content.PanelCmdlineOpened | undefined>;
+  close_panel_cmdline: Entry<content.ClosePanelCmdline, Void>;
   record_cmdline: Entry<content.RecordCmdline, Void>;
   complete_items: Entry<content.CompleteItems, content.CompleteItemsAnswer | undefined>;
   tab_rows_action: Entry<content.TabRowsActionRequest, content.TabRowsActionAnswer | undefined>;

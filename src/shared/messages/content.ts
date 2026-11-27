@@ -125,6 +125,9 @@ export type OpenCmdline = {
 // From the command line page when the browser module opened it in a panel over a locked page, with no tab of its own. The background answers only its own top-level `cmdline.html` with no sender tab, and only for the panel it recorded before it asked the module.
 export type OpenPanelCmdline = { type: "open_panel_cmdline" };
 
+// From the panel's page as its line ends on Enter or Escape: the background forgets the panel. Only the page at the panel's own address is heard.
+export type ClosePanelCmdline = { type: "close_panel_cmdline" };
+
 // The panel line's data, and what the line starts with: `text` typed in, and `mode` the mode it opened from.
 export type PanelCmdlineOpened = CmdlineOpened & { text: string; mode: string };
 

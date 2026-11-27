@@ -1,7 +1,8 @@
 // DesertFox browser module, the command line panel: DesertFox's own command line page in a panel over a locked page (about: pages, the PDF viewer, Reader View). See docs/design/browser_module.md, "The command line panel".
 // It answers `cmdline_panel.open { tab_id }`. The panel holds a remote <browser> that loads the fixed page `cmdline.html` of DesertFox, built as Firefox builds an extension's toolbar popup (ExtensionPopups.sys.mjs),
-// so the page runs in DesertFox's own process with DesertFox's principal, never the system principal. The extension names only the tab. The address is a constant here.
-// The page does the rest through the extension's own messages: the background admits it by its address and the panel it recorded before this request.
+// so the page runs in DesertFox's own process with DesertFox's principal, never the system principal. The extension names only the tab. The address is a constant here, with a random key this file makes.
+// The reply carries the key and the keys typed since the line was asked for, as JSON text. The page does the rest through the extension's own messages: the background admits it by its address, key included,
+// so no other copy of the page can act as the panel.
 // In a window it asks the core to load it into the core sandbox, where it starts once per process.
 
 (function desertfox_browser_module_cmdline_panel(scope) {
@@ -35,6 +36,8 @@
 
     // Each window's open panel, by its close function.
     const open_panels = new Map();
+    // A page that failed to load once fails again, so later requests are refused and the extension opens the address bar instead.
+    let load_failed = false;
 
     const tab_id_of = (tab) => ExtensionParent.apiManager.global.tabTracker.getId(tab);
 
@@ -48,10 +51,12 @@
     function open(win, extension) {
       const doc = win.document;
       const popup_set = doc.getElementById("mainPopupSet");
+      if (load_failed) return { ok: false, error: "The command line page did not load in this session" };
       if (!popup_set) return { ok: false, error: "This Firefox has no place for the panel" };
       if (open_panels.has(win) || doc.getElementById(PANEL_ID)) return { ok: false, error: "The command line is already open" };
       const opener = win.gBrowser.selectedBrowser;
       const opener_tab = win.gBrowser.selectedTab;
+      const key = Services.uuid.generateUUID().toString().slice(1, -1);
       const panel = doc.createXULElement("panel");
       panel.id = PANEL_ID;
       panel.setAttribute("class", "panel-no-padding");
@@ -92,12 +97,19 @@
         if (panel.state !== "closed") panel.hidePopup();
       };
       const on_tab_select = () => close();
+      // The line belongs to the page it opened over, so a load in that tab ends it. A move within the page (a fragment, pushState) does not.
+      const on_location = {
+        onLocationChange(browser, progress, _request, _location, flags) {
+          if (browser === opener && progress.isTopLevel && !(flags & Components.interfaces.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT)) close();
+        },
+      };
       const on_window_close = (event) => {
         // The page's `window.close()`: Enter and Escape end the line this way.
         event.preventDefault();
         close();
       };
       win.gBrowser.tabContainer.addEventListener("TabSelect", on_tab_select);
+      win.gBrowser.addTabsProgressListener(on_location);
       browser.addEventListener("DOMWindowClose", on_window_close, true);
       open_panels.set(win, close);
       panel.addEventListener(
@@ -105,6 +117,7 @@
         () => {
           open_panels.delete(win);
           win.gBrowser.tabContainer.removeEventListener("TabSelect", on_tab_select);
+          win.gBrowser.removeTabsProgressListener(on_location);
           browser.removeEventListener("DOMWindowClose", on_window_close, true);
           browser.messageManager?.removeMessageListener(RESIZED_MESSAGE, on_resized);
           panel.remove();
@@ -119,13 +132,14 @@
         browser.messageManager.addMessageListener(RESIZED_MESSAGE, on_resized);
         browser.messageManager.loadFrameScript(BROWSER_CONTENT_SCRIPT, false, true);
         browser.messageManager.sendAsyncMessage("Extension:InitBrowser", { allowScriptsToClose: true, fixedWidth: true, maxWidth: 10000, maxHeight: 10000, stylesheets: [] });
-        browser.fixupAndLoadURIString(extension.baseURI.resolve(PAGE), { triggeringPrincipal: extension.principal });
+        browser.fixupAndLoadURIString(`${extension.baseURI.resolve(PAGE)}?panel=${key}`, { triggeringPrincipal: extension.principal });
       };
       const load_or_close = () => {
         try {
           load();
         } catch (error) {
           core.log_once(`the command line page did not load: ${error}`);
+          load_failed = true;
           close();
         }
       };
@@ -139,11 +153,13 @@
           if (!extension.remote) load_or_close();
           // The page's input takes the focus from the browser, which must have it first.
           browser.focus();
+          // The keys now reach the panel, so the page under it needs no hold. Keys typed since the reply below are dropped.
+          core.take_held_keys(win, true);
         },
         { once: true },
       );
       panel.openPopup(opener, { position: "overlap", x: 0, y: page_box().height - height });
-      return { ok: true };
+      return { ok: true, value: JSON.stringify({ key, typed: core.take_held_keys(win, false) }) };
     }
 
     core.register_kind("cmdline_panel.open", ({ tab_id }) => {

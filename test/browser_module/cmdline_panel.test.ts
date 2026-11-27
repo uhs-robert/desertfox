@@ -6,7 +6,9 @@ import { create_firefox, source_of } from "./fake_firefox.ts";
 
 const PANEL_FILE = "desertfox-cmdline-panel.js";
 const BASE_URI = "moz-extension://uuid/";
-type Reply = { reply_to: string; ok: boolean; error?: string };
+const KEY = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const OPENED = { ok: true, value: JSON.stringify({ key: KEY, typed: "" }) };
+type Reply = { reply_to: string; ok: boolean; error?: string; value?: string };
 type Listener = (event: { preventDefault(): void; data?: unknown }) => void;
 
 // Just enough of a XUL element: attributes, style, listeners and children.
@@ -64,6 +66,10 @@ function panel_world({ private_window = false, private_access = false, enabled =
   Object.defineProperty(gBrowser, "selectedTab", { get: () => selected });
   Object.defineProperty(gBrowser, "selectedBrowser", { get: () => selected.linkedBrowser });
   gBrowser.tabContainer = tab_container;
+  const progress_listeners = new Set<{ onLocationChange(browser: unknown, progress: { isTopLevel: boolean }, request: unknown, location: unknown, flags: number): void }>();
+  gBrowser.addTabsProgressListener = (listener: never) => void progress_listeners.add(listener);
+  gBrowser.removeTabsProgressListener = (listener: never) => void progress_listeners.delete(listener);
+  const location_change = (browser: unknown, flags = 0) => progress_listeners.forEach((listener) => listener.onLocationChange(browser, { isTopLevel: true }, null, null, flags));
   const loaded: { url: string; principal: unknown }[] = [];
   const messages: unknown[] = [];
   Object.assign(window.win.document, {
@@ -102,6 +108,7 @@ function panel_world({ private_window = false, private_access = false, enabled =
   });
   const services = firefox.Services as Record<string, unknown>;
   services.focus = { activeWindow: window.win };
+  services.uuid = { generateUUID: () => ({ toString: () => `{${KEY}}` }) };
   let next_id = 0;
   async function ask(args: Record<string, unknown>): Promise<Omit<Reply, "reply_to">> {
     const id = `r${next_id++}`;
@@ -114,7 +121,7 @@ function panel_world({ private_window = false, private_access = false, enabled =
   }
   const panel = () => created.find((element) => element.localName === "panel");
   const browser = () => created.find((element) => element.localName === "browser") as (ReturnType<typeof fake_element> & { resized(height: unknown): void }) | undefined;
-  return { firefox, extension, ask, log, loaded, messages, emitted, panel, browser, tab_container, select_b: () => void (selected = tab_b), created };
+  return { firefox, extension, ask, log, loaded, messages, emitted, panel, browser, tab_container, select_b: () => void (selected = tab_b), created, opener, other_browser: tab_b.linkedBrowser, location_change, progress_listeners };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -122,7 +129,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 test("the panel opens over the selected tab with DesertFox's own page, its principal and its process, and only after it is shown", async () => {
   const world = panel_world();
   const reply = await world.ask({ tab_id: 7 });
-  assert.deepEqual(reply, { ok: true });
+  assert.deepEqual(reply, OPENED);
   const browser = world.browser()!;
   assert.equal(browser.attributes.get("remoteType"), "extension");
   assert.equal(browser.attributes.get("initialBrowsingContextGroupId"), 42);
@@ -131,7 +138,8 @@ test("the panel opens over the selected tab with DesertFox's own page, its princ
   assert.deepEqual(world.loaded, []);
   browser.fire("XULFrameLoaderCreated");
   await settle();
-  assert.deepEqual(world.loaded, [{ url: `${BASE_URI}cmdline.html`, principal: world.extension.principal }]);
+  // The key in the address is the one the reply carries, so the background admits this page alone.
+  assert.deepEqual(world.loaded, [{ url: `${BASE_URI}cmdline.html?panel=${KEY}`, principal: world.extension.principal }]);
   assert.deepEqual(world.emitted, [["extension-browser-inserted", browser]]);
   assert.ok(world.panel()!.children.includes(browser), "the browser joined the panel when it was shown");
   assert.ok(world.log.includes("focus panel browser"));
@@ -169,7 +177,7 @@ test("it refuses a tab that is not selected, a second panel, a window it may not
     const world = panel_world();
     assert.deepEqual(await world.ask({ tab_id: 8 }), { ok: false, error: "The tab that asked is no longer selected" });
     assert.equal(world.created.length, 0);
-    assert.deepEqual(await world.ask({ tab_id: 7 }), { ok: true });
+    assert.deepEqual(await world.ask({ tab_id: 7 }), OPENED);
     assert.deepEqual(await world.ask({ tab_id: 7 }), { ok: false, error: "The command line is already open" });
   }
   assert.equal((await panel_world({ enabled: false }).ask({ tab_id: 7 })).ok, false);
@@ -177,4 +185,26 @@ test("it refuses a tab that is not selected, a second panel, a window it may not
   assert.equal((await panel_world({ private_window: true, private_access: true }).ask({ tab_id: 7 })).ok, true);
   assert.deepEqual(await panel_world({ popup_set: false }).ask({ tab_id: 7 }), { ok: false, error: "This Firefox has no place for the panel" });
   assert.deepEqual(await panel_world().ask({ tab_id: "7" }), { ok: false, error: "cmdline_panel.open tab_id has the wrong shape" });
+});
+
+test("a load in the tab under the panel closes it, and a move within the page does not", async () => {
+  const world = panel_world();
+  await world.ask({ tab_id: 7 });
+  world.location_change(world.other_browser);
+  world.location_change(world.opener, 1);
+  assert.equal(world.panel()!.state, "open");
+  world.location_change(world.opener);
+  assert.equal(world.panel()!.state, "closed");
+  assert.equal(world.progress_listeners.size, 0, "the listener left with the panel");
+});
+
+test("a page that failed to load once refuses later panels, so the extension opens the address bar", async () => {
+  const world = panel_world();
+  await world.ask({ tab_id: 7 });
+  const browser = world.browser()!;
+  delete (browser as { messageManager?: unknown }).messageManager;
+  browser.fire("XULFrameLoaderCreated");
+  await settle();
+  assert.equal(world.panel()!.state, "closed");
+  assert.deepEqual(await world.ask({ tab_id: 7 }), { ok: false, error: "The command line page did not load in this session" });
 });

@@ -283,7 +283,11 @@ const complete_items = create_complete_items({
 
 track_window_focus(browser.storage.session, browser.windows);
 // Focusing another window changes the tab in view without a `tabs.onActivated`.
-browser.windows.onFocusChanged.addListener((window_id) => void last_used_tabs.focused(window_id));
+browser.windows.onFocusChanged.addListener((window_id) => {
+  void last_used_tabs.focused(window_id);
+  // Firefox closes the panel when its window loses the focus.
+  void cmdline_panel.focused(window_id).catch(warn_and_go("cmdline_panel.focused"));
+});
 browser.windows.onRemoved.addListener((window_id) => void last_used_tabs.window_removed(window_id));
 
 const inspect_relay = create_inspect_relay(browser.storage.session, Date.now);
@@ -521,6 +525,8 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   // A new tab's first load reports only `status`, with the address already on the tab.
   if ((change.url !== undefined || change.status === "loading") && tab.url !== undefined) void site_zoom.navigated(tab_id, tab.url, tab.incognito);
   void cmdline.forget_opener_on_navigation(tab_id, change);
+  // The module closes the panel when its tab loads another page.
+  if (change.status === "loading") void cmdline_panel.forget(tab_id).catch(warn_and_go("cmdline_panel.forget"));
   if (change.status === "loading") void external_editor.orphan(tab_id).catch(warn_and_go("external_editor.orphan"));
   void jump_leave.updated({ tab_id, incognito: tab.incognito, url: tab.url, status: tab.status }, change).catch(warn_and_go("jump_leave.updated"));
   if (change.status === "loading") void inspect_relay.forget(tab_id);
@@ -552,6 +558,7 @@ browser.history.onVisitRemoved.addListener((removal) => void clear_on_history_re
 browser.tabs.onActivated.addListener(({ tabId, windowId, previousTabId }) => {
   void previous_tabs.activated(windowId, previousTabId);
   void last_used_tabs.activated(tabId, windowId);
+  void cmdline_panel.left(windowId).catch(warn_and_go("cmdline_panel.left"));
 });
 
 browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
