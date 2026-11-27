@@ -161,8 +161,8 @@ const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
-  // A message of the page for the background.
-  page_call: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
+  // A message of the page for the background. `document_id` names the page's document (chrome's inner window id), so a call from a document that a load left is refused.
+  page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`.

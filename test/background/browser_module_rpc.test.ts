@@ -19,7 +19,7 @@ const TAB = { id: 7, url: PDF, index: 0, highlighted: false, active: true, pinne
 // The real base channel and the real message table, with a fake session and a handler table that records what reaches it.
 function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Partial<Record<SnapshotPart, unknown>> } = {}) {
   const data = new Map<string, unknown>();
-  const config = { on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: '{"keymap":1}', config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
+  const config = { before_send: undefined as ((id: string) => void) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: '{"keymap":1}', config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
   const session = {
     get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, structuredClone(data.get(name))])),
     set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value))),
@@ -43,7 +43,8 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
   const rpc = create_browser_module_rpc({
     session: session as never,
     is_on: async () => config.on,
-    send: (kind, args) => module.send(kind, args),
+    // `before_send` runs where the module could first see the push: a fast reply, or a load during the send.
+    send: (kind, args, on_id) => module.send(kind, args, (id) => (config.before_send?.(id), on_id?.(id))),
     get_tab: async (tab_id) => config.tabs.find((tab) => tab.id === tab_id),
     dispatch: dispatch(handlers, () => false),
     read_part: Object.fromEntries(SNAPSHOT_PART_NAMES.map((part) => [part, async () => config.parts[part]])) as never,
@@ -83,7 +84,7 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
 }
 
 let ids = 0;
-const call = (message: unknown, patch: Record<string, unknown> = {}) => ({ v: V, id: `c${++ids}`, kind: "page_call", args: { tab_id: 7, message: typeof message === "string" ? message : JSON.stringify(message), ...patch } });
+const call = (message: unknown, patch: Record<string, unknown> = {}) => ({ v: V, id: `c${++ids}`, kind: "page_call", args: { tab_id: 7, document_id: 1, message: typeof message === "string" ? message : JSON.stringify(message), ...patch } });
 
 test("a page call reaches the message table with a sender built from the browser's facts, and its answer comes back in the reply", async () => {
   const { seen, answers, from_module, page_replies, base_replies, data } = setup();
@@ -95,7 +96,7 @@ test("a page call reaches the message table with a sender built from the browser
   assert.deepEqual(seen[0]!.sender, { tab: TAB, frameId: 0, url: PDF }, "no extension id, frame 0, the tab's own address");
   assert.deepEqual(page_replies(), [{ reply_to: request.id, answer: { value: "yanked text" } }]);
   assert.equal(base_replies().length, 1, "one reply carries the answer");
-  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "7": PDF }, "the tab is marked locked");
+  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "7": { url: PDF, document_id: 1 } }, "the tab is marked locked, with its document");
 });
 
 test("a spoofed tab id, frame, sender or address inside the message is ignored", async () => {
@@ -283,7 +284,7 @@ test("a push to a subframe, a push too large and a push to a page that left are 
   await new Promise((resolve) => setImmediate(resolve));
   await rpc.tab_loading(7);
   await left;
-  await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
+  await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 2 })]);
   const closed = assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /closed/);
   await new Promise((resolve) => setImmediate(resolve));
   await rpc.tab_removed(7);
@@ -301,8 +302,8 @@ test("a reload of the same address unmarks the tab, and it counts as locked agai
   await rpc.tab_loading(7);
   await waiting;
   assert.equal(await rpc.is_locked_tab(7), false, "not ready before the new document calls");
-  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), {});
-  await from_module([call({ type: "mode_changed", mode: "normal" })]);
+  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "7": { left: [1] } }, "the load keeps the document it left");
+  await from_module([call({ type: "mode_changed", mode: "normal" }, { document_id: 2 })]);
   assert.equal(await rpc.is_locked_tab(7), true);
 });
 
@@ -323,7 +324,7 @@ test("a removal and a mark that run at once keep each other's tab", async () => 
   const removing = rpc.tab_removed(7);
   const marking = from_module([call({ type: "run", invocations: [], mode: "normal" }, { tab_id: 8 })]);
   await Promise.all([removing, marking]);
-  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "8": "about:reader?url=x" });
+  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "8": { url: "about:reader?url=x", document_id: 1 } });
 });
 
 test("each snapshot part is written whole, rewritten on its own change, and removed when it fails its cap", async () => {
@@ -344,4 +345,55 @@ test("each snapshot part is written whole, rewritten on its own change, and remo
   config.parts.theme = "not a theme";
   await rpc.sync();
   assert.equal(data.has(SNAPSHOT_PARTS.theme.key), false);
+});
+
+test("a reply that comes before the send returns settles the push", async () => {
+  const { rpc, from_module, config } = setup();
+  await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
+  // The reply lands while the push is still being written.
+  config.before_send = (id) => queueMicrotask(() => rpc.push_answered({ v: V, reply_to: id, ok: true, value: JSON.stringify({ value: "fast" }) }));
+  assert.equal(await rpc.send_to_locked_tab(7, { type: "get_selection" }), "fast");
+});
+
+test("a load or a setting off while a push is being sent rejects it and leaves no wait behind", async () => {
+  const { rpc, from_module, config, pushes, answer_push } = setup();
+  await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
+  config.before_send = () => void rpc.tab_loading(7);
+  await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
+  config.before_send = undefined;
+  // A reply to the push that was cut off settles nothing and throws nothing.
+  await answer_push(pushes().at(-1)!.id, { value: JSON.stringify({ value: "late" }) });
+  await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 2 })]);
+  config.before_send = () => {
+    config.on = false;
+    rpc.storage_changed({ [CONFIG_STATUS_STORAGE_KEY]: {} }, "local");
+  };
+  await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /setting is off/);
+});
+
+test("a call the old document sent before a reload of the same address cannot mark the tab again", async () => {
+  const { rpc, from_module, seen, base_replies } = setup();
+  await from_module([call({ type: "mode_changed", mode: "normal" }, { document_id: 41 })]);
+  await rpc.tab_loading(7);
+  const stale = call({ type: "mode_changed", mode: "normal" }, { document_id: 41 });
+  await from_module([stale]);
+  assert.equal(await rpc.is_locked_tab(7), false, "the old document's call leaves the tab unmarked");
+  assert.equal(seen.length, 1, "and never reaches a handler");
+  assert.equal(base_replies().find((reply) => reply.reply_to === stale.id)?.ok, false);
+  await from_module([call({ type: "mode_changed", mode: "normal" }, { document_id: 42 })]);
+  assert.equal(await rpc.is_locked_tab(7), true, "the new document's first call marks it");
+  assert.equal(seen.length, 2);
+});
+
+test("an answer that settles after the setting went off carries no page text", async () => {
+  const { answers, from_module, base_replies, config } = setup();
+  answers["register_read"] = async () => {
+    config.on = false;
+    return "page text";
+  };
+  const request = call({ type: "register_read", name: "a" });
+  await from_module([request]);
+  const reply = base_replies().find((message) => message.reply_to === request.id);
+  assert.equal(reply?.ok, false);
+  assert.equal(reply?.value, undefined);
 });

@@ -78,7 +78,7 @@ export type BrowserModuleDeps = {
   check_args: CheckCommandArgs;
   // The allow list of each direction. The protocol's lists are empty now, so a test passes its own.
   kinds?: { from_module: KindTable; from_extension: KindTable };
-  // One handler per kind the module may request. Handlers run outside the queue, so one may await `send`, and its reply is written when it settles. The text it gives is the reply's `value`, within its kind's limit. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
+  // One handler per kind the module may request. Handlers run outside the queue and at the same time, so one may await `send`. Each reply is written when its handler settles, so replies can land in any order, and the module matches each to its request by `reply_to`. The text it gives is the reply's `value`, within its kind's limit. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
   handlers: Record<string, (args: ModuleArgs) => Promise<string | void>>;
   // Hears each reply the module sends to a request of the extension.
   on_reply?: (reply: ModuleReply) => void;
@@ -127,6 +127,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const kinds = deps.kinds ?? { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS };
   // Ids of messages of the module that were handled, kept to skip them when the module rewrites its list. A copy: the replies in the extension's own list say the same for the requests that expect one.
   const handled = new Set<string>();
+  // Ids of requests whose handler has not settled. Kept apart from `handled`, whose oldest ids drop, so a rewrite never starts a running request again.
+  const running = new Set<string>();
   let sent = 0;
 
   const read_outbox = async (): Promise<ModuleMessage[]> => {
@@ -161,7 +163,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (!checked.ok) return;
     const outbox = await read_outbox();
     const answered = new Set(outbox.flatMap((message) => ("reply_to" in message ? [message.reply_to] : [])));
-    const seen = (id: string) => handled.has(id) || answered.has(id);
+    const seen = (id: string) => handled.has(id) || running.has(id) || answered.has(id);
     const replies: ModuleMessage[] = [];
     for (const message of checked.value.messages) {
       if ("reply_to" in message) {
@@ -169,8 +171,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
         handled.add(`reply:${message.reply_to}`);
       } else if (!seen(message.id)) {
         handled.add(message.id);
+        running.add(message.id);
         void run_request(message)
-          .then((reply) => reply && enqueue(async () => write_outbox([...(await read_outbox()), reply])))
+          .finally(() => running.delete(message.id))
+          // A reply that settles after the setting went off is dropped: the off sync removed the list, and the reply can hold page text.
+          .then((reply) => reply && enqueue(async () => (await deps.is_on()) && write_outbox([...(await read_outbox()), reply])))
           .catch(warn_and_go("browser_module.reply"));
       }
     }
@@ -225,11 +230,13 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   };
 
   // The extension starts a call. The kind must be on the extension's allow list and the args must pass its check. Nothing is written while the setting is off. The id comes back so a caller can match the reply.
-  const send_now = async (kind: string, args: ModuleArgs): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
+  // `on_id` hears the id before the request is written, so a caller can wait for its reply before the module can answer.
+  const send_now = async (kind: string, args: ModuleArgs, on_id?: (id: string) => void): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
     if (!(await deps.is_on())) return { ok: false, problem: "the browser module setting is off" };
     const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args };
     const checked = validate_message(request, kinds.from_extension);
     if (!checked.ok) return checked;
+    on_id?.(request.id);
     await write_outbox([...(await read_outbox()), checked.value]);
     return { ok: true, id: request.id };
   };
@@ -241,7 +248,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // Run at each background start, and after anything that changes the setting, the keymap or the switch.
     sync,
     tab_changed,
-    send: (kind: string, args: ModuleArgs = {}) => enqueue(() => send_now(kind, args)),
+    send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => void) => enqueue(() => send_now(kind, args, on_id)),
     // Ask for a read. Each has its own limiter, which decides when it runs.
     read_hello: request_hello_read,
     read_messages: request_messages_read,

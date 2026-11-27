@@ -354,3 +354,81 @@ test("the message reads do not use up the hello's second", async () => {
   await flush();
   assert.equal(status_of(data), "matched", "the first hello read runs at once, whatever the message reads did");
 });
+
+// A module whose `ask` handler waits until the test settles it, with a clock that never makes the limiter wait.
+function overlapping() {
+  const data = new Map<string, unknown>();
+  const runs: string[] = [];
+  const pending = new Map<string, (value: string) => void>();
+  const state = { on: true, clock: 0 };
+  const module = create_browser_module({
+    session: {
+      get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, structuredClone(data.get(name))])),
+      set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value))),
+      remove: async (keys: string | string[]) => void [keys].flat().forEach((key) => data.delete(key)),
+    } as never,
+    is_on: async () => state.on,
+    read_disabled: async () => false,
+    read_keymap: async () => undefined,
+    read_tab_records: async () => ({}),
+    check_args: real_check,
+    kinds: TEST_KINDS,
+    handlers: {
+      ask: (args) => new Promise<string>((resolve) => void (runs.push(String(args.axis)), pending.set(String(args.axis), resolve))),
+      push: async (args) => void runs.push(`push ${String(args.n)}`),
+    },
+    now: () => (state.clock += MESSAGE_MIN_GAP_MS),
+    later: () => assert.fail("the limiter waited"),
+  });
+  const settle = async () => {
+    for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+  };
+  const read = async (messages: unknown[]) => {
+    data.set(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, messages);
+    module.read_messages();
+    await settle();
+  };
+  const replies = () => ((data.get(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY) ?? []) as Record<string, unknown>[]).filter((message) => "reply_to" in message);
+  return { data, runs, pending, state, read, settle, replies };
+}
+const ask_of = (id: string, axis: "x" | "y") => ({ v: 1, id, kind: "ask", args: { axis } });
+
+test("two handlers run at once, their replies land in the order they settle, each by reply_to, and neither runs twice", async () => {
+  const { runs, pending, read, settle, replies } = overlapping();
+  const list = [ask_of("first", "x"), ask_of("second", "y")];
+  await read(list);
+  assert.deepEqual(runs, ["x", "y"], "the second started while the first still ran");
+  pending.get("y")!("answer y");
+  await settle();
+  // The module rewrites its list while the first still runs.
+  await read(list);
+  pending.get("x")!("answer x");
+  await settle();
+  await read(list);
+  assert.deepEqual(runs, ["x", "y"], "neither ran twice");
+  assert.deepEqual(replies(), [
+    { v: 1, reply_to: "second", ok: true, value: "answer y" },
+    { v: 1, reply_to: "first", ok: true, value: "answer x" },
+  ]);
+});
+
+test("a running request stays known after more than the remembered ids pass, so a rewrite does not start it again", async () => {
+  const { runs, pending, read, settle, replies } = overlapping();
+  const slow = ask_of("slow", "x");
+  await read([slow]);
+  for (let batch = 0; batch < 6; batch++) await read(Array.from({ length: 15 }, (_, index) => ({ v: 1, id: `p${batch}-${index}`, kind: "push", args: { n: index } })));
+  await read([slow]);
+  assert.equal(runs.filter((run) => run === "x").length, 1);
+  pending.get("x")!("done");
+  await settle();
+  assert.deepEqual(replies().map((reply) => reply.reply_to), ["slow"]);
+});
+
+test("a reply that settles after the setting went off is not written", async () => {
+  const { data, pending, read, settle, state } = overlapping();
+  await read([ask_of("late", "x")]);
+  state.on = false;
+  pending.get("x")!("page text");
+  await settle();
+  assert.equal(data.has(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY), false);
+});

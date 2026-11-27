@@ -8,11 +8,14 @@ import { BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, CONFIG_STATUS_STORAGE_KEY } fro
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
-import { keep_chain } from "../shared/swallow.ts";
+import { best_effort, keep_chain } from "../shared/swallow.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 type Sender = browser.runtime.MessageSender;
 type Sent = { ok: true; id: string } | { ok: false; problem: string };
+// What the locked tabs key holds per tab: the address and document of the page code's first call, and the documents that later loads left.
+type LockedTab = { url?: string; document_id?: number; left?: number[] };
+const LEFT_DOCUMENTS_KEPT = 8;
 
 // Whether both settings are on in the stored config status, for the reason `module_setting_on` gives.
 export async function pages_setting_on(storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> {
@@ -23,8 +26,8 @@ export async function pages_setting_on(storage: Pick<typeof browser.storage.loca
 export type BrowserModuleRpcDeps = {
   session: SessionStorage;
   is_on: () => Promise<boolean>;
-  // The base channel's `send`.
-  send: (kind: string, args: ModuleArgs) => Promise<Sent>;
+  // The base channel's `send`. `on_id` hears the request id before the module can see the request.
+  send: (kind: string, args: ModuleArgs, on_id?: (id: string) => void) => Promise<Sent>;
   get_tab: (tab_id: number) => Promise<browser.tabs.Tab | undefined>;
   // The message table's `dispatch`, with no sender counted as an extension page.
   dispatch: (message: unknown, sender: Sender) => Promise<unknown> | undefined | void;
@@ -79,21 +82,29 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     return run;
   };
 
-  const read_locked = async (): Promise<Record<string, string>> => {
+  const read_locked = async (): Promise<Record<string, LockedTab>> => {
     const stored: unknown = (await deps.session.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY))[BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY];
-    return typeof stored === "object" && stored !== null && !Array.isArray(stored) ? (stored as Record<string, string>) : {};
+    return typeof stored === "object" && stored !== null && !Array.isArray(stored) ? (stored as Record<string, LockedTab>) : {};
   };
 
-  // A tab is locked from its document's first call until its next top-level load. The next document marks it again with its own first call.
-  const mark_locked = (tab_id: number, url: string): Promise<void> =>
+  // A tab is locked from its document's first call until its next top-level load. The next document marks it again with its own first call. A call from a document that a load left is refused, so a call the old document sent before a reload of the same address cannot mark the tab again. False when the call may not run.
+  const mark_locked = (tab_id: number, url: string, document_id: number): Promise<boolean> =>
     in_turn(async () => {
-      if (!(await deps.is_on())) return;
+      if (!(await deps.is_on())) return false;
       const locked = await read_locked();
-      if (locked[tab_id] === url || (!(tab_id in locked) && Object.keys(locked).length >= MAX_STATE_TABS)) return;
-      await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: url } });
+      const entry = locked[tab_id] ?? {};
+      if (entry.left?.includes(document_id)) return false;
+      if ((entry.url === url && entry.document_id === document_id) || (!(tab_id in locked) && Object.keys(locked).length >= MAX_STATE_TABS)) return true;
+      await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: { ...entry, url, document_id } } });
+      return true;
     });
 
+  // Counts the loads of each tab, and every setting off in `epoch`, so a push whose send spans one knows its page went away.
+  const loads = new Map<number, number>();
+  let epoch = 0;
   const drop_waiting = (tab_id: number | undefined, why: string): void => {
+    if (tab_id === undefined) epoch += 1;
+    else loads.set(tab_id, (loads.get(tab_id) ?? 0) + 1);
     for (const [id, entry] of waiting) {
       if (tab_id !== undefined && entry.tab_id !== tab_id) continue;
       waiting.delete(id);
@@ -101,32 +112,37 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     }
   };
 
-  // The page went away: its pushes reject, as a `tabs.sendMessage` to it would, and the tab is no longer locked.
-  const unmark = (tab_id: number, why: string): Promise<void> => {
+  // The page went away: its pushes reject, as a `tabs.sendMessage` to it would, and the tab is no longer locked. A load keeps the id of the document it left. A closed tab keeps nothing.
+  const unmark = (tab_id: number, why: string, closed: boolean): Promise<void> => {
     drop_waiting(tab_id, why);
     return in_turn(async () => {
       const locked = await read_locked();
-      if (!(tab_id in locked)) return;
-      delete locked[tab_id];
+      const entry = locked[tab_id];
+      if (entry === undefined) return;
+      if (closed) delete locked[tab_id];
+      else locked[tab_id] = { left: [...(entry.left ?? []), ...(entry.document_id === undefined ? [] : [entry.document_id])].slice(-LEFT_DOCUMENTS_KEPT) };
       await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: locked });
     });
   };
 
   // The base runs this outside its queue, so the dispatch may send to the same tab. The text it returns is the reply's value.
   const page_call = async (args: ModuleArgs): Promise<string> => {
-    // The kind row checked the arg shapes: `tab_id` is a whole number and `message` text.
-    const { tab_id, message } = args as { tab_id: number; message: string };
+    // The kind row checked the arg shapes: `tab_id` and `document_id` are whole numbers and `message` text.
+    const { tab_id, document_id, message } = args as { tab_id: number; document_id: number; message: string };
     if (!(await deps.is_on())) throw new Error("the browser_module_pages setting is off");
     const request = page_message_of(message);
     if (request === undefined) throw new Error("the message is not one a locked page may send");
     const tab = await deps.get_tab(tab_id);
     if (tab === undefined || tab.id !== tab_id || tab.url === undefined) throw new Error("no such tab");
     if (!runs_page_code(tab.url)) throw new Error("DesertFox's page code does not run on this page");
-    await mark_locked(tab_id, tab.url);
+    if (!(await mark_locked(tab_id, tab.url, document_id))) throw new Error("the page went away");
     // The sender holds only what the browser says of the tab: no extension id, so no handler counts it as an extension page, and frame 0, the only frame the module runs in. An address the page names is the tab's.
     const sender: Sender = { tab, frameId: 0, url: tab.url };
     const request_at_tab = "url" in request ? { ...request, url: tab.url } : request;
-    return answer_text(await answer_of(() => deps.dispatch(request_at_tab, sender)));
+    const answer = answer_text(await answer_of(() => deps.dispatch(request_at_tab, sender)));
+    // The answer can hold page text, so it goes nowhere once the setting is off.
+    if (!(await deps.is_on())) throw new Error("the browser_module_pages setting is off");
+    return answer;
   };
 
   // The module's reply to a push. A reply to no waiting push does nothing, so a second one is harmless.
@@ -148,16 +164,27 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
 
   const is_locked_tab = async (tab_id: number): Promise<boolean> => {
     if (!(await deps.is_on())) return false;
-    const url = (await read_locked())[tab_id];
+    const url = (await read_locked())[tab_id]?.url;
     return url !== undefined && (await deps.get_tab(tab_id))?.url === url;
   };
 
   // In place of `tabs.sendMessage`: the module hands the message to the page, and the page's answer comes back in the reply. A locked page has one frame.
   const send_to_locked_tab = async (tab_id: number, message: unknown, frame_id?: number): Promise<unknown> => {
     if (frame_id !== undefined && frame_id !== 0) throw new Error("a locked page has only its top frame");
-    const sent = await deps.send("page_push", { tab_id, message: JSON.stringify(message) });
+    const load_at_start = loads.get(tab_id) ?? 0;
+    const epoch_at_start = epoch;
+    const page_left = () => (loads.get(tab_id) ?? 0) !== load_at_start || epoch !== epoch_at_start;
+    let answer: Promise<unknown> | undefined;
+    // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none.
+    const sent = await deps.send("page_push", { tab_id, message: JSON.stringify(message) }, (id) => {
+      if (page_left()) return;
+      answer = new Promise<unknown>((resolve, reject) => waiting.set(id, { tab_id, resolve, reject }));
+      // A load can reject it before this function hands it back. The caller still gets the rejection.
+      void best_effort(answer);
+    });
     if (!sent.ok) throw new Error(sent.problem);
-    return new Promise<unknown>((resolve, reject) => waiting.set(sent.id, { tab_id, resolve, reject }));
+    if (answer === undefined) throw new Error(epoch === epoch_at_start ? "the page went away" : "the browser_module_pages setting is off");
+    return answer;
   };
 
   // A part that fails its own check (over its cap) is removed, so the page reads nothing rather than an old copy.
@@ -192,7 +219,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       if (THEME_STORAGE_KEY in changes) void sync_parts(["theme"]);
     },
     // Every top-level load of the tab, a reload of the same address included.
-    tab_loading: (tab_id: number): Promise<void> => unmark(tab_id, "the page went away"),
-    tab_removed: (tab_id: number): Promise<void> => unmark(tab_id, "the tab closed"),
+    tab_loading: (tab_id: number): Promise<void> => unmark(tab_id, "the page went away", false),
+    tab_removed: (tab_id: number): Promise<void> => unmark(tab_id, "the tab closed", true),
   };
 }
