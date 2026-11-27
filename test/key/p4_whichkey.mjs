@@ -180,6 +180,100 @@ export async function run_cases({ config_copy, load_config_dir, setup, rdp, exte
     expect(await scroll_delta_by_press("wk", [" "]) > 0, "Space did not scroll the page");
   });
 
+  // Space inside a group holds it open: each key of the group runs and the panel stays until Escape, a key outside the group or a second Space.
+  const in_background = (code) => evaluate_in_background(rdp, extension_id, code);
+  const last_panel_value = (page_id = "wk") => whichkey_events(0, page_id).at(-1)?.value;
+  const zoom_of_active_tab = () => in_background(`browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => browser.tabs.getZoom(tabs[0].id))`);
+  const settle_zoom = async () => {
+    await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => browser.tabs.setZoom(tabs[0].id, 1))`);
+    await poll_until("the zoom back at 100 percent", async () => (await zoom_of_active_tab()) === 1);
+  };
+
+  await run_case("z Space i i i zooms three steps, the panel stays up, and Escape closes it", async () => {
+    try {
+      let mark = events.length;
+      await press_keys("z", " ");
+      await panel_value(mark, (value) => value !== "", "the held z panel");
+      if (process.env.DESERTFOX_SHOT_DIR) { await sleep(300); await take_shot(`${process.env.DESERTFOX_SHOT_DIR}/held-panel.png`); }
+      // zoom.by reads the zoom and writes it back in the background, so a press waits for the one before it.
+      for (const step of [1.1, 1.2, 1.3]) {
+        await press_keys("i");
+        await poll_until(`the zoom at ${step}`, async () => Math.abs((await zoom_of_active_tab()) - step) < 0.001);
+      }
+      expect(last_panel_value() !== "", "the panel closed while the hold was on");
+      await close_panel();
+      mark = events.length;
+      await press_keys("i");
+      await sleep(300);
+      expect(Math.abs((await zoom_of_active_tab()) - 1.3) < 0.001, "i after Escape zoomed again, so the hold outlived Escape");
+    } finally {
+      await settle_zoom();
+      await press_keys("-k", "Escape");
+    }
+  });
+
+  await run_case("a key outside the held group runs as a first key and ends the hold", async () => {
+    let mark = events.length;
+    await press_keys("z", " ");
+    await panel_value(mark, (value) => value !== "", "the held z panel");
+    mark = events.length;
+    expect(await scroll_delta_by_press("wk", ["j"]) > 0, "j did not scroll the page from the hold");
+    await panel_value(mark, (value) => value === "", "the panel to close");
+    await scroll_delta_by_press("wk", ["gg"]);
+  });
+
+  await run_case("a second Space ends the hold and does not scroll", async () => {
+    let mark = events.length;
+    await press_keys("z", " ");
+    await panel_value(mark, (value) => value !== "", "the held z panel");
+    mark = events.length;
+    await press_keys(" ");
+    await panel_value(mark, (value) => value === "", "the panel to close");
+    await sleep(300);
+    expect(await scroll_delta_by_press("wk", [" "]) > 0, "Space after the hold did not scroll the page again");
+  });
+
+  await run_case("Backspace in a hold leaves the hold and keeps the z panel", async () => {
+    try {
+      let mark = events.length;
+      await press_keys("z", " ", "i");
+      await panel_value(mark, (value) => value !== "", "the held z panel");
+      mark = events.length;
+      await press_keys("-k", "BackSpace");
+      await panel_value(mark, (value) => value !== "", "the z panel after Backspace");
+      await press_keys("i");
+      await poll_until("the zoom step", async () => (await zoom_of_active_tab()) > 1);
+      await press_keys("i");
+      await sleep(300);
+      expect(Math.abs((await zoom_of_active_tab()) - 1.2) < 0.001, "Backspace kept the hold, so a second i zoomed again");
+    } finally {
+      await settle_zoom();
+      await press_keys("-k", "Escape");
+    }
+  });
+
+  await run_case("m Space does not hold: the key is refused as a mark name and j scrolls", async () => {
+    await press_keys("m", " ");
+    await sleep(which_key_delay_ms + 300);
+    expect(last_panel_value() === "" || last_panel_value() === undefined, "a panel stayed up after m Space");
+    expect(await scroll_delta_by_press("wk", ["j"]) > 0, "j did not scroll after m Space");
+    await scroll_delta_by_press("wk", ["gg"]);
+  });
+
+  await run_case("a Space in the a group holds it, and p pauses the video twice", async () => {
+    const play_events = (type) => (event) => event.page_id === "wk_media" && event.type === type;
+    await open_page("media", "wk_media", { new_tab: true });
+    let mark = events.length;
+    await press_keys("a", " ");
+    await panel_value(mark, (value) => value !== "", "the held a panel", "wk_media");
+    await press_keys("p");
+    await wait_event(mark, play_events("media_play"), "the video to play");
+    mark = events.length;
+    await press_keys("p");
+    await wait_event(mark, play_events("media_pause"), "the video to pause");
+    await close_panel_of("wk_media");
+  });
+
   // <A-?> (Alt+Shift+/) is the default key in every mode. keymap.d adds ,w in normal mode only for the cases that press a short key. Each mode lists its own keys.
   const CHORD = ["-M", "alt", "-M", "shift", "/", "-m", "shift", "-m", "alt"];
   const rows_after = async (keys, mode, page_id = "wk") => {

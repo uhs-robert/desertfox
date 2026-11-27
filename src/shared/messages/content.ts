@@ -66,7 +66,7 @@ export type ReadRepeatPreview = {
 
 // What the panel shows: the chain of group names that leads here (empty when there is no panel) and the keys that can follow.
 // `repeat` is the step `.` would run. The background leaves it out of this answer: the panel bundle adds it from a `read_repeat_preview` answer.
-export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder; repeat?: string };
+export type WhichKeyPanel = { title: string[]; rows: WhichKeyRow[]; border: WhichKeyBorder; repeat?: string; held?: true };
 
 // One key that can follow a prefix. A key that starts a longer sequence has `more` and no description.
 export type WhichKeyRow = {

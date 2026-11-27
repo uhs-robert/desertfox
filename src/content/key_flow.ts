@@ -23,7 +23,8 @@ export type OnReplayPass = () => void;
 type HeldKey = { token_: string; on_replay_pass_?: OnReplayPass | undefined; repeat?: boolean | undefined; physical_?: string | null | undefined };
 
 // The keys typed so far in a half-typed sequence. Which-key reads it.
-export type PendingPrefix = { mode: Mode; typed_: string[] };
+// `held_` marks a group a hold keeps open: the panel shows at once and says how to leave.
+export type PendingPrefix = { mode: Mode; typed_: string[]; held_?: true };
 
 export type Matcher = {
   feed: (mode: string, token: string) => MatchResult;
@@ -90,6 +91,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
   let register: string | undefined;
   // The sequence waits for one key as an argument: a register name after `"`, or the key a command captures (`f`, `m`, `q`).
   let awaiting_argument = false;
+  // A Space in a group keeps it open (see the matcher). Backspace in a hold types the group's keys again without Space, so it ends the hold and keeps the group.
+  let holding = false;
 
   // What which-key lists: the keys typed in the tree, or `"` while the register name is awaited.
   const listed = (keys: string[]) => (register === '"' ? [register] : keys);
@@ -98,7 +101,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     matcher?.reset();
     typed = [];
     register = undefined;
-    sequence_in_progress = awaiting_argument = false;
+    sequence_in_progress = awaiting_argument = holding = false;
     deps.on_prefix_(undefined);
   };
 
@@ -171,15 +174,22 @@ export function create_key_flow(deps: KeyFlowDeps) {
     let result = active.feed(mode, token);
     // A find key waits for its target, unless a find is live: then the same press repeats it.
     if (result.kind_ === "pending" && result.node.children[LIVE_KEY] && deps.sink_of_(mode)?.live_?.()) result = active.feed(mode, LIVE_KEY);
-    sequence_in_progress = result.kind_ === "pending";
+    holding = result.kind_ !== "no_match" && !!result.held_;
+    sequence_in_progress = result.kind_ === "pending" || holding;
     if (result.kind_ === "pending") ({ typed_: typed, keys, register_keys_: register } = result);
+    else if (result.kind_ === "match" && holding) keys = result.keys!;
     awaiting_argument = result.kind_ === "pending" && (register === '"' || !!result.node.children[ANY_KEY]);
     // A bare count (`3`) has typed nothing yet, so no keys can be listed.
     const listing = listed(typed);
-    deps.on_prefix_(result.kind_ === "pending" && listing.length > 0 ? { mode, typed_: listing } : undefined);
+    // A leaf run in a hold leaves the panel up: it shows again once the leaf has run.
+    if (!(result.kind_ === "match" && holding)) deps.on_prefix_(result.kind_ === "pending" && listing.length > 0 ? { mode, typed_: listing, ...(holding && { held_: true as const }) } : undefined, holding);
     if (result.kind_ === "match") {
-      return deps.run_leaf_(result.leaf, result.count, repeat) ? "pass" : "cancel";
+      const passed = deps.run_leaf_(result.leaf, result.count, repeat);
+      // A leaf that changed the mode has reset the sequence, so the hold is gone.
+      if (holding && sequence_in_progress) deps.on_prefix_({ mode, typed_: result.held_!, held_: true }, true);
+      return passed ? "pass" : "cancel";
     }
+    if (result.kind_ === "no_match" && result.ended_) return "cancel";
     if (result.kind_ === "pending") return "cancel";
     // The page sees this Escape too, so it can close its own dialog.
     if (mode === "insert" && token === "<Escape>") deps.leave_insert_();
@@ -219,6 +229,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
       return decide(matcher, layout_token(token, physical), repeat, physical);
     },
     reset_sequence_,
+    // The window lost the focus to another frame or the browser.
+    end_hold_: () => holding && reset_sequence_(),
     layout_token_: layout_token,
     set_layout_fallback_: (on: boolean) => void (layout_fallback = on),
     // The first call also replays the held keys. Later calls swap the keymap.

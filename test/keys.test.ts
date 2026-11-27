@@ -10,7 +10,8 @@ import {
   to_firefox_shortcut,
 } from "../src/shared/keys/index.ts";
 import type { KeyEventLike } from "../src/shared/keys/index.ts";
-import type { KeymapConfig } from "../src/shared/index.ts";
+import type { CompiledKeymap, KeymapConfig, TreeLeaf } from "../src/shared/index.ts";
+import { capture_branch } from "../src/shared/prefix_tree.ts";
 import { default_layer_of, merge_keymaps } from "../src/background/keymap_merge.ts";
 
 const tokens_of = (sequence: string) => parse_sequence(sequence).tokens;
@@ -397,4 +398,74 @@ test("the compiled keymap carries the which-key skip list as typed tokens, and a
   assert.deepEqual(compiled.which_key_skip, ["g", "<C-w>"]);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0]!, /which_key_skip: skipped "<S-1>"/);
+});
+
+const HOLD_KEYMAP: KeymapConfig = { normal: { zi: { id: "zoom.in" }, "z<Space>": { id: "z.space" } } };
+
+test("matcher: Space in a group holds it, and each leaf returns to the group", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" }, zo: { id: "zoom.out" }, J: { id: "tab.next" } } });
+  assert.equal(matcher.feed("normal", "z").kind_, "pending");
+  const held = matcher.feed("normal", "<Space>");
+  assert.deepEqual([held.kind_, held.kind_ === "pending" && held.held_, held.kind_ === "pending" && held.typed_], ["pending", ["z"], ["z"]]);
+  for (const key of ["i", "i", "o"]) {
+    const result = matcher.feed("normal", key);
+    assert.deepEqual([result.kind_, result.kind_ === "match" && result.held_], ["match", ["z"]]);
+  }
+  assert.equal(matcher.feed("normal", "i").kind_, "match");
+});
+
+test("matcher: a key outside the held group drops the hold and runs as a first key", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" }, J: { id: "tab.next" } } });
+  walk(matcher, "normal", ["z", "<Space>", "i"]);
+  const outside = matcher.feed("normal", "J");
+  assert.equal(leaf_id(outside), "tab.next");
+  assert.equal(outside.kind_ === "match" && outside.held_, undefined);
+  assert.equal(matcher.feed("normal", "i").kind_, "no_match");
+});
+
+test("matcher: a second Space ends the hold and is spent, and a Space at the root is no hold", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" } } });
+  walk(matcher, "normal", ["z", "<Space>"]);
+  assert.deepEqual(matcher.feed("normal", "<Space>"), { kind_: "no_match", ended_: true });
+  assert.equal(matcher.feed("normal", "i").kind_, "no_match");
+  assert.equal(matcher.feed("normal", "<Space>").kind_, "no_match");
+});
+
+test("matcher: a user Space child wins over the hold", () => {
+  const matcher = matcher_for(HOLD_KEYMAP);
+  matcher.feed("normal", "z");
+  const result = matcher.feed("normal", "<Space>");
+  assert.deepEqual([leaf_id(result), result.kind_ === "match" && result.held_], ["z.space", undefined]);
+});
+
+test("matcher: a capture group takes Space as its argument and holds nothing", () => {
+  const mark: TreeLeaf = { kind: "leaf", steps: [{ invocation: { id: "mark.add" }, runs_in: "content", count_rule: "ignore", capture: "key" }] };
+  const tree: CompiledKeymap = { ...compile({}).compiled, modes: { normal: { kind: "branch", children: { m: capture_branch(mark) } } } as CompiledKeymap["modes"] };
+  const matcher = create_matcher(tree);
+  assert.equal(matcher.feed("normal", "m").kind_, "pending");
+  const result = matcher.feed("normal", "<Space>");
+  assert.deepEqual([result.kind_, result.kind_ === "match" && result.held_], ["match", undefined]);
+});
+
+test("matcher: a nested group under a hold returns to the held group after its leaf", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" }, zab: { id: "deep" } } });
+  walk(matcher, "normal", ["z", "<Space>", "a"]);
+  const deep = matcher.feed("normal", "b");
+  assert.deepEqual([leaf_id(deep), deep.kind_ === "match" && deep.held_], ["deep", ["z"]]);
+  assert.equal(matcher.feed("normal", "i").kind_, "match");
+});
+
+test("matcher: a mode change drops the hold, and a count does not enter one", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" } }, caret: { zi: { id: "caret.zoom" } } });
+  walk(matcher, "normal", ["z", "<Space>"]);
+  assert.equal(matcher.feed("caret", "i").kind_, "no_match");
+  walk(matcher, "normal", ["3", "z"]);
+  assert.equal(matcher.feed("normal", "<Space>").kind_, "no_match");
+});
+
+test("matcher: binds_after_ leaves a hold as it was", () => {
+  const matcher = matcher_for({ normal: { zi: { id: "zoom.in" } } });
+  walk(matcher, "normal", ["z", "<Space>"]);
+  assert.equal(matcher.binds_after_("normal", [], "i"), true);
+  assert.equal(matcher.feed("normal", "i").kind_ === "match" && true, true);
 });

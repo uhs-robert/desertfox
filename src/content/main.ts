@@ -413,6 +413,8 @@ function start(): void {
   // The top frame needs no blur report: the frame that takes the focus reports it, and a top window gets a focus event when its focused child frame is removed.
   listen("focus", report_mode, false);
   if (window !== window.top) listen("blur", report_mode, false);
+  // A hold lives in one frame, so it ends when the focus leaves the frame.
+  listen("blur", () => void key_flow.end_hold_(), false);
 
   // A page shown from the back-forward cache runs no start-up, and the background's mode for the tab is stale. The report after a first load is spare, and heals a start report the background lost.
   listen("pageshow", report_mode, false);

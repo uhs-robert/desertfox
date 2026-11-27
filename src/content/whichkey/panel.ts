@@ -10,6 +10,9 @@ import { STYLE } from "./style.ts";
 
 const FOOTER: readonly [key: string, word: string][] = [["ESC", "close"], ["←", "back"]];
 
+// A held group keeps its panel until Escape, and Backspace leaves the hold but keeps the group.
+const HELD_FOOTER: readonly [key: string, word: string][] = [["ESC", "leave hold"], ["␣", "end hold"], ["←", "back"]];
+
 let surface: ReturnType<typeof create_surface> | undefined;
 
 function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, class_name: string, text = ""): HTMLElementTagNameMap[Tag] {
@@ -17,7 +20,7 @@ function element<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, class_name: 
 }
 
 // Rows fill left to right, then down.
-export function show_panel({ title, rows, border, repeat }: WhichKeyPanel): void {
+export function show_panel({ title, rows, border, repeat, held }: WhichKeyPanel): void {
   surface ??= create_surface("desertfox-whichkey", STYLE, LAYERS.which_key);
   const columns = choose_columns(rows.length, window.innerHeight);
   surface.text.className = "desertfox-whichkey";
@@ -32,7 +35,7 @@ export function show_panel({ title, rows, border, repeat }: WhichKeyPanel): void
     }),
   );
   const footer = element("div", "footer");
-  for (const [key, word] of FOOTER) footer.append(element("span", "", key), word);
+  for (const [key, word] of held ? HELD_FOOTER : FOOTER) footer.append(element("span", "", key), word);
   if (repeat !== undefined) {
     const line = element("div", "repeat");
     line.append(element("span", "", "."), repeat);
