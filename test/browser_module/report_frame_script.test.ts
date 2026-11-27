@@ -155,6 +155,16 @@ test("a held key's repeat between DOMContentLoaded and load leaves the load wind
   assert.equal(frame.last_load_focus(), true);
 });
 
+test("a blur message that finds no field spends none of the window's blurs", () => {
+  const frame = report_frame();
+  frame.show();
+  frame.document.activeElement = { localName: "body" };
+  for (let message = 0; message < 6; message++) frame.core_blurs();
+  frame.focus_field();
+  assert.equal(frame.last_load_focus(), true);
+  assert.equal(frame.core_blurs(), 1);
+});
+
 test("a window blurs five times, then a page that takes the focus back keeps the field", () => {
   const frame = report_frame();
   frame.show();

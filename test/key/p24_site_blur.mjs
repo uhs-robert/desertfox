@@ -21,7 +21,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
 
   await setup("load a config with a blur_on_load row for the blur_ pages", async () => {
     const dir = config_copy();
-    appendFileSync(join(dir, "settings.toml"), '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=blur_*"\nblur_on_load = true\n');
+    appendFileSync(join(dir, "settings.toml"), '\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=blur_*"\nblur_on_load = true\n[[site_rules]]\nsite = "*://127.0.0.1/*?id=fol_*"\nblur_on_load = true\nfocus_on_load = "#last"\n');
     await load_config_dir(dir);
   });
 
@@ -116,6 +116,19 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
     expect((await focused_id()) === "first", `the field lost the focus after the click: ${await page_state("blur_click")}`);
   });
 
+  await run_case("a focus_on_load field takes the focus in insert mode, also from a field the page focuses inside the window", async () => {
+    const installed_at = await open_without_keys("controls", "fol_field");
+    await with_state("fol_field", poll_until("the focus_on_load field in insert mode", async () => (await focused_id()) === "last" && badge_of("fol_field") === "INSERT"));
+    const held = await focus_field("first");
+    expect_in_window(installed_at, "the page focus");
+    expect(held === "last", `the page focus kept its field: ${await page_state("fol_field")}`);
+    await with_state("fol_field", poll_until("insert mode after the redirect", async () => badge_of("fol_field") === "INSERT"));
+    // The page drops the keys of its first moments, and this case skipped the probe of open_page.
+    await settle_focus();
+    await press_keys("abc");
+    await with_state("fol_field", poll_until("typing in the focus_on_load field", async () => (await in_active_tab(`document.getElementById("last").value`)) === "abc"));
+  });
+
   await run_case("a click on a field before the keymap reply keeps the focus there, and typing reaches it", async () => {
     // The same page lays out the same, so the field's place is read on a first copy, while the background still answers.
     await open_page("controls", "blur_pre_layout", { new_tab: true });
@@ -149,7 +162,9 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
       })()`);
       await sleep(150);
     }
-    const replied_before_click = events.slice(mark).some((event) => event.type === "tree_read" && event.page_id === "blur_preclick");
+    // Event order, not the time of this check: the reply may land in the wait after the press that worked.
+    const click_index = events.slice(mark).findIndex((event) => event.type === "focused" && event.page_id === "blur_preclick" && event.id === "first");
+    const replied_before_click = events.slice(mark, mark + (click_index < 0 ? events.length : click_index)).some((event) => event.type === "tree_read" && event.page_id === "blur_preclick");
     expect(click_seen() && !replied_before_click, `the click came too late: seen ${click_seen()}, reply already in ${replied_before_click}`);
     await busy;
     await wait_event(mark, (event) => event.type === "tree_read" && event.page_id === "blur_preclick", "content script ready on blur_preclick", 6000);

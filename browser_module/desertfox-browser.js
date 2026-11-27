@@ -683,8 +683,10 @@
           const win = content;
           if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || (data.escape !== true && !page_focus())) return;
           const focused = deep_active(win.document);
+          if (!is_field(focused)) return;
+          // Only a blur spends the allowance: a second report sent before the first blur came back finds no field.
           if (data.escape !== true && --blurs_left < 1) end_load_blur();
-          if (is_field(focused)) focused.blur();
+          focused.blur();
         } catch (_) {
           // A document going away keeps its focus.
         }
