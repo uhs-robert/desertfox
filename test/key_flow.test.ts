@@ -139,3 +139,11 @@ test("a typed count shows in the pending prefix, bare or with keys, and the hold
   type("<Escape>", "z", "<Space>");
   assert.deepEqual(panels.at(-1), { mode: "normal", typed_: ["z"], held_: true });
 });
+
+test("Backspace after a count and a prefix key keeps the count on show", () => {
+  const { panels, type } = make_hold_flow();
+  type("3", "z", "<Backspace>");
+  assert.deepEqual(panels.at(-1), { mode: "normal", typed_: [], count_: 3 });
+  type("<Backspace>");
+  assert.equal(panels.at(-1), undefined);
+});
