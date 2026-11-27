@@ -27,7 +27,6 @@ class El {
   parentNode: El | null = null;
   ownerDocument: Doc;
   isContentEditable = false;
-  selected_row = false;
   visible = true;
   box = SHOWN;
   dispatched: { key: string; shiftKey: boolean; ctrlKey: boolean }[] = [];
@@ -45,7 +44,6 @@ class El {
   matches(selector: string): boolean {
     return selector.split(",").some((one): boolean => {
       const part = one.trim().split(" ").at(-1)!;
-      if (part.endsWith("[aria-selected=true]")) return this.selected_row && this.matches(part.slice(0, -"[aria-selected=true]".length));
       return part.startsWith("#") ? this.id === part.slice(1) : part.startsWith(".") ? this.classes.includes(part.slice(1)) : part === this.localName;
     });
   }
@@ -225,14 +223,10 @@ function started({ table = TABLE as unknown, visual_table = protocol.DEVTOOLS_VI
   const filter = response.add(new El(network_doc, "input")) as El;
   const response_source = (response.add(new El(network_doc, "div", { classes: ["cm-editor"] })) as El).add(new El(network_doc, "div", { classes: ["cm-content"] })) as El;
 
-  // The markup view: three lines, the second one the current row, while the document keeps the focus.
+  // The markup view: a tag line, while the document keeps the focus.
   const markup_doc = panel("chrome://devtools/content/inspector/markup/markup.html");
   const tree = markup_doc.body.add(new El(markup_doc, "ul", { id: "root" })) as El;
-  for (const [text, selected] of [["html", false], ["section", true], ["p", false]] as const) {
-    const line = tree.add(new El(markup_doc, "div", { classes: ["tag-line"] })) as El;
-    line.selected_row = selected;
-    line.add(new Text(text));
-  }
+  (tree.add(new El(markup_doc, "div", { classes: ["tag-line"] })) as El).add(new Text("section"));
 
   const press = (key: string, target: unknown, patch: Partial<FakeEvent> = {}) => window.press(key_event(key, { target, originalTarget: target, ...patch }));
   // The editor's keys come back to the window listener, as in Firefox.
@@ -284,11 +278,18 @@ test("the area pass skips the focused message it already searched, so its blank 
   assert.equal(console_doc.selection.calls[0], "collapse first line@0");
 });
 
-test("with the document itself focused, v starts at the area's current row, as the markup view marks it", async () => {
+test("with the document itself focused, v starts at the area's first shown text", async () => {
+  const { ready, press, console_doc } = started();
+  await ready();
+  press("v", console_doc.body);
+  assert.deepEqual(console_doc.selection.calls, ["collapse first line@0", "extend forward character"]);
+});
+
+test("v in the markup view is DevTools', since its tag lines stop a selection at each span", async () => {
   const { ready, press, markup_doc } = started();
   await ready();
-  press("v", markup_doc.body);
-  assert.deepEqual(markup_doc.selection.calls, ["collapse section@0", "extend forward character"]);
+  assert.equal(press("v", markup_doc.body).prevented, false);
+  assert.deepEqual(markup_doc.selection.calls, []);
 });
 
 test("a move that would leave the area goes back, so the rule view's selection never takes in the toolbar", async () => {

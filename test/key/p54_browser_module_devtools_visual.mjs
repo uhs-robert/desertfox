@@ -1,6 +1,6 @@
 // The browser module's visual mode in DevTools: v selects in a text area, the mode's keys extend the selection, y copies it, Escape ends the mode.
-// Text areas: the console output, the rule view, the Network headers and the markup view. Code areas: the Debugger source and the Network response. Docked and in a DevTools window.
-// Also what it leaves alone: v in the console input types there, a module whose hello does not say devtools_visual gets no v, and the tree keys work after the mode.
+// Text areas: the console output, the rule view and the Network headers. Code areas: the Debugger source and the Network response. Docked and in a DevTools window.
+// Also what it leaves alone: v in the console input types there, v in the markup view goes to DevTools, a module whose hello does not say devtools_visual gets no v, and j still moves the markup tree.
 import { module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
 
 export const areas = ["tabs", "keys"];
@@ -134,7 +134,7 @@ export async function run_cases(context) {
   const markup_state = () =>
     chrome(`(async () => { ${TOOLBOX} const inspector = tb.getPanel("inspector"); const node = inspector.selection.nodeFront; return [node?.displayName ?? null, inspector.markup.getContainer(node)?.expanded ?? null]; })()`);
 
-  await run_case("docked markup view: v and w select a word of a tag, y copies it, and after the mode j moves the tree again", async () => {
+  await run_case("docked markup view: v goes to DevTools and starts no mode, and j still moves the tree", async () => {
     await home("bm_dv_markup");
     await open_tab(TREE_PAGE);
     await show_tool("inspector");
@@ -152,14 +152,16 @@ export async function run_cases(context) {
       })()`),
     );
     await focus_in_devtools();
-    await set_clipboard();
-    await selects(["v", "w"], MARKUP, "#root", "the markup view");
-    await press_keys("y");
-    const text = await copied("the markup view");
-    expect(text.length > 0 && text.length < 20 && "<section>".includes(text.trim()), `the copy is not a word of the section tag: ${JSON.stringify(text)}`);
-    expect(JSON.stringify(await markup_state()) === JSON.stringify(["section", false]), `the mode's keys moved the tree: ${JSON.stringify(await markup_state())}`);
+    // The module took no key, so the markup view's own document sees v.
+    await chrome(`(async () => { ${TOOLBOX} ${MARKUP} const seen = (Services.desertfox_key_test_keys = []); const listener = (event) => seen.push(event.key); doc.addEventListener("keydown", listener); Services.desertfox_key_test_keys_off = () => doc.removeEventListener("keydown", listener); })()`);
+    on_teardown(() => chrome(`(async () => { Services.desertfox_key_test_keys_off?.(); delete Services.desertfox_key_test_keys_off; delete Services.desertfox_key_test_keys; })()`));
+    await press_keys("v");
+    await poll_until("v to reach the markup view", () => chrome(`(async () => Services.desertfox_key_test_keys.includes("v"))()`), { timeout_ms: 3000 });
+    await sleep(NO_EFFECT_MS);
+    const selection = await selection_of(MARKUP, "#root");
+    expect(selection.text === "", `v started the mode in the markup view: ${JSON.stringify(selection)}`);
     await press_keys("j");
-    await poll_until("j after the mode to move the tree", async () => (await markup_state())[0] === "p", { timeout_ms: 3000 });
+    await poll_until("j to move the tree", async () => (await markup_state())[0] === "p", { timeout_ms: 3000 });
   });
 
   await run_case("docked Network headers: v, w and y copy from the headers panel", async () => {
