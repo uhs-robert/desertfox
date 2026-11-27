@@ -77,13 +77,21 @@ function with_stop_for_record(node: TreeBranch): TreeBranch {
 // While the browser module's status bar is up the page hides its own corner badge, which the reply says through the setting it already obeys, and reports what the bar shows.
 const with_bar = (reply: PageKeymap, bar: boolean): PageKeymap => (bar ? { ...reply, keymap: { ...reply.keymap, mode_indicator: "off", bar: true } } : reply);
 
-// The stop key of the normal tree, laid over the same place in a site mode's own tree: a mode bind on the record key would hide it, as it hides every key of the normal tree it shares.
+// Only the paths of `stopped` that end in the stop key, or undefined when it holds none.
+const stop_paths_of = (stopped: TreeBranch): TreeBranch | undefined => {
+  const children = Object.fromEntries(Object.entries(stopped.children).flatMap(([token, node]) => (node === STOP_LEAF ? [[token, node]] : node.kind === "branch" && stop_paths_of(node) ? [[token, stop_paths_of(node)!]] : [])));
+  return Object.keys(children).length > 0 ? { kind: "branch", children } : undefined;
+};
+
+// The stop key of the normal tree, laid over the same place in a site mode's own tree: a mode bind on the record key would hide it, as it hides every key of the normal tree it shares. A mode leaf on a prefix of the record key gives way to a branch that holds the stop path alone, for as long as the macro records.
 const with_stop_over = (mode_tree: Record<string, TreeNode>, stopped: TreeBranch): Record<string, TreeNode> =>
   Object.fromEntries(
     Object.entries(mode_tree).map(([token, node]) => {
       const over = stopped.children[token];
       if (over === STOP_LEAF) return [token, STOP_LEAF];
-      return [token, over?.kind === "branch" && node.kind === "branch" ? { ...node, children: with_stop_over(node.children, over) } : node];
+      if (over?.kind !== "branch") return [token, node];
+      if (node.kind === "branch") return [token, { ...node, children: with_stop_over(node.children, over) }];
+      return [token, stop_paths_of(over) ?? node];
     }),
   );
 

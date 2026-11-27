@@ -24,8 +24,8 @@ const SITE_RULES = [
   { site: "https://zoom.test/*", blur_on_load: true, scroll_selector: "#pane" },
 ];
 
-function compiled_with(settings: Record<string, unknown>): CompiledKeymap {
-  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: SITE_RULES, ...settings } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
+function compiled_with(settings: Record<string, unknown>, keymap: Record<string, unknown> = {}): CompiledKeymap {
+  const { compiled, warnings } = compile_config({ config: { ...empty_config(), keymap: keymap as never, settings: { site_rules: SITE_RULES, ...settings } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: DEFAULT_SITE_ROWS, get_command: (id) => registry.get(id), enum_sources: {} });
   assert.deepEqual(warnings, []);
   return compiled;
 }
@@ -89,6 +89,17 @@ test("while recording, a site mode that binds the record key still gets the stop
   assert.equal(JSON.stringify(mode_tree({})["q"]).includes("tab.next"), true, "not recording: the mode's own bind");
   assert.equal(JSON.stringify(mode_tree({ recording: "a" })["q"]).includes("macro.stop"), true, "recording: the stop key");
   assert.equal(JSON.stringify(mode_tree({ recording: "a" })["w"]).includes("tab.prev"), true);
+});
+
+test("while recording, a site mode leaf on the first key of a prefixed record key gives way to the stop path", () => {
+  const keymap = compiled_with({ site_rules: [{ site: "https://gq.test/*", modes: { rec: { label: "REC", bind: { g: { id: "tab.next" }, w: { id: "tab.prev" } } } } }] }, { normal: { gq: { id: "macro.record" } } });
+  const mode_tree = (state: { recording?: string }) => page_keymap_of(keymap, ["https://gq.test/a"], state)!.site_modes!["rec"]!.tree;
+  assert.equal(JSON.stringify(mode_tree({})["g"]).includes("tab.next"), true, "not recording: the site's own leaf");
+  const g = mode_tree({ recording: "a" })["g"];
+  assert.equal(g?.kind, "branch");
+  assert.equal(JSON.stringify(g).includes("macro.stop"), true, "recording: g then q stops");
+  assert.equal(JSON.stringify(g).includes("tab.next"), false);
+  assert.equal(JSON.stringify(mode_tree({ recording: "a" })["w"]).includes("tab.prev"), true, "other binds stay");
 });
 
 test("no keymap gives no answer", () => {
