@@ -236,6 +236,16 @@ test("the corner follows the setting, and auto follows the panes of the owner's 
   assert.equal(bevel.bar()!.getAttribute("data-corner"), "chamfer");
 });
 
+test("a chamfer bar is clipped to the chamfer shape, and its border widths agree", () => {
+  const fixture = started();
+  const css = decodeURIComponent([...fixture.sheets][0]!.replace("data:text/css;charset=utf-8,", ""));
+  const chamfer = css.match(/#desertfox-statusbar\[data-corner="chamfer"\]\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(chamfer, /clip-path:\s*polygon\([^;]*--dfx-cut/);
+  assert.match(chamfer, /overflow:\s*visible/);
+  const fallbacks = new Set([...css.matchAll(/var\(--tf-border-width,\s*([^)]*)\)/g)].map((match) => match[1]));
+  assert.equal(fallbacks.size, 1);
+});
+
 test("a private window without private access draws nothing", () => {
   const fixture = create_bar_fixture({ private_window: true });
   fixture.firefox.start_extension({ private_access: false });
