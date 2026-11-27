@@ -639,8 +639,9 @@
 
     // ---- Grants: the fixed table of the controls whose pick waits for Enter.
 
-    // The doorhangers whose second button denies: Firefox's permission prompts, where it reads Block, Don't allow or Not now. Another doorhanger's second button waits for Enter, as an unknown control does.
-    const DENYING_PROMPTS = new Set(["geolocation", "xr", "web-notifications", "persistent-storage", "midi", "storage-access", "local-network", "loopback-network", "webRTC-shareDevices"]);
+    // The doorhangers whose second button denies once: Firefox's permission prompts, where it reads Block, Don't allow or Not now. Another doorhanger's second button waits for Enter, as an unknown control does.
+    // A deny that stays waits too, since it takes away what the user may want later. Notifications' second button is Always Block, so it is not here.
+    const DENYING_PROMPTS = new Set(["geolocation", "xr", "persistent-storage", "midi", "storage-access", "local-network", "loopback-network", "webRTC-shareDevices"]);
     // The tab prompt types that send a login to the site.
     const LOGIN_PROMPTS = new Set(["prompt:promptUserAndPass", "prompt:promptPassword"]);
     // Page Info's permission radios are `<permission>#<state>`. These states deny: Block (2) and Always Ask (3).
@@ -677,9 +678,12 @@
 
     function prompt_grants(prompt, element) {
       if (has_class(element, "popup-notification-closebutton") || has_class(element, "popup-notification-learnmore-link") || element.localName === "menulist") return false;
-      if (has_class(element, "popup-notification-secondary-button")) return !DENYING_PROMPTS.has(prompt.getAttribute("popupid"));
+      // With Remember ticked, Firefox stores the deny for good.
+      if (has_class(element, "popup-notification-secondary-button")) return !DENYING_PROMPTS.has(prompt.getAttribute("popupid")) || remembers(prompt);
       return true;
     }
+
+    const remembers = (prompt) => prompt.querySelector(".popup-notification-checkbox")?.hasAttribute("checked") ?? false;
 
     // A pick of a Library row only chooses it, and the user's own Enter there opens the file. A pick of a panel row opens its file, which waits, or the blocked-download view for a row Firefox holds back, which does not.
     function download_grants(win, element) {
