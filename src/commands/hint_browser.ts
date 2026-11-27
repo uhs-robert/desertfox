@@ -7,6 +7,8 @@ import { get_config } from "../background/config_main.ts";
 import { browser_module_call, browser_module_push } from "../background/browser_module_call.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { create_chrome_hints } from "../background/chrome_hints.ts";
+import { stored_keymap } from "../background/keymap_source.ts";
+import { page_hint_action_of } from "../shared/browser_module_scope.ts";
 
 // The roles the label sheet reads, for the dark and the light scheme.
 const LABEL_ROLES = ["primary", "bg_core", "fg_core"] as const;
@@ -25,6 +27,7 @@ export const chrome_hints = create_chrome_hints({
     await show_toast_on_tab({ tab_id: tab?.id }, "hint.browser", message, "error");
   },
   new_session: () => 1 + Math.floor(Math.random() * 0x7ffffffe),
+  page_action: async (keys) => page_hint_action_of(await stored_keymap(browser.storage.local), keys),
 });
 
 define("hint.browser", {

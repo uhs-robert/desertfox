@@ -3,7 +3,7 @@
 
 import type { CommandDef } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
-import type { NativeLeaf, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
+import type { NativeLeaf, PageHintAction, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
 import { check_module_args, is_module_command_id, MAX_COUNT, MAX_SEQUENCE_KEYS } from "./browser_module_protocol.ts";
 import { create_matcher } from "./keys/matcher.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "./prefix_tree.ts";
@@ -125,4 +125,37 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
     return { ok: true, leaf: result.leaf, count: count === 0 ? undefined : count };
   }
   return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
+}
+
+// The action of a page hint session (see `page_hints.want`) for the hint key the module matched on one of Firefox's own pages, matched again against the full normal tree.
+// Only a lone `hint.run` step maps: a plain click, a tab or a background tab, or a copy of a link's address. Any other action, filter or arg value needs DesertFox's page code, so it is refused.
+export type PageHintChoice = { ok: true; action: PageHintAction } | { ok: false; problem: string };
+const PAGE_HINT_REFUSAL = "This hint does not run on this page";
+const ANY_ELEMENT_FILTERS: readonly unknown[] = [undefined, "all", "clickable"];
+const LINK_FILTERS: readonly unknown[] = [...ANY_ELEMENT_FILTERS, "links"];
+// The registry fills every hint arg, so these are the values that change nothing on such a page. `frames` stays free: the page's own frames get no labels.
+const PLAIN_HINT_ARGS: Record<string, readonly unknown[]> = { text: [undefined, ""], rapid: [undefined, false], register: [undefined, ""] };
+
+export function page_hint_action_of(keymap: CompiledKeymap | undefined, keys_text: string): PageHintChoice {
+  const keys = keys_text.split(" ");
+  if (keys.length > MAX_SEQUENCE_KEYS || !keys.every((key) => KEY_TOKEN.test(key))) return { ok: false, problem: "the keys are not a key sequence" };
+  const current = current_keymap(keymap);
+  if (!current?.modes.normal) return { ok: false, problem: "DesertFox has no keymap yet" };
+  const matcher = create_matcher(current);
+  let leaf: TreeLeaf | undefined;
+  for (const [index, token] of keys.entries()) {
+    const result = matcher.feed("normal", token);
+    const last = index === keys.length - 1;
+    if (result.kind_ === "pending" && !last && result.count === undefined && result.register_keys_ === undefined && result.held_ === undefined) continue;
+    if (result.kind_ === "match" && last && result.count === undefined && result.held_ === undefined && result.keys?.length === keys.length) leaf = result.leaf;
+    break;
+  }
+  const step = leaf && !has_guard(leaf) && leaf.steps.length === 1 ? leaf.steps[0] : undefined;
+  if (!step || step.invocation.id !== "hint.run" || step.capture !== undefined || step.invocation.prompt !== undefined) return { ok: false, problem: PAGE_HINT_REFUSAL };
+  const { action = "here", filter, frames: _frames, ...rest } = step.invocation.args ?? {};
+  if (!Object.entries(rest).every(([name, value]) => Object.hasOwn(PLAIN_HINT_ARGS, name) && PLAIN_HINT_ARGS[name]!.includes(value))) return { ok: false, problem: PAGE_HINT_REFUSAL };
+  if (action === "here" && ANY_ELEMENT_FILTERS.includes(filter)) return { ok: true, action: "follow" };
+  if ((action === "tab" || action === "background") && LINK_FILTERS.includes(filter)) return { ok: true, action };
+  if (action === "copy" && LINK_FILTERS.includes(filter)) return { ok: true, action: "yank" };
+  return { ok: false, problem: PAGE_HINT_REFUSAL };
 }

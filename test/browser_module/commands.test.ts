@@ -168,6 +168,34 @@ test("no hint key is claimed with the focus in a field, where DesertFox is live,
   for (const each of [field, live, older]) assert.deepEqual(each.runs(), []);
 });
 
+test("on a page chrome hints label, every hint key starts them with its keys and count, stays claimed, and sends no notice", () => {
+  const { press, type, runs, first, second, on_tab, notices, core, window } = with_notices();
+  const starts: { window: unknown; browser: unknown; keys: string; count: number; trusted: boolean }[] = [];
+  (core as unknown as { share_page_hints(entry: unknown): void }).share_page_hints({
+    handles: () => true,
+    start: ({ window: win, browser, event, keys, count }: { window: unknown; browser: unknown; event: { isTrusted: boolean }; keys: string; count: number }) => (starts.push({ window: win, browser, keys, count, trusted: event.isTrusted }), true),
+  });
+  notices.set(first.browser, "page_hints");
+  assert.ok(press("f").prevented);
+  assert.ok(press("f").prevented, "a second press did not start again");
+  assert.ok(type("3", "F").every((event) => event.prevented));
+  assert.ok(type(";", "y", "l").every((event) => event.prevented));
+  assert.deepEqual(starts.map(({ keys, count }) => ({ keys, count })), [{ keys: "f", count: 0 }, { keys: "f", count: 0 }, { keys: "F", count: 3 }, { keys: "; y l", count: 0 }]);
+  // The window comes through the vm context as its global, so its tab browser names it.
+  assert.ok(starts.every((start) => (start.window as { gBrowser: unknown }).gBrowser === window.win.gBrowser && start.browser === first.browser && start.trusted));
+  assert.deepEqual(runs(), [], "a page hint key sent a notice");
+  on_tab(second);
+  assert.equal(press("f").prevented, false, "a tab with no notice lost its f");
+  assert.equal(starts.length, 4);
+});
+
+test("with the page rule saying page_hints but no start lent, a hint key is still claimed and goes nowhere", () => {
+  const { press, runs, first, notices } = with_notices();
+  notices.set(first.browser, "page_hints");
+  assert.ok(press("f").prevented);
+  assert.deepEqual(runs(), []);
+});
+
 test("a tree binding wins over a hint key on its way", () => {
   const { press, runs, first, notices, firefox } = with_notices();
   notices.set(first.browser, "pages_off");

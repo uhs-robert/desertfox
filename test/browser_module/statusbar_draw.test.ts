@@ -1,7 +1,7 @@
 // The status bar in a fake window: the hello it rewrites, what it draws from the state, how it treats a hostile state, how it drops widgets in a narrow bar, and that it leaves nothing behind at unload.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BAR_COLORS, BAR_CONFIG, create_bar_fixture } from "./statusbar_window.ts";
+import { BAR_COLORS, BAR_CONFIG, create_bar_fixture, FakeNode } from "./statusbar_window.ts";
 
 const state_with = (tab: Record<string, unknown>, bar: Record<string, unknown> = BAR_CONFIG, extra: Record<string, unknown> = {}) => ({
   v: 1,
@@ -173,6 +173,36 @@ test("the scroll widget shows only for the document the report names", () => {
   fixture.firefox.emit_message("desertfox-statusbar:scroll", fixture.tabs[0]!.browser, "junk");
   fixture.run_frames();
   assert.deepEqual(fixture.widgets("right"), ["Top"]);
+  assert.deepEqual(fixture.firefox.errors, []);
+});
+
+test("while chrome hints label one of Firefox's own pages the bar says HINT, and once their layer goes a focused field shows INSERT again", () => {
+  const fixture = create_bar_fixture();
+  const changes: (() => void)[] = [];
+  Object.assign(fixture.window.win, { MutationObserver: class { constructor(callback: () => void) { changes.push(callback); } observe() {} disconnect() {} } });
+  fixture.firefox.start_extension({ private_access: true });
+  fixture.load();
+  fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
+  fixture.firefox.emit_message("desertfox-browser-module:report", fixture.tabs[0]!.browser, { inner: 10, listeners: 0, field: true });
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[0], "INSERT");
+  const layer = new FakeNode("div");
+  layer.className = "desertfox-page-hints";
+  fixture.root.append(layer);
+  changes.forEach((change) => change());
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[0], "HINT");
+  layer.remove();
+  changes.forEach((change) => change());
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[0], "INSERT");
+  // The layer of chrome hints over the toolbars or a dialog is no page session.
+  const other = new FakeNode("div");
+  other.className = "desertfox-chrome-hints";
+  fixture.root.append(other);
+  changes.forEach((change) => change());
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[0], "INSERT");
   assert.deepEqual(fixture.firefox.errors, []);
 });
 

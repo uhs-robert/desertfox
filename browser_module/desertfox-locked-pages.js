@@ -1,6 +1,6 @@
 // DesertFox browser module, the locked pages feature: DesertFox's own page code (`content.js` and the bundles) in the PDF viewer and Reader View, where no content script runs. See docs/design/browser_module.md.
 // Chrome only carries the page code's messages. It hands the JSON text of each one on as it came and never parses it, so no message can pick an action, an address or a selector for chrome code.
-// The code runs in a sandbox under the expanded principal [page, extension], as Firefox runs a content script, never under the system principal. Every other page, about:addons and about:preferences included, gets nothing.
+// The code runs in a sandbox under the expanded principal [page, extension], as Firefox runs a content script, never under the system principal. Every other page, about:addons and about:preferences included, gets nothing. Chrome hints label a few of those themselves.
 //
 // Two halves. In the core sandbox (one per parent process): the attach rule, the page calls through the core's `send`, the pushes through `register_kind`, and the snapshots through `watch_session`.
 // In each tab (the frame script below): the sandbox, the files it loads from the extension, and the transport the shim (src/content/locked_shim.ts) takes as `desertfox_locked_transport`.
@@ -101,14 +101,17 @@
     }
 
     // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on the PDF viewer and Reader View while page code is off, "not_here" on an about: page, where page code never runs. Undefined everywhere else, so the key goes on.
+    // "page_hints" instead on an about: page that chrome hints label themselves (their own fixed list), once the extension's state says it answers their start. The key taker then starts those hints.
     // An initial about:blank and a srcdoc frame are no page the user sees as Firefox's own. A DevTools toolbox in a tab is DevTools, whose keys stay its own. Firefox matches about: names in any case, so the test does too.
-    function hint_notice_of(browser) {
+    // `win` is the browser window that shows `browser`.
+    function hint_notice_of(browser, win) {
       const global = browser?.browsingContext?.currentWindowGlobal;
       const principal = global?.documentPrincipal;
       if (!principal || principal.addonId) return undefined;
       if (page_kind_of(browser, global.innerWindowId)) return pages_on(desertfox()) ? undefined : "pages_off";
       const address = global.documentURI?.spec ?? "";
-      return /^about:(?!(?:blank|srcdoc|reader)\b|devtools)/i.test(address) ? "not_here" : undefined;
+      if (!/^about:(?!(?:blank|srcdoc|reader)\b|devtools)/i.test(address)) return undefined;
+      return core.page_hints?.()?.handles(browser) && core.page_hints_wanted?.(win) ? "page_hints" : "not_here";
     }
 
     const tab_id_of = (browser) => tab_tracker().getBrowserData(browser).tabId;

@@ -11,6 +11,10 @@
 // A request alone never labels or marks a control that grants: the module must have seen a whole `hint.browser` binding typed outside a field in that window just before (START_KEY_MS), as gB typed in the page.
 // A pick of a control that grants something (Allow, unblock a download, send a client certificate) does not click. It marks the control and waits for Enter, typed by the user in that window and seen here.
 // No message can confirm, so a compromised extension that names the wrong target grants nothing on its own. `grants` holds the fixed table.
+//
+// It also labels a few of Firefox's own pages that run in this process (PAGE_HINT_PAGES), which no content script reaches. The key taker (desertfox-commands.js) calls the start it lends through the core's `share_page_hints` on the user's own hint key there.
+// That start makes a token as a chrome-focus start does and pushes page_hints.want. The extension names the action and answers with page_hints.collect. Draw, key, pick and clear then go on the chrome_hints kinds.
+// A pick there runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it.
 
 (function desertfox_browser_module_chrome_hints(scope) {
   "use strict";
@@ -53,6 +57,8 @@
     // The alphabet the hint_letters setting allows: any key but a blank and "/".
     const LABEL = /^[^\s/]+$/u;
     const KEY_OWNER = "chrome_hints";
+    // The class of a layer over one of Firefox's own pages. The status bar shows HINT while one is in the window.
+    const PAGE_HOST_CLASS = "desertfox-page-hints";
     // Holds the window's keys while the first keys of a binding wait for the rest, so the popup walk leaves the next key alone.
     const PREFIX_OWNER = "chrome_hints.prefix";
     // A start token lives this long. Its key holds the window's keys meanwhile, as a session does.
@@ -150,9 +156,10 @@
       return false;
     }
 
-    // The fixed action of each target: a tab is selected, a menu, a drop-down or a bookmarks folder opens, a download row is chosen as a click on it would, a radio is chosen, a button runs its command or is clicked.
+    // The fixed action of each target: a tab is selected, a menu, a drop-down or a bookmarks folder opens, a download row is chosen as a click on it would, a radio is chosen, a text field of a page takes the focus, a button runs its command or is clicked.
     function kind_of(element) {
       if (element.localName === "tab") return "tab";
+      if (core.is_field(element)) return "field";
       if (element.localName === "richlistitem" && element.parentNode?.id === "downloadsListBox") return "download";
       if (element.localName === "radio") return "radio";
       if (element.localName === "menu" || element.localName === "menulist" || (element.localName === "toolbarbutton" && element.getAttribute("type") === "menu")) return "menu";
@@ -237,11 +244,14 @@
     }
 
     // The controls of a dialog's document or of the Library or Page Info, labelled in the window's own layer.
-    function control_targets(win, doc) {
+    const control_targets = (win, doc) => visible_targets(win, [...deep_all(doc, CONTROLS), ...doc.querySelectorAll(DOWNLOAD_ROWS)]);
+
+    // Those of `elements` the user sees at their box in the window, each once.
+    function visible_targets(win, elements) {
       const view = { left: 0, top: 0, width: win.innerWidth, height: win.innerHeight };
       const found = [];
       const seen = new Set();
-      for (const element of [...deep_all(doc, CONTROLS), ...doc.querySelectorAll(DOWNLOAD_ROWS)]) {
+      for (const element of elements) {
         if (seen.has(element) || !usable(element)) continue;
         seen.add(element);
         const inner = box_of(element);
@@ -250,6 +260,61 @@
         if (within(box, view)) found.push({ element, box, place: "window" });
       }
       return found;
+    }
+
+    // ---- Firefox's own pages in this process: the allowlist and what a session there labels.
+
+    // By about: name, what a pick there waits for Enter on (`grants`) and what never gets a label (`never`). Any other about: page keeps the key taker's notice, so a page a later Firefox adds stays unlabelled.
+    // about:addons: the controls that grant an add-on more (private windows, sites with restrictions, its optional permissions) and Remove. about:config: every write to a pref, and the risk warning's button is the user's own consent.
+    // about:downloads: the rules of the downloads list in `grants`.
+    const ADDON_GRANT_INPUTS = new Set(["private-browsing", "quarantined-domains-user-allowed"]);
+    const PAGE_HINT_PAGES = {
+      preferences: {},
+      settings: {},
+      downloads: {},
+      addons: {
+        grants: (element) => (element.localName === "input" && ADDON_GRANT_INPUTS.has(element.name)) || closest_of(element, (at) => at.hasAttribute?.("permission-key") || at.hasAttribute?.("permission-all-sites") || at.getAttribute?.("action") === "remove") !== null,
+      },
+      config: {
+        grants: (element) => element.localName === "button" && closest_of(element, (at) => at.id === "prefs") !== null,
+        never: (element) => element.id === "warningButton",
+      },
+    };
+    const ABOUT_NAME = /^about:([a-z]+)(?:[?#]|$)/i;
+
+    // The allowlist's row for a document, only for a page of Firefox's own (the system principal). A page in a content process has no document in this process at all.
+    function page_row(doc) {
+      if (doc?.nodePrincipal?.isSystemPrincipal !== true) return undefined;
+      const name = ABOUT_NAME.exec(String(doc.documentURI ?? ""))?.[1]?.toLowerCase();
+      return name !== undefined && Object.hasOwn(PAGE_HINT_PAGES, name) ? PAGE_HINT_PAGES[name] : undefined;
+    }
+
+    // The tab's page, when this file labels it.
+    function page_document(browser) {
+      if (!browser || browser.isRemoteBrowser) return undefined;
+      const doc = browser.contentDocument;
+      return page_row(doc) ? doc : undefined;
+    }
+
+    // Beside the dialog controls: a page's links and its newer link and button rows. Text fields too, which a pick focuses. The custom fields (moz-input-search, moz-select) are not matched, so their own input or select inside gets the label.
+    const PAGE_CONTROLS = `${CONTROLS}, a[href], moz-box-button, moz-box-link`;
+    const PAGE_FIELDS = "input, textarea, select";
+    const LINKS = "a[href]";
+
+    // The address a link goes to, only when it is on the web. A new tab or a copy takes no other, so no about:, chrome: or javascript: address leaves the page.
+    function web_address(element) {
+      const href = element.localName === "a" ? element.href : undefined;
+      return typeof href === "string" && /^https?:\/\/\S+$/i.test(href) ? href : undefined;
+    }
+
+    // `follow` labels the controls, the links and the text fields. The other actions label only links to the web.
+    function page_targets(win, doc, action) {
+      const row = page_row(doc);
+      const elements =
+        action === "follow"
+          ? [...deep_all(doc, `${PAGE_CONTROLS}, ${PAGE_FIELDS}`).filter((element) => !element.matches(PAGE_FIELDS) || element.matches(CONTROLS) || core.is_field(element)), ...doc.querySelectorAll(DOWNLOAD_ROWS)]
+          : deep_all(doc, LINKS).filter((element) => web_address(element) !== undefined);
+      return visible_targets(win, elements.filter((element) => !row?.never?.(element)));
     }
 
     const window_type = (win) => win.document?.documentElement?.getAttribute("windowtype") ?? "";
@@ -312,17 +377,21 @@
     // ---- The layer: a host in the window document for the toolbars, and one inside the panel for its rows.
 
     // The theme goes in a constructed sheet: the DevTools toolbox and Storage documents ignore an inline style.
+    // With no `style_url` the layer takes no sheet at all, so nothing the extension ships styles what it holds.
     function make_layer(doc, style_url, theme, fixed, host_class = HOST_CLASS) {
       const host = doc.createElementNS(HTML, "div");
       host.className = host_class;
       host.style.cssText = fixed ? "position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;" : "position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 2147483647;";
       const root = host.attachShadow({ mode: "closed" });
-      const sheet = doc.createElementNS(HTML, "link");
-      sheet.setAttribute("rel", "stylesheet");
-      sheet.setAttribute("href", style_url);
       const box = doc.createElementNS(HTML, "div");
       box.className = "desertfox-hints";
-      root.append(sheet, box);
+      if (style_url) {
+        const sheet = doc.createElementNS(HTML, "link");
+        sheet.setAttribute("rel", "stylesheet");
+        sheet.setAttribute("href", style_url);
+        root.append(sheet);
+      }
+      root.append(box);
       if (theme !== "") {
         const colors = new doc.defaultView.CSSStyleSheet();
         colors.replaceSync(theme);
@@ -333,8 +402,8 @@
 
     // ---- The session.
 
-    const send = (kind, args) => {
-      const sent = core.send(kind, args);
+    const send = (kind, args, on_reply = undefined) => {
+      const sent = core.send(kind, args, on_reply);
       if (!sent.ok) core.log_once(`${kind} was not sent: ${sent.problem}`);
       return sent.ok;
     };
@@ -361,8 +430,26 @@
 
     function push_key(key) {
       session.seq++;
+      if (session.page) note_typed(session, key);
       send("chrome_hints.key", { session: session.tag, seq: session.seq, key });
     }
+
+    // A page session keeps the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
+    // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing.
+    function note_typed(owner, key) {
+      owner.typed_at = time_now(owner.win);
+      if (key === "Backspace") {
+        owner.typed = owner.typed.slice(0, -1);
+        return;
+      }
+      if ([...key].length !== 1 || /\s/u.test(key)) return;
+      const next = owner.typed + key.toLowerCase();
+      if ([...owner.labels.values()].some((label) => label.startsWith(next))) owner.typed = next;
+    }
+
+    // The extension picks within a moment of the key that spelled the label.
+    const SPELLED_MS = 2000;
+    const spelled = (owner, id) => owner.typed !== "" && owner.labels?.get(id) === owner.typed && time_now(owner.win) - owner.typed_at <= SPELLED_MS;
 
     const ENDS = Symbol("ends");
 
@@ -417,16 +504,33 @@
 
     // The window's keys are held from the binding's last key on, so the labels' letters never reach the popup walk or the dialog.
     // `frame_win`: the dialog the binding was typed in, whose clicks stay in its own document.
-    function begin_start(win, frame_win) {
+    // `page`: the page of Firefox's own the hint key was typed on, with that key and its count. Its start asks with page_hints.want, and a refusal of it ends the start at once.
+    function begin_start(win, { frame_win, page } = {}) {
       end_start();
-      starting = { win, token: 1 + Math.floor(Math.random() * 0x7ffffffe), made_at: Date.now(), early_keys: [], undo: [] };
+      const token = 1 + Math.floor(Math.random() * 0x7ffffffe);
+      starting = { win, token, made_at: Date.now(), early_keys: [], undo: [], page };
       if (!core.hold_keys(win, KEY_OWNER)) return end_start();
       starting.undo.push(() => core.release_keys(win, KEY_OWNER));
       for (const type of ["mousedown", "deactivate", "unload"]) listen(starting, win, type, end_start);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(starting, frame_win, type, end_start);
+      if (page) {
+        listen(starting, win, "TabSelect", end_start);
+        for (const type of ["mousedown", "pagehide"]) listen(starting, page.doc.defaultView, type, end_start);
+      }
       const timer = win.setTimeout(end_start, START_TOKEN_MS);
       starting.undo.push(() => win.clearTimeout(timer));
-      if (!send("chrome_hints.want", { start: starting.token })) end_start();
+      const refused = (reply) => !reply.ok && starting?.token === token && end_start();
+      const asked = page ? send("page_hints.want", { start: token, keys: page.keys, count: page.count }, refused) : send("chrome_hints.want", { start: token });
+      if (!asked) end_start();
+    }
+
+    // The start the key taker calls for a hint key on a page this file labels. True when it asked the extension.
+    function start_page({ window: win, browser, event, keys, count }) {
+      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count)) return false;
+      const doc = page_document(browser);
+      if (!doc || tabs_of(win)?.selectedBrowser !== browser) return false;
+      begin_start(win, { page: { browser, inner: browser.innerWindowID, doc, keys, count } });
+      return starting?.win === win;
     }
 
     function on_start_key(event) {
@@ -452,7 +556,7 @@
       if (!step.take) return note_start_key(win, record, bindings, event);
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (step.done) begin_start(win, place.frame_win);
+      if (step.done) begin_start(win, { frame_win: place.frame_win });
     }
 
     // When a whole binding last went on to the page, per window: the content script starts hints for it with a plain collect.
@@ -488,16 +592,17 @@
 
     // `frame_win`: the window of the dialog the targets are in, whose close ends the session.
     // `keyed`: a key of the user's began the session, so a pick may mark a control that grants.
-    function start_session(tag, win, found, style_url, theme, { panel, frame_win, early_keys = [], keyed = false } = {}) {
+    // `page`: the page of Firefox's own the targets are on, and the session's action there.
+    function start_session(tag, win, found, style_url, theme, { panel, frame_win, page, early_keys = [], keyed = false } = {}) {
       // A start's and a confirm's ends release the same hold a session takes, so they end first.
       end_start();
       end_confirm();
       end_session(true);
       if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, look: { style_url, theme, panel, frame_win } };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, typed: "", typed_at: 0, labels: undefined, look: { style_url, theme, panel, frame_win, page } };
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
-        add_session_parts(win, found, style_url, theme, panel, frame_win);
+        add_session_parts(win, found, style_url, theme, panel, frame_win, page);
       } catch (error) {
         // A half-built session has no timer or listeners to end it, so it would swallow the window's letters until Escape.
         end_session(false);
@@ -505,10 +610,10 @@
       }
     }
 
-    function add_session_parts(win, found, style_url, theme, panel, frame_win) {
+    function add_session_parts(win, found, style_url, theme, panel, frame_win, page) {
       const doc = win.document;
       for (const target of found) session.targets.set(next_target_id++, { ...target, kind: kind_of(target.element) });
-      const window_layer = make_layer(doc, style_url, theme, true);
+      const window_layer = make_layer(doc, style_url, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
       doc.documentElement.append(window_layer.host);
       session.layers.window = window_layer;
       session.undo.push(() => window_layer.host.remove());
@@ -525,6 +630,10 @@
         listen(session, frame_win, "unload", end_told);
         listen(session, frame_win, "mousedown", end_told);
         listen(session, win, "TabSelect", end_told);
+      }
+      if (page) {
+        listen(session, win, "TabSelect", end_told);
+        for (const type of ["mousedown", "pagehide"]) listen(session, page.doc.defaultView, type, end_told);
       }
       listen(session, win, "mousedown", end_told);
       listen(session, win, "deactivate", end_told);
@@ -581,19 +690,26 @@
       return open_session(tag, win, found, colors, { ...places, keyed: labels_a_grant });
     }
 
-    // A start the user's key asked for in chrome. The token is spent here whatever the answer, so a second request with it finds nothing.
+    // Why the start `asked` may not open a session now, or undefined.
+    function asked_problem(asked) {
+      if (!enabled_by_pref()) return "The browser module is off";
+      if (Date.now() - asked.made_at > START_TOKEN_MS) return "The hint key is stale";
+      const win = asked.win;
+      if (win.closed) return "The window is gone";
+      if (Services.focus.activeWindow !== win) return "The window is not in front";
+      if (!core.may_act(win)) return "DesertFox cannot run in this window";
+      return start_problem(win);
+    }
+
+    // A start the user's key asked for in chrome. The token is spent here whatever the answer, so a second request with it finds nothing. A page's token opens nothing here.
     function collect_here({ session: tag, start, colors }) {
       const asked = starting;
       if (!asked || asked.token !== start) return { ok: false, error: "The hint key is stale" };
       end_start();
-      if (!enabled_by_pref()) return { ok: false, error: "The browser module is off" };
-      if (Date.now() - asked.made_at > START_TOKEN_MS) return { ok: false, error: "The hint key is stale" };
-      const win = asked.win;
-      if (win.closed) return { ok: false, error: "The window is gone" };
-      if (Services.focus.activeWindow !== win) return { ok: false, error: "The window is not in front" };
-      if (!core.may_act(win)) return { ok: false, error: "DesertFox cannot run in this window" };
-      const refused = start_problem(win);
+      if (asked.page) return { ok: false, error: "The hint key is stale" };
+      const refused = asked_problem(asked);
       if (refused) return { ok: false, error: refused };
+      const win = asked.win;
       const place = chrome_place(win);
       if (!place) return { ok: false, error: "Nothing to hint here" };
       if (place.opened) {
@@ -601,6 +717,20 @@
         return open_session(tag, win, found, colors, { ...places, early_keys: asked.early_keys, keyed: true });
       }
       return open_session(tag, win, control_targets(win, place.doc), colors, { frame_win: place.frame_win, early_keys: asked.early_keys, keyed: true });
+    }
+
+    // A start the user's hint key asked for on a page of Firefox's own. As with collect_here, the token is spent whatever the answer, and it opens only on the page it was typed on, still shown in its tab.
+    function page_collect({ session: tag, start, action, colors }) {
+      const asked = starting;
+      if (!asked || asked.token !== start) return { ok: false, error: "The hint key is stale" };
+      end_start();
+      if (!asked.page) return { ok: false, error: "The hint key is stale" };
+      const refused = asked_problem(asked);
+      if (refused) return { ok: false, error: refused };
+      const { win } = asked;
+      const { browser, inner, doc } = asked.page;
+      if (tabs_of(win)?.selectedBrowser !== browser || browser.innerWindowID !== inner || page_document(browser) !== doc) return { ok: false, error: "The page changed" };
+      return open_session(tag, win, page_targets(win, doc, action), colors, { page: { doc, action }, early_keys: asked.early_keys, keyed: true });
     }
 
     // ---- Draw.
@@ -677,11 +807,19 @@
         end_session(true);
         return { ok: true };
       }
+      if (session.page && !keeps_labels(session, rows_drawn)) return { ok: true };
       const first = session.drawn_gen === 0;
+      if (first && session.page) session.labels = new Map(rows_drawn);
       session.drawn_gen = args.gen;
       apply_draw(rows_drawn, [...args.typed].length);
       if (first) for (const key of session.early_keys.splice(0)) push_key(key);
       return { ok: true };
+    }
+
+    // A page session's labels are those of its first draw: each its own, and a later draw only shows fewer of them. So the keys typed name one target.
+    function keeps_labels(owner, rows) {
+      if (owner.labels === undefined) return new Set(rows.map(([, label]) => label)).size === rows.length;
+      return rows.every(([id, label]) => owner.labels.get(id) === label);
     }
 
     // ---- Grants: the fixed table of the controls whose pick waits for Enter.
@@ -708,6 +846,7 @@
 
     // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
     function grants(win, element) {
+      if (page_row(element.ownerDocument)?.grants?.(element)) return true;
       const prompt = prompt_of(element);
       if (prompt) return prompt_grants(prompt, element);
       if (closest_of(element, (at) => at.id === "downloadsListBox" || at.id === "downloadsPanel")) return download_grants(win, element);
@@ -732,13 +871,16 @@
 
     const remembers = (prompt) => prompt.querySelector(".popup-notification-checkbox")?.hasAttribute("checked") ?? false;
 
-    // A pick of a Library row only chooses it, and the user's own Enter there opens the file. A pick of a panel row opens its file, which waits, or the blocked-download view for a row Firefox holds back, which does not.
+    // The downloads panel sits in the browser window's own document. The Library and about:downloads hold the same list in their own.
+    const in_downloads_panel = (win, element) => window_type(win) === BROWSER && element.ownerDocument === win.document;
+
+    // A pick of a Library or about:downloads row only chooses it, and the user's own Enter there opens the file. A pick of a panel row opens its file, which waits, or the blocked-download view for a row Firefox holds back, which does not.
     function download_grants(win, element) {
       if (element.id === "downloadsHistory" || element.id === "downloadsPanel-blockedSubview-deleteButton" || has_class(element, "subviewbutton-back")) return false;
       const row = closest_of(element, (at) => at.localName === "richlistitem");
       if (!row) return true;
       const blocked = row.hasAttribute("verdict");
-      if (element === row) return window_type(win) === BROWSER && !(blocked && has_class(row, "temporary-block"));
+      if (element === row) return in_downloads_panel(win, element) && !(blocked && has_class(row, "temporary-block"));
       if (!has_class(element, "downloadButton")) return true;
       return !(AT_ONCE_DOWNLOAD_ICONS.some((icon) => has_class(element, icon)) || (has_class(element, "downloadIconShow") && !blocked));
     }
@@ -770,8 +912,11 @@
     const CONFIRM_MS = 15000;
     // Short enough to sit above the control inside its prompt: a longer note runs past the panel's edge, which cuts it.
     const CONFIRM_TEXT = "Enter";
-    // The height of the note above a marked control: a label of the hint sheet with its padding.
+    // The height of the note above a marked control, with its padding and border.
     const NOTE_PX = 20;
+    // The mark's own look, inline in a layer with no sheet: the extension's label sheet and theme colors never reach it, so a compromised extension cannot hide or fake the note over a grant.
+    const CONFIRM_FRAME_STYLE = "outline: 3px solid #ffd000; outline-offset: 2px; border-radius: 3px;";
+    const CONFIRM_NOTE_STYLE = "box-sizing: border-box; height: 20px; padding: 1px 4px; border: 1px solid #000000; border-radius: 3px; background: #ffd000; color: #000000; font: bold 12px/16px monospace; white-space: nowrap; opacity: 1; visibility: visible; display: block;";
     let confirming = null;
 
     function end_confirm() {
@@ -830,10 +975,10 @@
       return true;
     }
 
-    function add_confirm_parts(win, target, { style_url, theme, panel, frame_win }) {
+    function add_confirm_parts(win, target, { panel, frame_win, page }) {
       const doc = win.document;
       const in_panel = target.place === "panel" && panel !== undefined;
-      const layer = make_layer(doc, style_url, theme, !in_panel);
+      const layer = make_layer(doc, undefined, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
       if (in_panel) panel.view.prepend(layer.host);
       else doc.documentElement.append(layer.host);
       confirming.undo.push(() => layer.host.remove());
@@ -844,14 +989,11 @@
       const top = Math.round(box.top - origin.top);
       const frame = doc.createElementNS(HTML, "div");
       frame.className = "desertfox-confirm";
-      frame.style.cssText = `position: ${position}; left: ${left}px; top: ${top}px; width: ${Math.round(box.width)}px; height: ${Math.round(box.height)}px; outline: 3px solid var(--primary); outline-offset: 2px; border-radius: 3px;`;
+      frame.style.cssText = `position: ${position}; left: ${left}px; top: ${top}px; width: ${Math.round(box.width)}px; height: ${Math.round(box.height)}px; ${CONFIRM_FRAME_STYLE}`;
       const note = label_node(doc, CONFIRM_TEXT, 0);
-      note.style.position = position;
-      // The layer inside a panel has no width, so a note that may wrap breaks after each word.
-      note.style.whiteSpace = "nowrap";
-      note.style.left = `${Math.max(0, left)}px`;
+      // nowrap: the layer inside a panel has no width, so a note that may wrap breaks after each word.
       // Above the control, inside the panel or dialog it sits in: below it the panel's edge cuts the note, and on it the note hides what Enter grants.
-      note.style.top = `${Math.max(0, top - NOTE_PX)}px`;
+      note.style.cssText = `position: ${position}; left: ${Math.max(0, left)}px; top: ${Math.max(0, top - NOTE_PX)}px; ${CONFIRM_NOTE_STYLE}`;
       layer.box.replaceChildren(frame, note);
 
       const ends = () => end_confirm();
@@ -901,14 +1043,18 @@
     }
 
     // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
+    // On a page of Firefox's own the pick must also name the label the user's keys spelled, and a link action opens or copies the link's web address here.
     function pick({ session: tag, id }) {
       const { target, error } = drawn_target(session, tag, id);
       if (error) return { ok: false, error };
       const { element, drawn } = target;
-      const { win, look, keyed } = session;
+      const { win, look, keyed, page } = session;
+      const named_by_keys = !page || spelled(session, id);
       end_session(false);
+      if (!named_by_keys) return { ok: false, error: "The keys typed do not name this hint" };
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
       if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
+      if (page && page.action !== "follow") return run_link(win, element, page.action);
       if (grants(win, element)) {
         // A control can come to grant after the collect, as when a prompt's Remember is ticked.
         if (!keyed) return { ok: false, error: "Type the hint key to pick this" };
@@ -923,9 +1069,12 @@
     const box_moved = (drawn, now) => Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX;
     const moved = (win, element, drawn) => box_moved(drawn, window_box(win, element));
 
+    const tabs_of = (win) => win.gBrowser ?? win.wrappedJSObject?.gBrowser;
+
     function run_target(win, { element, kind }) {
-      const tabs = win.gBrowser ?? win.wrappedJSObject?.gBrowser;
+      const tabs = tabs_of(win);
       if (kind === "tab" && tabs) tabs.selectedTab = element;
+      else if (kind === "field") element.focus();
       else if (kind === "menu") element.open = true;
       else if (kind === "download") choose_download(win, element);
       // The radio's <command> reads the group's choice, so the radio is chosen first. Page Info's permission rows work this way.
@@ -939,13 +1088,28 @@
     }
 
     // The downloads panel acts on a click in a row's main area, on the row the list has chosen, and only with the focus in the list. A click on the row itself does nothing.
-    // The Library acts on a double click, so a pick there only chooses the row, and Enter then opens it.
+    // The Library and about:downloads act on a double click, so a pick there only chooses the row, and Enter then opens it.
     function choose_download(win, row) {
       const list = row.parentNode;
       if (!holds(list, core.focused_element(win))) list.focus();
       list.selectedItem = row;
-      if (window_type(win) === BROWSER) row.querySelector(".downloadMainArea")?.click();
+      if (in_downloads_panel(win, row)) row.querySelector(".downloadMainArea")?.click();
       else list.ensureElementIsVisible?.(row);
+    }
+
+    // A new tab loads the address as a link the user opened would, with no principal of the page or of chrome behind it.
+    function run_link(win, element, action) {
+      const address = web_address(element);
+      if (address === undefined) return { ok: false, error: "The link has no web address" };
+      if (action === "yank") {
+        Components.classes["@mozilla.org/widget/clipboardhelper;1"].getService(Components.interfaces.nsIClipboardHelper).copyString(address);
+        return { ok: true };
+      }
+      const tabs = tabs_of(win);
+      const user_context_id = tabs.selectedTab?.userContextId ?? 0;
+      const tab = tabs.addTab(address, { triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal({ userContextId: user_context_id }), userContextId: user_context_id, relatedToCurrent: true, inBackground: action === "background" });
+      if (action === "tab") tabs.selectedTab = tab;
+      return { ok: true };
     }
 
     function clear({ session: tag }) {
@@ -1060,6 +1224,9 @@
     core.register_kind("chrome_hints.draw", draw);
     core.register_kind("chrome_hints.pick", pick);
     core.register_kind("chrome_hints.clear", clear);
+    core.register_kind("page_hints.collect", page_collect);
+    core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined, start: start_page });
+    core.set_hello_flag("page_hints", true);
     // The DevTools hints draw with these, so their label checks and layer stay one code.
     core.share_hint_drawing({ MAX_TARGETS, label_style_url, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
   }

@@ -366,7 +366,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const fits = tree && validate_scope_tree(tree).ok;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }) });
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true });
     request_hello_read();
     request_messages_read();
   };

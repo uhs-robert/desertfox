@@ -12,6 +12,7 @@
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
   var PANE_DIRECTIONS = ["left", "right"];
+  var PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
   var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
   var MAX_DEVTOOLS_KEY_ROWS = 8;
   var DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
@@ -58,6 +59,7 @@
     if (kind === "axis") return value === "x" || value === "y" ? void 0 : "must be x or y";
     if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? void 0 : `must be one of ${PANE_REGIONS.join(", ")}`;
     if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
+    if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
     if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
@@ -220,6 +222,8 @@
     const branch = (node) => ({ kind: "branch", children: Object.fromEntries(Object.entries(node.children).map(([token, child]) => [token, typeof child === "string" || "native" in child ? { kind: "leaf", steps: [], scope: child } : branch(child)])) });
     return { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: branch(tree) }, mode_indicator: "off", which_key_delay_ms: 0, toast_ms: 0, toast_error_ms: 0 };
   }
+  var ANY_ELEMENT_FILTERS = [void 0, "all", "clickable"];
+  var LINK_FILTERS = [...ANY_ELEMENT_FILTERS, "links"];
 
   // src/shared/keys/token.ts
   var MODIFIER_KEY_NAMES = /* @__PURE__ */ new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "OS", "CapsLock", "Dead", "Unidentified", "Process"]);
@@ -280,8 +284,10 @@
     const is_ignored = (browser2) => ignored.get(browser2) === browser2.innerWindowID;
     const NOTICE_LEAF = "notice";
     const noticed = /* @__PURE__ */ new WeakMap();
-    const hint_notice_of = (browser2) => core2.locked_page_rule?.()?.hint_notice(browser2);
-    function with_notice_leaves(tree) {
+    const hint_notice_of = (browser2, win) => core2.locked_page_rule?.()?.hint_notice(browser2, win);
+    const PAGE_HINT_LEAF = "page_hint";
+    const PAGE_HINTS = "page_hints";
+    function with_hint_leaves(tree, leaf) {
       for (const path of Array.isArray(tree.hint_keys) ? tree.hint_keys : []) {
         const tokens = path.split(" ");
         let node = tree;
@@ -289,7 +295,7 @@
           const child = Object.hasOwn(node.children, token) ? node.children[token] : void 0;
           const last = index === tokens.length - 1;
           if (child === void 0) {
-            const added = last ? NOTICE_LEAF : { children: {} };
+            const added = last ? leaf : { children: {} };
             Object.defineProperty(node.children, token, { value: added, enumerable: true, writable: true, configurable: true });
             node = added;
           } else if (!last && typeof child === "object" && "children" in child) node = child;
@@ -346,7 +352,7 @@
       const walk = walks.get(win);
       if (walk?.text === text && walk.notice === notice && walk.browser === browser2 && walk.inner === browser2.innerWindowID) return walk;
       const parsed = JSON.parse(text);
-      const tree = notice === void 0 ? parsed : with_notice_leaves(parsed);
+      const tree = notice === void 0 ? parsed : with_hint_leaves(parsed, notice === PAGE_HINTS ? PAGE_HINT_LEAF : NOTICE_LEAF);
       const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
       const fresh = { text, notice, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: void 0 };
       walks.set(win, fresh);
@@ -369,6 +375,10 @@
       if (!sent.ok) core2.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
       else if (walk.line_keys.has(keys)) start_hold(win, walk.browser);
       return sent.ok;
+    }
+    function start_page_hints(result, context) {
+      core2.page_hints?.()?.start({ window: context.window, browser: context.browser, event: context.event, keys: path_of(result).join(" "), count: result.count ?? 0 });
+      return true;
     }
     function notice_once(result, browser2) {
       if (noticed.get(browser2) === browser2.innerWindowID) return true;
@@ -396,7 +406,7 @@
         return true;
       }
       const text = tree === void 0 ? "" : tree_text(tree);
-      const walk = text === "" ? void 0 : walk_for(win, browser2, text, hint_notice_of(browser2));
+      const walk = text === "" ? void 0 : walk_for(win, browser2, text, hint_notice_of(browser2, win));
       if (!walk && context.row_runs) return void 0;
       const idle = walk === void 0 || walk.pending === void 0;
       if (idle && token === IGNORE_TOGGLE_KEY && !walk?.matcher.binds_after_("normal", [], token)) {
@@ -420,6 +430,7 @@
       if (result.register_keys_ !== void 0) return true;
       if (leaf === "forward") return forward(result, walk, win);
       if (leaf === NOTICE_LEAF) return notice_once(result, browser2);
+      if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
       return run_native(leaf, result, context);
     }
     function pending_in(win) {

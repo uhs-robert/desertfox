@@ -5,7 +5,7 @@ import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
-import { locked_page_command_ids, matcher_keymap_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
+import { locked_page_command_ids, matcher_keymap_of, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
@@ -192,4 +192,20 @@ test("a forged, stale or page key, a typed count or register and junk are refuse
   // A tree the module still holds from before a remap: the keymap now unbinds xx.
   refused("x x", 0, compiled({ normal: { xx: null } }));
   assert.equal(resolve_run(undefined, "x x", 0, allowed).ok, false);
+});
+
+test("a hint key on one of Firefox's own pages maps to the page action of its binding, and any other hint is refused", () => {
+  const keymap = compiled({ normal: { gF: { id: "hint.run", args: { action: "tab" } }, gY: { id: "hint.run", args: { action: "copy", filter: "links", rapid: true } }, gX: [{ id: "hint.run", args: {} }, { id: "page.item", args: { direction: "current" } }] } });
+  const action = (keys: string) => page_hint_action_of(keymap, keys);
+  assert.deepEqual(action("f"), { ok: true, action: "follow" });
+  assert.deepEqual(action("F"), { ok: true, action: "background" });
+  assert.deepEqual(action("g F"), { ok: true, action: "tab" });
+  assert.deepEqual(action("; y l"), { ok: true, action: "yank" });
+  const refused = { ok: false, problem: "This hint does not run on this page" };
+  // A window, a filter that needs page code, a rapid copy, a second step, a caret start and a key that is no hint.
+  for (const keys of ["w h", "; b", "; l", "g Y", "g X", "; v", "j"]) assert.deepEqual(action(keys), refused, keys);
+  // Half a sequence or more keys than the binding reach no leaf.
+  for (const keys of [";", "f f"]) assert.deepEqual(action(keys), refused, keys);
+  assert.equal(page_hint_action_of(keymap, "a b".repeat(9)).ok, false);
+  assert.equal(page_hint_action_of(undefined, "f").ok, false);
 });
