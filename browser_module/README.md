@@ -28,5 +28,5 @@ Rules:
 
 - Set `desertfox.browser_module.enabled` to `true` in about:config and turn on the setting `browser_module`, then restart Firefox. The settings page shows the module's hello.
 - In a private window the module acts only when DesertFox has private window access (about:addons, DesertFox, "Run in Private Windows"). Without that, J and the scroll keys do nothing on about:privatebrowsing, about:newtab and about:home there. That is intended.
-- about:preferences and about:config put the focus in their search box when they open, so J types there. Turn on the setting `blur_on_load` to take the focus out of the box on load, or click the page first.
+- about:preferences and about:config put the focus in their search box when they open, so J types there. Turn on the setting `blur_on_load` to take the focus out of the box on load and on each switch to the tab (after a module reinstall), or click the page first.
 - In the PDF viewer `j` and `k` scroll and never reach pdf.js, which uses them for the next and previous page. Shift+Escape gives every key to the page in that tab until it is pressed again or the page loads.

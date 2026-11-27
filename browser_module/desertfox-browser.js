@@ -591,11 +591,17 @@
         }
       };
       let load_blur_ends = 0;
-      const open_load_blur = () => {
+      let blur_by_switch = false;
+      const open_load_blur = (by_switch = false) => {
+        blur_by_switch = by_switch;
         load_blur_ends = Date.now() + LOAD_BLUR_MS;
       };
-      // Whether the focus is still the page's own: no key or click reached the document yet, and the load window is open.
-      const page_focus = (win) => Date.now() < load_blur_ends && !win.navigator.userActivation?.hasBeenActive;
+      const end_load_blur = () => {
+        load_blur_ends = 0;
+      };
+      // Whether the focus is still the page's own: the window is open, and for a load window no key or click reached the document yet.
+      // A switch window skips the activation check, which never resets: a page used once would never blur again. Input since the switch ends the window instead.
+      const page_focus = (win) => Date.now() < load_blur_ends && (blur_by_switch || !win.navigator.userActivation?.hasBeenActive);
       function report() {
         try {
           const win = content;
@@ -613,6 +619,16 @@
       addEventListener("pageshow", for_top(report), true);
       // A content script that came after DOMContentLoaded shows on this later look.
       addEventListener("load", for_top(() => (open_load_blur(), setTimeout(report, 500))), true);
+      // The tab shown again: a page that focuses its field on each show gets the same blur as on load. The report covers a field that already holds the focus.
+      addEventListener(
+        "visibilitychange",
+        for_top(() => (content.document.hidden ? end_load_blur() : (open_load_blur(true), report()))),
+        true,
+      );
+      // A held key repeats into each tab it switches to, and a modifier alone is no input to the page, so neither ends the window.
+      const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "OS"]);
+      addEventListener("keydown", (event) => event.isTrusted && !event.repeat && !MODIFIER_KEYS.has(event.key) && end_load_blur(), true);
+      addEventListener("mousedown", (event) => event.isTrusted && end_load_blur(), true);
       addEventListener("focusin", report, true);
       addEventListener("focusout", () => setTimeout(report, 0), true);
       addMessageListener("desertfox-browser-module:report-now", report);
