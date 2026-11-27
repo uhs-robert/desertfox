@@ -8,6 +8,8 @@ const W = `Services.wm.getMostRecentWindow("navigator:browser")`;
 const SESSION_KEY = "desertfox_chrome_hints";
 const TEST_PREF = "desertfox.key_test.page_hints_flag";
 const SORT_PREF = "browser.ctrlTab.sortByRecentlyUsed";
+// LABELS_SEEN_MS of the module, with a margin.
+const LABELS_SEEN_MS = 400;
 
 // Chrome code: the first element of the selected tab's page that matches `selector`, through the shadow roots, as `find(el)`.
 const DEEP_FIND = `const deep_find = (root, selector) => { const hit = root.querySelector(selector); if (hit) return hit; for (const el of root.querySelectorAll("*")) { const shadow = el.openOrClosedShadowRoot; const inner = shadow && deep_find(shadow, selector); if (inner) return inner; } return null; };`;
@@ -53,6 +55,8 @@ export async function run_cases(context) {
   async function start_hints(key, what) {
     await press_keys(key);
     await poll_until(`${what}: the labels to show`, async () => (await chrome(label_count)) > 0, { timeout_ms: 5000 });
+    // The module counts a key toward a label only from 300 ms after the labels show, so a key typed sooner spells nothing.
+    await sleep(LABELS_SEEN_MS);
   }
   async function expect_ended(what) {
     await poll_until(`${what}: the layer to go`, async () => (await chrome(page_layers)) === 0, { timeout_ms: 3000 });
