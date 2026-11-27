@@ -335,6 +335,8 @@
     linear-gradient(45deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--dfx-bw)), transparent calc(50% + var(--dfx-bw))) left bottom / var(--dfx-cut) var(--dfx-cut) no-repeat;
   transition: --tf-bevel-line var(--tf-border-transition, 0.2s ease);
 }
+/* Without TextFox only the top border exists, so the padding box already meets the border box on the other three sides. */
+#${BAR_ID}:not([data-textfox])[data-corner="chamfer"]::after { inset: calc(-1 * var(--dfx-bw)) 0 0; }
 #${BAR_ID}:not([data-on]),
 :root[inFullscreen] #${BAR_ID},
 :root[customizing] #${BAR_ID} { display: none; }
