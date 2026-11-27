@@ -8,7 +8,9 @@ import { DEFAULT_HINT_LETTERS, make_labels } from "../../src/shared/hints/labels
 
 type Sent = { kind: string; args: Record<string, number | string> };
 
-function make({ collect = { ok: true } as { ok: true } | { ok: false; error: string }, pick = { ok: true } as { ok: true } | { ok: false; error: string }, colors = async () => "" } = {}) {
+const page_action_of: ChromeHintDeps["page_action"] = async (keys) => (keys === "f" ? { ok: true, action: "follow" } : keys === "; y l" ? { ok: true, action: "yank" } : { ok: false, problem: "This hint does not run on this page" });
+
+function make({ collect = { ok: true } as { ok: true } | { ok: false; error: string }, pick = { ok: true } as { ok: true } | { ok: false; error: string }, colors = async () => "", page_action = page_action_of } = {}) {
   const bucket = new Map<string, unknown>();
   const pushed: Sent[] = [];
   const called: Sent[] = [];
@@ -33,7 +35,7 @@ function make({ collect = { ok: true } as { ok: true } | { ok: false; error: str
     colors,
     notify: async (_window_id, message) => void notes.push(message),
     new_session: () => next++,
-    page_action: async (keys) => (keys === "f" ? { ok: true, action: "follow" } : keys === "; y l" ? { ok: true, action: "yank" } : { ok: false, problem: "This hint does not run on this page" }),
+    page_action,
   };
   const hints = create_chrome_hints(deps);
   const session = () => bucket.get(CHROME_HINTS_STORAGE_KEY) as { session: number; labels?: LabelRow[]; typed: string } | undefined;
@@ -295,4 +297,18 @@ test("a hint key on one of Firefox's own pages hands the token back with the act
   const stale = make({ collect: { ok: false, error: "The hint key is stale" } });
   await stale.hints.handlers["page_hints.want"]({ start: 79, keys: "f", count: 0 });
   assert.deepEqual(stale.notes, []);
+});
+
+test("a page start whose action loads after a newer start began sends nothing, so the newer session stays", async () => {
+  let release = () => {};
+  const slow = make({ page_action: (keys) => (keys === "f" ? new Promise((resolve) => (release = () => resolve({ ok: true, action: "follow" }))) : page_action_of(keys)) });
+  const older = slow.hints.handlers["page_hints.want"]({ start: 80, keys: "f", count: 0 });
+  await flush();
+  await slow.hints.handlers["page_hints.want"]({ start: 81, keys: "; y l", count: 0 });
+  const newer = slow.session()!.session;
+  release();
+  await assert.rejects(older);
+  assert.deepEqual(slow.called.map((sent) => sent.args.start), [81], "the older start still asked the module to collect");
+  assert.equal(slow.session()?.session, newer, "the older start replaced the newer session");
+  assert.deepEqual(slow.pushed.filter((sent) => sent.kind === "chrome_hints.clear"), [], "the older start cleared the newer session");
 });
