@@ -129,7 +129,7 @@ On a locked page `:` and a key that asks for a value open DesertFox's own comman
 
 Status: built, off by default. The module side is `desertfox-locked-pages.js`. The extension side is `src/content/locked_shim.ts` and `src/background/browser_module_rpc.ts`. The kinds and snapshots are in `src/shared/browser_module_protocol.ts`. What Firefox does there is measured in [firefox-behavior.md](../firefox-behavior.md#locked-pages-locked-page-modes).
 
-With the setting `browser_module_pages` on, DesertFox's own `content.js` and bundles run inside the PDF viewer and Reader View, so every key that works on a web page works there too (hints, caret, which-key, the command line). The module's key tree (above) still covers about:addons, about:preferences and every other locked page.
+With the setting `browser_module_pages` on, DesertFox's own `content.js` and bundles run inside the PDF viewer and Reader View, so the keys that work on a web page work there too (hints, caret, which-key, the command line). The exception is a route that `LOCKED_PAGE_ROUTES` refuses on a locked page, such as snippets. The module's key tree (above) still covers about:addons, about:preferences and every other locked page.
 
 What runs where:
 
@@ -155,8 +155,8 @@ Snapshots carry the read-only data a message is too small for: the keymap with i
 
 Lifecycle:
 
-- The module attaches a page only when the kill switch pref, `browser_module` and `browser_module_pages` are on, the snapshots are present with protocol version 1, the tab is not private (unless DesertFox has private access), and chrome reads the page kind as the PDF viewer or Reader View.
-- Pagehide destroys the sandbox and settles every open call and push with an error. Turning either setting off, the kill switch, a version mismatch or a failed start does the same and takes the page code out. Tab close clears the tab's lock.
+- The module attaches a page only when the kill switch pref, `browser_module` and `browser_module_pages` are on, the snapshots are present with the protocol version (`BROWSER_MODULE_PROTOCOL_VERSION`), the tab is not private (unless DesertFox has private access), and chrome reads the page kind as the PDF viewer or Reader View.
+- A pagehide settles every open call and push with an error and sends `page_gone`. A pagehide of a page that goes into the back-forward cache keeps the sandbox, and the page attaches again under a new id when it returns. Any other pagehide destroys the sandbox. Turning either setting off, the kill switch, a version mismatch or a failed start does the same and takes the page code out. Tab close clears the tab's lock.
 - The setting is off by default and works only with `browser_module` on. [privacy.md](../privacy.md) states what it writes and relays.
 
 ## Safety
