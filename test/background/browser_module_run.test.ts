@@ -220,3 +220,28 @@ test("the address bar stands in for the command line only on a tab with no conte
   assert.ok(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open " } }, EXTENSION_TO_MODULE_KINDS).ok);
   assert.equal(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "x".repeat(5000) } }, EXTENSION_TO_MODULE_KINDS).ok, false);
 });
+
+test("a prompt step handed to the address bar ends the binding, so its later steps do not run", async () => {
+  const ran: string[] = [];
+  const bar_texts: unknown[] = [];
+  const get_command = (id: string) => {
+    const command = registry.get(id);
+    return command && { ...command, run: () => void ran.push(id) };
+  };
+  const router = create_router({
+    get_command,
+    get_enum_sources: async () => ({ search_engines: [] }),
+    is_disabled: async () => false,
+    active_tab: async () => ({ tab_id: 9, window_id: 1, url: "about:preferences" }),
+    get_tab: async () => undefined,
+    has_content_script: async () => false,
+    has_permission: async () => true,
+    open_cmdline: with_address_bar(async () => Promise.reject(new Error("no receiver")), async () => false, async (_kind, args) => (bar_texts.push(args.text), { ok: true as const })),
+    show_refusal: async () => assert.fail("nothing is refused"),
+    repeat_memory: { save: async () => undefined },
+  } as never);
+  const answer = await router.run({ invocations: [{ id: "open.url", prompt: { param: "url" } }, { id: "tab.close" }], mode: "normal", may_prompt: true });
+  assert.deepEqual(answer, { ok: true, cancelled: true });
+  assert.equal(bar_texts.length, 1);
+  assert.deepEqual(ran, [], "tab.close ran while the bar was still open");
+});
