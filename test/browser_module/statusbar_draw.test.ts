@@ -293,7 +293,7 @@ test("unload takes every listener, observer, sheet and the bar away", () => {
   assert.equal(fixture.run_frames(), 0);
 });
 
-test("two windows share one scroll listener, and the frame script loads once", () => {
+test("each window listens on its own, and the frame script loads once", () => {
   const first = started();
   const messages = first.firefox.message_listener_count();
   first.firefox.set_named_pref("desertfox.browser_module.statusbar", undefined);
@@ -302,4 +302,64 @@ test("two windows share one scroll listener, and the frame script loads once", (
   first.window.close();
   assert.equal(first.firefox.message_listener_count(), messages - 1);
   assert.equal(scripts(), 1);
+});
+
+test("the hello keeps a field the core adds, and the bar adds only bar", () => {
+  const fixture = started();
+  fixture.firefox.extension_writes("desertfox_browser_module_hello", { v: 1, module_version: "1.0.0", later_field: "x" });
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", later_field: "x", bar: true });
+  fixture.firefox.set_named_pref("desertfox.browser_module.statusbar", false);
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", later_field: "x" });
+});
+
+test("a draw that fails retracts bar true and hides the bar, so the corner badge returns", () => {
+  const fixture = started();
+  fixture.firefox.write_state(state_with({}));
+  fixture.run_frames();
+  assert.equal((fixture.firefox.hello() as { bar?: boolean }).bar, true);
+  Object.defineProperty(fixture.window.win.gBrowser, "visibleTabs", {
+    get: () => {
+      throw new Error("visibleTabs changed");
+    },
+  });
+  fixture.firefox.write_state(state_with({ mode: "insert" }));
+  fixture.run_frames();
+  assert.equal(fixture.bar()!.hasAttribute("data-on"), false);
+  assert.equal(fixture.root.style_values.get("--desertfox-statusbar-height"), "0px");
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0" });
+  fixture.firefox.write_state(state_with({}));
+  fixture.run_frames();
+  assert.equal(fixture.bar()!.hasAttribute("data-on"), false, "the bar stays off for the session");
+});
+
+test("turning the bar back on asks every tab for its scroll place again", () => {
+  const fixture = started();
+  const asked = () => fixture.firefox.broadcasts.filter((name) => name === "desertfox-statusbar:report-now").length;
+  const before = asked();
+  fixture.firefox.set_named_pref("desertfox.browser_module.statusbar", false);
+  assert.equal(asked(), before);
+  fixture.firefox.set_named_pref("desertfox.browser_module.statusbar", undefined);
+  assert.equal(asked(), before + 1);
+});
+
+test("a private window with private access shows no address and no container", () => {
+  const fixture = create_bar_fixture({ private_window: true });
+  fixture.firefox.identity_service = { getPublicIdentityFromId: () => ({ color: "blue" }), getUserContextLabel: () => "Work" };
+  fixture.firefox.start_extension({ private_access: true });
+  fixture.load();
+  (fixture.tabs[0]!.tab as { userContextId?: number }).userContextId = 1;
+  fixture.navigate(0, "https://example.com/secret");
+  fixture.firefox.write_state(state_with({}, { ...BAR_CONFIG, right: ["url", "container", "tabs"] }));
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL"]);
+  assert.deepEqual(fixture.widgets("right"), ["[1/1]"]);
+});
+
+test("the live region is clipped, not hidden, so a screen reader hears it", () => {
+  const fixture = started();
+  const sheet = decodeURIComponent([...fixture.sheets][0]!);
+  const rule = (name: string) => sheet.split("\n").find((line) => line.includes(`.${name} {`))!;
+  assert.match(rule("dfx-live"), /clip-path: inset\(50%\)/);
+  assert.doesNotMatch(rule("dfx-live"), /visibility/);
+  assert.match(rule("dfx-probe"), /visibility: hidden/);
 });
