@@ -40,7 +40,7 @@ type Transport = {
 };
 
 // The frame script as Firefox runs it in a tab's process: `content` is the shown page, and its messages go to the parent half through the fake's message manager.
-function frame_of(frame_source: string, to_parent: (name: string, data: unknown) => void, { pref = true } = {}) {
+function frame_of(frame_source: string, to_parent: (name: string, data: unknown) => void, { pref = true, already_shown = undefined as Page | undefined } = {}) {
   const listeners = new Map<string, ((message: { data: unknown }) => void)[]>();
   const events = new Map<string, ((event: unknown) => void)[]>();
   const sandboxes: { principal: unknown; options: Record<string, unknown>; global: FakeSandbox }[] = [];
@@ -83,10 +83,11 @@ function frame_of(frame_source: string, to_parent: (name: string, data: unknown)
     addEventListener: (type: string, listener: (event: unknown) => void) => events.set(type, [...(events.get(type) ?? []), listener]),
   });
   Object.defineProperty(context, "content", { get: () => frame.content });
-  vm.runInContext(frame_source, context);
   const show = ({ principal, uri, inner }: Page) => {
     frame.content = { document: { nodePrincipal: principal, documentURI: uri }, windowGlobalChild: { innerWindowId: inner } };
   };
+  if (already_shown) show(already_shown);
+  vm.runInContext(frame_source, context);
   const fire = (type: string, persisted = false) => {
     for (const listener of events.get(type) ?? []) listener({ target: frame.content.document, persisted });
   };
@@ -108,23 +109,26 @@ function locked({ config = ON_CONFIG as unknown, keymap = KEYMAP as unknown, pag
   const frame_url = firefox.frame_scripts.find((url) => decodeURIComponent(url).includes("locked_pages_frame_script"));
   assert.ok(frame_url, "the feature adds its frame script");
   const frame_source = decodeURIComponent(frame_url.slice(frame_url.indexOf(",") + 1));
-  const add_tab = (shown_first: Page) => {
+  const add_tab = (shown_first: Page, script_after_load = false) => {
     const { tab } = window.add_tab() as { tab: { linkedBrowser: Record<string, unknown> } };
-    // The frame speaks through whichever <browser> shows the tab now, as a frame that moved to another window does.
-    const frame = frame_of(frame_source, (name, data) => firefox.from_frame(name, tab.linkedBrowser, data));
-    firefox.frames.add(frame.deliver);
     const shown = { ...shown_first };
-    const set_page = (next: Page) => {
-      Object.assign(shown, next);
-      frame.show(next);
-    };
+    // The <browser> is ready before its frame script runs, as in Firefox. Its messages reach the frame made below.
     const wire = (browser: Record<string, unknown>) =>
       Object.assign(browser, {
         private_browser,
         browsingContext: { get currentWindowGlobal() { return { innerWindowId: shown.inner, documentPrincipal: shown.principal, documentURI: { spec: shown.uri } }; } },
-        messageManager: { sendAsyncMessage: (name: string, data: unknown) => frame.deliver(name, data) },
+        // Firefox delivers a message later. The fake delivers at once, except to a frame script that is still starting.
+        messageManager: { sendAsyncMessage: (name: string, data: unknown) => (frame ? frame.deliver(name, data) : queueMicrotask(() => frame!.deliver(name, data))) },
       });
+    let frame: ReturnType<typeof frame_of> | undefined;
     wire(tab.linkedBrowser);
+    // The frame speaks through whichever <browser> shows the tab now, as a frame that moved to another window does.
+    frame = frame_of(frame_source, (name, data) => firefox.from_frame(name, tab.linkedBrowser, data), { already_shown: script_after_load ? shown_first : undefined });
+    firefox.frames.add(frame.deliver);
+    const set_page = (next: Page) => {
+      Object.assign(shown, next);
+      frame.show(next);
+    };
     set_page(shown_first);
     const move_to_another_window = () => firefox.move_tab(tab, wire({ localName: "browser" }));
     const load = async () => {
@@ -561,10 +565,11 @@ test("the module pref going off and the core's shut down end every call waiting 
   }
 });
 
-test("a page call whose reply never comes ends at its deadline, and a reply in time cancels it", async () => {
+test("a page call whose reply never comes ends at a 30 min backstop, and a reply in time cancels it", async () => {
   const { firefox, frame, load, from_module, extension_sends } = locked();
   await load();
   const lost = frame.transport()!.call("lost");
+  assert.deepEqual(firefox.timer_delays(), [30 * 60 * 1000], "long enough for a prompt, a hint pick or a macro replay");
   firefox.run_timers();
   await assert.rejects(lost, /no answer came/);
   const answered = frame.transport()!.call("answered");
@@ -573,16 +578,16 @@ test("a page call whose reply never comes ends at its deadline, and a reply in t
   assert.equal(firefox.timer_count(), 0);
 });
 
-test("a push the page never answers ends at its deadline, and a push to a frame that is gone ends at once", async () => {
+test("a push that waits on the user has no deadline, and a push to a frame that is gone ends at once", async () => {
   const { firefox, frame, load, from_module, extension_sends, tab } = locked();
   await load();
   frame.transport()!.on_push(() => new Promise(() => undefined));
   extension_sends([push_request("slow", 1, "{}")]);
   await settle();
-  assert.equal(from_module().find((message) => message.reply_to === "slow"), undefined);
+  assert.equal(firefox.timer_count(), 0, "no timer stands over a push");
   firefox.run_timers();
   await settle();
-  assert.deepEqual(from_module().find((message) => message.reply_to === "slow"), { v: V, reply_to: "slow", ok: false, error: "no answer came" });
+  assert.equal(from_module().find((message) => message.reply_to === "slow"), undefined, "a hint pick or a prompt still waits");
   tab.linkedBrowser.messageManager = undefined;
   extension_sends([push_request("lost", 1, "{}")]);
   await settle();
@@ -599,4 +604,31 @@ test("the keymap snapshot going away drops the page code, and a good keymap brin
   firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);
   await settle();
   assert.equal(frame.sandboxes.length, 2);
+});
+
+test("a push with no document_id, as an older extension sends it, reaches the tab's page", async () => {
+  const { frame, load, from_module, extension_sends } = locked();
+  await load();
+  const heard: string[] = [];
+  frame.transport()!.on_push(async (text) => (heard.push(text), "answer"));
+  extension_sends([{ v: V, id: "old", kind: "page_push", args: { tab_id: 1, message: "from an older extension" }, sent_at: Date.now() }]);
+  await settle();
+  assert.deepEqual(heard, ["from an older extension"]);
+  assert.deepEqual(from_module().find((message) => message.reply_to === "old"), { v: V, reply_to: "old", ok: true, value: "answer" });
+});
+
+test("turning the setting off tells the extension that each attach ended", async () => {
+  const { firefox, frame, load, from_module } = locked();
+  await load();
+  // Firefox delivers the detach later, after the module forgot its attaches, so the frame's own word comes too late.
+  firefox.frames.delete(frame.deliver);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, { v: V, value: { settings: { browser_module: true, browser_module_pages: false } } });
+  assert.deepEqual(gone_of(from_module()), [{ tab_id: 1, document_id: 1 }]);
+});
+
+test("a frame script that loads into a tab whose PDF already loaded asks for page code at once", async () => {
+  const { add_tab } = locked();
+  const late = add_tab({ principal: PDF_PRINCIPAL, uri: "file:///tmp/late.pdf", inner: 11 }, true);
+  await settle();
+  assert.equal(late.frame.sandboxes.length, 1);
 });

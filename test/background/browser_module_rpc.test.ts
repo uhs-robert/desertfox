@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { create_browser_module } from "../../src/background/browser_module.ts";
 import { create_browser_module_rpc, pages_setting_on } from "../../src/background/browser_module_rpc.ts";
 import { dispatch } from "../../src/background/message_table.ts";
@@ -19,10 +19,13 @@ const TAB = { id: 7, url: PDF, index: 0, highlighted: false, active: true, pinne
 // The real base channel and the real message table, with a fake session and a handler table that records what reaches it.
 function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Partial<Record<SnapshotPart, unknown>> } = {}) {
   const data = new Map<string, unknown>();
-  const config = { before_send: undefined as ((id: string) => void) | undefined, after_send: undefined as ((sent: { ok: true; id: string } | { ok: false; problem: string }) => { ok: true; id: string } | { ok: false; problem: string }) | undefined, before_get_tab: undefined as (() => Promise<void>) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: { format_version: 1, modes: {} }, config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
+  const config = { fail_outbox: false, before_send: undefined as ((id: string) => void) | undefined, after_send: undefined as ((sent: { ok: true; id: string } | { ok: false; problem: string }) => { ok: true; id: string } | { ok: false; problem: string }) | undefined, before_get_tab: undefined as (() => Promise<void>) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: { format_version: 1, modes: {} }, config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
   const session = {
     get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, structuredClone(data.get(name))])),
-    set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value))),
+    set: async (items: Record<string, unknown>) => {
+      if (config.fail_outbox && BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY in items) throw new Error("over the storage quota");
+      Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value)));
+    },
     remove: async (keys: string | string[]) => void [keys].flat().forEach((key) => data.delete(key)),
   };
   const seen: Seen[] = [];
@@ -41,14 +44,7 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
   } as unknown as Handlers<keyof ToBackground>;
   let module: ReturnType<typeof create_browser_module>;
   let clock = 0;
-  // Timers run only when a test calls `run_timers`.
-  const timers = new Map<number, () => void>();
-  let next_timer = 0;
-  const run_timers = () => {
-    const due = [...timers.values()];
-    timers.clear();
-    due.forEach((run) => run());
-  };
+
   const rpc = create_browser_module_rpc({
     session: session as never,
     is_on: async () => config.on,
@@ -57,11 +53,6 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
     get_tab: async (tab_id) => (await config.before_get_tab?.(), config.tabs.find((tab) => tab.id === tab_id)),
     dispatch: dispatch(handlers, () => false),
     read_part: Object.fromEntries(SNAPSHOT_PART_NAMES.map((part) => [part, async () => config.parts[part]])) as never,
-    later: (run) => {
-      const id = ++next_timer;
-      timers.set(id, run);
-      return () => void timers.delete(id);
-    },
   });
   module = create_browser_module({
     session: session as never,
@@ -94,7 +85,7 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
   const pushes = () => outbox().filter((message) => message.kind === "page_push") as { id: string; args: { tab_id: number; message: string } }[];
   // The module's reply to a push, written into chrome's list.
   const answer_push = (id: string, reply: Record<string, unknown>) => from_module([{ v: V, reply_to: id, ok: true, ...reply }]);
-  return { data, config, rpc, module, seen, answers, from_module, settle, outbox, page_replies, base_replies, pushes, answer_push, written: () => written, run_timers, timer_count: () => timers.size };
+  return { data, config, rpc, module, seen, answers, from_module, settle, outbox, page_replies, base_replies, pushes, answer_push, written: () => written };
 }
 
 let ids = 0;
@@ -498,7 +489,7 @@ test("with the table full, a new tab's call is refused and a recorded tab's call
 
 test("the module going off ends every lock and every waiting push", async () => {
   for (const status of [undefined, { result: "waiting" as const }, { result: "mismatch" as const, module_version: "x", module_v: V + 1 }]) {
-    const { rpc, from_module, data, timer_count } = setup();
+    const { rpc, from_module, data } = setup();
     await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
     const waiting = assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /module is off/);
     await new Promise((resolve) => setImmediate(resolve));
@@ -506,7 +497,6 @@ test("the module going off ends every lock and every waiting push", async () => 
     await waiting;
     assert.equal(await rpc.is_locked_tab(7), false, JSON.stringify(status));
     assert.equal(data.has(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), false);
-    assert.equal(timer_count(), 0, "the push's deadline is cancelled");
   }
   const matched = setup();
   await matched.from_module([call({ type: "run", invocations: [], mode: "normal" })]);
@@ -514,34 +504,33 @@ test("the module going off ends every lock and every waiting push", async () => 
   assert.equal(await matched.rpc.is_locked_tab(7), true, "a matched module keeps its locks");
 });
 
-test("a push the module never answers ends at its deadline, and an answer in time cancels the deadline", async () => {
-  const { rpc, from_module, pushes, answer_push, run_timers, timer_count } = setup();
+test("a push that waits on the user has no deadline: it still waits past 60 s and takes its answer", async () => {
+  const { rpc, from_module, pushes, answer_push } = setup();
   await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
-  const lost = rpc.send_to_locked_tab(7, { type: "ping" });
-  await new Promise((resolve) => setImmediate(resolve));
-  const lost_id = pushes().at(-1)!.id;
-  run_timers();
-  await assert.rejects(lost, /did not answer/);
-  // The late reply finds no wait.
-  await answer_push(lost_id, { value: JSON.stringify({ value: "late" }) });
-  const answered = rpc.send_to_locked_tab(7, { type: "ping" });
-  await new Promise((resolve) => setImmediate(resolve));
-  await answer_push(pushes().at(-1)!.id, { value: JSON.stringify({ value: "in time" }) });
-  assert.equal(await answered, "in time");
-  assert.equal(timer_count(), 0);
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let settled = false;
+    const waiting = rpc.send_to_locked_tab(7, { type: "run_in_content", invocations: [] }).finally(() => (settled = true));
+    await new Promise((resolve) => setImmediate(resolve));
+    mock.timers.tick(61 * 60 * 1000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(settled, false, "a hint pick or a prompt on the page is not cut off");
+    await answer_push(pushes().at(-1)!.id, { value: JSON.stringify({ value: "picked" }) });
+    assert.equal(await waiting, "picked");
+  } finally {
+    mock.timers.reset();
+  }
 });
 
-test("a push whose write fails or throws after its wait was set leaves no wait behind", async () => {
-  const { rpc, from_module, config, timer_count } = setup();
+test("a push whose write fails or throws after its wait was set is refused and writes nothing", async () => {
+  const { rpc, from_module, config, pushes } = setup();
   await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
+  config.fail_outbox = true;
+  await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /storage quota|not sent|refused/);
+  assert.deepEqual(pushes(), []);
+  config.fail_outbox = false;
   config.after_send = () => ({ ok: false, problem: "the list is full" });
   await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /the list is full/);
-  assert.equal(timer_count(), 0);
-  config.after_send = () => {
-    throw new Error("over the storage quota");
-  };
-  await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /storage quota/);
-  assert.equal(timer_count(), 0);
 });
 
 test("a page_gone that comes after its tab closed writes no row", async () => {
@@ -558,4 +547,32 @@ test("a first call read with its document's page_gone is refused, even when the 
   config.tabs = [{ ...TAB, url: "https://bank.example/" }];
   await from_module([call({ type: "run", invocations: [], mode: "normal" }), gone(7, 1)]);
   assert.deepEqual(seen, []);
+});
+
+test("a first call that was in flight when the module went off does not lock the tab again", async () => {
+  const { rpc, from_module, config, seen, data } = setup();
+  let release: () => void = () => undefined;
+  config.before_get_tab = () => new Promise<void>((done) => (release = done));
+  const calling = from_module([call({ type: "run", invocations: [], mode: "normal" })]);
+  await new Promise((resolve) => setImmediate(resolve));
+  await rpc.module_status_changed({ result: "waiting" });
+  config.before_get_tab = undefined;
+  release();
+  await calling;
+  assert.deepEqual(seen, []);
+  assert.equal(data.has(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), false);
+});
+
+test("page_gone rejects the pushes for its own document and leaves a newer document's alone", async () => {
+  const { rpc, from_module, pushes, answer_push } = setup();
+  await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 1 })]);
+  const old_push = assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
+  await new Promise((resolve) => setImmediate(resolve));
+  await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 2 })]);
+  const new_push = rpc.send_to_locked_tab(7, { type: "ping" });
+  await new Promise((resolve) => setImmediate(resolve));
+  await from_module([gone(7, 1)]);
+  await old_push;
+  await answer_push(pushes().at(-1)!.id, { value: JSON.stringify({ value: "still here" }) });
+  assert.equal(await new_push, "still here");
 });

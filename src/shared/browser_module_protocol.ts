@@ -316,8 +316,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
-  // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document.
-  page_push: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
+  // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
+  page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
   // The pane calls change the window, so each expects a reply: the module answers with its refusal text when it cannot do the call. A resize step is 5 percent of the panel area. Each message is tiny, so one limit covers all.
   "pane.split_new_tab": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.split_next_tab": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },

@@ -44,8 +44,8 @@
       ask: "desertfox-browser-module:locked-ask",
     };
     const WENT_AWAY = "the page went away";
-    // How long a page call or a push may wait for its answer. A wait whose answer was lost (a full message list, a frame that died) ends then with an error.
-    const ANSWER_DEADLINE_MS = 60000;
+    // A leak backstop for a page call whose reply was lost, not a timeout: a call can wait on the user (a prompt, a hint pick, a macro replay), so the bound is long. A push has none, because every teardown path settles it.
+    const ANSWER_DEADLINE_MS = 30 * 60 * 1000;
     const NO_ANSWER = "no answer came";
 
     const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -165,9 +165,10 @@
     }
 
     // The setting or the pref went off, or DesertFox changed: every page drops its code, and so does every page in the back-forward cache, which no attach names.
+    // Each attach ends through `end_attach` first, so the extension hears page_gone while the module can still write it.
     function detach_all() {
+      for (const browser_id of [...attached.keys()]) end_attach(browser_id);
       Services.mm.broadcastAsyncMessage(MESSAGE.detach, {});
-      attached.clear();
       end_pushes(undefined);
     }
 
@@ -235,10 +236,11 @@
       const browser = browser_of_tab(tab_id);
       const browser_id = browser?.browserId;
       const attach = browser && attached.get(browser_id);
-      if (!attach || attach.attach_id !== document_id || attach.extension !== desertfox() || !pages_on(attach.extension)) return { ok: false, error: WENT_AWAY };
+      // An older extension names no document: the push goes to the tab's page as it is now.
+      if (!attach || (document_id !== undefined && attach.attach_id !== document_id) || attach.extension !== desertfox() || !pages_on(attach.extension)) return { ok: false, error: WENT_AWAY };
       const push_id = ++last_push_id;
       return new Promise((resolve) => {
-        pushes.set(push_id, { browser_id, resolve: once_within_deadline(resolve) });
+        pushes.set(push_id, { browser_id, resolve });
         if (!send_to(browser, MESSAGE.push, { attach_id: attach.attach_id, push_id, message })) end_push(push_id, { ok: false, error: WENT_AWAY });
       });
     });
@@ -535,5 +537,7 @@
       },
       true,
     );
+    // A script that loads into a tab whose page already loaded heard no DOMContentLoaded. A second ask for the same page changes nothing.
+    if (content?.document) ask_to_attach();
   }
 })(this);

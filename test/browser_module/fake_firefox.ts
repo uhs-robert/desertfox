@@ -87,6 +87,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   let next_browser_id = 100;
   // Timer.sys.mjs: a timer runs only when a test calls `run_timers`.
   const timers = new Map<number, () => void>();
+  const timer_delays = new Map<number, number>();
   let next_timer = 1;
   const firefox = {
     extension: undefined as FakeExtension | undefined,
@@ -231,8 +232,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         },
         ContextualIdentityService: firefox.identity_service,
         PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true, isBrowserPrivate: (browser: { private_browser?: boolean }) => browser.private_browser === true },
-        setTimeout: (run: () => void) => (timers.set(next_timer, run), next_timer++),
-        clearTimeout: (id: number) => void timers.delete(id),
+        setTimeout: (run: () => void, ms: number) => (timers.set(next_timer, run), timer_delays.set(next_timer, ms), next_timer++),
+        clearTimeout: (id: number) => void (timers.delete(id), timer_delays.delete(id)),
         ...firefox.module_exports,
       };
     },
@@ -386,9 +387,12 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     run_timers: () => {
       const due = [...timers.values()];
       timers.clear();
+      timer_delays.clear();
       due.forEach((run) => run());
     },
     timer_count: () => timers.size,
+    // The delay of each timer still set, in ms.
+    timer_delays: () => [...timer_delays.values()],
     emit_message,
     set_named_pref,
     set_pref,

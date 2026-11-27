@@ -314,10 +314,6 @@ const browser_module_rpc = create_browser_module_rpc({
     theme: () => stored_value(THEME_STORAGE_KEY),
     which_key: () => list_keys(browser.storage.local, (id) => registry.get(id), { mode: "normal", prefix: [] }),
   },
-  later: (run, ms) => {
-    const timer = setTimeout(run, ms);
-    return () => clearTimeout(timer);
-  },
 });
 reach_locked_tabs(browser_module_rpc);
 browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.storage_changed(changes, area));
