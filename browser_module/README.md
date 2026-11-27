@@ -8,6 +8,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type arrow keys in open menus and panels and in the Library, Page Info and Picture-in-Picture windows.
 - `desertfox-commands.js`: generated from `sources/commands.js`, never edited. Key sequences and counts on locked pages, the ignore toggle, `page.stop` and the address bar opener.
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
+- `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
 - `install.sh`: `sudo browser_module/install.sh [--uninstall]` copies or removes every `desertfox-*.js` file here.
 
 Rules:
