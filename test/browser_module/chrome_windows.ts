@@ -96,7 +96,11 @@ export function chrome_window(firefox: Firefox, type: string, build: (root: Node
   doc.own();
   const id = firefox.windows_by_id.size + 1;
   firefox.windows_by_id.set(id, win);
-  const press = (key: string, patch: Partial<FakeEvent> = {}) => window_root.fire("keydown", key_event(key, { timeStamp: clock.now, ...patch }));
+  // The window root hears a key first, then the window's own capture listeners, unless a listener stopped it.
+  const press = (key: string, patch: Partial<FakeEvent> = {}) => {
+    const event = window_root.fire("keydown", key_event(key, { timeStamp: clock.now, ...patch }));
+    return event.stopped ? event : win.dispatch("keydown", event);
+  };
   const layers = () => root.children.filter((child) => child.className === "desertfox-chrome-hints");
   const labels = () => layers().flatMap((host) => host.shadow!.children.find((child) => child.className === "desertfox-hints")!.children.map((node) => ({ text: node.textContent, left: node.style.left, top: node.style.top })));
   const fire_timers = () => timers.filter((timer) => timer.live).forEach((timer) => ((timer.live = false), timer.run()));

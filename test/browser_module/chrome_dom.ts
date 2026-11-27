@@ -145,9 +145,21 @@ export class Node {
     this.listeners.get(type)?.delete(handler);
   }
   fire(type: string, event: Partial<FakeEvent> & { target?: unknown } = {}) {
-    const full = Object.assign(key_event("", { target: this }), event, { stopImmediatePropagation() { full.stopped = true; } });
-    for (const handler of [...(this.listeners.get(type) ?? [])]) handler(full);
-    return full;
+    return this.dispatch(type, Object.assign(key_event("", { target: this }), event));
+  }
+  // Runs this node's listeners on the event itself, as the next target of one dispatch. A listener's stopImmediatePropagation skips the rest.
+  dispatch(type: string, event: FakeEvent) {
+    let stopped_here = false;
+    const stop_now = () => {
+      event.stopped = true;
+      stopped_here = true;
+    };
+    Object.assign(event, { stopImmediatePropagation: stop_now });
+    for (const handler of [...(this.listeners.get(type) ?? [])]) {
+      handler(event);
+      if (stopped_here) break;
+    }
+    return event;
   }
   listener_total() {
     return [...this.listeners.values()].reduce((sum, set) => sum + set.size, 0);

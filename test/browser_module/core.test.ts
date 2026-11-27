@@ -723,3 +723,15 @@ test("on_shut_down runs each feature's step once when the module turns off, and 
   assert.ok(firefox.errors.some((line) => line.includes("a feature failed to shut down")));
   assert.equal(window.listener_count("keydown"), 0, "the core kept its window listener");
 });
+
+test("hold_keys refuses a window another owner holds, and the owner's own second hold succeeds", () => {
+  const { firefox, window } = started();
+  const core = firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): boolean; release_keys(win: unknown, owner: string): void; keys_held_by(win: unknown): unknown };
+  assert.equal(core.hold_keys(window.win, "first"), true);
+  assert.equal(core.hold_keys(window.win, "second"), false);
+  assert.equal(core.keys_held_by(window.win), "first", "a refused hold took the window");
+  assert.equal(core.hold_keys(window.win, "first"), true);
+  core.release_keys(window.win, "first");
+  assert.equal(core.hold_keys(window.win, "second"), true);
+  assert.equal(core.keys_held_by(window.win), "second");
+});

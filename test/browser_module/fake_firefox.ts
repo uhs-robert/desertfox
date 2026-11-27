@@ -57,6 +57,7 @@ export function key_event(key: string, patch: Partial<FakeEvent> = {}): FakeEven
     stopped: false,
     preventDefault() {
       this.prevented = true;
+      this.defaultPrevented = true;
     },
     stopPropagation() {
       this.stopped = true;
