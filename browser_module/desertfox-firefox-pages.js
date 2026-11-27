@@ -100,25 +100,31 @@
     }
 
     // In a container tab Firefox opens a page that asks for no container in a new tab instead, which is what a system page needs.
-    const open_here = (win, address) => win.openTrustedLinkIn(address, "current", { userContextId: NO_CONTAINER });
+    // Returns the <browser> the page loads in: the selected one, or the new tab's, which openLinkIn hands to `resolveOnNewTabCreated`.
+    function open_here(win, address) {
+      let target = win.gBrowser.selectedBrowser;
+      win.openTrustedLinkIn(address, "current", { userContextId: NO_CONTAINER, resolveOnNewTabCreated: (browser) => void (target = browser) });
+      return target;
+    }
 
-    // The add-on manager shows a view only after it loads. In a tab, Firefox's own opener waits for that. Here, the wait is this one: the first manager that loads in this window takes the view.
+    // The add-on manager shows a view only after it loads. In a tab, Firefox's own opener waits for that. Here, the wait is this one, and only the manager that loads in the browser this request loaded takes the view, so another add-ons tab that loads first keeps its own.
     function open_view_here(win, view) {
       let timer;
+      let target;
       const stop = () => {
         view_waits.delete(stop);
         Services.obs.removeObserver(on_loaded, "EM-loaded");
         clearTimeout(timer);
       };
       const on_loaded = (manager) => {
-        if (manager?.browsingContext?.topChromeWindow !== win) return;
+        if (target === undefined || manager?.docShell?.chromeEventHandler !== target) return;
         stop();
         manager.loadView(view);
       };
       Services.obs.addObserver(on_loaded, "EM-loaded");
       view_waits.add(stop);
       timer = setTimeout(stop, VIEW_WAIT_MS);
-      open_here(win, ADDONS_ADDRESS);
+      target = open_here(win, ADDONS_ADDRESS);
     }
 
     function open_page(win, entry, where) {
@@ -138,10 +144,23 @@
       return true;
     }
 
-    // True when this open repeats the last one of the same page in the same window within SAME_OPEN_MS.
-    function repeats(win, page, now) {
+    // The address a tab shows for a page, without its fragment, under each name Firefox gives it.
+    const shown_names = (entry) => {
+      const base = (entry.address ?? ADDONS_ADDRESS).split("#")[0];
+      return base === SETTINGS_ADDRESS ? [base, SETTINGS_ALIAS] : [base];
+    };
+    // Whether `browser` is still in a tab of `win` and shows the page, or is still loading it from a blank start.
+    function still_shows(win, browser, entry) {
+      const tab = browser ? win.gBrowser.getTabForBrowser(browser) : null;
+      if (!tab || tab.closing) return false;
+      const spec = String(browser.currentURI?.spec ?? "").split("#")[0];
+      return spec === "about:blank" || shown_names(entry).includes(spec);
+    }
+
+    // True when this open repeats the last one of the same page in the same window within SAME_OPEN_MS, and the tab that open left selected still shows the page. A tab the user closed or moved on from gets the page again.
+    function repeats(win, page, entry, now) {
       const last = last_open.get(win);
-      return last?.page === page && now - last.at < SAME_OPEN_MS;
+      return last?.page === page && now - last.at < SAME_OPEN_MS && still_shows(win, last.browser, entry);
     }
 
     core.register_kind("firefox_page.open", ({ page, where = "tab", tab_id }) => {
@@ -156,12 +175,13 @@
       // A late request never replaces a tab the user switched away from.
       if (where === "here" && win.gBrowser.selectedTab !== tab) return refuse("The tab that asked is no longer selected");
       const now = ChromeUtils.now();
-      if (repeats(win, page, now)) return { ok: true };
+      if (repeats(win, page, entry, now)) return { ok: true };
       recent_opens = recent_opens.filter((at) => now - at < RATE_WINDOW_MS);
       if (recent_opens.length >= MAX_OPENS_PER_WINDOW) return refuse("Too many Firefox pages opened at once");
       if (!open_page(win, entry, where)) return refuse(CANNOT_OPEN);
       recent_opens.push(now);
-      last_open.set(win, { page, at: now });
+      // Firefox selects the tab it switches to or opens, so the window's selected tab is where the page went.
+      last_open.set(win, { page, at: now, browser: win.gBrowser.selectedBrowser });
       return { ok: true };
     });
     core.on_shut_down(() => {

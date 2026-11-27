@@ -31,7 +31,8 @@ test("the module's page table equals the extension's, without about:logins and w
 });
 
 // One browser window with two tabs, the module on, DesertFox running and its state written. Each Firefox entry point records what it was asked.
-function world({ private_window = false, private_access = false, enabled = true, entry_points = true } = {}) {
+// `container_tab`: the asking tab is in a container, so a load here goes to a new tab, as openLinkIn does.
+function world({ private_window = false, private_access = false, enabled = true, entry_points = true, container_tab = false } = {}) {
   const firefox = create_firefox({ extra_files: { [PAGES_FILE]: source_of(PAGES_FILE) } });
   firefox.start_extension({ private_access });
   firefox.write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled, keys: [], tabs: {} });
@@ -50,13 +51,30 @@ function world({ private_window = false, private_access = false, enabled = true,
   const opened: Opened[] = [];
   // Which address an open tab shows, for the switch to find it.
   const shown = new Set<string>();
+  // Each entry point leaves the tab it opened or switched to selected, showing the address, as Firefox does.
+  type FakeBrowser = { currentURI?: { spec: string } };
+  const show_in_new_tab = (address: string) => {
+    const made = window.add_tab();
+    (made.browser as FakeBrowser).currentURI = { spec: address };
+    window.select(made.tab);
+    return made.browser;
+  };
+  const closed = new Set<unknown>();
+  const gBrowser = window.win.gBrowser as unknown as { getTabForBrowser(browser: unknown): unknown; selectedBrowser: FakeBrowser };
+  const tab_for_browser = gBrowser.getTabForBrowser;
+  gBrowser.getTabForBrowser = (browser: unknown) => (closed.has(browser) ? null : tab_for_browser(browser));
   if (entry_points) {
     Object.assign(window.win, {
       switchToTabHavingURI: (address: string, open_new: boolean, params: Record<string, unknown>, user_context_id: unknown) => {
         opened.push({ how: "switch", address, open_new, params: plain({ ...params, triggeringPrincipal: params.triggeringPrincipal === SYSTEM_PRINCIPAL ? "system" : params.triggeringPrincipal }), user_context_id });
+        if (!shown.has(address) && open_new) show_in_new_tab(address);
         return shown.has(address);
       },
-      openTrustedLinkIn: (address: string, where: string, params: Record<string, unknown>) => void opened.push({ how: "trusted", address, where, params: plain(params) }),
+      openTrustedLinkIn: (address: string, where: string, params: Record<string, unknown>) => {
+        opened.push({ how: "trusted", address, where, params: plain(params) });
+        if (container_tab) (params.resolveOnNewTabCreated as (browser: unknown) => void)(show_in_new_tab(address));
+        else gBrowser.selectedBrowser.currentURI = { spec: address };
+      },
       BrowserAddonUI: { openAddonsMgr: async (view: string) => void opened.push({ how: "addons", address: view }) },
     });
   }
@@ -81,7 +99,8 @@ function world({ private_window = false, private_access = false, enabled = true,
     return error === undefined ? { ok } : { ok, error };
   }
   const fire_em_loaded = (subject: unknown) => [...em_loaded].forEach((fn) => fn(subject, "EM-loaded"));
-  return { firefox, window, a, b, ids, ask, opened, shown, em_loaded, fire_em_loaded };
+  const selected_browser = () => gBrowser.selectedBrowser;
+  return { firefox, window, a, b, ids, ask, opened, shown, em_loaded, fire_em_loaded, selected_browser, close: (browser: unknown) => void closed.add(browser) };
 }
 
 
@@ -148,15 +167,17 @@ test("the add-on manager opens through Firefox's own opener, and a view with no 
   assert.deepEqual(opened, [{ how: "switch", address: "about:addons", open_new: true, params: SWITCH_PARAMS("whenComparing"), user_context_id: 0 }, { how: "addons", address: "addons://shortcuts/shortcuts" }]);
 });
 
-test("the shortcuts view here loads about:addons into the tab, then shows the view in the first manager that loads in this window", async () => {
-  const { ask, ids, opened, window, fire_em_loaded, em_loaded, firefox } = world();
+test("the shortcuts view here loads about:addons into the tab, then shows the view only in the manager that loads in that tab", async () => {
+  const { ask, ids, opened, a, fire_em_loaded, em_loaded, firefox } = world();
   assert.deepEqual(await ask({ page: "addons-shortcuts", where: "here", tab_id: ids.a }), { ok: true });
   assert.deepEqual(opened, [{ how: "trusted", address: "about:addons", where: "current", params: { userContextId: 0 } }]);
   const views: string[] = [];
-  fire_em_loaded({ browsingContext: { topChromeWindow: {} }, loadView: (view: string) => views.push(`other ${view}`) });
-  fire_em_loaded({ browsingContext: { topChromeWindow: window.win }, loadView: (view: string) => views.push(view) });
-  fire_em_loaded({ browsingContext: { topChromeWindow: window.win }, loadView: (view: string) => views.push(`again ${view}`) });
-  assert.deepEqual(views, ["addons://shortcuts/shortcuts"]);
+  const manager = (browser: unknown, name: string) => ({ docShell: { chromeEventHandler: browser }, loadView: (view: string) => views.push(`${name} ${view}`) });
+  // Another add-ons tab of the same window that loads first keeps its own view.
+  fire_em_loaded(manager({}, "other"));
+  fire_em_loaded(manager(a.browser, "asked"));
+  fire_em_loaded(manager(a.browser, "again"));
+  assert.deepEqual(views, ["asked addons://shortcuts/shortcuts"]);
   assert.equal(em_loaded.size, 0);
   // A manager that never loads: the wait ends on its own.
   firefox.chrome_now += 2000;
@@ -164,6 +185,17 @@ test("the shortcuts view here loads about:addons into the tab, then shows the vi
   assert.equal(em_loaded.size, 1);
   firefox.run_timers();
   assert.equal(em_loaded.size, 0);
+});
+
+test("from a container tab the shortcuts view waits on the new tab Firefox opens, not the asking tab", async () => {
+  const { ask, ids, a, fire_em_loaded, selected_browser } = world({ container_tab: true });
+  await ask({ page: "addons-shortcuts", where: "here", tab_id: ids.a });
+  const new_tab = selected_browser();
+  assert.notEqual(new_tab, a.browser);
+  const views: string[] = [];
+  fire_em_loaded({ docShell: { chromeEventHandler: a.browser }, loadView: (view: string) => views.push(`asking ${view}`) });
+  fire_em_loaded({ docShell: { chromeEventHandler: new_tab }, loadView: (view: string) => views.push(`new ${view}`) });
+  assert.deepEqual(views, ["new addons://shortcuts/shortcuts"]);
 });
 
 test("a second request for the same page in the same window within a second opens nothing more and answers ok", async () => {
@@ -175,6 +207,24 @@ test("a second request for the same page in the same window within a second open
   firefox.chrome_now += 600;
   assert.deepEqual(await ask({ page: "config", tab_id: ids.a }), { ok: true });
   assert.equal(opened.length, 2);
+});
+
+test("within that second, a request opens the page again once the tab it went to is closed or shows another page", async () => {
+  const { ask, ids, opened, firefox, selected_browser, close } = world();
+  await ask({ page: "config", tab_id: ids.a });
+  close(selected_browser());
+  firefox.chrome_now += 300;
+  await ask({ page: "config", tab_id: ids.a });
+  assert.equal(opened.length, 2);
+  selected_browser().currentURI = { spec: "https://example.com/" };
+  firefox.chrome_now += 300;
+  await ask({ page: "config", tab_id: ids.a });
+  assert.equal(opened.length, 3);
+  // A tab still on its blank start is the page loading, so a double press still opens one.
+  selected_browser().currentURI = { spec: "about:blank" };
+  firefox.chrome_now += 300;
+  await ask({ page: "config", tab_id: ids.a });
+  assert.equal(opened.length, 3);
 });
 
 test("a request read twice opens once", async () => {
