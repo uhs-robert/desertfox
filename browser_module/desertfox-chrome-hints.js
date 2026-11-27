@@ -265,15 +265,17 @@
     // ---- Firefox's own pages in this process: the allowlist and what a session there labels.
 
     // By about: name, what a pick there waits for Enter on (`grants`) and what never gets a label (`never`). Any other about: page keeps the key taker's notice, so a page a later Firefox adds stays unlabelled.
-    // about:addons: the controls that grant an add-on more (private windows, sites with restrictions, its optional permissions) and Remove. about:config: every write to a pref, and the risk warning's button is the user's own consent.
+    // about:addons: the controls that grant an add-on more (private windows, sites with restrictions, its optional permissions, enabling it) and Remove. about:config: every write to a pref, and the risk warning's button is the user's own consent.
     // about:downloads: the rules of the downloads list in `grants`.
     const ADDON_GRANT_INPUTS = new Set(["private-browsing", "quarantined-domains-user-allowed"]);
+    // Enabling an add-on again (toggle-disabled), undoing its removal and always activating a plugin each give back what it may do, with no prompt from Firefox.
+    const ADDON_GRANT_ACTIONS = new Set(["remove", "toggle-disabled", "undo", "always-activate"]);
     const PAGE_HINT_PAGES = {
       preferences: {},
       settings: {},
       downloads: {},
       addons: {
-        grants: (element) => (element.localName === "input" && ADDON_GRANT_INPUTS.has(element.name)) || closest_of(element, (at) => at.hasAttribute?.("permission-key") || at.hasAttribute?.("permission-all-sites") || at.getAttribute?.("action") === "remove") !== null,
+        grants: (element) => (element.localName === "input" && ADDON_GRANT_INPUTS.has(element.name)) || closest_of(element, (at) => at.hasAttribute?.("permission-key") || at.hasAttribute?.("permission-all-sites") || ADDON_GRANT_ACTIONS.has(at.getAttribute?.("action"))) !== null,
       },
       config: {
         grants: (element) => element.localName === "button" && closest_of(element, (at) => at.id === "prefs") !== null,
@@ -437,6 +439,7 @@
     // A page session keeps the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
     // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing.
     function note_typed(owner, key) {
+      if (time_now(owner.win) < owner.counts_at) return;
       owner.typed_at = time_now(owner.win);
       if (key === "Backspace") {
         owner.typed = owner.typed.slice(0, -1);
@@ -449,6 +452,8 @@
 
     // The extension picks within a moment of the key that spelled the label.
     const SPELLED_MS = 2000;
+    // A key counts toward a label only this long after the first labels show. A key typed before (one the extension asked to start with, or a tap meant for the page) never saw them.
+    const LABELS_SEEN_MS = 300;
     const spelled = (owner, id) => owner.typed !== "" && owner.labels?.get(id) === owner.typed && time_now(owner.win) - owner.typed_at <= SPELLED_MS;
 
     const ENDS = Symbol("ends");
@@ -599,7 +604,7 @@
       end_confirm();
       end_session(true);
       if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, typed: "", typed_at: 0, labels: undefined, look: { style_url, theme, panel, frame_win, page } };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, typed: "", typed_at: 0, counts_at: Infinity, labels: undefined, look: { style_url, theme, panel, frame_win, page } };
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
         add_session_parts(win, found, style_url, theme, panel, frame_win, page);
@@ -664,7 +669,9 @@
 
     function open_session(tag, win, found, colors, places) {
       if (found.length === 0) return { ok: false, error: "Nothing to hint here" };
-      start_session(tag, win, found.slice(0, MAX_TARGETS), label_style_url(), theme_text(colors), places);
+      // A page's labels sit over controls that change settings, so no sheet of the extension's may move or hide them there.
+      const themed = !places.page;
+      start_session(tag, win, found.slice(0, MAX_TARGETS), themed ? label_style_url() : undefined, themed ? theme_text(colors) : "", places);
       const parts = target_parts(session.targets);
       parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
       return { ok: true };
@@ -756,6 +763,10 @@
       return node;
     }
 
+    // A page label's look, inline in a layer with no sheet, after the hint view's own (src/content/hints/view.ts) in its default colors.
+    const PAGE_LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: #7fa3c9; color: #0c0e13; border: 1px solid #7fa3c9; box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
+    const PAGE_LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+
     // Replaces every label with the rows of one complete draw. Each box is read now, so a label sits where its target is at this draw, and a pick checks against that.
     function apply_draw(rows, typed_length) {
       const doc = session.win.document;
@@ -765,6 +776,10 @@
         const target = session.targets.get(id);
         target.drawn = window_box(session.win, target.element);
         const node = label_node(doc, text, typed_length);
+        if (session.page) {
+          node.style.cssText = PAGE_LABEL_STYLE;
+          node.children[0].style.cssText = PAGE_LABEL_TYPED_STYLE;
+        }
         if (target.place === "panel") {
           node.style.position = "absolute";
           node.style.left = `${Math.round(target.drawn.left - origin.left)}px`;
@@ -809,16 +824,19 @@
       }
       if (session.page && !keeps_labels(session, rows_drawn)) return { ok: true };
       const first = session.drawn_gen === 0;
-      if (first && session.page) session.labels = new Map(rows_drawn);
+      if (first && session.page) {
+        session.labels = new Map(rows_drawn);
+        session.counts_at = time_now(session.win) + LABELS_SEEN_MS;
+      }
       session.drawn_gen = args.gen;
       apply_draw(rows_drawn, [...args.typed].length);
       if (first) for (const key of session.early_keys.splice(0)) push_key(key);
       return { ok: true };
     }
 
-    // A page session's labels are those of its first draw: each its own, and a later draw only shows fewer of them. So the keys typed name one target.
+    // A page session's labels are those of its first draw: none the start of another, and a later draw only shows fewer of them. So the keys typed name one target, and no label is spelled on the way to a longer one.
     function keeps_labels(owner, rows) {
-      if (owner.labels === undefined) return new Set(rows.map(([, label]) => label)).size === rows.length;
+      if (owner.labels === undefined) return rows.every(([, label], index) => rows.every(([, other], at) => at === index || !other.startsWith(label)));
       return rows.every(([id, label]) => owner.labels.get(id) === label);
     }
 
@@ -999,6 +1017,8 @@
       const ends = () => end_confirm();
       for (const type of ["mousedown", "deactivate", "resize", "unload", "TabSelect"]) listen(confirming, win, type, ends);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(confirming, frame_win, type, ends);
+      // A click in the page lands in its own document, as in a dialog.
+      if (page) for (const type of ["mousedown", "pagehide"]) listen(confirming, page.doc.defaultView, type, ends);
       if (panel) listen(confirming, panel.panel, "popuphidden", (event) => event.target === panel.panel && end_confirm(), false);
       // A download that finishes or is unblocked elsewhere changes its row, and a doorhanger reuses its element for the next prompt.
       const observer = new win.MutationObserver(ends);

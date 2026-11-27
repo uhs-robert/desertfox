@@ -12,6 +12,8 @@ import type { Firefox } from "./chrome_windows.ts";
 const PAGE_LAYER = "desertfox-page-hints";
 // How long a grant's mark shows before an Enter counts: Firefox's `security.notification_enable_delay` when unset.
 const DWELL_MS = 500;
+// How long after the first labels show a key starts to count toward one.
+const SEEN_MS = 300;
 
 type Opened = { address: string; options: { inBackground: boolean; triggeringPrincipal: unknown } };
 
@@ -73,6 +75,7 @@ function start_on(url: string, build: (root: Node) => void, options: Parameters<
   const label_all = async (session: number) => {
     const labelled = rows(session).map(([id], index) => [id!, String.fromCharCode(97 + index)] as [number, string]);
     await run.draw(session, labelled);
+    chrome.clock.now += SEEN_MS;
     return new Map(labelled);
   };
   const page_layers = () => chrome.root.children.filter((child) => child.className === PAGE_LAYER);
@@ -200,6 +203,7 @@ test("Backspace takes a typed letter back, a letter that continues no label chan
   const rows = run.rows(5);
   const [first, second] = [rows[0]![0]!, rows[1]![0]!];
   await run.draw(5, rows.map(([id], index) => [id!, ["aa", "ab", "ba", "bb"][index]!]));
+  run.chrome.clock.now += SEEN_MS;
   for (const key of ["a", "z", "Backspace", "b", "a"]) run.chrome.press(key);
   // Typed now: "ba", the third label. The extension's draw that gives the first target "ba" is dropped.
   await run.draw(5, [[first, "ba"], [second, "aa"]], 2);
@@ -209,17 +213,55 @@ test("Backspace takes a typed letter back, a letter that continues no label chan
   await again.collect(6);
   const target = again.rows(6)[2]![0]!;
   await again.draw(6, again.rows(6).map(([id], index) => [id!, ["aa", "ab", "ba", "bb"][index]!]));
+  again.chrome.clock.now += SEEN_MS;
   for (const key of ["a", "Backspace", "b", "a"]) again.chrome.press(key);
   assert.equal((await again.pick(6, target))?.ok, true);
 });
 
-test("a first draw with two targets under one label shows nothing", async () => {
+test("a first draw with two targets under one label, or one label the start of another, shows nothing and picks nothing", async () => {
+  for (const labels of [["a", "a", "b", "c"], ["a", "ab", "b", "c"]]) {
+    const run = start_on("about:preferences", preferences().build);
+    run.hint_key();
+    await run.collect(5);
+    const rows = run.rows(5);
+    await run.draw(5, rows.map(([id], index) => [id!, labels[index]!]));
+    const shown = run.page_layers()[0]!.shadow!.children.find((child) => child.className === "desertfox-hints")!.children;
+    assert.equal(shown.length, 0, `labels ${labels.join(" ")} were drawn`);
+    run.chrome.clock.now += SEEN_MS;
+    run.chrome.press("a");
+    // The user types "a" on the way to "ab", and the extension names the target of "a".
+    assert.equal((await run.pick(5, rows[0]![0]!))?.ok, false, `labels ${labels.join(" ")}`);
+    assert.equal(run.chrome.page_root.children[0]!.clicks, 0, `labels ${labels.join(" ")}: the pick clicked`);
+  }
+});
+
+test("keys typed before the labels showed, or at once after, spell no label", async () => {
+  for (const before_draw of [true, false]) {
+    const run = start_on("about:preferences", preferences().build);
+    run.hint_key();
+    await run.collect(5);
+    const rows = run.rows(5);
+    const labelled = rows.map(([id], index) => [id!, String.fromCharCode(97 + index)] as [number, string]);
+    if (before_draw) run.chrome.press("a");
+    await run.draw(5, labelled);
+    if (!before_draw) run.chrome.press("a");
+    assert.equal((await run.pick(5, rows[0]![0]!))?.error, "The keys typed do not name this hint", before_draw ? "a key typed before the first draw counted" : "a key typed as the labels drew counted");
+    assert.equal(run.chrome.page_root.children[0]!.clicks, 0);
+  }
+});
+
+test("a page's labels take no sheet and no theme from the extension: each is styled inline in a layer with no link", async () => {
   const run = start_on("about:preferences", preferences().build);
   run.hint_key();
-  await run.collect(5);
-  await run.draw(5, run.rows(5).map(([id]) => [id!, "a"]));
-  const labels = run.page_layers()[0]!.shadow!.children.find((child) => child.className === "desertfox-hints")!.children;
-  assert.equal(labels.length, 0);
+  run.send("page_hints.collect", { session: 5, start: run.wants()[0]!.start, action: "follow", colors: JSON.stringify({ dark: { primary: "#ff0000" } }) });
+  await settle();
+  await run.label_all(5);
+  const host = run.page_layers()[0]!;
+  const parts = host.shadow!.descendants();
+  assert.equal(parts.filter((node) => node.localName === "link").length, 0, "the page layer links the extension's sheet");
+  assert.equal((host.shadow as unknown as { adoptedStyleSheets?: unknown[] }).adoptedStyleSheets, undefined, "the page layer took the theme");
+  const label = parts.find((node) => node.className === "desertfox-hint")!;
+  assert.match(String(label.style.cssText), /position: fixed;.*background: #7fa3c9;/);
 });
 
 test("a field pick focuses it and ends the session, so the bar can say INSERT and Escape is #1027's again; while the session runs, Escape ends it here", async () => {
@@ -272,13 +314,20 @@ test("on about:addons a grant control and Remove only mark the control, and the 
   const remove_button = el("button", 20, 100);
   remove.openOrClosedShadowRoot = Object.assign(new Node("#shadow"), { host: remove });
   remove.openOrClosedShadowRoot.append(remove_button);
-  const enable = el("moz-toggle", 20, 140);
-  const parts = { permission, private_allow, remove_button, enable };
-  for (const target of [permission, private_allow, remove_button]) {
-    const run = start_on("about:addons", (root) => root.append(permission, private_allow, remove, enable));
+  const plain_toggle = el("moz-toggle", 20, 140);
+  // Enabling an add-on again, undoing its removal and always activating a plugin.
+  const [enable, undo, activate] = ["toggle-disabled", "undo", "always-activate"].map((action, index) => {
+    const control = el("moz-button", 300, 20 + 40 * index);
+    control.setAttribute("action", action);
+    return control;
+  });
+  const parts = { permission, private_allow, remove_button, plain_toggle };
+  const build = (root: Node) => root.append(permission, private_allow, remove, plain_toggle, enable!, undo!, activate!);
+  for (const target of [permission, private_allow, remove_button, enable!, undo!, activate!]) {
+    const run = start_on("about:addons", build);
     const { pick } = await labelled_session(run, 5);
     assert.equal((await pick(target))?.ok, true);
-    assert.equal(target.clicks, 0, `a pick of ${target.localName} granted with no Enter`);
+    assert.equal(target.clicks, 0, `a pick of ${target.localName} ${target.getAttribute("action") ?? ""} granted with no Enter`);
     assert.ok(run.marked(), `no mark on ${target.localName}`);
     run.chrome.press("Enter", { isTrusted: false });
     assert.equal(target.clicks, 0, "a synthetic Enter granted");
@@ -288,10 +337,27 @@ test("on about:addons a grant control and Remove only mark the control, and the 
     assert.equal(run.held(), undefined);
     target.clicks = 0;
   }
-  const run = start_on("about:addons", (root) => root.append(permission, private_allow, remove, enable));
+  const run = start_on("about:addons", build);
   const { pick } = await labelled_session(run, 6);
-  assert.equal((await pick(parts.enable))?.ok, true);
-  assert.equal(enable.clicks, 1, "the enable toggle, which grants nothing, waited for Enter");
+  assert.equal((await pick(parts.plain_toggle))?.ok, true);
+  assert.equal(plain_toggle.clicks, 1, "a toggle that grants nothing waited for Enter");
+});
+
+test("a click in the page or the page going away ends a grant's mark, so a later Enter grants nothing", async () => {
+  for (const end of ["mousedown", "pagehide"]) {
+    const permission = el("moz-toggle", 20, 20);
+    permission.setAttribute("permission-key", "history");
+    const run = start_on("about:addons", (root) => root.append(permission));
+    const { pick } = await labelled_session(run, 5);
+    await pick(permission);
+    assert.ok(run.marked());
+    run.chrome.page_view.fire(end);
+    assert.equal(run.marked(), false, `${end} left the mark`);
+    assert.equal(run.held(), undefined, `${end} left the keys held`);
+    run.chrome.clock.now += DWELL_MS;
+    run.chrome.press("Enter");
+    assert.equal(permission.clicks, 0, `an Enter after ${end} granted`);
+  }
 });
 
 test("the Enter note takes no sheet and no theme from the extension: its layer holds only the mark, styled inline", async () => {
