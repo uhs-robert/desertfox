@@ -501,3 +501,53 @@ test("a flag set while the pref is off goes in the hello when it comes on", () =
   firefox.set_pref(true);
   assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true });
 });
+
+// A page in this process (about:preferences) whose search box holds the focus, and the key target that reaches it.
+function in_process_field(browser: unknown) {
+  const page_document: Record<string, unknown> = { designMode: "off", activeElement: undefined, defaultView: { browsingContext: { isContent: true, top: { embedderElement: browser } } } };
+  const field = { localName: "input", type: "search", blurs: 0, ownerDocument: page_document, blur() { this.blurs++; page_document.activeElement = undefined; } };
+  page_document.activeElement = field;
+  return { field, page_document, target: { target: field, originalTarget: field } };
+}
+
+test("Escape in a field on a page in this process blurs it, stops the page's own Escape and leaves keys working", () => {
+  const { press, first, window, runs } = started();
+  const { field, target } = in_process_field(first.browser);
+  const escape = press("Escape", target);
+  assert.deepEqual([field.blurs, escape.prevented, escape.stopped], [1, true, true]);
+  press("J", { target: first.browser, originalTarget: first.browser });
+  assert.deepEqual(window.tab_moves, [1]);
+  assert.deepEqual(runs(), []);
+});
+
+test("Escape in a field on a page in another process asks its frame script for a blur marked escape", () => {
+  const { press, first, firefox } = started();
+  firefox.report(first.browser, { inner: 10, listeners: 0, field: true });
+  const escape = press("Escape");
+  assert.equal(escape.prevented, true);
+  assert.deepEqual(firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")).map(({ data }) => plain(data)), [{ inner: 10, escape: true }]);
+});
+
+test("Escape leaves the field alone with a modifier, with no field, in a tab DesertFox runs in, in an ignored tab, while a feature holds the keys and with the module off", () => {
+  const cases: [string, (world: ReturnType<typeof started>, page: ReturnType<typeof in_process_field>) => Partial<FakeEvent>][] = [
+    ["Shift", () => ({ shiftKey: true })],
+    ["Ctrl", () => ({ ctrlKey: true })],
+    ["no field", (_world, page) => ((page.page_document.activeElement = undefined), {})],
+    ["a live tab", (world) => (world.firefox.report(world.first.browser, { inner: 10, listeners: 1, field: true }), {})],
+    ["a feature holding the keys", (world) => (vm.runInContext(`Services.desertfox_browser_module.hold_keys(this, "feature")`, (world.window.win as { context: vm.Context }).context), {})],
+    ["the toolbar switch off", (world) => (world.firefox.write_state(state({ enabled: false })), {})],
+  ];
+  for (const [what, prepare] of cases) {
+    const world = started();
+    const page = in_process_field(world.first.browser);
+    const patch = prepare(world, page);
+    const escape = world.press("Escape", { ...page.target, ...patch });
+    assert.equal(page.field.blurs, 0, what);
+    assert.equal(escape.stopped && what !== "Shift", false, what);
+  }
+  const ignored = started();
+  const page = in_process_field(ignored.first.browser);
+  ignored.press("Escape", { shiftKey: true });
+  const escape = ignored.press("Escape", page.target);
+  assert.deepEqual([page.field.blurs, escape.prevented], [0, false], "an ignored tab");
+});

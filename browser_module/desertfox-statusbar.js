@@ -30,6 +30,9 @@
     // The kill switch of the bar alone, so a bar fault is turned off with the keys left alone. It is true unless set.
     const BAR_PREF = "desertfox.browser_module.statusbar";
     const SCROLL_MESSAGE = "desertfox-statusbar:scroll";
+    // The core's own report of each tab, read here only for whether a field has the focus.
+    const FIELD_MESSAGE = "desertfox-browser-module:report";
+    const FIELD_REPORT_NOW = "desertfox-browser-module:report-now";
     const HTML_NS = "http://www.w3.org/1999/xhtml";
     const BAR_ID = "desertfox-statusbar";
     const HEIGHT_TOKEN = "--desertfox-statusbar-height";
@@ -227,6 +230,27 @@
       if (Services[FRAME_FLAG]) return;
       Services[FRAME_FLAG] = true;
       Services.mm.loadFrameScript("data:application/javascript;charset=utf-8," + encodeURIComponent(`(${scroll_frame_script})();`), true);
+    }
+
+    // The newest field report of each of this window's tabs, by <browser>.
+    const fields = new WeakMap();
+
+    function on_field_message(message) {
+      try {
+        const data = message.data;
+        if (!win.gBrowser.getTabForBrowser(message.target) || !is_record(data) || typeof data.inner !== "number" || typeof data.listeners !== "number" || typeof data.field !== "boolean") return;
+        fields.set(message.target, { inner: data.inner, listeners: data.listeners, field: data.field });
+        schedule();
+      } catch (error) {
+        log_once(`a field report was dropped after an error: ${error}`);
+      }
+    }
+
+    // The keys type into a field on a page with no DesertFox code and no tab record, so the bar says INSERT, as it does on a web page.
+    function field_has_focus(browser, record) {
+      if (record?.live === true) return false;
+      const report = fields.get(browser);
+      return report !== undefined && report.inner === browser.innerWindowID && report.listeners === 0 && report.field;
     }
 
     // ---- The model: what each widget says now. No DOM and no layout read.
@@ -431,9 +455,11 @@
       const id = tab_id_of(tab);
       const record = id !== undefined && Object.hasOwn(view_state.tabs, id) ? view_state.tabs[id] : undefined;
       const scroll = scrolls.get(browser);
+      const view = tab_view(record);
+      if (view.mode === "normal" && field_has_focus(browser, record)) view.mode = "insert";
       return {
         enabled: view_state.enabled,
-        view: tab_view(record),
+        view,
         container: container_of(tab),
         scroll: scroll && scroll.inner === browser.innerWindowID ? scroll : undefined,
         place: tab_place(tab),
@@ -616,6 +642,8 @@
         if (running) load_frame_script();
         // A page that scrolled while the bar was off has no report of its own to send, so the tabs are asked again.
         if (running && !was_running) Services.mm.broadcastAsyncMessage("desertfox-statusbar:report-now");
+        // A tab focused before the bar started has sent no field report the bar saw.
+        if (running && !was_running) Services.mm.broadcastAsyncMessage(FIELD_REPORT_NOW);
         was_running = running;
         schedule();
       } catch (error) {
@@ -628,6 +656,8 @@
     undo.push(() => stop_listening());
     Services.mm.addMessageListener(SCROLL_MESSAGE, on_scroll_message);
     undo.push(() => Services.mm.removeMessageListener(SCROLL_MESSAGE, on_scroll_message));
+    Services.mm.addMessageListener(FIELD_MESSAGE, on_field_message);
+    undo.push(() => Services.mm.removeMessageListener(FIELD_MESSAGE, on_field_message));
     const tab_events = ["TabSelect", "TabOpen", "TabClose", "TabMove", "TabAttrModified", "TabShow", "TabHide", "SSTabRestoring"];
     for (const type of tab_events) {
       win.gBrowser.tabContainer.addEventListener(type, schedule);

@@ -456,7 +456,8 @@
         for (const held_win of win ? [win] : [...holds.keys()]) end_hold(held_win);
       },
       pending: pending_in,
-      take_held
+      take_held,
+      ignores: is_ignored
     });
   }
 })();

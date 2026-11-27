@@ -267,5 +267,6 @@ function define(core) {
     },
     pending: pending_in,
     take_held,
+    ignores: is_ignored,
   });
 }

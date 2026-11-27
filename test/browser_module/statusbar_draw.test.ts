@@ -176,6 +176,34 @@ test("the scroll widget shows only for the document the report names", () => {
   assert.deepEqual(fixture.firefox.errors, []);
 });
 
+test("a tab with no record and a focused field shows INSERT, and nothing else a report says does", () => {
+  const fixture = started();
+  fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
+  const report = (data: unknown) => {
+    fixture.firefox.emit_message("desertfox-browser-module:report", fixture.tabs[0]!.browser, data);
+    fixture.run_frames();
+    return fixture.widgets("left")[0];
+  };
+  assert.equal(report({ inner: 10, listeners: 0, field: false }), "NORMAL");
+  assert.equal(report({ inner: 10, listeners: 0, field: true }), "INSERT");
+  assert.equal(report({ inner: 99, listeners: 0, field: true }), "NORMAL", "another document");
+  assert.equal(report({ inner: 10, listeners: 1, field: true }), "NORMAL", "a DesertFox listener runs");
+  assert.equal(report({ inner: "10", listeners: 0, field: true }), "NORMAL", "junk");
+  assert.equal(report("junk"), "NORMAL");
+  assert.equal(report({ inner: 10, listeners: 0, field: true }), "INSERT");
+  assert.equal(report({ inner: 10, listeners: 0, field: false }), "NORMAL", "the field lost the focus");
+  fixture.firefox.write_state(state_with({ live: true }));
+  assert.equal(report({ inner: 10, listeners: 0, field: true }), "NORMAL", "a live record");
+  fixture.firefox.write_state(state_with({ mode: "caret", live: false }));
+  assert.equal(report({ inner: 10, listeners: 0, field: true }), "CARET", "a record mode stays");
+  assert.deepEqual(fixture.firefox.errors, []);
+});
+
+test("starting the bar asks every tab for a fresh field report", () => {
+  const fixture = started();
+  assert.ok(fixture.firefox.broadcasts.includes("desertfox-browser-module:report-now"));
+});
+
 test("the container widget names a container, hides the default one and ignores a color it does not know", () => {
   const fixture = create_bar_fixture();
   fixture.firefox.identity_service = {
@@ -310,7 +338,7 @@ test("unload takes every listener, observer, sheet and the bar away", () => {
   assert.equal(fixture.progress_listeners.size, 0);
   assert.equal(fixture.firefox.ready_listener_count(), ready_before - 1, "ready");
   assert.equal(fixture.firefox.pref_observer_count(), pref_observers_before - 1, "prefs (the fake keeps one observer for both names)");
-  assert.equal(fixture.firefox.message_listener_count(), messages_before - 1, "scroll message");
+  assert.equal(fixture.firefox.message_listener_count(), messages_before - 2, "scroll and field messages");
   assert.ok(fixture.resize_observers.every((observer) => observer.disconnected));
   assert.equal(fixture.firefox.extension!.listeners.size, 1, "only the core's storage listener is left");
   fixture.firefox.write_state(state_with({ mode: "insert" }));
@@ -324,7 +352,7 @@ test("each window listens on its own, and the frame script loads once", () => {
   const scripts = () => first.firefox.frame_scripts.filter((url) => decodeURIComponent(url).includes("desertfox-statusbar:scroll")).length;
   assert.equal(scripts(), 1);
   first.window.close();
-  assert.equal(first.firefox.message_listener_count(), messages - 1);
+  assert.equal(first.firefox.message_listener_count(), messages - 2);
   assert.equal(scripts(), 1);
 });
 
