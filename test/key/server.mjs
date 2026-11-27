@@ -237,6 +237,27 @@ export function start_server() {
       </script>`;
       return response.end(page(`switch_field ${id}`, `<input id="field">${frame}${tall_filler}${script}`));
     }
+    if (url.pathname === "/refocus") {
+      // A field the page fights to keep focused, as a login form or a chat prompt does. The id picks the ways it refocuses, each a word in the id:
+      // `auto` an autofocus attribute, `login` a sign-in form with autocomplete, `vis` a focus on each show and on window focus,
+      // `blur` a focus inside the field's own blur handler, `blurt` the same a tick later, `loop` a focus every 30 ms for 3 s after a blur.
+      // `window.refocus_count` counts the focus calls, so a test can see a blur and refocus loop.
+      const has = (word) => id.split("_").includes(word);
+      const field = has("login")
+        ? `<form id="login" action="/page" onsubmit="return false"><input id="field" name="email" type="email" autocomplete="username" ${has("auto") ? "autofocus" : ""}><input id="password" name="password" type="password" autocomplete="current-password"><button>Sign in</button></form>`
+        : `<input id="field" ${has("auto") ? "autofocus" : ""}>`;
+      const script = `<script>
+        window.refocus_count = 0;
+        const field = document.getElementById("field");
+        const refocus = () => (window.refocus_count++, field.focus());
+        ${has("vis") ? 'document.addEventListener("visibilitychange", () => document.hidden || refocus()); addEventListener("focus", refocus);' : ""}
+        ${has("blur") ? 'field.addEventListener("blur", refocus);' : ""}
+        ${has("blurt") ? 'field.addEventListener("blur", () => setTimeout(refocus));' : ""}
+        ${has("loop") ? 'let loop_ends = 0; setInterval(() => Date.now() < loop_ends && document.activeElement !== field && refocus(), 30); field.addEventListener("blur", () => (loop_ends = Date.now() + 3000));' : ""}
+        addEventListener("focusin", (event) => send("focused", { id: event.target.id }));
+      </script>`;
+      return response.end(page(`refocus ${id}`, `${field}${tall_filler}${script}`));
+    }
     if (url.pathname === "/aligned") {
       return response.end(page(`aligned ${id}`, `${tall_filler}<input id="field">${tall_filler}`));
     }
