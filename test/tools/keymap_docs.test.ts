@@ -10,6 +10,7 @@ import type { CommandDef } from "../../src/shared/command.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { render } from "../../tools/keymap_docs/render.ts";
+import { locked_keys } from "../../tools/keymap_docs/locked_keys.ts";
 import { render_site_rows } from "../../tools/keymap_docs/render_site_rows.ts";
 import { BEGIN_MARKER, cell, code, END_MARKER, splice } from "../../tools/keymap_docs/splice.ts";
 
@@ -64,7 +65,7 @@ test("render fails when the keymap has a mode it has no place for", () => {
 
 test("docs/keymap.md is current", () => {
   const doc = read("docs/keymap.md");
-  assert.equal(splice(doc, render(DEFAULT_KEYMAP, registry)), doc, "run `just docs-gen`");
+  assert.equal(splice(doc, render(DEFAULT_KEYMAP, registry, locked_keys(DEFAULT_KEYMAP, DEFAULT_SITE_ROWS, registry))), doc, "run `just docs-gen`");
 });
 
 test("docs/site_rows.md is current", () => {

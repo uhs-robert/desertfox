@@ -68,6 +68,8 @@ import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tr
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_browser_module_rpc, pages_setting_on } from "./browser_module_rpc.ts";
+import { create_module_run } from "./browser_module_run.ts";
+import { locked_page_command_ids } from "../shared/browser_module_scope.ts";
 import { list_keys } from "./list_keys.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { create_global_mark_jump } from "./global_mark_jump.ts";
@@ -320,6 +322,7 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 }, { properties: ["url"] });
 browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
+const locked_commands = locked_page_command_ids(registry.list());
 const browser_module = create_browser_module({
   session: browser.storage.session,
   is_on: () => module_setting_on(browser.storage.local),
@@ -331,7 +334,8 @@ const browser_module = create_browser_module({
     const checked = command && check_args(command, args);
     return checked?.ok ? checked.args : undefined;
   },
-  handlers: browser_module_rpc.handlers,
+  locked_commands,
+  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal }) },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);
