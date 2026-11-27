@@ -246,11 +246,18 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       closed: false,
       gURLBar: {
         focus() {},
-        search: (text: string) => void address_bar.push(text),
+        // A query would reach the search suggestions, so a test fails on one.
+        search: (text: string) => void address_bar.push(`query: ${text}`),
+        set value(text: string) {
+          address_bar.push(text);
+        },
       },
       gBrowser: {
         get selectedBrowser() {
           return (selected ?? [...tabs.values()][0])?.browser;
+        },
+        get selectedTab() {
+          return selected ?? [...tabs.values()][0];
         },
         getTabForBrowser: (browser: unknown) => [...tabs.values()].find((tab) => tab.browser === browser) ?? null,
         tabContainer: {

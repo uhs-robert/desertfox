@@ -34,7 +34,8 @@ export const HELLO_MIN_INTERVAL_MS = 1000;
 export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
-type ArgKind = "int" | "number" | "axis" | "text" | "step" | "region" | "direction";
+// `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
@@ -99,9 +100,10 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
   if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
+  if (kind === "optional_int" && value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
   if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? undefined : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
-  return kind === "int" && !Number.isInteger(value) ? "must be a whole number" : undefined;
+  return (kind === "int" || kind === "optional_int") && !Number.isInteger(value) ? "must be a whole number" : undefined;
 }
 
 // Returns the args the command takes, each of the right shape, or the first problem. A name the command does not take is ignored, so a newer extension can add an optional arg.
@@ -289,7 +291,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.equalize": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
-  "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
+  // `tab_id` names the tab that asked. The module refuses when that tab is no longer the selected tab of the focused window, so the text never lands in a window the user switched to. An older extension leaves it out.
+  "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
@@ -339,7 +342,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
   for (const [name, kind] of Object.entries(kinds[value.kind]!.args)) {
     const problem = arg_problem(kind, given[name]);
     if (problem !== undefined) return bad(`${value.kind} ${name} ${problem}`);
-    args[name] = given[name] as number | string;
+    if (given[name] !== undefined) args[name] = given[name] as number | string;
   }
   return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
 }

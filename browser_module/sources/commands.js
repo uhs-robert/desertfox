@@ -17,7 +17,7 @@ if (typeof core === "object" && core !== null) {
     } catch (error) {
       Components.utils.reportError(`DesertFox browser module: the commands feature failed to load: ${error}`);
     }
-  } else if (typeof core.take_keys !== "function" || typeof core.run_command !== "function") {
+  } else if (typeof core.take_keys !== "function" || typeof core.run_command !== "function" || typeof core.may_act !== "function") {
     core.log_once("the core cannot hand keys to a feature, so the commands feature stays off");
   } else {
     // In the sandbox an error goes on to the core's `adopt`, which turns the module off for the session.
@@ -35,7 +35,7 @@ function define(core) {
   const MAX_NATIVE_REPEAT = 100;
 
   // The matcher of each window and what it was fed on. A key on another tab or document, or a new tree, starts a fresh one, so a half-typed sequence never finishes elsewhere.
-  const walks = new WeakMap();
+  let walks = new WeakMap();
   // The text of each tree the core handed over, so a state rewrite with the same tree keeps the sequence under way.
   const tree_texts = new WeakMap();
   // Per tab browser, the document the ignore toggle was turned on in. A load makes a new document, which ends it.
@@ -93,6 +93,8 @@ function define(core) {
     }
     const text = tree === undefined ? "" : tree_text(tree);
     const walk = text === "" ? undefined : walk_for(win, browser, text);
+    // With no tree the single-key rows decide, and a row wins over the module's own keys as a tree binding does.
+    if (!walk && context.row_runs) return undefined;
     const idle = walk === undefined || walk.pending === undefined;
     // The tree wins over the module's own keys, so a user who binds them gets the binding.
     if (idle && token === IGNORE_TOGGLE_KEY && !walk?.matcher.binds_after_("normal", [], token)) {
@@ -128,33 +130,40 @@ function define(core) {
     return { keys: [...walk.pending.keys], ...(walk.pending.count !== undefined && { count: walk.pending.count }) };
   }
 
-  // The text goes into the field as typed text: Firefox shows its results and the user presses Enter. It is never submitted here.
+  // The text goes into the field and nothing else happens: the user reads it, edits it and presses Enter. It is never submitted here.
+  // It can hold the selection or clipboard text a prompt takes, so it starts no query. Setting `value` only sets the field (UrlbarInputBase setValue fires no input event).
+  // `search(text)` would fire one, and the query it starts reaches the remote search suggestions (UrlbarProviderSearchSuggestions does not skip an omnibox keyword).
   function open_address_bar(win, text) {
     const bar = win?.gURLBar;
     if (!bar || typeof bar.focus !== "function") return { ok: false, error: "This Firefox has no address bar to open" };
-    const typed = text.replace(/[\p{Cc}\p{Cf}]/gu, "");
-    if (typeof bar.search === "function") bar.search(typed);
-    else {
-      bar.focus();
-      bar.value = typed;
-    }
+    bar.focus();
+    bar.value = text.replace(/[\p{Cc}\p{Cf}]/gu, "");
     return { ok: true };
   }
 
-  // The window with the focus: the key that asked came from it. A private window counts only when DesertFox may run there, as in the core's key guard.
+  // The window with the focus: the key that asked came from it. `may_act` holds the pref, the toolbar switch and private window access.
   function focused_window() {
     const win = Services.focus?.activeWindow;
-    if (!win || win.closed || win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser") return undefined;
-    const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
-    const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
-    if (PrivateBrowsingUtils.isWindowPrivate(win) && !ExtensionParent.GlobalManager.getExtension("desertfox@uhs-robert")?.privateBrowsingAllowed) return undefined;
+    if (!win || win.closed || win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser" || !core.may_act(win)) return undefined;
     return win;
   }
 
+  const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
+
   core.define_command("page.stop", { args: {}, run: ({ browser }) => browser.stop() });
-  core.register_kind("address_bar.open", ({ text }) => {
+  core.register_kind("address_bar.open", ({ text, tab_id }) => {
     const win = focused_window();
-    return win ? open_address_bar(win, OMNIBOX_PREFIX + text) : { ok: false, error: "No Firefox window has the focus" };
+    if (!win) return { ok: false, error: "No Firefox window has the focus" };
+    // The user switched windows or tabs after the key: the text belongs to the tab that asked.
+    if (tab_id !== undefined && selected_tab_id(win) !== tab_id) return { ok: false, error: "The tab that asked is no longer selected" };
+    return open_address_bar(win, OMNIBOX_PREFIX + text);
   });
-  core.take_keys({ key: take_key, pending: pending_in });
+  core.take_keys({
+    key: take_key,
+    reset: (win) => {
+      if (win) walks.delete(win);
+      else walks = new WeakMap();
+    },
+    pending: pending_in,
+  });
 }

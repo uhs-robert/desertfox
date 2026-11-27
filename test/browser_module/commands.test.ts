@@ -198,6 +198,55 @@ test("nothing is taken where DesertFox is live, in a field, or in another mode",
   for (const each of [live, field, insert]) assert.deepEqual(each.runs(), []);
 });
 
+test("a key a guard refuses ends the half-typed sequence: x, a field, then x closes nothing", () => {
+  const { press, type, runs, window } = started();
+  type("x");
+  window.win.windowUtils.IMEStatus = IME_ENABLED;
+  assert.equal(press("a").prevented, false);
+  window.win.windowUtils.IMEStatus = 0;
+  type("x");
+  assert.deepEqual(runs(), []);
+  const live = started();
+  live.type("g");
+  live.firefox.report(live.first.browser, { inner: 10, listeners: 1, field: false });
+  live.press("q");
+  live.firefox.report(live.first.browser, { inner: 10, listeners: 0, field: false });
+  live.type("t");
+  assert.deepEqual(live.runs(), []);
+  // A key outside a page (the browser UI or DevTools) ends it too.
+  const outside = started();
+  outside.type("g");
+  outside.window.press(key_event("a", { target: { localName: "input", ownerDocument: outside.window.win.document } }));
+  outside.type("t");
+  assert.deepEqual(outside.runs(), []);
+});
+
+test("a sequence typed before the module or the toolbar switch went off does not finish after it comes back", () => {
+  const tree: ScopeTree = { children: { g: { children: { t: "forward" } } } };
+  const { firefox, type, runs } = started({ written: state({ tree }) });
+  type("g");
+  firefox.set_pref(false);
+  firefox.set_pref(true);
+  type("t");
+  type("g");
+  firefox.write_state(state({ enabled: false, tree: undefined }));
+  firefox.write_state(state({ tree }));
+  type("t");
+  type("g", "t");
+  assert.deepEqual(runs(), [{ keys: "g t", count: 0 }]);
+});
+
+test("with no tree a single-key row wins over the module's own : and Shift+Escape", () => {
+  const keys = [...ROWS, { key: ":", id: "tab.prev", args: {} }, { key: "<S-Escape>", id: "tab.prev", args: {} }];
+  const { press, window } = started({ written: state({ tree: undefined, keys }) });
+  press(":", { shiftKey: true });
+  press("Escape", { shiftKey: true });
+  assert.deepEqual(window.tab_moves, [-1, -1]);
+  assert.deepEqual(window.address_bar, []);
+  press("J");
+  assert.deepEqual(window.tab_moves, [-1, -1, 1]);
+});
+
 test("with no tree or a bad one, the single-key rows decide", () => {
   for (const tree of [undefined, { children: { x: "run anything" } }]) {
     const { press, type, runs, window, firefox } = started({ written: state({ tree }) });
@@ -228,7 +277,7 @@ test(": opens the address bar with df, unless the tree binds it", () => {
   assert.deepEqual(bound.runs(), [{ keys: ":", count: 0 }]);
 });
 
-const bar_request = (text: unknown) => [{ v: BROWSER_MODULE_PROTOCOL_VERSION, id: "bar1", kind: "address_bar.open", args: { text }, sent_at: Date.now() }];
+const bar_request = (text: unknown, tab_id?: number) => [{ v: BROWSER_MODULE_PROTOCOL_VERSION, id: "bar1", kind: "address_bar.open", args: { text, ...(tab_id !== undefined && { tab_id }) }, sent_at: Date.now() }];
 const replies = (firefox: ReturnType<typeof create_firefox>) => plain(((firefox.read_holder("desertfox_browser_module_from_module") ?? []) as { reply_to?: string }[]).filter((message) => message.reply_to === "bar1"));
 
 test("address_bar.open types df and the text into the focused window's address bar and never submits it", async () => {
@@ -240,7 +289,28 @@ test("address_bar.open types df and the text into the focused window's address b
   assert.deepEqual(replies(firefox), [{ v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: "bar1", ok: true }]);
 });
 
-test("address_bar.open refuses with no focused window or a private window DesertFox may not use", async () => {
+test("address_bar.open fills the bar only while the tab that asked is the focused window's selected tab", async () => {
+  const { firefox, window, second } = started();
+  (firefox.Services.focus as { activeWindow: unknown }).activeWindow = window.win;
+  // The fake numbers tabs in the order they are first asked about, so the selected first tab is 1.
+  firefox.extension_writes("desertfox_browser_module_from_extension", bar_request("open.url ", 1));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(window.address_bar, ["df open.url "]);
+  window.select(second);
+  firefox.extension_writes("desertfox_browser_module_from_extension", [{ ...bar_request("open.url ", 1)[0]!, id: "bar2" }]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(window.address_bar, ["df open.url "]);
+  const refused = plain(((firefox.read_holder("desertfox_browser_module_from_module") ?? []) as { reply_to?: string }[]).filter((message) => message.reply_to === "bar2"));
+  assert.deepEqual(refused, [{ v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: "bar2", ok: false, error: "The tab that asked is no longer selected" }]);
+});
+
+test("address_bar.open refuses with no focused window, a private window DesertFox may not use, or the toolbar switch off", async () => {
+  const switched_off = started({ written: state({ enabled: false }) });
+  (switched_off.firefox.Services.focus as { activeWindow: unknown }).activeWindow = switched_off.window.win;
+  switched_off.firefox.extension_writes("desertfox_browser_module_from_extension", bar_request("open.url "));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(switched_off.window.address_bar, []);
+  assert.equal(replies(switched_off.firefox)[0]?.ok, false);
   for (const [private_window, focused] of [[false, false], [true, true]] as const) {
     const { firefox, window } = started({ private_window });
     if (focused) (firefox.Services.focus as { activeWindow: unknown }).activeWindow = window.win;
