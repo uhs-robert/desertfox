@@ -37,7 +37,7 @@ test("a failed leaf shows its toast and still reports the failure", async () => 
 test("a leaf with a background step goes to the router whole and records nothing from the page", async () => {
   const { sent, run_leaf } = setup();
   await run_leaf(leaf_of(step("scroll.lines", "content"), step("tab.next", "background")), 2, false);
-  assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.lines", count: 2 }, { id: "tab.next", count: 2 }], mode: "normal" }]);
+  assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "scroll.lines", count: 2 }, { id: "tab.next", count: 2 }], mode: "normal", repeat: false }]);
 });
 
 test("only a leaf made of captured-key steps holds the keys after it, and never in a field", () => {
@@ -54,7 +54,7 @@ test("a jump leaf goes to the router on a first press, and runs in the page on a
   const jump = { ...step("scroll.to", "content"), jump: true as const };
   const first = setup();
   await first.run_leaf(leaf_of(jump), undefined, false);
-  assert.deepEqual(first.sent, [{ type: "run", invocations: [{ id: "scroll.to" }], mode: "normal" }]);
+  assert.deepEqual(first.sent, [{ type: "run", invocations: [{ id: "scroll.to" }], mode: "normal", repeat: false }]);
   const repeat = setup();
   await repeat.run_leaf(leaf_of(jump), undefined, true);
   assert.deepEqual(repeat.sent, []);
@@ -71,4 +71,10 @@ test("a leaf with a jump step holds the keys after it, even with a plain step be
   assert.equal(holds_keys_after(leaf_of(jump, step("copy.url", "content")), false), true);
   assert.equal(holds_keys_after(leaf_of(step("copy.url", "content"), jump), false), true);
   assert.equal(holds_keys_after(leaf_of(jump, step("copy.url", "content")), true), false);
+});
+
+test("a held key's repeat reaches the router with the repeat flag", async () => {
+  const { sent, run_leaf } = setup();
+  await run_leaf(leaf_of(step("tab.next", "background")), undefined, true);
+  assert.deepEqual(sent, [{ type: "run", invocations: [{ id: "tab.next" }], mode: "normal", repeat: true }]);
 });

@@ -948,3 +948,23 @@ test("an offset from a page that replaced the one read before records nothing", 
   await create_router(same_page.deps).run({ invocations: [{ id: "scroll.to", args: { percent: 0 } }], mode: "normal", sender_tab_id: 7 });
   assert.ok(same_page.log.some((line) => line.startsWith("record")), "a hash change keeps the page");
 });
+
+// Focus moves to the new tab only after the async switch, so a held key's repeats all come from the tab it started in.
+test("repeated tab.next from one sender tab advance from the active tab, and a press stays relative to the sender", async () => {
+  let active = 1;
+  const { deps } = make_fake(
+    { "tab.next": { label: "Next Tab", intent: "x", runs_in: "background", run: (ctx) => void (active = ctx.tab_id! + 1) } },
+    { active_tab: async () => ({ tab_id: active, window_id: 1, url: "https://example.org/" }), get_tab: async (tab_id) => ({ tab_id, window_id: 1, url: "https://example.org/" }) },
+  );
+  const router = create_router(deps);
+  const next = (repeat: boolean) => router.run({ invocations: [{ id: "tab.next" }], mode: "normal", sender_tab_id: 1, ...(repeat && { repeat: true as const }) });
+  await next(true);
+  await next(true);
+  await next(true);
+  assert.equal(active, 4);
+  active = 1;
+  await next(false);
+  active = 5;
+  await next(false);
+  assert.equal(active, 2);
+});

@@ -4,7 +4,7 @@ import { ALT, CTRL, SHIFT_ESCAPE } from "./harness.mjs";
 
 export const areas = ["scroll", "tabs", "keys"];
 
-export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar, wait_active_tab, tab_switch_mark }) {
+export async function run_cases({ run_case, setup, expect, open_page, press_keys, settle_focus, poll_until, wait_tab_quiet, events, wait_event, since, find_event, scroll_delta_by_press, scroll_of, last_scroll_y, expect_absent, expect_no_scroll, expect_exactly_one_visible, in_background, record, type_in_address_bar, wait_active_tab, tab_switch_mark, tabs_shown_since, send_keys, sleep }) {
   await setup("open pages a, b and c", async () => {
     await open_page("page", "a", { new_tab: false });
     await open_page("page", "b", { new_tab: true });
@@ -15,6 +15,26 @@ export async function run_cases({ run_case, setup, expect, open_page, press_keys
     for (const [keys, expected] of [["K", "b"], ["K", "a"], ["J", "b"], ["J", "c"]]) {
       await press_keys(keys);
       await wait_active_tab(expected, `tab ${expected} after ${keys}`);
+      await settle_focus();
+    }
+  });
+
+  // The nested session switches fast enough that the unfixed router passes this too. It guards the repeat flag's path from the key to the router.
+  await run_case("holding Shift+J keeps switching tabs, each to the next one", async () => {
+    const switch_mark = await tab_switch_mark();
+    await send_keys("-M", "shift", "-P", "j", "-s", "1500", "-p", "j", "-m", "shift");
+    await sleep(500);
+    const shown = await tabs_shown_since(switch_mark);
+    expect(shown.length >= 6, `holding Shift+J switched ${shown.length} times: ${shown.join(", ")}`);
+    const order = ["a", "b", "c"];
+    const skipped = shown.findIndex((id, index) => index > 0 && id !== order[(order.indexOf(shown[index - 1]) + 1) % order.length]);
+    expect(skipped < 0, `a repeat did not land on the next tab: ${shown.join(", ")}`);
+    await settle_focus();
+    // The later cases start on c.
+    for (let at = order.indexOf(shown.at(-1)); order[at] !== "c"; ) {
+      at = (at + 1) % order.length;
+      await press_keys("J");
+      await wait_active_tab(order[at], `tab ${order[at]} after J`);
       await settle_focus();
     }
   });

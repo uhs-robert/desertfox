@@ -56,6 +56,9 @@ export type RouteRequest = {
   mode: Mode;
   // The tab the caller says it came from. The first step runs there while it exists. Later steps follow the active tab.
   sender_tab_id?: number;
+  // A held key's repeat. Focus moves to a new tab only after the async switch, so repeats still sent from the old tab would all
+  // resolve against it. A repeat runs in the active tab instead.
+  repeat?: true;
   frame_id?: number;
   // Set for a request from a page's content script, and carried to every step's context (`CommandContext.from_page`).
   from_page?: true;
@@ -115,9 +118,9 @@ export function create_router(deps: RouterDeps): Router {
   const record_step = deps.record_step ?? create_step_recorder(deps);
 
   // Read at run time: an earlier step or repeat can change which tab is active. The first step is pinned to the sender, because
-  // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab.
+  // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab, and so does a repeat.
   async function read_now(request: RouteRequest, pin_to_sender: boolean): Promise<Now> {
-    const sender = pin_to_sender && request.sender_tab_id !== undefined ? await ignore_refusal(deps.get_tab(request.sender_tab_id)) : undefined;
+    const sender = pin_to_sender && request.repeat !== true && request.sender_tab_id !== undefined ? await ignore_refusal(deps.get_tab(request.sender_tab_id)) : undefined;
     const active = sender ?? (await deps.active_tab());
     const tab_id = active?.tab_id ?? request.sender_tab_id;
     // The sender frame exists only in the sender tab. Another tab gets its top frame.
