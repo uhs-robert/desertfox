@@ -201,11 +201,21 @@ test("a start the module asks for from chrome focus hands its token back in a co
   assert.ok(validate_message({ v: 1, id: "c1", kind: "chrome_hints.collect_here", args: called[0]!.args }, EXTENSION_TO_MODULE_KINDS).ok);
   assert.equal("window_id" in session()!, false);
 
-  const refused = make({ collect: { ok: false, error: "The hint key is stale" } });
+  const refused = make({ collect: { ok: false, error: "The window is not in front" } });
   refused.hints.handlers["chrome_hints.want"]({ start: 1 });
   await flush();
   await refused.hints.handlers["chrome_hints.want"]({ start: 2 });
   assert.equal(refused.session(), undefined);
-  assert.deepEqual(refused.notes, ["The hint key is stale", "The hint key is stale"]);
+  assert.deepEqual(refused.notes, ["The window is not in front", "The window is not in front"]);
   assert.deepEqual(notes, []);
+});
+
+test("a start the user cancelled or let expire before the extension answered ends silently, and another refusal still tells the user", async () => {
+  const stale = make({ collect: { ok: false, error: "The hint key is stale" } });
+  await stale.hints.handlers["chrome_hints.want"]({ start: 1 });
+  assert.deepEqual(stale.notes, []);
+  assert.equal(stale.session(), undefined);
+  const nothing = make({ collect: { ok: false, error: "Nothing to hint here" } });
+  await nothing.hints.handlers["chrome_hints.want"]({ start: 1 });
+  assert.deepEqual(nothing.notes, ["Nothing to hint here"]);
 });

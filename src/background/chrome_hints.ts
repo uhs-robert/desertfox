@@ -45,6 +45,9 @@ export type ChromeHintDeps = {
 const ROWS_BYTES = CHROME_HINT_PART_BYTES - 512;
 const MAX_ROWS = 400;
 
+// The module's refusal of a start token the user cancelled (Escape, a click, another window) or let expire. The user ended it, so no toast says why.
+const STALE_START = "The hint key is stale";
+
 const is_whole = (value: unknown): value is number => Number.isSafeInteger(value);
 const is_part_of = (part: unknown, parts: unknown): boolean => is_whole(parts) && parts >= 1 && parts <= CHROME_HINT_MAX_PARTS && is_whole(part) && part >= 0 && part < parts;
 
@@ -180,7 +183,7 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       if (!is_whole(args.start)) return;
       const start = args.start;
       const result = await begin({}, (session, colors) => deps.call("chrome_hints.collect_here", { session, start, colors }));
-      if (!result.ok) await deps.notify(undefined, result.error);
+      if (!result.ok && result.error !== STALE_START) await deps.notify(undefined, result.error);
     },
   };
 
