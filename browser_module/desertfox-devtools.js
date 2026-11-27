@@ -357,7 +357,8 @@
         if (!by_layer.has(layer)) by_layer.set(layer, []);
         by_layer.get(layer).push(node);
       }
-      for (const layer of session.layers.values()) layer.box.replaceChildren(...(by_layer.get(layer) ?? []));    }
+      for (const layer of session.layers.values()) layer.box.replaceChildren(...(by_layer.get(layer) ?? []));
+    }
 
     // An area's label at its middle, a markup line's left of it, an icon button's over its middle, and any other at its top left corner.
     function place_label(node, { drawn, area, before }) {
