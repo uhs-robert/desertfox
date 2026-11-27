@@ -437,7 +437,9 @@ export async function create_session({ name: session_name, timings, sweep = true
   try {
     if (sweep) await sweep_dead_sessions();
     session = await timings.time("driver", () => start_session({ name: session_name, session_dir: join(work_dir, "session") }));
-    const firefox = session.spawn([join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), launch_mode]);
+    // The session builds its environment from nothing, so the Firefox that run.mjs chose goes in by name.
+    const firefox_choice = process.env.KEY_TEST_FIREFOX ? ["/usr/bin/env", `KEY_TEST_FIREFOX=${process.env.KEY_TEST_FIREFOX}`] : [];
+    const firefox = session.spawn([...firefox_choice, join(key_test_dir, "launch_firefox.sh"), work_dir, profile_dir, String(debug_port), launch_mode]);
     let firefox_exit;
     firefox.on("exit", (code, signal) => { firefox_exit = signal ? `signal ${signal}` : `exit ${code}`; });
     for (let attempt = 0; ; attempt++) {

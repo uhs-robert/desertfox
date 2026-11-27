@@ -24,12 +24,13 @@ This file holds the constraints, decisions, snippets, routing, the content scrip
 | Which-key, help, new tab, popup and external editor | [design/interfaces_pages.md](design/interfaces_pages.md) |
 | Tab sessions, groups, split view, live model, unload and reload | [design/interfaces_tabs.md](design/interfaces_tabs.md) |
 | The native host | [design/host.md](design/host.md) |
+| The browser module, the optional script for the pages a content script misses | [design/browser_module.md](design/browser_module.md) |
 
 ## Constraints from Firefox
 
 These were measured on Firefox 159 with real key presses. They shape every choice below.
 
-- A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus. The address bar keyword `df` runs commands on these pages (see [Command line and completion](design/interfaces_cmdline.md#command-line-and-completion)).
+- A content script catches plain keys such as `Shift+J` on web pages only. It catches nothing on about: pages, addons.mozilla.org, view-source, reader view, the PDF viewer, or while the address bar has focus. The address bar keyword `df` runs commands on these pages (see [Command line and completion](design/interfaces_cmdline.md#command-line-and-completion)). The optional browser module takes the tab and scroll keys there (see [design/browser_module.md](design/browser_module.md)).
 - `moz-extension://` pages do not match `<all_urls>`, so no content script runs on them by itself. The help page loads `content.js` with a script tag, and `tabs.sendMessage` reaches it like any other tab.
 - The `commands` API (Firefox shortcuts) catches a modifier chord such as `Alt+J` everywhere except on a page that cancels the key first. Firefox rejects bare keys and Shift plus a letter there.
 - A `document_start` listener is ready 11-58 ms (median 27) after the first byte of a page. Keys before that moment are lost. Navigating from a live page keeps the old listener until the new page commits.

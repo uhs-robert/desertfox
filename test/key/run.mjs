@@ -6,6 +6,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { make_firefox_copy } from "./firefox_copy.mjs";
 import { make_run_dir, stop_session_named, sweep_dead_run_dirs, sweep_dead_sessions } from "./session.mjs";
 import { build_incomplete, classify_exit, create_ledger, final_exit_code, load_weights, pick_debug_ports, piece_name_of, queue_order, stale_weight_warnings } from "./shards.mjs";
 import { default_timings_path, merge_reports, summary_text, write_report } from "./timings.mjs";
@@ -77,6 +78,8 @@ async function main() {
   // Holds each shard's timings file and, through TMPDIR, each worker's session files, so one removal leaves nothing behind in /tmp.
   // Made after the sweep, because a signal before the handlers below kills the coordinator outright.
   const run_dir = make_run_dir();
+  // A KEY_TEST_FIREFOX from the caller wins, so a run can test another Firefox build. Then the browser module cases need the module installed in that build.
+  const firefox_bin = process.env.KEY_TEST_FIREFOX || make_firefox_copy(run_dir);
 
   const failures = [];
   const results = [];
@@ -93,6 +96,7 @@ async function main() {
       env: {
         ...process.env,
         KEY_TEST_DEBUG_PORT: String(debug_ports[index]),
+        KEY_TEST_FIREFOX: firefox_bin,
         KEY_TEST_STARTUP_DELAY_MS: String(index * STARTUP_STAGGER_MS),
         KEY_TEST_TIMINGS_FILE: timings_file,
         KEY_TEST_DIAGNOSTICS_DIR: join(diagnostics_root, `s${shard}`),

@@ -26,6 +26,14 @@ A full run takes about 34 s on 8 shards. It needs labwc, Hyprland, dbus-daemon a
 - `KEY_TEST_PROBE=1 KEY_TEST_PIECES=p97_key_delivery KEY_TEST_DEADLINE_S=900 just key-test` runs the key-delivery probe. It presses every key the pieces use and checks each keydown's `key` and `code`, then counts lost F8 presses at 0, 30, 100 and 300 ms after a page loads. `KEY_TEST_PROBE_ROUNDS` sets the repeats (default 20). Without `KEY_TEST_PROBE` the piece does nothing.
 - One run at a time per machine, across worktrees: the recipe takes `/tmp/desertfox-key-test.lock` and a second run waits up to 900 s for it, after it prints the holders. Never wrap `just key-test` in `flock` on that file: the outer lock blocks the recipe's own for the whole wait. `just test-all` runs `just test` beside the key test, and the unit tests take no extra lock.
 
+## Firefox copy and the browser module
+
+Each run starts a private copy of `/usr/lib/firefox`, not the system Firefox, so a browser module installed on the machine never loads in a test.
+
+- `firefox_copy.mjs` makes the copy once per run in the run folder, before the shards start. It swaps in `chrome_loader.cfg`, a stand-in for the drop-in loader. Its `chrome.d` holds this worktree's `browser_module/desertfox-*.js` files after `chrome_throws.js`, a drop-in that throws at load.
+- `run.mjs` passes the copy's binary to the workers as `KEY_TEST_FIREFOX`, and `launch_firefox.sh` starts it. A `KEY_TEST_FIREFOX` from the caller wins, and without one the launcher starts the system `firefox`.
+- The module's pref stays unset, so every piece but the `p54_browser_module_*` ones runs with the module present and idle. Those pieces turn it on for their own cases. `browser_module_steps.mjs` holds their shared steps. See [docs/design/browser_module.md](../../docs/design/browser_module.md), "Tests".
+
 ## Demo
 
 `just readme-demo` runs `demo.mjs`: one key-test session that plays the seven shots in `demo_scenes.mjs` (shot 4 also drags a card across a board) with default settings and keys. Shot 1 is the new tab page, and the later shots run on the help Practice page in dark mode, with hint labels read at run time. The session floats the Firefox window to 1280x800, wf-recorder films that area and grim takes the stills. ffmpeg burns a corner overlay of the key presses into the film and makes `docs/images/demo.gif` from it, lowering the frame rate and then the width until the file is under 5 MB. It also cuts the two-move board scene into `docs/images/drag.gif`, with the same settings and a 2 MB cap. The stills (hints, drag, which-key, command-line, theme-switch) land beside it, copied out only when the whole run worked. Set `DEMO_OUT_DIR` to write elsewhere. It needs wf-recorder, ffmpeg and grim, and it is not a piece of the key test run.
@@ -89,7 +97,7 @@ Each piece exports `export const areas = ["hints", ...]`, the feature areas it e
 
 - With no `head`, the diff is the merge base with `HEAD` against the working tree, plus new files under `src`, `test/key`, `tools` and `host`. With `head`, it is `base...head`.
 - A shared file in the diff selects all pieces.
-- A changed piece file selects that piece. A change to the test machinery (`harness.mjs`, `run.mjs`, `server.mjs`, `rdp.mjs`, `session.mjs`, `keyboard.py`, `us.xkb`, `timings.mjs`, `areas.mjs`, `launch_firefox.sh`, `user.js`, `config/`) or to `tools/build.mjs` or a tools file it imports (`write_commands_json.mjs`, `render_docs.ts`) selects every piece. So does a change to the config host (`host/desertfox-host`, `host/install.sh`), which the harness installs and every piece loads its config through. Other paths are ignored.
+- A changed piece file selects that piece. A change to the test machinery (`harness.mjs`, `run.mjs`, `server.mjs`, `rdp.mjs`, `session.mjs`, `keyboard.py`, `us.xkb`, `timings.mjs`, `areas.mjs`, `launch_firefox.sh`, `user.js`, `config/`, the Firefox copy files and `browser_module/*.js`) or to `tools/build.mjs` or a tools file it imports (`write_commands_json.mjs`, `render_docs.ts`) selects every piece. So does a change to the config host (`host/desertfox-host`, `host/install.sh`), which the harness installs and every piece loads its config through. Other paths are ignored.
 - With no src, piece or harness change it says so and runs nothing.
 - Renames count both paths, so a moved file selects the areas of its old path too.
 - `node test/key/areas.mjs <base> [head]` prints the same choice without running anything.
