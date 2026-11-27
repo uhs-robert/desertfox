@@ -5,7 +5,7 @@
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, TabState } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, KeyRow, KindTable, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, TabState } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -35,6 +35,7 @@ import {
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
+import { is_reply } from "../shared/browser_module_protocol.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
 import { keep_chain, warn_and_go } from "../shared/swallow.ts";
 import { mode_of_record } from "./tab_modes.ts";
@@ -97,10 +98,12 @@ export type BrowserModuleDeps = {
   read_theme?: () => Promise<unknown>;
   // The bar appeared or went away, so the pages must ask for their keymap again (the corner badge hides while the bar shows).
   on_bar_change?: () => void;
-  // The allow list of each direction. The protocol's lists are empty now, so a test passes its own.
+  // The allow list of each direction. A test passes its own.
   kinds?: { from_module: KindTable; from_extension: KindTable };
   // One handler per kind the module may request. Handlers run outside the queue and at the same time, so one may await `send`. Each reply is written when its handler settles, so replies can land in any order, and the module matches each to its request by `reply_to`. The text it gives is the reply's `value`, within its kind's limit. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
   handlers: Record<string, (args: ModuleArgs) => Promise<string | void>>;
+  // Hears each change of the status the settings page shows: `undefined` when the setting turns off, else the result of the last hello check.
+  on_status?: (status: ModuleStatus | undefined) => void;
   // Hears each reply the module sends to a request of the extension.
   on_reply?: (reply: ModuleReply) => void;
   now: () => number;
@@ -252,7 +255,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const read_hello_status = async (): Promise<void> => {
     if (!(await deps.is_on())) return;
     const hello = (await deps.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY];
-    await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status_of_hello(hello) });
+    const status = status_of_hello(hello);
+    await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status });
+    deps.on_status?.(status);
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
     if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
@@ -270,6 +275,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       hello_bar = false;
       set_bar_seen(false);
       await deps.session.remove([BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY]);
+      deps.on_status?.(undefined);
       return;
     }
     const bar = await deps.read_bar_config?.();
@@ -336,6 +342,12 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     return { ok: true, id: request.id };
   };
 
+  // Takes a request back out of the list the module reads, so a module that wakes up later does not run a call the user already saw refused. Nothing is written when the request is not there.
+  const withdraw_now = async (id: string): Promise<void> => {
+    const outbox = await read_outbox();
+    if (outbox.some((message) => !is_reply(message) && message.id === id)) await write_outbox(outbox.filter((message) => is_reply(message) || message.id !== id));
+  };
+
   const sync = (): Promise<void> => enqueue(sync_now);
   const tab_changed = (tab_id: string, record: TabModeRecord | undefined): Promise<void> => enqueue(() => tab_changed_now(tab_id, record));
 
@@ -346,6 +358,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
     bar_active: (): Promise<boolean> => Promise.resolve(bar_seen),
     send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => void) => enqueue(() => send_now(kind, args, on_id)),
+    withdraw: (id: string) => enqueue(() => withdraw_now(id)),
     // Ask for a read. Each has its own limiter, which decides when it runs.
     read_hello: request_hello_read,
     read_messages: request_messages_read,

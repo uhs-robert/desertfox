@@ -96,9 +96,9 @@ test("the status says waiting, matched, mismatch or invalid", () => {
 const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args: { axis: "axis" as const }, reply: true } };
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
-test("each direction lists only the page kinds, so any other request is refused", () => {
+test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(validate_message(msg({}), MODULE_TO_EXTENSION_KINDS).ok, false);
   assert.equal(validate_message(msg({}), EXTENSION_TO_MODULE_KINDS).ok, false);
@@ -274,4 +274,9 @@ test("a long pending sequence keeps its last keys", () => {
   const checked = validate_module_state(state({ tabs: { "7": { mode: "normal", live: true, pending: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] } } }));
   assert.ok(checked.ok);
   assert.deepEqual(checked.value.tabs["7"]!.pending, ["c", "d", "e", "f", "g", "h", "i", "j"]);
+});
+
+test("a reply error loses control and bidi characters before anyone shows it", () => {
+  const checked = validate_message({ v: V, reply_to: "m1", ok: false, error: "no\u202e split\n\u0007here" }, KINDS);
+  assert.deepEqual(checked, { ok: true, value: { v: V, reply_to: "m1", ok: false, error: "no splithere" } });
 });
