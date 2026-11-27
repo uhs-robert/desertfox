@@ -154,6 +154,36 @@ test("in a window opened after startup, where the walk hears keys first, a bindi
   assert.deepEqual(run.typed, ["ArrowDown"]);
 });
 
+test("in a window opened after startup, a binding's first j goes to chrome hints in an open app menu, with the focus on a shadow control or on nothing", () => {
+  for (const focus_on of ["shadow control", "nothing"]) {
+    const run = started(library, { walk: true, state: { ...STATE, chrome_hint_keys: [["j", "B"]] } });
+    const panel = new Node("panel", { id: "appMenu-popup", state: "open", box: box(700, 40, 300, 400) });
+    const view = new Node("panelview", { id: "appMenu-mainView", box: box(700, 40, 300, 400) });
+    view.setAttribute("visible", "true");
+    // A moz-toggle keeps its focusable button in its shadow root, and the core follows the focus in there.
+    const toggle = new Node("moz-toggle", { box: box(720, 60, 200, 24) });
+    const shadow = new Node("#shadow");
+    const inner = new Node("button", { box: box(720, 60, 200, 24) });
+    shadow.append(inner);
+    Object.assign(toggle, { openOrClosedShadowRoot: shadow });
+    shadow.host = toggle;
+    const multiview = new Node("panelmultiview");
+    view.append(toggle);
+    multiview.append(view);
+    panel.append(multiview);
+    const other = chrome_window(run.firefox, "navigator:browser", (root) => root.append(panel));
+    other.own();
+    Object.assign(other.win, { KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } } });
+    other.focus(focus_on === "nothing" ? other.root : inner);
+    run.open_window(other);
+    (run.firefox.Services.focus as { activeWindow: unknown }).activeWindow = other.win;
+    assert.ok(other.press("j").prevented, focus_on);
+    assert.equal(run.held(other.win), "chrome_hints.prefix", `${focus_on}: the walk took the binding's first key`);
+    other.fire_timers();
+    assert.deepEqual(run.typed, [], `${focus_on}: the walk typed an arrow key for a key of the binding`);
+  }
+});
+
 test("in a window opened after startup, a key off a binding's held first j walks once chrome hints drop the held key", () => {
   const run = started(library, { walk: true, state: { ...STATE, chrome_hint_keys: [["j", "B"]] } });
   const other = library(run.firefox);
