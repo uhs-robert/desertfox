@@ -24,6 +24,8 @@ export type RunRequest = {
   from_hints?: true;
   // Set by the command line host. A line that draws in the top frame for a subframe's keys runs the command in that subframe.
   from_line?: true;
+  // The key press was a held key's repeat (`event.repeat`). An older extension ignores it.
+  repeat?: boolean;
 };
 
 // `focus` says whether the frame's own document holds the keyboard focus. The tab shows the mode of the frame that does.

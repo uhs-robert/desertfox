@@ -119,6 +119,7 @@ export const content_handlers = (deps: ContentDeps) => {
             invocations: settled.invocations,
             mode: request.mode,
             may_prompt: true,
+            ...(request.repeat === true && { repeat: true as const }),
             ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
             ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }),
             ...(frame_id === undefined ? {} : { frame_id }),
