@@ -79,7 +79,11 @@ const with_bar = (reply: PageKeymap, bar: boolean): PageKeymap => (bar ? { ...re
 
 // Only the paths of `stopped` that end in the stop key, or undefined when it holds none.
 const stop_paths_of = (stopped: TreeBranch): TreeBranch | undefined => {
-  const children = Object.fromEntries(Object.entries(stopped.children).flatMap(([token, node]) => (node === STOP_LEAF ? [[token, node]] : node.kind === "branch" && stop_paths_of(node) ? [[token, stop_paths_of(node)!]] : [])));
+  const children: Record<string, TreeNode> = {};
+  for (const [token, node] of Object.entries(stopped.children)) {
+    const kept = node === STOP_LEAF ? node : node.kind === "branch" ? stop_paths_of(node) : undefined;
+    if (kept) children[token] = kept;
+  }
   return Object.keys(children).length > 0 ? { kind: "branch", children } : undefined;
 };
 
