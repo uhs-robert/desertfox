@@ -5,6 +5,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-browser.js`: the core. The state, the hello, the message lists, the guards (fields, DevTools, modes, liveness, private windows), the report frame script and the surface feature files use. Start here.
 - `desertfox-tabs-scroll.js`: the tab and scroll feature. It defines `tab.next`, `tab.prev` and the four scroll commands, and holds the scroll frame script.
 - `desertfox-panes.js`: the pane feature. It answers the extension's `pane.*` requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused window.
+- `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type the arrow keys in open menus and panels, the Library, Page Info and Picture-in-Picture, and Escape closes the Library. It attaches to those chrome windows itself.
 - `install.sh`: `sudo browser_module/install.sh [--uninstall]` copies or removes every `desertfox-*.js` file here.
 
 Rules:
