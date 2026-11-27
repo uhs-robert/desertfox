@@ -619,7 +619,12 @@
     function on_storage_change(extension, changes) {
       try {
         // The toolbar switch turned off: a sequence typed before it must not finish after it comes back on.
-        if (Object.hasOwn(changes, STATE_STORAGE_KEY) && key_taker && read_state_value(deserialized(changes[STATE_STORAGE_KEY].newValue))?.enabled !== true) key_taker.reset();
+        // A new tree ends the walk now, not at the next key, so the status bar never shows keys of a tree that is gone. A rewrite of the same tree keeps it.
+        if (Object.hasOwn(changes, STATE_STORAGE_KEY) && key_taker) {
+          const before = read_state_value(deserialized(changes[STATE_STORAGE_KEY].oldValue));
+          const after = read_state_value(deserialized(changes[STATE_STORAGE_KEY].newValue));
+          if (after?.enabled !== true || JSON.stringify(before?.tree) !== JSON.stringify(after.tree)) key_taker.reset();
+        }
         if (!Object.hasOwn(changes, FROM_EXTENSION_STORAGE_KEY) || !enabled_by_pref() || shut || desertfox() !== extension) return;
         const holder = changes[FROM_EXTENSION_STORAGE_KEY].newValue;
         if (holder === undefined) return;

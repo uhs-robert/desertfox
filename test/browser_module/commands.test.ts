@@ -133,6 +133,20 @@ test("a remap starts the sequence again, and a rewrite of the same tree keeps it
   assert.deepEqual(runs(), [{ keys: "g t", count: 0 }, { keys: "t", count: 0 }]);
 });
 
+test("module_pending drops the half-typed keys when the tree changes or goes, and keeps them through a rewrite of the same tree", () => {
+  const tree: ScopeTree = { children: { g: { children: { t: "forward" } } } };
+  const { firefox, type, core, window: fake } = started({ written: state({ tree }) });
+  const win = vm.runInContext("globalThis", fake.win.context!);
+  type("g");
+  firefox.write_state(state({ tree: structuredClone(tree), tabs: { "9": { mode: "normal", live: false } } }));
+  assert.deepEqual(plain(core.module_pending(win)), { keys: ["g"] });
+  firefox.write_state(state({ tree: { children: { g: { children: { u: "forward" } } } } }));
+  assert.equal(core.module_pending(win), undefined);
+  type("g");
+  firefox.write_state(state({ tree: undefined }));
+  assert.equal(core.module_pending(win), undefined);
+});
+
 test("a half-typed sequence ends when the tab switches or the page loads another document", () => {
   const { type, press, runs, on_tab, first, second } = started();
   type("g");
