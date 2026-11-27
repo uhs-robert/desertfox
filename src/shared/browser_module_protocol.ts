@@ -35,11 +35,36 @@ export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction";
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "devtools_keys";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
 export const PANE_DIRECTIONS = ["left", "right"] as const;
+
+// The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
+export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand"] as const;
+export type DevtoolsAction = (typeof DEVTOOLS_ACTIONS)[number];
+export type DevtoolsKeyRow = { key: string; action: DevtoolsAction };
+export const MAX_DEVTOOLS_KEY_ROWS = 8;
+export const DEVTOOLS_TREE_KEYS: DevtoolsKeyRow[] = [
+  { key: "j", action: "tree.down" },
+  { key: "k", action: "tree.up" },
+  { key: "h", action: "tree.collapse" },
+  { key: "l", action: "tree.expand" },
+];
+const is_devtools_key = (key: unknown): key is string => typeof key === "string" && [...key].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(key);
+
+// A table that is not a list, is empty or too long, repeats a key or holds a row of the wrong shape fails whole. A row's unknown fields are ignored.
+function devtools_keys_problem(value: unknown): string | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_DEVTOOLS_KEY_ROWS) return `must be a list of 1 to ${MAX_DEVTOOLS_KEY_ROWS} rows`;
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (!is_record(row) || !is_devtools_key(row.key) || !(DEVTOOLS_ACTIONS as readonly unknown[]).includes(row.action) || seen.has(row.key)) return "rows need one-character keys, each once, and an action from the list";
+    seen.add(row.key);
+  }
+  return undefined;
+}
+const devtools_rows_of = (value: unknown): DevtoolsKeyRow[] => (value as Record<string, unknown>[]).map((row) => ({ key: row.key as string, action: row.action as DevtoolsAction }));
 
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
@@ -67,7 +92,7 @@ export const MAX_CHROME_HINT_KEY_TOKENS = 4;
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;
 export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleCommandId[];
 
-export type ModuleArgs = Record<string, number | string>;
+export type ModuleArgs = Record<string, number | string | DevtoolsKeyRow[]>;
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 // What the status bar shows of a tab beyond its mode, all optional. `pending` holds the keys of a half-typed sequence (a held group included), `count` a typed count, `pass` that pass-next is armed, `site` the label of a site mode and `recording` the register a macro records into. A private tab never has `site`.
 export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
@@ -109,6 +134,7 @@ const is_message_id = (id: unknown): id is string => typeof id === "string" && i
 const is_key_token = (key: unknown): key is string => typeof key === "string" && key.length > 0 && key.length <= MAX_KEY_CHARS && !/[\s\p{Cc}\p{Cf}]/u.test(key);
 
 function arg_problem(kind: ArgKind, value: unknown): string | undefined {
+  if (kind === "devtools_keys") return devtools_keys_problem(value);
   if (kind === "text") return typeof value === "string" ? undefined : "must be text";
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
@@ -366,6 +392,9 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // Ends the session in chrome. The extension sends it after a failed collect, whose lost reply can hide a session that started.
   "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // The DevTools key table, pushed after each matched hello, since the module keeps it in memory only. A module without DevTools code refuses the kind, and one that never got it claims no key in DevTools.
+  // A day to be read, not the default 2 s: the push sets a table rather than pressing a key, so a late one does no harm, and a dropped one leaves DevTools keys off until the next hello.
+  "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86_400_000 },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
@@ -415,7 +444,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
   for (const [name, kind] of Object.entries(kinds[value.kind]!.args)) {
     const problem = arg_problem(kind, given[name]);
     if (problem !== undefined) return bad(`${value.kind} ${name} ${problem}`);
-    if (given[name] !== undefined) args[name] = given[name] as number | string;
+    if (given[name] !== undefined) args[name] = kind === "devtools_keys" ? devtools_rows_of(given[name]) : (given[name] as number | string);
   }
   return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
 }

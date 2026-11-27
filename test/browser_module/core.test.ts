@@ -10,7 +10,7 @@ import {
   BROWSER_MODULE_STATE_STORAGE_KEY,
 } from "../../src/shared/config/storage_keys.ts";
 import { event_to_token } from "../../src/shared/keys/token.ts";
-import { COMMANDS_FILE, CORE_FILE, create_firefox, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
+import { COMMANDS_FILE, CORE_FILE, create_firefox, DEVTOOLS_FILE, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 
 const DEFAULT_KEYS = [
   { key: "J", id: "tab.next", args: {} },
@@ -49,9 +49,10 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
   assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
-  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS", "MAX_DEVTOOLS_KEY_ROWS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
   assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
   assert.deepEqual(plain(vm.runInNewContext(/const PANE_REGIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PANE_REGIONS);
+  assert.deepEqual(plain(vm.runInNewContext(/const DEVTOOLS_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.DEVTOOLS_ACTIONS);
   assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);
   assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
 });
@@ -250,7 +251,7 @@ test("the core is built once per process: one sandbox, one report listener and o
   assert.equal(firefox.frame_scripts.length, 2, "turning the pref off and on again loads the frame scripts again");
   const core = firefox.Services.desertfox_browser_module as { status(): { windows: number; features: string[] } };
   assert.equal(core.status().windows, 2);
-  assert.deepEqual(plain(core.status().features), [FEATURE_FILE]);
+  assert.deepEqual(plain(core.status().features), [DEVTOOLS_FILE, FEATURE_FILE]);
 });
 
 test("a closed window loses its listeners and leaves the core to the other windows", () => {
@@ -328,7 +329,7 @@ test("the core loads only feature files from its own folder", () => {
   const core = firefox.Services.desertfox_browser_module as { adopt(url: string): void; status(): { features: string[] } };
   core.adopt("file:///home/user/.mozilla/evil.js");
   core.adopt("file:///usr/lib/firefox/chrome.d/sub/evil.js");
-  assert.deepEqual(plain(core.status().features), [FEATURE_FILE]);
+  assert.deepEqual(plain(core.status().features), [DEVTOOLS_FILE, FEATURE_FILE]);
   assert.equal(firefox.errors.filter((line) => line.includes("refused a feature file")).length, 2);
 });
 

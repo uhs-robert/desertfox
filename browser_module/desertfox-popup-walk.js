@@ -1,7 +1,7 @@
 // DesertFox browser module, the popup walk feature: in an open menu or panel, the Library, Page Info and Picture-in-Picture, j, k, h and l move as the arrow keys do. See docs/design/browser_module.md.
 // Firefox does all the moving. The feature takes the letter and types the matching arrow key into the same window once the letter's event is over, so each menu, panel, tree and list handles it as its own arrow key.
 // It also closes the Library on Escape when the focus is in one of its trees and the search box is empty, since Firefox binds no Escape there.
-// In a window it asks the core to load it into the core sandbox, where it starts once per process and attaches to every chrome window of the four types, open or opened later.
+// In a window it asks the core to load it into the core sandbox, where it starts once per process and attaches to every chrome window of these types and DevTools windows, open or opened later.
 
 (function desertfox_browser_module_popup_walk(scope) {
   "use strict";
@@ -30,7 +30,8 @@
     const LIBRARY = "Places:Organizer";
     // In these windows every list, tree and radio group walks, so no open popup is needed.
     const WALK_WINDOWS = new Set([LIBRARY, "Browser:page-info", "Toolkit:PictureInPicture"]);
-    const ATTACHED_TYPES = new Set([BROWSER, ...WALK_WINDOWS]);
+    // A DevTools window opens its context menus in its own document. With no menu open the walk leaves every key there to the core's DevTools keys.
+    const ATTACHED_TYPES = new Set([BROWSER, "devtools:toolbox", ...WALK_WINDOWS]);
     const DIALOG_LISTS = new Set(["tree", "richlistbox", "listbox", "radiogroup", "radio"]);
 
     const Ci = Components.interfaces;

@@ -592,3 +592,17 @@ Facts from the built feature (Firefox 161, key piece `test/key/p54_browser_modul
 - The principal results above hold for the built feature: the page code runs under `[page, extension]` on the PDF viewer and Reader View, and a page script sees none of `desertfox_host`, the transport or `browser` there.
 
 Not measured: the real `storage.session` channel, a dark theme, scanned, large or form PDFs, real Reader View articles, and an IME.
+
+## Keys in DevTools (devtools-keys)
+
+Question: can chrome code give the DevTools trees j, k, h and l, docked and in a DevTools window, and which keys does DevTools already use?
+
+Setup: Firefox 161.0, a private copy with a temporary profile, real key presses from the key-test session, and a probe module in its drop-in folder.
+
+Results:
+- Docked DevTools is a `<browser class="devtools-toolbox-iframe">` in the tab's browser container. The toolbox (`about:devtools-toolbox`) and every panel document (`chrome://devtools/content/...`) run in the parent process with the system principal. A capture keydown listener on the browser window sees every key typed in any panel, with the panel's element as the target.
+- A key is in docked DevTools when the walk up from its document meets that class. `frameElement` stops at the toolbox `<browser>`, so the walk takes the browsing context's `embedderElement` there. About five steps, synchronous.
+- A DevTools window (`hostType: "window"`) is its own top-level window of type `devtools:toolbox`. A listener on the browser window never sees its keys, so the module attaches to it on `domwindowopened` after its document loads.
+- An untrusted `KeyboardEvent("keydown")` with the arrow's `key` and `keyCode`, dispatched on the focused element, moves, expands and collapses the Inspector markup, the Debugger sources tree and the Storage tree, and moves the Network request rows, as the real arrows do. No handler checks `isTrusted`. `nsITextInputProcessor` fails from this context with `NS_ERROR_NOT_INITIALIZED`.
+- DevTools keys that meet DesertFox's: Escape toggles the split console, and `h` hides the node in the markup view. Plain `j`, `k` and `l` do nothing in the markup view, the Debugger tree, Storage and Network. The console input takes every key.
+- The Browser Toolbox runs in a second Firefox process with its own profile and no DesertFox.

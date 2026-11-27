@@ -106,7 +106,7 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  await run_case("in DevTools the module takes no key: DevTools moves its own tree selection, the tab and the page stay", async () => {
+  await run_case("in DevTools the module takes no key row: J stays, j moves the tree as Down does through the DevTools feature, the tab and the page stay", async () => {
     await home("bm_devtools");
     await open_tab(`data:text/html,${encodeURIComponent("<!doctype html><main><p>one</p><p>two</p><p>three</p></main><div style='height:4000px'></div>")}`);
     on_teardown(() => chrome(`(async () => { const { require } = ChromeUtils.importESModule("resource://devtools/shared/loader/Loader.sys.mjs"); const { gDevTools } = require("devtools/client/framework/devtools"); for (const tab of ${W}.gBrowser.tabs) await gDevTools.closeToolboxForTab(tab); })()`));
@@ -129,13 +129,15 @@ export async function run_cases(context) {
     const before = await selected();
     const scroll_before = await page_scroll();
     await switches_none("J in the Inspector tree");
-    await switches_none("j in the Inspector tree", ["j"]);
-    expect((await page_scroll()) === scroll_before, "j scrolled the page under DevTools");
     await press_keys("-k", "Down");
     await poll_until("Down to move the Inspector selection", async () => (await selected()) !== before);
     const after_down = await selected();
     await press_keys("-k", "Up");
-    await poll_until("Up to move the Inspector selection back", async () => (await selected()) !== after_down);
+    await poll_until("Up to move the Inspector selection back", async () => (await selected()) === before);
+    // j is a scroll key row of the state. In DevTools only the DevTools feature's table counts, where j is Down.
+    await switches_none("j in the Inspector tree", ["j"]);
+    await poll_until("j to move the Inspector selection as Down did", async () => (await selected()) === after_down);
+    expect((await page_scroll()) === scroll_before, "j scrolled the page under DevTools");
   });
 
   await run_case("a second window gets the module once, and closing it takes its listener away", async () => {
