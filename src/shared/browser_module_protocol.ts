@@ -4,7 +4,7 @@
 
 import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
-import { BROWSER_BAR_WIDGETS } from "./settings_table.ts";
+import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./settings_table.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -57,9 +57,8 @@ export type BarRole = (typeof BAR_ROLES)[number];
 export type BarColors = Record<BarRole, string>;
 export type BarTheme = { dark: BarColors; light: BarColors };
 // What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
-export const BAR_BORDERS = ["auto", "square", "round", "chamfer"] as const;
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
-export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BAR_BORDERS)[number] };
+export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig };
 // `bar` says the module built its status bar.
 export type ModuleHello = { v: number; module_version: string; bar?: true };
@@ -138,7 +137,7 @@ const widgets_of = (value: unknown): BarWidget[] | undefined =>
 export function bar_config_of(value: unknown): BarConfig | undefined {
   if (!is_record(value)) return undefined;
   const [left, right] = [widgets_of(value.left), widgets_of(value.right)];
-  return left && right && (BAR_BORDERS as readonly unknown[]).includes(value.border) ? { left, right, border: value.border as BarConfig["border"] } : undefined;
+  return left && right && (BROWSER_BAR_BORDERS as readonly unknown[]).includes(value.border) ? { left, right, border: value.border as BarConfig["border"] } : undefined;
 }
 
 export function validate_module_state(value: unknown): Checked<ModuleState> {

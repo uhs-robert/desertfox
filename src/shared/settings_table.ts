@@ -23,6 +23,7 @@ export type BindingTable = Readonly<Record<string, BindStep | readonly BindStep[
 export type SiteModeTable = Readonly<Record<string, { label: string; bind: BindingTable; sticky?: boolean }>>;
 
 // The items either side of the browser bar can list.
+export const BROWSER_BAR_BORDERS = ["auto", "square", "round", "chamfer"] as const;
 export const BROWSER_BAR_WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"] as const;
 // The keymap modes a site row can bind keys in. `normal` is what the `bind` column writes in short form.
 export const SITE_KEYMAP_MODES = ["normal", "visual", "visual_line", "caret", "item"] as const;
@@ -153,7 +154,7 @@ export const SETTINGS_TABLE = {
   browser_bar_left: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["mode", "pending", "recording"] },
   browser_bar_right: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["container", "scroll", "tabs"] },
   // `auto` follows the corners of the Firefox panes and falls back to `square` when it finds none.
-  browser_bar_border: { kind: "enum", values: ["auto", "square", "round", "chamfer"], default: "auto" },
+  browser_bar_border: { kind: "enum", values: BROWSER_BAR_BORDERS, default: "auto" },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
   history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.
