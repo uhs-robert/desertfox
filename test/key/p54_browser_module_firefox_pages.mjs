@@ -1,6 +1,5 @@
 // :firefox and the ,f keys through the browser module (desertfox-firefox-pages.js), with the native host taken away, so every open here is the module's.
 // The module opens the page in the asking tab's window, switches to a tab that already shows it, and replaces the tab for where=here.
-// The case for :open about:addons is not here: a web page's command line counts as page-sent, so :open maps only from DesertFox's own pages.
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["help", "keys", "tabs"];
@@ -69,6 +68,16 @@ export async function run_cases(context) {
     await press_keys(",fs");
     await poll_until("the open settings tab to be selected again", async () => (await selected_spec()) === "about:preferences", { timeout_ms: 8000 });
     expect((await tabs_at("about:preferences")) === 1, `a second settings tab opened: ${await tabs_at("about:preferences")}`);
+  });
+
+  await run_case(":open about:addons on a web page opens the Add-ons page through the module", async () => {
+    on_teardown(() => close_tabs_at("about:addons"));
+    await open_page("page", "fpm_open_addons", { new_tab: true });
+    await pace();
+    await run_line(":open about:addons");
+    await poll_until("about:addons to be the selected tab", async () => (await selected_spec()) === "about:addons", { timeout_ms: 8000 });
+    // Later cases count add-ons tabs, so this one leaves none behind.
+    await close_tabs_at("about:addons");
   });
 
   await run_case(":firefox settings-privacy lands on the privacy section", async () => {
