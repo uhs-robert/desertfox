@@ -94,7 +94,8 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       const locked = await read_locked();
       const entry = locked[tab_id] ?? {};
       if (entry.left?.includes(document_id)) return false;
-      if ((entry.url === url && entry.document_id === document_id) || (!(tab_id in locked) && Object.keys(locked).length >= MAX_STATE_TABS)) return true;
+      if (entry.url === url && entry.document_id === document_id) return true;
+      if (!(tab_id in locked) && Object.keys(locked).length >= MAX_STATE_TABS) return false;
       await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: { ...entry, url, document_id } } });
       return true;
     });
@@ -129,12 +130,15 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const page_call = async (args: ModuleArgs): Promise<string> => {
     // The kind row checked the arg shapes: `tab_id` and `document_id` are whole numbers and `message` text.
     const { tab_id, document_id, message } = args as { tab_id: number; document_id: number; message: string };
+    const load_at_start = loads.get(tab_id) ?? 0;
     if (!(await deps.is_on())) throw new Error("the browser_module_pages setting is off");
     const request = page_message_of(message);
     if (request === undefined) throw new Error("the message is not one a locked page may send");
     const tab = await deps.get_tab(tab_id);
     if (tab === undefined || tab.id !== tab_id || tab.url === undefined) throw new Error("no such tab");
     if (!runs_page_code(tab.url)) throw new Error("DesertFox's page code does not run on this page");
+    // A load that ran while the tab was read left the document that sent this call, and no mark records it yet.
+    if ((loads.get(tab_id) ?? 0) !== load_at_start) throw new Error("the page went away");
     if (!(await mark_locked(tab_id, tab.url, document_id))) throw new Error("the page went away");
     // The sender holds only what the browser says of the tab: no extension id, so no handler counts it as an extension page, and frame 0, the only frame the module runs in. An address the page names is the tab's.
     const sender: Sender = { tab, frameId: 0, url: tab.url };

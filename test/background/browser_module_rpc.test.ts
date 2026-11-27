@@ -5,7 +5,7 @@ import { create_browser_module_rpc, pages_setting_on } from "../../src/backgroun
 import { dispatch } from "../../src/background/message_table.ts";
 import type { Handlers } from "../../src/background/message_table.ts";
 import type { ToBackground } from "../../src/shared/messages/map.ts";
-import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_PROTOCOL_VERSION as V, MAX_KIND_BYTES, MAX_MESSAGES, MESSAGE_MIN_GAP_MS, SNAPSHOT_PART_NAMES, SNAPSHOT_PARTS } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_PROTOCOL_VERSION as V, MAX_KIND_BYTES, MAX_MESSAGES, MAX_STATE_TABS, MESSAGE_MIN_GAP_MS, SNAPSHOT_PART_NAMES, SNAPSHOT_PARTS } from "../../src/shared/browser_module_protocol.ts";
 import type { SnapshotPart } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, CONFIG_STATUS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { THEME_STORAGE_KEY } from "../../src/shared/theme/apply.ts";
@@ -19,7 +19,7 @@ const TAB = { id: 7, url: PDF, index: 0, highlighted: false, active: true, pinne
 // The real base channel and the real message table, with a fake session and a handler table that records what reaches it.
 function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Partial<Record<SnapshotPart, unknown>> } = {}) {
   const data = new Map<string, unknown>();
-  const config = { before_send: undefined as ((id: string) => void) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: '{"keymap":1}', config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
+  const config = { before_send: undefined as ((id: string) => void) | undefined, before_get_tab: undefined as (() => Promise<void>) | undefined, on: options.on ?? true, tabs: options.tabs ?? [TAB], parts: { keymap: '{"keymap":1}', config: { settings: {} }, theme: { dark: {}, light: {} }, which_key: { title: [], rows: [] }, ...options.parts } as Record<SnapshotPart, unknown> };
   const session = {
     get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, structuredClone(data.get(name))])),
     set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value))),
@@ -45,7 +45,7 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
     is_on: async () => config.on,
     // `before_send` runs where the module could first see the push: a fast reply, or a load during the send.
     send: (kind, args, on_id) => module.send(kind, args, (id) => (config.before_send?.(id), on_id?.(id))),
-    get_tab: async (tab_id) => config.tabs.find((tab) => tab.id === tab_id),
+    get_tab: async (tab_id) => (await config.before_get_tab?.(), config.tabs.find((tab) => tab.id === tab_id)),
     dispatch: dispatch(handlers, () => false),
     read_part: Object.fromEntries(SNAPSHOT_PART_NAMES.map((part) => [part, async () => config.parts[part]])) as never,
   });
@@ -396,4 +396,35 @@ test("an answer that settles after the setting went off carries no page text", a
   const reply = base_replies().find((message) => message.reply_to === request.id);
   assert.equal(reply?.ok, false);
   assert.equal(reply?.value, undefined);
+});
+
+test("a first call whose document was left by a load while its tab was read is refused and marks nothing", async () => {
+  const { rpc, from_module, config, seen, base_replies } = setup();
+  config.before_get_tab = async () => {
+    config.before_get_tab = undefined;
+    await rpc.tab_loading(7);
+  };
+  const first = call({ type: "mode_changed", mode: "normal" }, { document_id: 1 });
+  await from_module([first]);
+  assert.deepEqual(seen, []);
+  assert.equal(base_replies().find((reply) => reply.reply_to === first.id)?.ok, false);
+  assert.equal(await rpc.is_locked_tab(7), false);
+  await from_module([call({ type: "mode_changed", mode: "normal" }, { document_id: 2 })]);
+  assert.equal(seen.length, 1, "a call that no load crossed still runs");
+});
+
+test("with the table full, a new tab's call is refused and a recorded tab's call still runs", async () => {
+  const { rpc, data, from_module, seen, base_replies } = setup();
+  await from_module([call({ type: "mode_changed", mode: "normal" })]);
+  assert.equal(seen.length, 1);
+  const full = Object.fromEntries(Array.from({ length: MAX_STATE_TABS }, (_, index) => [String(1000 + index), { url: PDF, document_id: 1 }]));
+  data.set(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, { ...full, 7: { url: PDF, document_id: 1 } });
+  await from_module([call({ type: "mode_changed", mode: "normal" })]);
+  assert.equal(seen.length, 2, "the recorded tab's matching call runs");
+  data.set(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, full);
+  const extra = call({ type: "mode_changed", mode: "normal" });
+  await from_module([extra]);
+  assert.equal(seen.length, 2, "the new tab's call reaches no handler");
+  assert.equal(base_replies().find((reply) => reply.reply_to === extra.id)?.ok, false);
+  assert.equal(await rpc.is_locked_tab(7), false);
 });
