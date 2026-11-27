@@ -20,6 +20,7 @@ function make_flow(mode: Mode) {
   const sink_tokens: string[] = [];
   const flow = create_key_flow({
     user_input_seen_: () => false,
+    blur_window_open_: () => false,
     in_editable_field_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,

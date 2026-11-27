@@ -33,12 +33,13 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }, input_seen = false, field: { on: boolean } | undefined = undefined) {
+function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }, input_seen = false, field: { on: boolean } | undefined = undefined, blur_window = { open: false }) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => field?.on ?? in_field,
     user_input_seen_: () => input_seen,
+    blur_window_open_: () => blur_window.open,
     escape_to_page_: () => escape_to_page,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
@@ -742,6 +743,7 @@ function make_passing_flow() {
   const flow = create_key_flow({
     in_editable_field_: () => false,
     user_input_seen_: () => false,
+    blur_window_open_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
@@ -867,6 +869,28 @@ test("after the keymap reply, a repeat in a field passes", () => {
   flow.set_matcher_(create_matcher(keymap));
   state.focus_entered_editable_();
   assert.equal(flow.handle_token_("j", true), "pass");
+});
+
+test("after the keymap reply, a held key's repeat in a field is dropped while a blur window is open", () => {
+  const blur_window = { open: true };
+  const { flow, state, ran } = make_flow(true, false, undefined, { on: false }, true, undefined, blur_window);
+  flow.set_matcher_(create_matcher(keymap));
+  state.focus_entered_editable_();
+  assert.equal(flow.drops_repeat_(true), true, "the caller keeps no press record for it");
+  assert.equal(flow.handle_token_("J", true), "cancel", "a repeat in a field the page focused on a show is cancelled");
+  assert.equal(flow.handle_token_("J", false), "pass", "a first press still reaches the field");
+  assert.deepEqual(ran, []);
+});
+
+test("a held key's repeat in a field passes again once the blur window ends", () => {
+  const blur_window = { open: true };
+  const { flow, state } = make_flow(true, false, undefined, { on: false }, true, undefined, blur_window);
+  flow.set_matcher_(create_matcher(keymap));
+  state.focus_entered_editable_();
+  assert.equal(flow.handle_token_("j", true), "cancel");
+  // A real key, a click, the blur cap and the 1 s end all end the window in main.ts.
+  blur_window.open = false;
+  assert.equal(flow.handle_token_("j", true), "pass", "the user holds a letter in a field they chose");
 });
 
 test("a dropped repeat leaves the press record of the queued press of the same key", () => {

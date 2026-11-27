@@ -252,6 +252,7 @@ function make_flow() {
   const flow = create_key_flow({
     in_editable_field_: () => false,
     user_input_seen_: () => false,
+    blur_window_open_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,

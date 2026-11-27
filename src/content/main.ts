@@ -125,6 +125,7 @@ const key_flow = create_key_flow({
   },
   in_editable_field_: () => is_editable_element(deepest_focused_element()),
   user_input_seen_: () => user_input_seen,
+  blur_window_open_: () => Date.now() < blur_ends_ms,
   escape_to_page_: () => escape_to_page,
   is_loading_: bundles.is_loading_,
   loading_sink_bundles_: bundles.loading_sink_bundles_,
