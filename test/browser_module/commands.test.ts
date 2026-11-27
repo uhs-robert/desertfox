@@ -522,7 +522,7 @@ test("Escape in a field on a page in this process blurs it, stops the page's own
 
 test("Escape in a field on a page in another process asks its frame script for a blur marked escape", () => {
   const { press, first, firefox } = started();
-  firefox.report(first.browser, { inner: 10, listeners: 0, field: true });
+  firefox.report(first.browser, { inner: 10, listeners: 0, field: true, text_field: true });
   const escape = press("Escape");
   assert.equal(escape.prevented, true);
   assert.deepEqual(firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")).map(({ data }) => plain(data)), [{ inner: 10, escape: true }]);
@@ -572,4 +572,17 @@ test("Escape leaves a field in a subdialog, a field in an iframe of a remote pag
   design.page_document.activeElement = body;
   const ended = editable.press("Escape", { target: body, originalTarget: body });
   assert.equal(ended.prevented, false, "design mode keeps Escape for the page");
+});
+
+test("Escape on a remote design mode page, or after an older frame script's report, passes to the page", () => {
+  for (const [what, report] of [
+    ["design mode", { inner: 10, listeners: 0, field: true, text_field: false }],
+    ["an older report", { inner: 10, listeners: 0, field: true }],
+  ] as const) {
+    const { press, first, firefox } = started();
+    firefox.report(first.browser, report);
+    const escape = press("Escape");
+    assert.equal(escape.prevented, false, what);
+    assert.deepEqual(firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")), [], what);
+  }
 });

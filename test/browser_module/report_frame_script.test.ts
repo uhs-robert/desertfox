@@ -44,12 +44,13 @@ function report_frame() {
   const hide = () => ((document.hidden = true), fire("visibilitychange"));
   const focus_field = () => ((document.activeElement = field), fire("focusin"));
   const last_load_focus = () => reports.at(-1)?.load_focus;
+  const last_report = () => reports.at(-1) ?? {};
   // The core answers a marked report with a blur for the same document.
   const core_blurs = (data: Record<string, unknown> = { inner: 7 }) => {
     for (const listener of messages.get(BLUR) ?? []) listener({ data });
     return field.blurred;
   };
-  return { document, clock, field, user_activation, fire, show, hide, focus_field, last_load_focus, core_blurs };
+  return { document, last_report, clock, field, user_activation, fire, show, hide, focus_field, last_load_focus, core_blurs };
 }
 
 test("a tab shown again marks a field that already holds the focus, even on a page used before", () => {
@@ -139,4 +140,14 @@ test("a blur marked escape leaves a design mode document alone", () => {
   frame.document.designMode = "on";
   frame.document.activeElement = { localName: "body", blur: () => assert.fail("body was blurred") };
   frame.core_blurs({ inner: 7, escape: true });
+});
+
+test("the report says text_field for a real field and not for design mode, while field covers both", () => {
+  const frame = report_frame();
+  frame.focus_field();
+  assert.deepEqual([frame.last_report().field, frame.last_report().text_field], [true, true]);
+  const editable = report_frame();
+  editable.document.designMode = "on";
+  editable.fire("focusin");
+  assert.deepEqual([editable.last_report().field, editable.last_report().text_field], [true, false]);
 });
