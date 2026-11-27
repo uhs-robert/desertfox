@@ -44,7 +44,7 @@ export type KeyFlowDeps = {
   in_editable_field_: () => boolean;
   // True once a click or a first key of the user's own reached this window.
   user_input_seen_: () => boolean;
-  // True while a load or switch blur window is open (blur_on_load).
+  // True while a load or switch blur window is open (blur_on_load or focus_on_load).
   blur_window_open_: () => boolean;
   // True when the site row lets the page keep Escape while a field is focused.
   escape_to_page_: () => boolean;
@@ -148,8 +148,9 @@ export function create_key_flow(deps: KeyFlowDeps) {
     held_keys.some((held) => held.token_ === "<Backspace>" || held.token_ === "<Escape>") ||
     active.binds_after_(mode, held_tokens(), token);
 
-  // A held key's repeat in a field is dropped before the keymap reply and while a blur window is open, so a page that focuses its field on load or on a show does not get a letter before the blur runs. The blur alone is not enough: a page that focuses its field before its window has the focus fires no focusin, so the blur never sees it. A real press or click sets user_input_seen_ and ends the window, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
-  const drops_repeat = (repeat: boolean | undefined): boolean => !!repeat && ((!matcher && !deps.user_input_seen_()) || deps.blur_window_open_()) && deps.in_editable_field_();
+  // A held key's text repeat in a field is dropped before the keymap reply and while a blur window is open, so a page that focuses its field on load or on a show does not get a letter before the blur runs. The blur alone is not enough: a page that focuses its field before its window has the focus fires no focusin, so the blur never sees it. A real press or click sets user_input_seen_ and ends the window, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
+  // A held browser chord (Ctrl, Alt or Meta, such as Ctrl+Tab) types nothing, so it keeps going to Firefox.
+  const drops_repeat = (repeat: boolean | undefined, token: string): boolean => !!repeat && !is_chord(token) && ((!matcher && !deps.user_input_seen_()) || deps.blur_window_open_()) && deps.in_editable_field_();
 
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean, physical?: string | null): KeyDecision => {
     const mode = deps.get_mode_();
@@ -244,7 +245,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
         reset_sequence_();
         return "pass";
       }
-      if (drops_repeat(repeat)) return "cancel";
+      if (drops_repeat(repeat, token)) return "cancel";
       if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_, repeat, physical);
       return decide(matcher, layout_token(token, physical), repeat, physical);
     },
