@@ -82,7 +82,7 @@ export type ContentDeps = {
   router: ReturnType<typeof create_router>;
   router_deps: ReturnType<typeof make_router_deps>;
   media_quality: ReturnType<typeof create_media_quality>;
-  browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active">;
+  browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active" | "bar_focus">;
   is_locked_tab: (tab_id: number) => Promise<boolean>;
 };
 
@@ -129,6 +129,7 @@ export const content_handlers = (deps: ContentDeps) => {
       run: (request, { tab_id, tab, frame_id, sender }) => {
         // The top frame leaving insert by any route ends the hold.
         if (frame_id === 0 && request.mode !== "insert") void tab_insert.top_frame_left_insert(tab_id, request.mode).catch(warn_and_go("tab_insert.top_frame_left_insert"));
+        if (request.focus === true && frame_id !== 0) void deps.browser_module.bar_focus(tab_id, frame_id);
         void media_discovery.reported(tab_id, frame_id, request.mode).catch(warn_and_go("media_discovery.reported"));
         const report = { frame_id, mode: request.mode, focus: request.focus === true, activated: request.activated, in_field: request.in_field, cross_origin: is_cross_origin(sender.url, tab.url) };
         const { documentId: document_id } = sender as LoadSender;

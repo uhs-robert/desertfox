@@ -246,7 +246,8 @@ test("key flow: Backspace inside a longer key keeps the prefix and the count", (
   for (const key of ["2", '"', "a", "g"]) flow.handle_token_(key);
   assert.deepEqual(prefixes.at(-1), ["g"]);
   flow.handle_token_("<Backspace>");
-  assert.equal(prefixes.at(-1), undefined);
+  // No key is left to list, but the count stays on show because the matcher still holds it.
+  assert.deepEqual(prefixes.at(-1), []);
   flow.handle_token_("y");
   assert.deepEqual(ran, ["test.yank:a:2"]);
 });
