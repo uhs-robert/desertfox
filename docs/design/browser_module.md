@@ -16,11 +16,11 @@ A content script never runs on Firefox's own pages, the restricted sites, the PD
 
 - `desertfox-browser.js` is the core. It reads and checks the state, says the hello and reads and writes the message lists. It decides whether a key is DesertFox's to take on this page. Its frame script reports each document.
 - `desertfox-statusbar.js` draws the status bar (see the next section). It is not a command feature.
-- Each feature is its own file that sorts after the core (`desertfox-tabs-scroll.js` runs `tab.next`, `tab.prev`, `scroll.lines`, `scroll.pixels`, `scroll.pages` and `scroll.to`, `desertfox-panes.js` answers the pane kinds, `desertfox-cmdline-panel.js` opens the command line panel, and `desertfox-devtools.js` takes the tree keys in DevTools, see [DevTools](#devtools)). A later feature adds a file and touches no other.
+- Each feature is its own file that sorts after the core (`desertfox-tabs-scroll.js` runs `tab.next`, `tab.prev`, `scroll.lines`, `scroll.pixels`, `scroll.pages` and `scroll.to`, `desertfox-panes.js` answers the pane kinds, `desertfox-cmdline-panel.js` opens the command line panel, `desertfox-devtools.js` takes the tree keys in DevTools, see [DevTools](#devtools), `desertfox-popup-walk.js` walks menus and panels, see [Popup walk](#popup-walk), and `desertfox-chrome-hints.js` hints Firefox's own UI, see [Hints over Firefox's own UI](#hints-over-firefoxs-own-ui)). A later feature adds a file and touches no other.
 - `desertfox-commands.js` is generated: `tools/build_browser_module.ts` (`just browser-module`) bundles `browser_module/sources/commands.js` with the extension's matcher (`src/shared/keys/matcher.ts`), token (`src/shared/keys/token.ts`) and tree check, so both sides read keys with one code. The file is committed, because `install.sh` copies the checkout and runs no build. `test/tools/build_browser_module.test.ts` fails when it differs from a fresh build, so a change to the bundled code needs `just browser-module` in the same PR.
 - The core lives in a system sandbox that the first window builds by loading the core file into it, once per process. A listener the process keeps then holds no closed window alive. In a window, the core file only attaches the window, and a feature file only asks the core to load it into the sandbox (`adopt`). The core loads only files from its own folder.
-- The surface for feature files, on `Services.desertfox_browser_module`: `define_command(id, { args, run })`, `add_frame_script(fn)`, `register_kind(kind, handler)`, `send(kind, args)`, `claim_devtools_keys(fn)`, `on_hello(fn)`, `log_once(text)`, `set_hello_flag(name, on)`, `take_keys(taker)`, `run_command(id, args, context)`, `module_pending(win)`, `take_held_keys(win, end)`, `may_act(win)`, `on_shut_down(fn)`, `sidebar_row(win, keys)`, `token_of(event)`, `type_key(win, key, still_holds)` and, in a window, `adopt(file_url)`. `args` names the shape of each arg (`int`, `number`, `enum` with `values`), and the core runs `run({ window, browser, tab, args, repeat })` only for a row whose args fit. The header of the core file documents it.
-- A feature file lets an error in its start throw. The core then turns the module off for the session, so a feature that started halfway never takes keys.
+- The surface for feature files, on `Services.desertfox_browser_module`: `define_command(id, { args, run })`, `add_frame_script(fn)`, `register_kind(kind, handler)`, `send(kind, args, on_reply)`, `claim_devtools_keys(fn)`, `on_hello(fn)`, `watch_session(keys, fn)`, `log_once(text)`, `set_hello_flag(name, on)`, `take_keys(taker)`, `run_command(id, args, context)`, `module_pending(win)`, `take_held_keys(win, end)`, `may_act(win)`, `on_shut_down(fn)`, `sidebar_row(win, keys)`, `chrome_hint_keys(win)`, `token_of(event)`, `is_field(element)`, `deep_active(doc)`, `focused_element(win)`, `ime_in_field(win)`, `type_key(win, key, still_holds)`, `hold_keys(win, owner)`, `release_keys(win, owner)`, `keys_held_by(win)` and, in a window, `adopt(file_url)`. `args` names the shape of each arg (`int`, `number`, `enum` with `values`), and the core runs `run({ window, browser, tab, args, repeat })` only for a row whose args fit. The header of the core file documents each call.
+- A feature file ends a failed start in one of two ways, and a feature that started halfway never takes keys. It lets the error throw, and the core turns the whole module off for the session. Or it catches the error, undoes what it registered, logs one line with `log_once` and stays off alone, so the rest of the module keeps running. The popup walk and the chrome hints take the second way, because a menu walk that fails to start is no reason to drop the tab and scroll keys.
 
 ## When the module takes a key
 
@@ -51,6 +51,67 @@ The module runs the command first, then prevents and stops the key in the parent
 - The `sidebar.*` commands are defined once in the registry, with command line names such as `sidebar_down`, and hidden from completion. The extension has no focus in the sidebar, so its handler of each refuses with "Works only with focus in the sidebar". Only the module runs them.
 - `,e` focuses the sidebar. It is the same `pane.focus` command with region `sidebar` that `ES` runs, and it needs the module. The focus lands in the panel's search box, so a letter types there. The first <Escape> moves into the list, where the keys above work. The next <Escape> goes back to the page. The same holds after `ES`.
 - In which-key the `g` group of this mode is the `Go` group of the normal mode. `,e` sits in the `DesertFox` group.
+
+## Popup walk
+
+`desertfox-popup-walk.js` makes `j`, `k`, `h` and `l` move in Firefox's own popups. It takes the letter and types the matching arrow key into the same window once the letter's event is over, through `nsITextInputProcessor`. Firefox then does all its own moving: subviews, submenus, trees, radio groups and the Picture-in-Picture seek and volume keys. The letters are fixed and are no key rows of the extension, since a menu has no DesertFox mode or keymap. The walk adds no protocol kind.
+
+- It takes a letter only where an open popup or a walking window owns the keys: an open menu, the app menu or the downloads panel open, the Library, Page Info or a Picture-in-Picture window, or a list with the focus in a settings sub-dialog. A permission prompt and another extension's popup never count, because an arrow key there goes to the page or to that extension. A DevTools window with a context menu open counts too.
+- A field keeps its letters, except under an open menu: a menu opened over the focused address bar keeps the letter out of the field, so walking there steals no typing.
+- Escape also closes the Library from one of its trees when the search box is empty, since Firefox binds no Escape there.
+- The arrow key is dropped when the popup closed, the window closed or the focus moved into a field before it goes out, so it never lands on what was under the popup.
+- The listener sits on the window root, which hears a key before the core's window listener. Otherwise the core would take `j` as a scroll key on a locked page under a context menu.
+- The feature reads the state itself (the pref, DesertFox, private window access, the state version and the toolbar switch), because the core shows it no gate. Its start error leaves it off alone.
+- A key the [key hold](#key-hold) gives to another feature is left alone, so the letters of hint labels never walk a menu.
+
+## Hints over Firefox's own UI
+
+`desertfox-chrome-hints.js` and the command `hint.browser` (`gB`) label the controls of Firefox itself, in the style of the page hints. The user types the label to pick the control. The surfaces are the nav bar buttons, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, the rows of an open app menu, permission prompts (doorhangers), the downloads panel, the controls of a tab's prompt, the settings sub-dialogs, the Library and Page Info. A pick clicks the button, runs its command, selects the tab or opens the menu or folder.
+
+The work splits by the thin-executor rule:
+
+- The module collects the targets and sends only ids and boxes (`chrome_hints.targets`, at most 400 targets, in parts of at most 4 KB and at most 32 parts). It sends no page content and no label text.
+- The extension makes the labels from the `hint_letters` setting, narrows them as the module reports each typed key (`chrome_hints.key`, one key per message, with a counter so a key read twice runs once) and names the id to pick (`chrome_hints.pick`). It stores the session in `storage.session`.
+- The module draws the labels it is told (`chrome_hints.draw`) in a closed shadow root that links one fixed sheet. Theme colors travel as checked hex values. A draw replaces the one before only when all its parts came. A target inside an open panel gets its label inside the panel's own DOM, because the window layer does not cover a popup.
+- A pick names an id of the module's own table for the current session. The module refuses an id of an older session, a target that is gone and one that moved more than 2 px since its label was drawn. Each target kind has one fixed action.
+- A session ends on Escape, a key with Ctrl, Alt or Meta, a click, a resize, the window leaving the front or closing, the pref going off, the module shutting down, or no labels within 2 s of the start. Each end removes the layers, the listeners and the timer.
+
+### Start token
+
+The content script hears `gB` only with the focus in a page. With the focus in a dialog, the Library, Page Info or an open panel, the module starts the hints itself:
+
+- The extension lists the key token lists of the `hint.browser` bindings in the optional state field `chrome_hint_keys` (at most 4 bindings of at most 4 tokens, none beginning another). A bad table is left out whole and the rest of the state stays. The module never knows the binding is `gB`.
+- The module matches those tokens only with the focus in one of those places, never in a field and never with a menu open. The first keys of a longer binding are held while they wait for the rest.
+- A whole binding makes the module hold the window's keys and push `chrome_hints.want` with a random start token. The extension answers with `chrome_hints.collect_here`, which names no window. The module takes its own token once, within 3 s of the key, and only in the window where the key was typed. So the extension cannot open a session where the user did not ask for one. An older or cancelled token gets the refusal "The hint key is stale", which shows no toast.
+- Keys typed before the first labels show (at most 16) wait for them.
+- A start from a page or the toolbar goes the other way: the extension asks with `chrome_hints.collect`, which names the window, and the module refuses it unless that browser window is in front and may act. Both starts refuse with a short text while a menu is open or the focus is in a field. A start that lost to a newer one sends nothing.
+
+### Key hold
+
+Two features can see the same key in one window, and listener order cannot settle who goes first: Firefox calls the newest window watcher first. So the core keeps one owner per window. `hold_keys(win, owner)` claims every key of the window, `release_keys(win, owner)` ends the owner's hold and `keys_held_by(win)` names it. A feature leaves a key alone while another owner holds its window. The hints hold the keys from the binding's last key to the end of the session, a pending grant holds them until its Enter, and the popup walk stands aside for both.
+
+### Grants wait for the user's Enter
+
+Some picks give something away: they allow a permission, unblock a held-back download, open a downloaded file, send a client certificate or send a login. The extension names every pick, so a compromised extension could swap the user's Block for Allow. The module therefore never clicks such a control on a pick. It marks the control with a frame and the word "Enter", holds the window's keys and waits for an Enter that the user types in that window. The extension has no kind that confirms, and the module decides from the real key event alone.
+
+What counts as a grant is a fixed table in the module, keyed by Firefox's own ids, classes and attributes. The table sits in the module and not in the extension because the extension is the party it guards against. On a surface that can grant, a control the table does not name counts as a grant, so a button that a later Firefox adds waits as well.
+
+- A doorhanger's main button and any control but its close button, its link and its drop-down. Its second button clicks at once only on a prompt of a known deny (location, XR, persistent storage, MIDI, storage access, the two local network prompts, and camera and microphone). It waits when the Remember box is ticked, because Firefox then stores the deny for good. Notifications' second button is Always Block, so it waits too.
+- The downloads panel and list: opening a file, and a held-back download's unblock and open buttons. Cancel, retry, the arrow to the blocked-download view and Show in folder on a clean row click at once. A Library row pick only chooses the row, and the user's own Enter there opens the file.
+- Page Info's permission rows, except the Block and Always Ask radios.
+- The external protocol dialog and the client certificate dialog: every control but Cancel and a drop-down, which only opens.
+- The Exceptions and site permissions dialogs: only Block, Cancel and a drop-down click at once. Remove, Remove All, Add and Save Changes wait, since a removed Block entry lets the site do what the default allows.
+- A tab prompt's OK when it sends a login (a user name and password or a password prompt), and a tab prompt's checkbox, which stops the site's prompts or on a prompt from a background tab lets the site take the focus to its tab.
+
+An Enter confirms only when all of these hold:
+
+- The key is trusted, so a script's key does nothing. It has no modifier and is not a repeat, so a held-down Enter does nothing.
+- It was pressed after the mark showed, and at least the dwell later. The dwell is Firefox's own doorhanger delay, the pref `security.notification_enable_delay` (500 ms by default). A key inside the dwell ends the confirm, so tapping Enter through a page never carries over to a grant the user did not see marked. Times are in ms since the epoch on the key target's own clock, because a dialog's window starts later than the browser window that shows the mark.
+- The window is still in front, the module may still act there and the hold is still the confirm's.
+- The target is the same: the same prompt, the same download, the same control and row state, visible and where it was drawn. Else the confirm ends.
+- The control is ready. A doorhanger button and a dialog's accept button ignore a click for a moment after they show. Enter then does nothing, and the next Enter tries again.
+
+Any other key or a click ends the confirm without a grant. So do the window leaving the front, a resize, a tab switch, the prompt closing, the download changing and the module turning off. A timer ends it after 15 s. Every end clears the mark and releases the held keys.
 
 ## DevTools
 
