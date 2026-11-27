@@ -480,13 +480,11 @@
     const TEXT_NODE = 3;
     const MAX_START_NODES = 5000;
     // The areas the mode starts in, by the address of their document. The root holds the selection. Class names change between Firefox releases, and a root that finds nothing starts no mode.
-    // `start` marks the current row, where the mode starts while the document itself has the focus, as the markup view keeps it.
-    // `lines: false` where a line move goes wrong: the console draws only the messages near the view, so a line move skips the rest, and in the markup view it stops after one line (measured).
-    // The computed view is out: its text is user-select none, so nothing selects.
+    // `lines: false` where a line move goes wrong: the console draws only the messages near the view, so a line move skips the rest (measured).
+    // The computed view is out: its text is user-select none, so nothing selects. The markup view is out: Selection.modify stops at the edge of each span of a tag line, so the selection never grows past the `<`.
     const TEXT_AREAS = [
       { url: "chrome://devtools/content/webconsole/index.html", root: ".webconsole-output", lines: false },
       { url: "chrome://devtools/content/inspector/index.xhtml", root: "#ruleview-container", lines: true },
-      { url: "chrome://devtools/content/inspector/markup/markup.html", root: "#root", lines: false, start: ".tag-line[aria-selected=true]" },
       { url: "chrome://devtools/content/netmonitor/index.html", root: "#headers-panel", lines: true },
     ];
     // CodeMirror editors that DevTools shows read-only: the Debugger source and the Network response. The console input is a CodeMirror editor too, and stays out by having no row.
@@ -542,14 +540,14 @@
       for (const row of TEXT_AREAS) {
         if (!url.startsWith(row.url)) continue;
         const root = target.closest(row.root) ?? root_of_focused_document(doc, target, row.root);
-        if (root?.checkVisibility()) return { doc, root, lines: row.lines, start: row.start, code: false };
+        if (root?.checkVisibility()) return { doc, root, lines: row.lines, code: false };
       }
       return null;
     }
 
-    // The first text that shows in the area: under the focused element when it sits inside the area, or the area's current row, else anywhere in it. Blank text is skipped.
-    function start_point({ root, start }, focused) {
-      const target = root.contains(focused) ? focused : ((start && root.querySelector(start)) ?? root);
+    // The first text that shows in the area: under the focused element when it sits inside the area, else anywhere in it. Blank text is skipped.
+    function start_point({ root }, focused) {
+      const target = root.contains(focused) ? focused : root;
       const shown = root.getBoundingClientRect();
       let seen = 0;
       for (const scope of target !== root && root.contains(target) ? [target, root] : [root]) {
