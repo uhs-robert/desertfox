@@ -11,7 +11,7 @@ import { apply_count } from "./count.ts";
 import type { RepeatMemory } from "./repeat_memory.ts";
 import { create_step_recorder, type RecordStep } from "./record_step.ts";
 import { place_in_tab, type JumpEntry } from "../shared/jump_names.ts";
-import { ignore_refusal, refused_as, warn_and_go } from "../shared/swallow.ts";
+import { ignore_refusal, keep_chain, refused_as, warn_and_go } from "../shared/swallow.ts";
 
 export type ActiveTab = { tab_id: number; window_id: number; url: string | undefined; incognito?: boolean };
 
@@ -114,6 +114,8 @@ function over_repeat_limit(command: CommandDef | undefined, invocation: BoundInv
   return `A count of ${invocation.count} is over the limit of ${limit} for ${invocation.id}`;
 }
 
+const MAX_PENDING_REPEATS = 2;
+
 export function create_router(deps: RouterDeps): Router {
   const record_step = deps.record_step ?? create_step_recorder(deps);
 
@@ -130,7 +132,7 @@ export function create_router(deps: RouterDeps): Router {
     return { active, context };
   }
 
-  async function run(request: RouteRequest): Promise<RunResponse> {
+  async function run_now(request: RouteRequest): Promise<RunResponse> {
     // Keys stop in the page, so this catches what does not come from a key: a slot chord, a snippet call, a line that was open.
     if (await deps.is_disabled()) return { ok: false, refusal: { id: "desertfox.off", message: "DesertFox is off" } };
     // Read before any step: window.new, window.close and tab.attach change which tab is active.
@@ -333,6 +335,25 @@ export function create_router(deps: RouterDeps): Router {
     if (source === "search_query") return deps.search_query(active?.url);
     const selection = context.tab_id === undefined ? undefined : await deps.ask_selection(context.tab_id, context.frame_id ?? 0);
     return selection === "" ? undefined : selection;
+  }
+
+  // A held key sends a repeat every few ms, faster than a tab switch settles. Each repeat reads the active tab, so overlapping runs all
+  // read the same one. One chain per window makes a repeat start after the one before it finished. A press is no repeat and never waits.
+  const repeat_chains = new Map<number | undefined, { tail: Promise<void>; pending: number }>();
+  async function run(request: RouteRequest): Promise<RunResponse> {
+    if (request.repeat !== true) return run_now(request);
+    const sender = request.sender_tab_id === undefined ? undefined : await ignore_refusal(deps.get_tab(request.sender_tab_id));
+    const window_id = (sender ?? (await deps.active_tab()))?.window_id;
+    const chain = repeat_chains.get(window_id) ?? { tail: Promise.resolve(), pending: 0 };
+    // One running and one waiting keeps the switches back to back. A deeper queue would keep switching after the key is let go.
+    if (chain.pending >= MAX_PENDING_REPEATS) return { ok: true };
+    repeat_chains.set(window_id, chain);
+    chain.pending++;
+    const result = chain.tail.then(() => run_now(request));
+    chain.tail = keep_chain(result).then(() => {
+      if (--chain.pending === 0) repeat_chains.delete(window_id);
+    });
+    return result;
   }
 
   return { run };

@@ -968,3 +968,73 @@ test("repeated tab.next from one sender tab advance from the active tab, and a p
   await next(false);
   assert.equal(active, 2);
 });
+
+// A tab switch that settles after the next repeat arrives: `active` moves only when the switch finishes.
+function slow_switch() {
+  const window_of = (tab_id: number) => (tab_id > 10 ? 2 : 1);
+  const state = { active: new Map<number, number>([[1, 1], [2, 11]]), calls: 0, fail_on: -1 };
+  const { deps } = make_fake(
+    {
+      "tab.next": {
+        label: "Next Tab",
+        intent: "x",
+        runs_in: "background",
+        run: async (ctx) => {
+          const call = state.calls++;
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          if (call === state.fail_on) throw new Error("switch failed");
+          state.active.set(ctx.window_id!, ctx.tab_id! + 1);
+        },
+      },
+    },
+    {
+      active_tab: async () => ({ tab_id: state.active.get(1)!, window_id: 1, url: "https://example.org/" }),
+      get_tab: async (tab_id) => ({ tab_id, window_id: window_of(tab_id), url: "https://example.org/" }),
+    },
+  );
+  return { state, router: create_router(deps) };
+}
+const held = (router: ReturnType<typeof create_router>) => router.run({ invocations: [{ id: "tab.next" }], mode: "normal", sender_tab_id: 1, repeat: true });
+
+test("overlapping repeats while a switch is slow advance one tab each", async () => {
+  const { state, router } = slow_switch();
+  await Promise.all([held(router), held(router)]);
+  assert.equal(state.active.get(1), 3);
+});
+
+test("a long hold queues no more than one waiting repeat, so nothing runs on after the release", async () => {
+  const { state, router } = slow_switch();
+  await Promise.all(Array.from({ length: 20 }, () => held(router)));
+  assert.equal(state.calls, 2);
+  assert.equal(state.active.get(1), 3);
+  // The chain is empty again: the next hold starts at once.
+  await held(router);
+  assert.equal(state.active.get(1), 4);
+});
+
+test("a repeat that throws does not jam the queue", async () => {
+  const { state, router } = slow_switch();
+  state.fail_on = 0;
+  const [first, second] = await Promise.all([held(router), held(router)]);
+  assert.equal(first.ok, false);
+  assert.equal(second.ok, true);
+  await held(router);
+  assert.equal(state.calls, 3);
+});
+
+test("a press does not wait behind the repeat queue", async () => {
+  const { state, router } = slow_switch();
+  const running = held(router);
+  const press = await router.run({ invocations: [{ id: "tab.next" }], mode: "normal", sender_tab_id: 1 });
+  assert.equal(press.ok, true);
+  assert.equal(state.calls, 2);
+  await running;
+});
+
+test("repeats in two windows have a queue each", async () => {
+  const { state, router } = slow_switch();
+  const in_window_2 = () => router.run({ invocations: [{ id: "tab.next" }], mode: "normal", sender_tab_id: 11, repeat: true });
+  await Promise.all([held(router), held(router), held(router), in_window_2(), in_window_2()]);
+  // Window 1 ran two and dropped the third. Window 2's own limit let both of its repeats run.
+  assert.equal(state.calls, 4);
+});
