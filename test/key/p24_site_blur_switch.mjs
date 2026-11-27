@@ -9,7 +9,7 @@ export const areas = ["keys", "config", "tabs"];
 
 const BLUR_WINDOW_MS = 1000;
 
-export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, send_keys, in_background, in_active_tab, wait_event, wait_active_tab, tab_switch_mark, tabs_shown_since, poll_until, settle_focus, events, url_of, scroll_of, expect, sleep, rdp, close_tabs_with, escape_to_normal }) {
+export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, send_keys, in_background, in_active_tab, wait_event, wait_active_tab, tab_switch_mark, tabs_shown_since, poll_until, settle_focus, events, url_of, scroll_of, expect, sleep, rdp, close_tabs_with, escape_to_normal, wait_tab_quiet }) {
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
   const tab_id_of = async (page_id) => {
     const tab_id = await in_background(`browser.tabs.query({}).then((tabs) => tabs.find((tab) => URL.canParse(tab.url) && new URL(tab.url).searchParams.get("id") === ${JSON.stringify(page_id)})?.id)`);
@@ -257,9 +257,24 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     await escape_to_normal("blur_key");
   });
 
+  await run_case("a mouse press the page dispatches itself leaves the switch window open", async () => {
+    await open_page("switch_field", "blur_fake_delay", { new_tab: true });
+    await open_page("page", "blur_fake_next", { new_tab: true });
+    const mark = events.length;
+    await switch_by_key("K", "blur_fake_delay");
+    // Before the page's own focus, 300 ms after the show.
+    await in_active_tab(`document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); true`);
+    await with_state("blur_fake_delay", wait_event(mark, focused_since(mark, "blur_fake_delay"), "the page to focus its field after the show", 3000));
+    await sleep(100);
+    await expect_blurred("blur_fake_delay");
+    await expect_keys_work("blur_fake_delay");
+  });
+
   await run_case("a tab hidden again before its window ends keeps a focus it got while hidden, and loses it at the next show", async () => {
     await open_page("switch_field", "blur_hide_delay", { new_tab: true });
     await open_page("page", "blur_hide_next", { new_tab: true });
+    // A page reports its visibility reliably only once it has been hidden past the quiet time, so the show below is not lost.
+    await wait_tab_quiet(await tab_id_of("blur_hide_next"));
     const mark = events.length;
     await show_tab("blur_hide_delay");
     await wait_event(mark, (event) => event.type === "visibility" && event.page_id === "blur_hide_delay" && event.state === "visible", "the page to turn visible", 3000);
