@@ -39,9 +39,11 @@
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
 //   ime_in_field(win)          In the sandbox: whether the window's input state says a text field has the focus, which covers a field in a page of another process.
-//   type_key(win, key, still_holds)  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
+//   type_key(win, key, still_holds, { menu_owns_keys })  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
-//   hold_keys(win, owner)      In the sandbox: claim every key of `win` for the feature named `owner`. A feature's key listener leaves a key alone while another owner holds its window.
+//                              `menu_owns_keys: true` asks to type with the focus in a field while a menu that takes keys is open, as such a menu takes the field's keys anyway. The core checks for the menu itself, at the call and again when it types.
+//   hold_keys(win, owner)      In the sandbox: claim every key of `win` for the feature named `owner`, and return true. Returns false and claims nothing while another owner holds the window.
+//                              A feature's key listener leaves a key alone while another owner holds its window.
 //                              Listener order cannot settle this, because Firefox calls the newest window watcher first.
 //   release_keys(win, owner)   In the sandbox: end `owner`'s hold on `win`. A release by another owner does nothing.
 //   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
@@ -487,12 +489,25 @@
       return false;
     }
 
+    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field (`ignorekeys`).
+    // A dialog's menu sits in the dialog's own document, so the focused element's document is read too.
+    function key_taking_menu_open(win, focused) {
+      for (const doc of new Set([win.document, focused?.ownerDocument])) {
+        if (!doc) continue;
+        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !popup.hasAttribute("ignorekeys")) return true;
+      }
+      return false;
+    }
+
     // A text input processor refuses to start inside a key's dispatch, so the key goes out after the current event. The focus can move before then, so the guards run again.
-    function type_key(win, key, still_holds) {
+    function type_key(win, key, still_holds, options) {
       if (!Object.hasOwn(TYPED_KEY_CODES, key)) return false;
+      const menu_owns_keys = options?.menu_owns_keys === true;
       const refused = () => {
         const focused = focused_element(win);
-        return is_field(focused) || ime_in_field(win) || in_devtools(focused);
+        if (in_devtools(focused)) return true;
+        if (!is_field(focused) && !ime_in_field(win)) return false;
+        return !(menu_owns_keys && key_taking_menu_open(win, focused));
       };
       if (refused()) return false;
       win.setTimeout(() => {
@@ -1009,7 +1024,10 @@
         shut_down_steps.push(fn);
       },
       hold_keys(win, owner) {
+        const holder = key_holders.get(win);
+        if (holder !== undefined && holder !== owner) return false;
         key_holders.set(win, owner);
+        return true;
       },
       release_keys(win, owner) {
         if (key_holders.get(win) === owner) key_holders.delete(win);

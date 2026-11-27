@@ -84,10 +84,13 @@ function setup({ pref = true, state = { v: BROWSER_MODULE_PROTOCOL_VERSION, enab
     const root = make_target();
     let focused: Node | undefined;
     const elements = new Map<string, Node>();
+    // The popups a test showed, which the core's menu check reads back from the document.
+    const shown: Node[] = [];
     const win = Object.assign(base, {
       type,
       closed: false,
       location: { href: loaded ? `chrome://browser/content/${type}.xhtml` : "about:blank" },
+      windowUtils: { IMEStatus: 0 },
       windowRoot: root,
       // The fake's own listeners are replaced: the core attaches through these, and a key reaches them after the window root.
       addEventListener: own.addEventListener,
@@ -100,7 +103,7 @@ function setup({ pref = true, state = { v: BROWSER_MODULE_PROTOCOL_VERSION, enab
             return focused;
           },
         },
-        querySelectorAll: () => [],
+        querySelectorAll: (selector: string) => shown.filter((node) => selector.split(",").some((name) => name.trim() === node.localName)),
         getElementById: (id: string) => elements.get(id) ?? null,
       },
       setTimeout: (run: () => void) => timers.push(run),
@@ -130,6 +133,7 @@ function setup({ pref = true, state = { v: BROWSER_MODULE_PROTOCOL_VERSION, enab
         own.fire("load", key_event("load"));
       },
       show(node: Node) {
+        if (!shown.includes(node)) shown.push(node);
         own.fire("popupshown", key_event("popupshown", { originalTarget: node, target: node }));
       },
       hide(node: Node & { state: string }) {
@@ -255,6 +259,31 @@ test("a field keeps its letters, unless a menu that takes keys is open over it",
   assert.ok(browser.press("j").prevented, "a menu bar menu over the address bar did not walk");
   run_timers();
   assert.equal(typed.length, 1);
+});
+
+test("the core types from a field for menu_owns_keys only while it sees a menu that takes keys, at the call and when it types, and never into DevTools", () => {
+  const { firefox, browser, typed, run_timers } = setup();
+  type TypeKey = (win: unknown, key: string, still_holds: () => boolean, options?: { menu_owns_keys?: boolean }) => boolean;
+  const type_key = (firefox.Services.desertfox_browser_module as { type_key: TypeKey }).type_key;
+  const owns = { menu_owns_keys: true };
+  browser.focus({ localName: "input", type: "text" });
+  assert.equal(type_key(browser.win, "ArrowDown", () => true, owns), false, "the flag alone let a key into a field");
+  browser.show(popup("menupopup", "", { ignorekeys: "true" }));
+  assert.equal(type_key(browser.win, "ArrowDown", () => true, owns), false, "a menu that leaves keys to its field let a key in");
+  const menu = popup("menupopup", "menu_FilePopup");
+  browser.show(menu);
+  assert.equal(type_key(browser.win, "ArrowDown", () => true), false, "an open menu let a key into a field without the flag");
+  assert.equal(type_key(browser.win, "ArrowDown", () => true, owns), true);
+  run_timers();
+  assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"]);
+  assert.equal(type_key(browser.win, "ArrowUp", () => true, owns), true);
+  browser.hide(menu);
+  run_timers();
+  assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"], "the key went into the field after the menu closed");
+  browser.show(menu);
+  menu.state = "open";
+  browser.focus({ localName: "input", type: "text", ownerDocument: { documentURI: "about:devtools-toolbox" } });
+  assert.equal(type_key(browser.win, "ArrowDown", () => true, owns), false, "typed into DevTools under a menu");
 });
 
 test("only a plain trusted letter walks: no modifier, no capital, no composition, no untrusted or prevented key", () => {

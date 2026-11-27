@@ -368,7 +368,7 @@ test("the session's key listener runs before a listener a later feature adds on 
   chrome.window_root.addEventListener("keydown", (event) => void later.push(event.prevented));
   await collect(1);
   chrome.press("j");
-  assert.deepEqual(later, [true], "a later listener saw the session's key as not taken");
+  assert.deepEqual(later, [], "a later listener heard the session's key");
   (firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
   assert.equal(chrome.layers().length, 0);
   assert.equal(held(), undefined, "the module shut down with the window's keys held");
@@ -384,6 +384,16 @@ test("a whole draw with no labels ends the session, so it never holds the keys w
   assert.equal(chrome.layers().length, 0);
   assert.equal(held(), undefined);
   assert.ok(!chrome.press("a").prevented, "a key after an empty draw was taken");
+});
+
+test("a collect is refused while another feature holds the window's keys, and that hold stays", async () => {
+  const { firefox, collect, chrome, held } = started();
+  const core = firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): boolean };
+  assert.equal(core.hold_keys(chrome.win, "sidebar"), true);
+  assert.notEqual((await collect(1))?.ok, true);
+  assert.equal(chrome.layers().length, 0);
+  assert.equal(held(), "sidebar");
+  assert.equal(chrome.press("a").prevented, false, "a session that never started took a key");
 });
 
 test("a collect is refused while a field of the window has the focus, such as the address bar", async () => {

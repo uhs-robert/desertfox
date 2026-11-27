@@ -23,9 +23,10 @@
   }
 
   function start(core) {
+    const missing = ["may_act", "on_shut_down", "type_key", "token_of", "chrome_hint_keys", "is_field", "focused_element", "ime_in_field", "keys_held_by"].find((name) => typeof core[name] !== "function");
+    if (missing) throw new Error(`the core has no ${missing}`);
     // The fixed translation. The letters are the walk's own, not key rows of the extension: a menu has no DesertFox mode or keymap.
     const WALK_KEYS = { j: "ArrowDown", k: "ArrowUp", h: "ArrowLeft", l: "ArrowRight" };
-    const KEY_CODES = { ArrowDown: 40, ArrowUp: 38, ArrowLeft: 37, ArrowRight: 39 };
     const BROWSER = "navigator:browser";
     const LIBRARY = "Places:Organizer";
     // In these windows every list, tree and radio group walks, so no open popup is needed.
@@ -34,43 +35,15 @@
     const ATTACHED_TYPES = new Set([BROWSER, "devtools:toolbox", ...WALK_WINDOWS]);
     const DIALOG_LISTS = new Set(["tree", "richlistbox", "listbox", "radiogroup", "radio"]);
 
-    const Ci = Components.interfaces;
-    const Cc = Components.classes;
-
     const attached = new Map();
     const loading = new Map();
     let stopped = false;
 
     const window_type = (win) => win.document?.documentElement?.getAttribute("windowtype") ?? "";
 
-    const TEXT_INPUT = /^(?!button$|checkbox$|radio$|submit$|reset$|image$|file$|range$|color$|hidden$)/;
-    const is_field = (node) =>
-      !!node?.localName &&
-      (node.isContentEditable || node.localName === "textarea" || node.localName === "select" || (node.localName === "input" && TEXT_INPUT.test(node.type || "text")));
-
-    function deep_active(doc) {
-      let active_element = doc?.activeElement;
-      while (active_element?.shadowRoot?.activeElement) active_element = active_element.shadowRoot.activeElement;
-      return active_element;
-    }
-
-    // The element with the focus in this window's own process, through frames of this process (a settings sub-dialog, a tab-modal prompt).
-    function focused_element(win) {
-      let element = win.document.commandDispatcher?.focusedElement ?? deep_active(win.document);
-      while (element?.localName === "browser" && !element.isRemoteBrowser && element.contentDocument) {
-        const inner = deep_active(element.contentDocument);
-        if (!inner) break;
-        element = inner;
-      }
-      return element;
-    }
-
-    // A field of a page in another process is not in this one, so the window's input state stands in for it, as in the core.
-    const field_focused = (win) => {
-      const ime = win.windowUtils?.IMEStatus;
-      return is_field(focused_element(win)) || ime === Ci.nsIDOMWindowUtils.IME_STATUS_ENABLED || ime === Ci.nsIDOMWindowUtils.IME_STATUS_PASSWORD;
-    };
-    const in_field = (win, target) => is_field(target) || field_focused(win);
+    // A field of a page in another process is not in this one, so the window's input state stands in for it.
+    const field_focused = (win) => core.is_field(core.focused_element(win)) || core.ime_in_field(win);
+    const in_field = (win, target) => core.is_field(target) || field_focused(win);
 
     // ---- What is open. Each window keeps the popups it saw open, checked again against their state on each use.
 
@@ -103,70 +76,74 @@
     // A menu that lets keys through to its field (`ignorekeys`) is the field's.
     const takes_keys = (popup) => popup.localName === "menupopup" && !popup.hasAttribute("ignorekeys");
 
-    // Why the walk takes this key here, as a check that must still hold when the arrow key goes out, or undefined to leave the key alone.
+    // Why the walk takes this key here, or undefined to leave the key alone. `still_holds` must still be true when the arrow key goes out.
+    // `menu_owns_keys` marks the open menu that takes the window's keys, a focused field's too.
     function walk_reason(win, record, event) {
       const popups = open_popups(record);
       const menu = popups.find(takes_keys);
-      if (menu) return () => is_open(menu);
-      const focused = focused_element(win);
+      if (menu) return { still_holds: () => is_open(menu), menu_owns_keys: true };
+      const focused = core.focused_element(win);
       if (in_field(win, event.originalTarget) || in_extension_popup(event.target) || in_extension_popup(focused)) return undefined;
       const panel = popups.find(walking_panel);
-      if (panel) return () => is_open(panel) && !field_focused(win);
-      if (WALK_WINDOWS.has(record.type)) return () => !field_focused(win);
+      if (panel) return { still_holds: () => is_open(panel) && !field_focused(win) };
+      if (WALK_WINDOWS.has(record.type)) return { still_holds: () => !field_focused(win) };
       const list = dialog_list(win, focused);
-      if (list) return () => focused_element(win) === list;
+      if (list) return { still_holds: () => core.focused_element(win) === list };
       return undefined;
     }
 
-    // The arrow key goes out after the letter's event is over: a text input processor refuses to start inside a key's dispatch.
-    // The window may close and the popup may shut before then. The key is then dropped, so it never lands on whatever is under the popup.
-    function replay(win, key, still_holds) {
-      win.setTimeout(() => {
-        try {
-          if (stopped || win.closed || !attached.has(win) || !still_holds()) return;
-          const processor = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
-          if (!processor.beginInputTransaction(win, () => true)) {
-            core.log_once("Firefox refused to type the walk's arrow key");
-            return;
-          }
-          const arrow = new win.KeyboardEvent("", { key, code: key, keyCode: KEY_CODES[key] });
-          processor.keydown(arrow);
-          processor.keyup(arrow);
-        } catch (error) {
-          core.log_once(`a walk key was dropped after an error: ${error}`);
-        }
-      }, 0);
-    }
+    // The core types the arrow key once the letter's event is over. A window or popup that closed meanwhile gets none, so it never lands on whatever was under the popup.
+    const walk = (win, arrow, { still_holds, menu_owns_keys = false }) => core.type_key(win, arrow, () => !stopped && attached.has(win) && still_holds(), { menu_owns_keys });
 
     const take = (event) => {
       event.preventDefault();
       event.stopPropagation();
     };
 
+    // What the walk does with the key, run once it is sure to take it: true when it did, so the key stops. Undefined to leave the key alone.
+    function action_for(win, record, event) {
+      const arrow = Object.hasOwn(WALK_KEYS, event.key) ? WALK_KEYS[event.key] : undefined;
+      if (arrow) {
+        const reason = walk_reason(win, record, event);
+        return reason && { act: () => walk(win, arrow, reason), menu_owns_keys: reason.menu_owns_keys === true };
+      }
+      if (event.key !== "Escape" || event.shiftKey || record.type !== LIBRARY) return undefined;
+      if (in_field(win, event.originalTarget) || !library_closes_on_escape(win, record)) return undefined;
+      return { act: () => (win.setTimeout(() => win.close(), 0), true), menu_owns_keys: false };
+    }
+
+    // Chrome hints match the first key of a `hint.browser` binding on the window root too, and in a window opened after startup they hear it after the walk.
+    const may_start_hints = (win, event) => {
+      const token = core.token_of(event);
+      return core.chrome_hint_keys(win).some((keys) => keys[0] === token);
+    };
+
     function on_key(win, record, event) {
+      record.waiting = undefined;
       if (core.keys_held_by(win) !== undefined) return;
       if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
-      const arrow = Object.hasOwn(WALK_KEYS, event.key) ? WALK_KEYS[event.key] : undefined;
-      const escape = event.key === "Escape" && !event.shiftKey && record.type === LIBRARY;
-      if (!arrow && !escape) return;
+      if (!Object.hasOwn(WALK_KEYS, event.key) && event.key !== "Escape") return;
       if (!core.may_act(win)) return;
-      if (escape) {
-        if (!in_field(win, event.originalTarget) && library_closes_on_escape(win, record)) {
-          take(event);
-          win.setTimeout(() => win.close(), 0);
-        }
-        return;
-      }
-      const still_holds = walk_reason(win, record, event);
-      if (!still_holds) return;
-      take(event);
-      replay(win, arrow, still_holds);
+      const action = action_for(win, record, event);
+      if (!action) return;
+      // Under a menu that takes keys chrome hints start nothing, so the walk acts at once, before the core could scroll the page under the menu.
+      if (!action.menu_owns_keys && may_start_hints(win, event)) record.waiting = { event, act: action.act };
+      else if (action.act()) take(event);
+    }
+
+    // A key that may start chrome hints waits for the window's own listeners. Chrome hints stop a key they take, so it never gets here, and their first keys hold the window.
+    // Those listeners run after the core's on a browser window, so the core's own row for the key comes first there.
+    function on_key_after_root(win, record, event) {
+      const waiting = record.waiting;
+      record.waiting = undefined;
+      if (waiting?.event !== event || event.defaultPrevented || core.keys_held_by(win) !== undefined) return;
+      if (waiting.act()) take(event);
     }
 
     // Escape in the Library closes it from a tree with no search text. With a menu open, Escape closes the menu as usual.
     function library_closes_on_escape(win, record) {
       if (open_popups(record).length > 0) return false;
-      if (focused_element(win)?.localName !== "tree") return false;
+      if (core.focused_element(win)?.localName !== "tree") return false;
       const search = win.document.getElementById("searchFilter");
       return !search?.value;
     }
@@ -175,7 +152,7 @@
 
     function attach(win) {
       if (stopped || attached.has(win) || !ATTACHED_TYPES.has(window_type(win))) return;
-      const record = { type: window_type(win), popups: new Set() };
+      const record = { type: window_type(win), popups: new Set(), waiting: undefined };
       for (const popup of win.document.querySelectorAll("menupopup, panel")) if (is_tracked(popup) && is_open(popup)) record.popups.add(popup);
       const guarded = (handler) => (event) => {
         try {
@@ -186,6 +163,7 @@
         }
       };
       const keydown = guarded((event) => on_key(win, record, event));
+      const keydown_after_root = guarded((event) => on_key_after_root(win, record, event));
       const shown = guarded((event) => {
         const popup = event.originalTarget;
         if (is_tracked(popup)) record.popups.add(popup);
@@ -195,15 +173,18 @@
       // The window root hears a key before the window's own capture listeners, so the walk goes before the core, which could take the same letter as a scroll key.
       const root = win.windowRoot;
       root.addEventListener("keydown", keydown, true);
+      win.addEventListener("keydown", keydown_after_root, true);
       win.addEventListener("popupshown", shown, true);
       win.addEventListener("popuphidden", hidden, true);
       win.addEventListener("unload", unload, { once: true });
       attached.set(win, () => {
         root.removeEventListener("keydown", keydown, true);
+        win.removeEventListener("keydown", keydown_after_root, true);
         win.removeEventListener("popupshown", shown, true);
         win.removeEventListener("popuphidden", hidden, true);
         win.removeEventListener("unload", unload);
         record.popups.clear();
+        record.waiting = undefined;
       });
     }
 

@@ -408,7 +408,7 @@
     function begin_start(win, frame_win) {
       end_start();
       starting = { win, token: 1 + Math.floor(Math.random() * 0x7ffffffe), made_at: Date.now(), early_keys: [], undo: [] };
-      core.hold_keys(win, KEY_OWNER);
+      if (!core.hold_keys(win, KEY_OWNER)) return end_start();
       starting.undo.push(() => core.release_keys(win, KEY_OWNER));
       for (const type of ["mousedown", "deactivate", "unload"]) listen(starting, win, type, end_start);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(starting, frame_win, type, end_start);
@@ -454,8 +454,8 @@
       end_start();
       end_confirm();
       end_session(true);
+      if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
       session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, look: { style_url, theme, panel, frame_win } };
-      core.hold_keys(win, KEY_OWNER);
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
         add_session_parts(win, found, style_url, theme, panel, frame_win);

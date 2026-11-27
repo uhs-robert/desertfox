@@ -215,7 +215,10 @@ test("the mark shows as long as Firefox's security.notification_enable_delay say
 
 test("Enter does nothing once another feature holds the window's keys", async () => {
   const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
-  (run.firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): void }).hold_keys(chrome.win, "sidebar");
+  // The core refuses a hold over another owner's, so the confirm's own hold ends first.
+  const core = run.firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): boolean; release_keys(win: unknown, owner: string): void };
+  core.release_keys(chrome.win, "chrome_hints");
+  assert.equal(core.hold_keys(chrome.win, "sidebar"), true);
   chrome.press("Enter");
   assert.equal(chrome.allow.clicks, 0, "an Enter granted while another feature held the keys");
   assert.equal(marked(chrome), false);

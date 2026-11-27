@@ -132,6 +132,28 @@ test("keys typed while the extension answers wait for the labels, and the popup 
   assert.deepEqual(run.typed, ["ArrowDown"], "the walk moved the tree on a key meant for the labels");
 });
 
+test("in a window opened after startup, where the walk hears keys first, a binding's first j goes to chrome hints and a j outside their places still walks", async () => {
+  const run = started(library, { walk: true, state: { ...STATE, chrome_hint_keys: [["j", "B"]] } });
+  const with_typing = <T extends { win: object }>(window: T) => (Object.assign(window.win, { KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } } }), window);
+  const other = with_typing(library(run.firefox));
+  run.open_window(other);
+  (run.firefox.Services.focus as { activeWindow: unknown }).activeWindow = other.win;
+  const first = other.press("j");
+  assert.equal(run.held(other.win), "chrome_hints.prefix", "the walk took the binding's first key");
+  assert.ok(first.prevented);
+  other.press("B");
+  assert.equal(run.tokens().length, 1, "the binding did not start");
+  assert.equal(run.held(other.win), "chrome_hints");
+  other.fire_timers();
+  assert.deepEqual(run.typed, [], "the walk typed an arrow key for a key of the binding");
+
+  const picture = with_typing(chrome_window(run.firefox, "Toolkit:PictureInPicture", (root) => root.append(button("close", 10))));
+  run.open_window(picture);
+  assert.ok(picture.press("j").prevented, "a j that chrome hints leave alone did not walk");
+  picture.fire_timers();
+  assert.deepEqual(run.typed, ["ArrowDown"]);
+});
+
 test("in a tab's prompt the buttons in the dialog's shadow root get labels at their place in the window, the prompt's field gets none, and a pick clicks", async () => {
   const run = started(browser_with_dialog);
   run.type_binding();
