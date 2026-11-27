@@ -33,9 +33,10 @@
     if (kind === "axis") return value === "x" || value === "y" ? void 0 : "must be x or y";
     if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? void 0 : `must be one of ${PANE_REGIONS.join(", ")}`;
     if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
+    if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
-    return kind === "int" && !Number.isInteger(value) ? "must be a whole number" : void 0;
+    return (kind === "int" || kind === "optional_int") && !Number.isInteger(value) ? "must be a whole number" : void 0;
   }
   function check_module_args(id, args) {
     const kinds = MODULE_COMMAND_ARGS[id];
@@ -228,7 +229,7 @@
       } catch (error) {
         Components.utils.reportError(`DesertFox browser module: the commands feature failed to load: ${error}`);
       }
-    } else if (typeof core.take_keys !== "function" || typeof core.run_command !== "function") {
+    } else if (typeof core.take_keys !== "function" || typeof core.run_command !== "function" || typeof core.may_act !== "function") {
       core.log_once("the core cannot hand keys to a feature, so the commands feature stays off");
     } else {
       define(core);
@@ -239,7 +240,7 @@
     const ADDRESS_BAR_KEY = ":";
     const OMNIBOX_PREFIX = "df ";
     const MAX_NATIVE_REPEAT = 100;
-    const walks = /* @__PURE__ */ new WeakMap();
+    let walks = /* @__PURE__ */ new WeakMap();
     const tree_texts = /* @__PURE__ */ new WeakMap();
     const ignored = /* @__PURE__ */ new WeakMap();
     const is_ignored = (browser2) => ignored.get(browser2) === browser2.innerWindowID;
@@ -287,6 +288,7 @@
       }
       const text = tree === void 0 ? "" : tree_text(tree);
       const walk = text === "" ? void 0 : walk_for(win, browser2, text);
+      if (!walk && context.row_runs) return void 0;
       const idle = walk === void 0 || walk.pending === void 0;
       if (idle && token === IGNORE_TOGGLE_KEY && !walk?.matcher.binds_after_("normal", [], token)) {
         ignored.set(browser2, browser2.innerWindowID);
@@ -319,27 +321,30 @@
     function open_address_bar(win, text) {
       const bar = win?.gURLBar;
       if (!bar || typeof bar.focus !== "function") return { ok: false, error: "This Firefox has no address bar to open" };
-      const typed = text.replace(/[\p{Cc}\p{Cf}]/gu, "");
-      if (typeof bar.search === "function") bar.search(typed);
-      else {
-        bar.focus();
-        bar.value = typed;
-      }
+      bar.focus();
+      bar.value = text.replace(/[\p{Cc}\p{Cf}]/gu, "");
       return { ok: true };
     }
     function focused_window() {
       const win = Services.focus?.activeWindow;
-      if (!win || win.closed || win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser") return void 0;
-      const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
-      const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
-      if (PrivateBrowsingUtils.isWindowPrivate(win) && !ExtensionParent.GlobalManager.getExtension("desertfox@uhs-robert")?.privateBrowsingAllowed) return void 0;
+      if (!win || win.closed || win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser" || !core2.may_act(win)) return void 0;
       return win;
     }
+    const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
     core2.define_command("page.stop", { args: {}, run: ({ browser: browser2 }) => browser2.stop() });
-    core2.register_kind("address_bar.open", ({ text }) => {
+    core2.register_kind("address_bar.open", ({ text, tab_id }) => {
       const win = focused_window();
-      return win ? open_address_bar(win, OMNIBOX_PREFIX + text) : { ok: false, error: "No Firefox window has the focus" };
+      if (!win) return { ok: false, error: "No Firefox window has the focus" };
+      if (tab_id !== void 0 && selected_tab_id(win) !== tab_id) return { ok: false, error: "The tab that asked is no longer selected" };
+      return open_address_bar(win, OMNIBOX_PREFIX + text);
     });
-    core2.take_keys({ key: take_key, pending: pending_in });
+    core2.take_keys({
+      key: take_key,
+      reset: (win) => {
+        if (win) walks.delete(win);
+        else walks = /* @__PURE__ */ new WeakMap();
+      },
+      pending: pending_in
+    });
   }
 })();

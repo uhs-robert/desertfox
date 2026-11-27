@@ -41,6 +41,18 @@ export async function run_cases(context) {
     await focus_page();
   };
   const bar_state = () => chrome(`(async () => { const bar = ${W}.gURLBar; return { focused: bar.focused, value: bar.value }; })()`);
+  // Counts the address bar's queries from now on. A query is what reaches the search suggestion providers, so a filled bar must start none.
+  const watch_queries = async () => {
+    on_teardown(() => chrome(`(async () => { Services.desertfox_key_test_unwatch_queries?.(); delete Services.desertfox_key_test_unwatch_queries; delete Services.desertfox_key_test_queries; })()`));
+    await chrome(`(async () => {
+      Services.desertfox_key_test_unwatch_queries?.();
+      const bar = ${W}.gURLBar;
+      Services.desertfox_key_test_queries = 0;
+      bar.startQuery = function (...args) { Services.desertfox_key_test_queries++; return Object.getPrototypeOf(bar).startQuery.apply(bar, args); };
+      Services.desertfox_key_test_unwatch_queries = () => { delete bar.startQuery; };
+    })()`);
+  };
+  const query_count = () => chrome(`(async () => Services.desertfox_key_test_queries)()`);
   const zoom = () => chrome(`(async () => ${W}.ZoomManager.getZoomForBrowser(${W}.gBrowser.selectedBrowser))()`);
 
   await setup("turn the module on, with the tree in its state", async () => {
@@ -122,8 +134,9 @@ export async function run_cases(context) {
         const sent = async () => ((await session_value("desertfox_browser_module_from_module")) ?? []).find((message) => message.kind === "run" && message.args.keys === "z i");
         await poll_until("the module to send zi", async () => !!(await sent()));
         const id = (await sent()).id;
-        await poll_until("DesertFox to answer zi", async () => ((await session_value("desertfox_browser_module_from_extension")) ?? []).some((message) => message.reply_to === id));
-        await context.clear_notices();
+        const reply = async () => ((await session_value("desertfox_browser_module_from_extension")) ?? []).find((message) => message.reply_to === id);
+        await poll_until("DesertFox to answer zi", async () => !!(await reply()));
+        expect((await reply()).ok === true, `DesertFox refused zi on the PDF viewer: ${JSON.stringify(await reply())}`);
       } else await poll_until(`zi to zoom in ${page}`, async () => (await zoom()) > zoom_before);
       await chrome(`(async () => ${W}.FullZoom.reset(${W}.gBrowser.selectedBrowser))()`);
       await focus_page();
@@ -148,6 +161,42 @@ export async function run_cases(context) {
       await close_others();
     });
   }
+
+  await run_case("when the module refuses the panel, o on about:support fills the address bar with df and the open command, and starts no query", async () => {
+    await home("bmc_prompt");
+    await open_tab("about:support");
+    await focus_page();
+    // A stray element under the panel's id: the module refuses a second panel, so the address bar takes the line.
+    await chrome(`(async () => { const doc = ${W}.document; const stray = doc.createXULElement("box"); stray.id = "desertfox-cmdline-panel"; stray.dataset.keyTest = "stray"; doc.documentElement.appendChild(stray); })()`);
+    on_teardown(() => chrome(`(async () => { for (const w of Services.wm.getEnumerator("navigator:browser")) w.document.querySelector('[data-key-test="stray"]')?.remove(); })()`));
+    await watch_queries();
+    await press_keys("o");
+    await poll_until("o to fill the address bar", async () => {
+      const bar = await bar_state();
+      return bar.focused && bar.value.startsWith("df ") && bar.value.length > 3;
+    });
+    await sleep(300);
+    expect((await query_count()) === 0, `filling the bar started ${await query_count()} queries`);
+    await press_keys("-k", "Escape");
+    await chrome(`(async () => ${W}.document.querySelector('[data-key-test="stray"]')?.remove())()`);
+    await close_selected_tab();
+  });
+
+  await run_case("x, a visit to the about:preferences search box, then x closes nothing", async () => {
+    await home("bmc_field_reset");
+    await open_tab("about:preferences");
+    await page_ready("about:preferences");
+    const tabs = await tab_count();
+    await press_keys("x");
+    await in_selected_page(`(win) => { win.document.querySelector("#searchInput")?.focus(); return true; }`);
+    await poll_until("the search box to take the focus", () => chrome(`(async () => ${W}.windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`));
+    await press_keys("a");
+    await focus_page();
+    await press_keys("x");
+    await sleep(NO_EFFECT_MS);
+    expect((await tab_count()) === tabs, "the x typed before the field and the x after it closed the tab");
+    await close_selected_tab();
+  });
 
   await run_case("on about:addons f and / reach the page, and the module sends nothing for them", async () => {
     await home("bmc_addons_keys");

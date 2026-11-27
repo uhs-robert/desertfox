@@ -88,6 +88,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     fail_tab_moves: false,
     // More exports every importESModule call gives, for a feature file that imports a module the core does not.
     module_exports: {} as Record<string, unknown>,
+    // The container service the status bar reads names from. Unset, as in a build with no containers.
+    identity_service: undefined as unknown,
     errors,
     broadcasts,
     frame_scripts,
@@ -143,6 +145,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         broadcasts.push(name);
       },
     },
+    obs: { addObserver: () => undefined, removeObserver: () => undefined },
     scriptSecurityManager: { getSystemPrincipal: () => ({}) },
     // The window a test gives the focus.
     focus: { activeWindow: undefined as unknown },
@@ -157,7 +160,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     get stack() {
       return { filename: running_file };
     },
-    interfaces: { nsIDOMWindowUtils: { IME_STATUS_DISABLED: IME_DISABLED, IME_STATUS_ENABLED: IME_ENABLED, IME_STATUS_PASSWORD: IME_PASSWORD } } as Record<string, unknown>,
+    interfaces: { nsIWebProgress: { NOTIFY_LOCATION: 1, NOTIFY_SECURITY: 4 }, nsIDOMWindowUtils: { IME_STATUS_DISABLED: IME_DISABLED, IME_STATUS_ENABLED: IME_ENABLED, IME_STATUS_PASSWORD: IME_PASSWORD } } as Record<string, unknown>,
     // XPCOM classes by contract id. A test adds the ones its feature file creates.
     classes: {} as Record<string, unknown>,
     utils: {
@@ -169,6 +172,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     },
   };
   const ChromeUtils = {
+    generateQI: (names: string[]) => () => names,
     importESModule(url: string) {
       if (firefox.fail_import) throw new Error(`no module ${url}`);
       return {
@@ -206,6 +210,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
           on: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.add(listener),
           off: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.delete(listener),
         },
+        ContextualIdentityService: firefox.identity_service,
         PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true },
         ...firefox.module_exports,
       };
@@ -246,11 +251,18 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       closed: false,
       gURLBar: {
         focus() {},
-        search: (text: string) => void address_bar.push(text),
+        // A query would reach the search suggestions, so a test fails on one.
+        search: (text: string) => void address_bar.push(`query: ${text}`),
+        set value(text: string) {
+          address_bar.push(text);
+        },
       },
       gBrowser: {
         get selectedBrowser() {
           return (selected ?? [...tabs.values()][0])?.browser;
+        },
+        get selectedTab() {
+          return selected ?? [...tabs.values()][0];
         },
         getTabForBrowser: (browser: unknown) => [...tabs.values()].find((tab) => tab.browser === browser) ?? null,
         tabContainer: {
@@ -301,6 +313,18 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     for (const listener of message_listeners.get("desertfox-browser-module:report") ?? []) listener({ target: browser, data });
   };
 
+  // A message a frame script sends the parent: the listeners of `name` hear it as from `browser`.
+  const emit_message = (name: string, browser: unknown, data: unknown) => {
+    for (const listener of message_listeners.get(name) ?? []) listener({ target: browser, data });
+  };
+
+  // Any pref but the module's own switch. The observers hear every change, as they do for the switch.
+  const set_named_pref = (name: string, value: boolean | string | undefined) => {
+    if (value === undefined) prefs.delete(name);
+    else prefs.set(name, value);
+    [...pref_observers].forEach((observer) => observer());
+  };
+
   const set_pref = (value: boolean | string | undefined) => {
     if (value === undefined) prefs.delete("desertfox.browser_module.enabled");
     else prefs.set("desertfox.browser_module.enabled", value);
@@ -324,6 +348,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     Components,
     make_window,
     report,
+    emit_message,
+    set_named_pref,
     set_pref,
     start_extension,
     write_state,

@@ -17,9 +17,10 @@
 //   send(kind, args)           In the sandbox: start a call to the extension, a kind on the copy of MODULE_TO_EXTENSION_KINDS. Returns { ok: true, id } or { ok: false, problem }.
 //   log_once(text)             One line in the browser console per distinct text.
 //   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
-//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), pending(win) }.
-//                              key gets every key the module may take on a page, after the guards: context = { window, browser, tab, event, tree }, `tree` the state's raw tree or undefined.
-//                              It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the single-key rows decide.
+//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), reset(win?), pending(win) }.
+//                              key gets every key the module may take on a page, after the guards: context = { window, browser, tab, event, tree, row_runs }, `tree` the state's raw tree or undefined,
+//                              `row_runs` whether a single-key row would run the key. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
+//                              reset(win) drops what the taker holds half typed in `win`, or in every window with no `win`: the core calls it for a key a guard refused and when the module or the toolbar switch goes off.
 //   run_command(id, args, context)  In the sandbox: run a command a feature defined, with its args checked as for a row. Returns false when no feature defines it or the args do not fit.
 //   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The status bar reads it.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
@@ -100,7 +101,7 @@
       "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: 256 },
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
-      "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: 4096 },
+      "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: 4096 },
       "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
@@ -322,17 +323,16 @@
       if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (MODIFIER_KEYS.has(event.key)) return;
       const page = page_of(win, event.target);
-      if (!page) return;
-      const state = state_for(win);
-      if (!state) return;
-      if (key_taker) {
-        const taken = offer_key(win, page, state, event);
-        if (taken !== undefined) return;
-      }
+      const state = page && state_for(win);
+      // A key the module may not take here ends a half-typed sequence, as a key DesertFox does not see ends it in a page.
+      if (!state) return void key_taker?.reset(win);
       const row = state.keys.get(token_of(event));
       const command = row && commands.get(row.id);
-      if (!command) return;
-      const args = checked_args(command, row.args);
+      const args = command && checked_args(command, row.args);
+      if (key_taker) {
+        const taken = offer_key(win, page, state, event, args !== undefined);
+        if (taken !== undefined) return;
+      }
       if (!args || in_field(win, page, event)) return;
       const tab = win.gBrowser.getTabForBrowser(page.browser);
       if (!left_to_module(state, page.browser, tab)) return;
@@ -342,12 +342,14 @@
       event.stopPropagation();
     }
 
-    // The taker sees a key only where a row could run: not in a field, and on a tab left to the module.
-    function offer_key(win, page, state, event) {
-      if (in_field(win, page, event)) return false;
+    // The taker sees a key only where a row could run: not in a field, and on a tab left to the module. `row_runs` says a single-key row would run the key.
+    function offer_key(win, page, state, event, row_runs) {
       const tab = win.gBrowser.getTabForBrowser(page.browser);
-      if (!left_to_module(state, page.browser, tab)) return false;
-      const taken = key_taker.key({ window: win, browser: page.browser, tab, event, tree: state.tree });
+      if (in_field(win, page, event) || !left_to_module(state, page.browser, tab)) {
+        key_taker.reset(win);
+        return false;
+      }
+      const taken = key_taker.key({ window: win, browser: page.browser, tab, event, tree: state.tree, row_runs });
       if (taken === true) {
         event.preventDefault();
         event.stopPropagation();
@@ -466,6 +468,7 @@
 
     function on_pref_change() {
       try {
+        key_taker?.reset();
         // The frame scripts load once and stay, but a pref turned off took the hello back, so turning it on says it again and asks each tab for a fresh report.
         if (enabled_by_pref()) {
           const was_active = active;
@@ -502,8 +505,9 @@
       if (kind === "text") return typeof value === "string";
       if (kind === "region") return PANE_REGIONS.includes(value);
       if (kind === "direction") return value === "left" || value === "right";
+      if (kind === "optional_int" && value === undefined) return true;
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
-      return typeof value === "number" && Number.isFinite(value) && (kind !== "int" || Number.isInteger(value));
+      return typeof value === "number" && Number.isFinite(value) && (kind === "number" || Number.isInteger(value));
     };
     // json_bytes: undefined for a value that is not plain data.
     const byte_size = (value) => {
@@ -539,7 +543,7 @@
       const args = {};
       for (const [name, kind] of Object.entries(kinds[value.kind].args)) {
         if (!arg_fits(kind, given[name])) return { problem: `${value.kind} ${name} has the wrong shape` };
-        args[name] = given[name];
+        if (given[name] !== undefined) args[name] = given[name];
       }
       return { message: { v: PROTOCOL_VERSION, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
     }
@@ -615,6 +619,8 @@
     // Each change carries the whole list, so the reader takes `newValue` and never reads the list again.
     function on_storage_change(extension, changes) {
       try {
+        // The toolbar switch turned off: a sequence typed before it must not finish after it comes back on.
+        if (Object.hasOwn(changes, STATE_STORAGE_KEY) && key_taker && read_state_value(deserialized(changes[STATE_STORAGE_KEY].newValue))?.enabled !== true) key_taker.reset();
         if (!Object.hasOwn(changes, FROM_EXTENSION_STORAGE_KEY) || !enabled_by_pref() || shut || desertfox() !== extension) return;
         const holder = changes[FROM_EXTENSION_STORAGE_KEY].newValue;
         if (holder === undefined) return;
@@ -752,7 +758,7 @@
       },
       take_keys(taker) {
         if (key_taker) log_once("two feature files take keys, the first one does");
-        else if (typeof taker?.key === "function") key_taker = taker;
+        else if (typeof taker?.key === "function" && typeof taker.reset === "function") key_taker = taker;
       },
       run_command(id, args, context) {
         const command = commands.get(id);

@@ -108,7 +108,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `tab_actions.ts`: the one place that mutes, pins, moves and reopens tabs in a container, each over a list of ids.
 - `browser_module.ts`: the state writer and hello reader for the optional browser module, kept in `storage.session`.
 - `browser_module_rpc.ts`: the background end of DesertFox's page code on a locked page: page calls through the message table, pushes in place of `tabs.sendMessage`, the snapshots.
-- `browser_module_run.ts`: the module's `run` requests for keys on locked pages, checked against the stored keymap, and the panel, else the address bar, in place of the command line on a tab with no content script.
+- `browser_module_run.ts`: the module's `run` requests on locked pages, checked against the stored keymap, and the panel or address bar standing in for the command line.
 - `native_client.ts`: the client for the native host.
 - `host_update.ts`, `host_update_browser.ts`: the host updater.
 - `bridge.ts`, `bridge_browser.ts`, `bridge_run.ts`: publish the mode to the bridge host over one `connectNative` port and answer its `run`, `list` and `theme` requests.

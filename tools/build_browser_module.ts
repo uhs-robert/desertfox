@@ -3,9 +3,10 @@
 // Usage: node tools/build_browser_module.ts --write | --check
 
 import { build } from "esbuild";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+const repo_root = fileURLToPath(new URL("../", import.meta.url));
 const module_dir = new URL("../browser_module/", import.meta.url);
 export const BROWSER_MODULE_BUNDLES: readonly Bundle[] = [{ source: "sources/commands.js", output: "desertfox-commands.js" }];
 
@@ -17,6 +18,8 @@ type Bundle = { source: string; output: string };
 export async function bundle_text({ source }: Bundle): Promise<string> {
   const result = await build({
     entryPoints: [fileURLToPath(new URL(source, module_dir))],
+    // The path comments in the output are relative to this folder, so a build from any working folder gives the same file.
+    absWorkingDir: repo_root,
     bundle: true,
     format: "iife",
     target: "firefox140",
@@ -40,7 +43,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let stale = false;
   for (const bundle of BROWSER_MODULE_BUNDLES) {
     const text = await bundle_text(bundle);
-    if (readFileSync(output_path(bundle), { encoding: "utf8", flag: "a+" }) === text) continue;
+    if (existsSync(output_path(bundle)) && readFileSync(output_path(bundle), "utf8") === text) continue;
     if (write) writeFileSync(output_path(bundle), text);
     else {
       console.error(`browser_module/${bundle.output} is stale: run just browser-module`);

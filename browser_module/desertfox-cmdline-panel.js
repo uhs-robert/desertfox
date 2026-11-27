@@ -38,13 +38,11 @@
 
     const tab_id_of = (tab) => ExtensionParent.apiManager.global.tabTracker.getId(tab);
 
-    // The browser window whose selected tab is `tab_id`, or undefined. A tab the user has left since the request gets no panel.
+    // The focused browser window, while its selected tab is still `tab_id`, as the address bar's opener checks it. A tab or window the user has left since the request gets no panel.
     function window_selecting(tab_id) {
-      for (const win of Services.wm.getEnumerator("navigator:browser")) {
-        if (win.closed || !win.gBrowser?.selectedTab) continue;
-        if (tab_id_of(win.gBrowser.selectedTab) === tab_id) return win;
-      }
-      return undefined;
+      const win = Services.focus?.activeWindow;
+      if (!win || win.closed || win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser" || !win.gBrowser?.selectedTab) return undefined;
+      return tab_id_of(win.gBrowser.selectedTab) === tab_id ? win : undefined;
     }
 
     function open(win, extension) {
@@ -150,7 +148,7 @@
 
     core.register_kind("cmdline_panel.open", ({ tab_id }) => {
       const win = window_selecting(tab_id);
-      if (!win) return { ok: false, error: "The tab is no longer the selected one" };
+      if (!win) return { ok: false, error: "The tab that asked is no longer selected" };
       // The pref, DesertFox running, private window access and the toolbar switch, as for a key.
       if (!core.may_act(win)) return { ok: false, error: "The browser module may not act in this window" };
       const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);

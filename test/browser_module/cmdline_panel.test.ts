@@ -101,7 +101,7 @@ function panel_world({ private_window = false, private_access = false, enabled =
     },
   });
   const services = firefox.Services as Record<string, unknown>;
-  services.wm = { getEnumerator: () => [window.win] };
+  services.focus = { activeWindow: window.win };
   let next_id = 0;
   async function ask(args: Record<string, unknown>): Promise<Omit<Reply, "reply_to">> {
     const id = `r${next_id++}`;
@@ -167,7 +167,7 @@ test("a tab switch closes the panel and leaves the focus where the switch put it
 test("it refuses a tab that is not selected, a second panel, a window it may not act in and a Firefox with no popup set", async () => {
   {
     const world = panel_world();
-    assert.deepEqual(await world.ask({ tab_id: 8 }), { ok: false, error: "The tab is no longer the selected one" });
+    assert.deepEqual(await world.ask({ tab_id: 8 }), { ok: false, error: "The tab that asked is no longer selected" });
     assert.equal(world.created.length, 0);
     assert.deepEqual(await world.ask({ tab_id: 7 }), { ok: true });
     assert.deepEqual(await world.ask({ tab_id: 7 }), { ok: false, error: "The command line is already open" });
