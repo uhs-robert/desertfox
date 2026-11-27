@@ -178,3 +178,16 @@ test("a part count above the protocol's limit and a part index outside the count
   await hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0)], 0, 1));
   assert.equal(draws().length, 1, "a bad part blocked a good one");
 });
+
+test("a second start whose collect is refused clears the first session in chrome too, so its labels do not hold the keys", async () => {
+  // The first collect starts a session, and the second is refused because the focus moved into a field.
+  const collect: { ok: true } | { ok: false; error: string } = { ok: true };
+  const { hints, session, pushed } = make({ collect });
+  await hints.start(7);
+  const first = session()!.session;
+  Object.assign(collect, { ok: false, error: "Leave the field first" });
+  await hints.start(7);
+  const cleared = pushed.filter((sent) => sent.kind === "chrome_hints.clear").map((sent) => sent.args.session);
+  assert.ok(cleared.includes(first), "the first session was left in chrome");
+  assert.equal(session(), undefined);
+});
