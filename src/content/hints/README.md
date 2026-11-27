@@ -8,7 +8,7 @@ The `hints` bundle (`hints.js`). The background injects it into a frame on the f
 - `pick.ts`: the typing rules, label mode and text mode (`/`). Pure. The label generator is `src/shared/hints/labels.ts`.
 - `rank.ts`: the text ranking of text mode (`score_text`, `rank_items`). Pure.
 - `inspect.ts`: the `inspect` action (`;o`): `hand_to_devtools` exposes the pick to the devtools page. `main.ts` wires its send to the `inspect_pick` message.
-- `view.ts`: the labels in a closed shadow root, the key line, and the Space rotation of overlapping labels.
+- `view.ts`: the labels in a closed shadow root, the key line, and the Tab rotation of overlapping labels.
 - `focus_fields.ts`: the pick of `page.focus_field` (`]i`, `[i`) and `page.focus_link` (`]l`, `[l`).
 - `click_first.ts`: the `page.click` handler: clicks the first shown match of a selector with the hint click. Pure.
 - `yank_links.ts`: the list of `copy.links` (`yL`, `yl`, `:copylinks`), formatted through `src/shared/copy/link_list.ts`.

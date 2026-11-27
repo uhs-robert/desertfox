@@ -2060,3 +2060,18 @@ test("rapid set in the keyboard frame keeps the collected copy list across the f
   assert.equal(page.copied.at(-1), "https://example.com/one\nhttps://example.com/two");
   page.escape();
 });
+
+test("a copy list started in rapid mode keeps collecting after Space turns rapid off", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.run({ action: "copy" });
+  await settle();
+  page.type("<Space>");
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  page.type(page.labels()[1]!.toLowerCase());
+  await settle();
+  page.type("<Space>");
+  page.type(page.labels()[2]!.toLowerCase());
+  await settle();
+  assert.equal(page.copied.at(-1), "https://example.com/one\nhttps://example.com/two\nhttps://example.com/three");
+});

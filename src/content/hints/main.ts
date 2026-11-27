@@ -236,10 +236,10 @@ const inspect_ = (target: Element): Promise<Outcome> => hand_to_devtools(window 
 // A pick copies into the register its own `hint.run` was typed with.
 const COLLECT_NOUNS = { copy: ["address", "addresses"], copy_text: ["text", "texts"] } as const;
 
-// A rapid copy rewrites the whole list on every pick, so the clipboard is right at any Escape and after a navigation.
+// A rapid copy rewrites the whole list on every pick, so the clipboard is right at any Escape and after a navigation. The list also grows after Space turns rapid off, so the last pick does not replace it.
 function copy_of_pick(current: Pick<Session, "args" | "action" | "rapid" | "collected_">) {
   const register = current.args.register as string | undefined;
-  const nouns = current.rapid && (current.action === "copy" || current.action === "copy_text") ? COLLECT_NOUNS[current.action] : undefined;
+  const nouns = (current.rapid || current.collected_.length > 0) && (current.action === "copy" || current.action === "copy_text") ? COLLECT_NOUNS[current.action] : undefined;
   return (text: string, what?: string) => {
     const list = nouns && collect_pick(current.collected_, text, nouns);
     return copy_to_clipboard(list ? list.text : text, register, list ? list.what : what);
