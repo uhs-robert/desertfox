@@ -16,21 +16,13 @@
     return;
   }
   // A failed start must not reach the core's `adopt`, which would turn the whole module off. The walk stays off instead, with nothing left registered.
-  let stop = () => undefined;
   try {
-    stop = start(core, scope);
+    start(core);
   } catch (error) {
-    stop();
     core.log_once(`the popup walk is off for this session: ${error}`);
   }
 
-  function start(core, sandbox) {
-    // A copy of the names in src/shared/browser_module_protocol.ts and of the core's pref. test/browser_module/popup_walk.test.ts keeps them equal.
-    const EXTENSION_ID = "desertfox@uhs-robert";
-    const PROTOCOL_VERSION = 1;
-    const STATE_STORAGE_KEY = "desertfox_browser_module_state";
-    const ENABLED_PREF = "desertfox.browser_module.enabled";
-
+  function start(core) {
     // The fixed translation. The letters are the walk's own, not key rows of the extension: a menu has no DesertFox mode or keymap.
     const WALK_KEYS = { j: "ArrowDown", k: "ArrowUp", h: "ArrowLeft", l: "ArrowRight" };
     const KEY_CODES = { ArrowDown: 40, ArrowUp: 38, ArrowLeft: 37, ArrowRight: 39 };
@@ -43,33 +35,10 @@
 
     const Ci = Components.interfaces;
     const Cc = Components.classes;
-    const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
-    const { extensionStorageSession } = ChromeUtils.importESModule("resource://gre/modules/ExtensionStorage.sys.mjs");
-    const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
 
     const attached = new Map();
     const loading = new Map();
-    let cached = { extension: undefined, holder: undefined, enabled: false };
     let stopped = false;
-
-    // The core has no shut down hook for features. Once it turned off for the session, the next event here takes the whole walk down with it.
-    const core_alive = () => Services.desertfox_browser_module === core;
-
-    // The core's own gates, short of a page: the pref, DesertFox running, private window access and a state of this version with the toolbar switch on.
-    // The state exists only while the setting `browser_module` is on, so the walk follows that consent too.
-    function may_walk(win) {
-      if (!Services.prefs.getBoolPref(ENABLED_PREF, false)) return false;
-      const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
-      if (!extension) return false;
-      if (PrivateBrowsingUtils.isWindowPrivate(win) && !extension.privateBrowsingAllowed) return false;
-      const holder = extensionStorageSession.get(extension, [STATE_STORAGE_KEY])[STATE_STORAGE_KEY];
-      if (holder === undefined) return false;
-      if (cached.extension !== extension || cached.holder !== holder) {
-        const state = typeof holder?.deserialize === "function" ? holder.deserialize(sandbox, true) : holder;
-        cached = { extension, holder, enabled: state?.v === PROTOCOL_VERSION && state.enabled === true };
-      }
-      return cached.enabled;
-    }
 
     const window_type = (win) => win.document?.documentElement?.getAttribute("windowtype") ?? "";
 
@@ -95,7 +64,11 @@
       return element;
     }
 
-    const field_focused = (win) => is_field(focused_element(win));
+    // A field of a page in another process is not in this one, so the window's input state stands in for it, as in the core.
+    const field_focused = (win) => {
+      const ime = win.windowUtils?.IMEStatus;
+      return is_field(focused_element(win)) || ime === Ci.nsIDOMWindowUtils.IME_STATUS_ENABLED || ime === Ci.nsIDOMWindowUtils.IME_STATUS_PASSWORD;
+    };
     const in_field = (win, target) => is_field(target) || field_focused(win);
 
     // ---- What is open. Each window keeps the popups it saw open, checked again against their state on each use.
@@ -174,7 +147,7 @@
       const arrow = Object.hasOwn(WALK_KEYS, event.key) ? WALK_KEYS[event.key] : undefined;
       const escape = event.key === "Escape" && !event.shiftKey && record.type === LIBRARY;
       if (!arrow && !escape) return;
-      if (!may_walk(win)) return;
+      if (!core.may_act(win)) return;
       if (escape) {
         if (!in_field(win, event.originalTarget) && library_closes_on_escape(win, record)) {
           take(event);
@@ -203,7 +176,6 @@
       const record = { type: window_type(win), popups: new Set() };
       for (const popup of win.document.querySelectorAll("menupopup, panel")) if (is_tracked(popup) && is_open(popup)) record.popups.add(popup);
       const guarded = (handler) => (event) => {
-        if (!core_alive()) return stop_all();
         try {
           handler(event);
         } catch (error) {
@@ -244,7 +216,6 @@
       if (win.document?.readyState === "complete" && win.location?.href !== "about:blank") return attach(win);
       const on_load = () => {
         loading.delete(win);
-        if (!core_alive()) return stop_all();
         try {
           attach(win);
         } catch (error) {
@@ -257,8 +228,13 @@
 
     const window_watcher = {
       observe(subject, topic) {
+        // A window that closes before it loads drops out here: its first about:blank unloads on the way to the real document, so an unload listener cannot tell.
+        if (topic === "domwindowclosed") {
+          loading.get(subject)?.();
+          loading.delete(subject);
+          return;
+        }
         if (topic !== "domwindowopened") return;
-        if (!core_alive()) return stop_all();
         try {
           attach_when_loaded(subject);
         } catch (error) {
@@ -281,12 +257,12 @@
     }
 
     try {
+      core.on_shut_down(stop_all);
       Services.ww.registerNotification(window_watcher);
       for (const win of Services.wm.getEnumerator(null)) attach_when_loaded(win);
     } catch (error) {
       stop_all();
       throw error;
     }
-    return stop_all;
   }
 })(this);

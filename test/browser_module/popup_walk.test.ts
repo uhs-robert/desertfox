@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BROWSER_MODULE_PROTOCOL_VERSION } from "../../src/shared/browser_module_protocol.ts";
-import { BROWSER_MODULE_STATE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
-import { create_firefox, key_event, source_of } from "./fake_firefox.ts";
+import { create_firefox, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
 
 const WALK_FILE = "desertfox-popup-walk.js";
@@ -163,6 +162,7 @@ function setup({ pref = true, state = { v: BROWSER_MODULE_PROTOCOL_VERSION, enab
     return record;
   };
   const notify_open = (win: unknown) => [...watchers].forEach((watcher) => watcher.observe(win, "domwindowopened"));
+  const notify_closed = (win: unknown) => [...watchers].forEach((watcher) => watcher.observe(win, "domwindowclosed"));
   const run_timers = () => timers.splice(0).forEach((run) => run());
   return {
     firefox,
@@ -170,21 +170,13 @@ function setup({ pref = true, state = { v: BROWSER_MODULE_PROTOCOL_VERSION, enab
     tab,
     open,
     notify_open,
+    notify_closed,
     typed,
     run_timers,
     watcher_count: () => watchers.size,
     refuse_typing: () => (refuse_typing = true),
   };
 }
-
-test("the walk's copy of the protocol names equals src/shared", () => {
-  const source = source_of(WALK_FILE);
-  assert.match(source, new RegExp(`const STATE_STORAGE_KEY = "${BROWSER_MODULE_STATE_STORAGE_KEY}";`));
-  assert.match(source, new RegExp(`const PROTOCOL_VERSION = ${BROWSER_MODULE_PROTOCOL_VERSION};`));
-  assert.match(source_of("desertfox-browser.js"), /const EXTENSION_ID = "desertfox@uhs-robert";/);
-  assert.match(source, /const EXTENSION_ID = "desertfox@uhs-robert";/);
-  assert.match(source, /const ENABLED_PREF = "desertfox\.browser_module\.enabled";/);
-});
 
 test("in an open menu j, k, h and l become the four arrow keys once the letter's event is over", () => {
   const { browser, typed, run_timers, tab } = setup();
@@ -390,23 +382,39 @@ test("a dialog list in the browser window walks, the browser window's own lists 
   assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"], "the arrow key went out after the focus left the list");
 });
 
-test("closing a window takes its listeners, and the core turning off takes the walk down at its next event", () => {
+test("closing a window takes its listeners, and the core turning off takes the whole walk down at once", () => {
   const walk = setup();
   const library = walk.open("Places:Organizer");
   library.finish_load();
   assert.ok(library.listener_count() > 0);
   library.win.close();
   assert.equal(library.listener_count(), 0, "a closed window kept a listener");
+  const closed_early = walk.open("Browser:page-info");
+  closed_early.win.close();
+  walk.notify_closed(closed_early.win);
+  assert.equal(closed_early.listener_count(), 0, "a window that closed before it loaded kept a listener");
   const pending = walk.open("Browser:page-info");
   const core = walk.firefox.Services.desertfox_browser_module as { shut_down(): void };
   walk.firefox.Services.desertfox_browser_module = "off";
   core.shut_down();
-  walk.browser.show(popup("menupopup"));
-  assert.equal(walk.browser.press("j").prevented, false, "the walk took a key after the core turned off");
   assert.equal(walk.browser.listener_count(), 0, "the browser window kept a listener");
   assert.equal(walk.watcher_count(), 0, "the window watcher stayed");
+  assert.equal(pending.listener_count(), 0, "a window still loading kept its load listener");
   pending.finish_load();
   assert.equal(pending.listener_count(), 0, "a window that loaded after the turn off got a listener");
+});
+
+test("a page field in another process keeps its letters under an open panel, as the window's input state says", () => {
+  const { browser, tab, typed, run_timers } = setup();
+  browser.focus(tab.browser as Node);
+  Object.assign(browser.win, { windowUtils: { IMEStatus: IME_ENABLED } });
+  browser.show(popup("panel", "downloadsPanel"));
+  assert.equal(browser.press("j").prevented, false, "j was taken from a page field under the downloads panel");
+  Object.assign(browser.win, { windowUtils: { IMEStatus: 0 } });
+  assert.ok(browser.press("j").prevented);
+  Object.assign(browser.win, { windowUtils: { IMEStatus: IME_ENABLED } });
+  run_timers();
+  assert.deepEqual(typed, [], "the arrow key went out after a page field took the focus");
 });
 
 test("a walk that fails to start logs one line and leaves the core and its keys running", () => {
