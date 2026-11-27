@@ -371,9 +371,11 @@ export function mount_settings(container: HTMLElement, send: SessionDeps["send"]
     },
   });
   const listener = (changes: Record<string, unknown>, area: string) => {
-    if (touches_settings(changes, area)) void session.refresh();
+    if (touches_settings(changes, area)) {
+      void session.refresh();
+      show_module_status();
+    }
     if (area === "session" && BROWSER_MODULE_STATUS_STORAGE_KEY in changes) show_module_status();
-    if (touches_settings(changes, area)) show_module_status();
   };
   let stopped = false;
   const stop = () => {
