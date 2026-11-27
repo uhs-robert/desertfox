@@ -44,6 +44,8 @@ export type KeyFlowDeps = {
   in_editable_field_: () => boolean;
   // True once a click or a first key of the user's own reached this window.
   user_input_seen_: () => boolean;
+  // True while a load or switch blur window is open (blur_on_load).
+  blur_window_open_: () => boolean;
   // True when the site row lets the page keep Escape while a field is focused.
   escape_to_page_: () => boolean;
   // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
@@ -146,14 +148,13 @@ export function create_key_flow(deps: KeyFlowDeps) {
     held_keys.some((held) => held.token_ === "<Backspace>" || held.token_ === "<Escape>") ||
     active.binds_after_(mode, held_tokens(), token);
 
-  // A held key's repeat in a field before the keymap reply is dropped, so a page that focuses its field on load does not get a letter before the load blur runs. A real press or click sets user_input_seen_ first, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
-  const drops_repeat = (repeat: boolean | undefined): boolean => !!repeat && !matcher && !deps.user_input_seen_() && deps.in_editable_field_();
+  // A held key's repeat in a field is dropped before the keymap reply and while a blur window is open, so a page that focuses its field on load or on a show does not get a letter before the blur runs. The blur alone is not enough: a page that focuses its field before its window has the focus fires no focusin, so the blur never sees it. A real press or click sets user_input_seen_ and ends the window, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
+  const drops_repeat = (repeat: boolean | undefined): boolean => !!repeat && ((!matcher && !deps.user_input_seen_()) || deps.blur_window_open_()) && deps.in_editable_field_();
 
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean, physical?: string | null): KeyDecision => {
     const mode = deps.get_mode_();
     const typed_token = token;
     token = layout_token(token, physical);
-    if (drops_repeat(repeat)) return "cancel";
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
     if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
@@ -243,6 +244,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
         reset_sequence_();
         return "pass";
       }
+      if (drops_repeat(repeat)) return "cancel";
       if (!matcher || deps.is_loading_(true)) return hold(token, on_replay_pass_, repeat, physical);
       return decide(matcher, layout_token(token, physical), repeat, physical);
     },
