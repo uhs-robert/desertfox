@@ -412,12 +412,18 @@ test("the bar fields survive a mode change and a full sync, and go when the tab 
   await module.tab_changed("3", { awaiting_commit: true });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: false });
   await module.bar_report(3, 0, false, { pending: ["g"] });
+  await module.bar_report(3, 7, false, { pending: ["z"] });
   await module.tab_changed("3", undefined);
   assert.equal("3" in state_of(data).tabs, false);
   delete records[`${TAB_MODE_STORAGE_PREFIX}3`];
   await module.sync();
   await flush();
   assert.equal("3" in state_of(data).tabs, false);
+  // The id is reused by a new tab, which must not inherit the child frame's keys.
+  records[`${TAB_MODE_STORAGE_PREFIX}3`] = { top_mode: "normal", live: true };
+  await module.sync();
+  await flush();
+  assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true });
 });
 
 test("the bar is active only with the module setting, the bar setting and a hello that says bar, and a page's ask reads no storage", async () => {
@@ -498,6 +504,7 @@ test("the bar's reports are dropped when the bar goes away, and a load that keep
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true }, "hidden while the load runs");
   await module.tab_changed("3", { top_mode: "normal", live: true });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"], recording: "q" }, "the old page stayed");
+  await module.bar_report(3, 7, false, { pending: ["z"] });
   config.bar_setting = false;
   await module.sync();
   await flush();
