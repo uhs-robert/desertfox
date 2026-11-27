@@ -66,6 +66,10 @@ const EXPECTATIONS: Record<string, string> = {
   cmdline_prompt: "a string of 1 to 8 characters on one line",
   open_completion: 'a list of "bookmarks" and "history" with no repeat',
   statusbar_widgets: 'a list of "url", "scroll" and "tabs" with no repeat',
+  browser_bar: "true or false",
+  browser_bar_left: 'a list of "mode", "pending", "recording", "container", "scroll", "tabs" and "url" with no repeat',
+  browser_bar_right: 'a list of "mode", "pending", "recording", "container", "scroll", "tabs" and "url" with no repeat',
+  browser_bar_border: '"auto", "square", "round" or "chamfer"',
   history_completion_max: "a whole number, 0 or more",
   history_list_max: "a whole number, 0 or more",
   newtab_clock: 'true, false, "analog" or "digital"',
@@ -122,6 +126,10 @@ test("every setting keeps its listed values", () => {
     cmdline_prompt: ["caret", "colon"],
     open_completion: ["bookmarks", "history"],
     statusbar_widgets: ["url", "scroll", "tabs"],
+    browser_bar: ["true", "false"],
+    browser_bar_left: ["mode", "pending", "recording", "container", "scroll", "tabs", "url"],
+    browser_bar_right: ["mode", "pending", "recording", "container", "scroll", "tabs", "url"],
+    browser_bar_border: ["auto", "square", "round", "chamfer"],
     default_site_rows_off: ["sheets", "maps", "arrow", "google_images", "google_videos", "google_news", "google_short_videos", "google_shopping", "ddg_images", "ddg_videos", "ddg_news", "ddg", "kagi_images", "kagi", "brave_images", "brave", "google", "bing", "hackernews", "wikipedia", "lobsters", "archwiki", "startpage", "arxiv", "stackoverflow", "tildes", "amazon", "reddit_thread", "reddit", "drive"],
     newtab_clock: ["true", "false", "analog", "digital"],
     newtab_date: ["true", "false"],
@@ -138,11 +146,11 @@ test("every setting keeps its listed values", () => {
 });
 
 test("the list, unsettable and toggle sets stay the same", () => {
-  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["which_key_skip", "hint_add", "hint_remove", "editable_add", "editable_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets"]);
+  assert.deepEqual(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_list), ["which_key_skip", "hint_add", "hint_remove", "editable_add", "editable_remove", "default_site_rows_off", "next_patterns", "prev_patterns", "strip_tracking_params", "open_completion", "statusbar_widgets", "browser_bar_left", "browser_bar_right"]);
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, layout_fallback: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, browser_module: false, browser_module_pages: false, completion_all_windows: false, item_hover: true, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, newtab_closed_tabs: false, newtab_top_sites: false, newtab_command_hint: true, newtab_weather: true, newtab_ip_info: false });
+  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, layout_fallback: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, browser_bar: true, browser_module: false, browser_module_pages: false, completion_all_windows: false, item_hover: true, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, newtab_closed_tabs: false, newtab_top_sites: false, newtab_command_hint: true, newtab_weather: true, newtab_ip_info: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -198,6 +206,10 @@ const ACCEPTS: Record<string, unknown[]> = {
   cmdline_prompt: ["c", "> ", "12345678", "\u{1F600}".repeat(8), "\t"],
   open_completion: [[], ["history"], ["history", "bookmarks"]],
   statusbar_widgets: [[], ["tabs"], ["tabs", "url"]],
+  browser_bar: [true, false],
+  browser_bar_left: [[], ["url"], ["tabs", "mode"]],
+  browser_bar_right: [[], ["pending"], ["url", "container"]],
+  browser_bar_border: ["auto", "square", "round", "chamfer"],
   history_completion_max: [0, 10],
   history_list_max: [0, 10],
   newtab_clock: [true, false, "analog", "digital"],
@@ -274,6 +286,10 @@ const REFUSES: Record<string, unknown[]> = {
   cmdline_prompt: ["", "123456789", "\u{1F600}".repeat(9), "a\nb", "a\rb", 1, true],
   open_completion: [["bookmarks", "bookmarks"], ["tabs"], "history"],
   statusbar_widgets: [["url", "url"], ["clock"], "url"],
+  browser_bar: ["true", 1],
+  browser_bar_left: [["mode", "mode"], ["clock"], "mode"],
+  browser_bar_right: [["tabs", "tabs"], ["clock"], "tabs"],
+  browser_bar_border: ["wavy", "Round", 1, true],
   history_completion_max: [-1, 1.5, "10"],
   history_list_max: [-1, 1.5, "10"],
   newtab_clock: ["true", "Analog", 1],
@@ -396,6 +412,10 @@ test("the defaults stay the same", () => {
     cmdline_prompt: "caret",
     open_completion: ["bookmarks", "history"],
     statusbar_widgets: ["url", "scroll", "tabs"],
+    browser_bar: true,
+    browser_bar_left: ["mode", "pending", "recording"],
+    browser_bar_right: ["container", "scroll", "tabs"],
+    browser_bar_border: "auto",
     history_completion_max: 10,
     history_list_max: 20,
     newtab_clock: true,
@@ -450,7 +470,7 @@ test("the editor schema matches its output before #85, apart from the listed cha
   // Removed: no setting can turn the first-install Quick Start page off.
   delete properties.open_quick_start_on_install;
   // Settings added since the fixture was taken.
-  for (const name of ["item_navigator", "item_hover", "item_select", "statusbar_widgets", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "browser_module", "browser_module_pages", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info", "font_family", "font_family_mono", "font_scale"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
+  for (const name of ["item_navigator", "item_hover", "item_select", "statusbar_widgets", "browser_bar", "browser_bar_left", "browser_bar_right", "browser_bar_border", "next_patterns", "prev_patterns", "bridge", "bridge_share_tabs", "host_auto_update", "browser_module", "browser_module_pages", "hint_key_line", "which_key_repeat", "zoom", "blur_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "focus_on_load", "hint_add", "hint_remove", "default_site_rows_off", "media_quality", "strip_tracking_params", "strip_tracking", "editor_ext", "layout_fallback", "which_key_skip", "toast_ms", "toast_error_ms", "grab_step_px", "newtab_closed_tabs", "newtab_closed_tabs_max", "newtab_top_sites", "newtab_top_sites_max", "newtab_command_hint", "newtab_weather", "newtab_weather_city", "newtab_weather_units", "newtab_ip_info", "font_family", "font_family_mono", "font_scale"]) properties[name] = JSON.parse(JSON.stringify((settings_schema(all_commands).properties as Record<string, unknown>)[name]));
   // #620 rewrote every description for a first-time reader.
   const described_now = settings_schema(all_commands).properties as Record<string, { description: string }>;
   for (const [name, property] of Object.entries(properties as Record<string, { description?: string | undefined }>)) property.description = described_now[name]?.description;

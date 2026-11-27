@@ -22,6 +22,7 @@ type Void = undefined;
 export type ContentRequests = Checked<{
   run: Entry<content.RunRequest, content.RunResponse>;
   mode_changed: Entry<content.ModeChanged, Void>;
+  bar_state: Entry<content.BarState, Void>;
   leave_tab_insert: Entry<content.LeaveTabInsert, Void>;
   load_bundle: Entry<content.LoadBundle, content.RunResponse>;
   list_keys: Entry<content.ListKeys, content.WhichKeyPanel>;

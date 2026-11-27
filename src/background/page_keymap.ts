@@ -157,8 +157,11 @@ export const join_mode = async (first_ask: boolean, insert_held: () => Promise<b
   !first_ask ? undefined : (await insert_held()) ? "insert" : (await media_held()) ? "media" : (await item_held()) ? "item" : undefined;
 
 // `recording` is the register a macro is being recorded into, or undefined.
-export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<JoinMode | undefined>): Promise<PageKeymap | undefined> {
-  const trimmed = await trimmed_keymap_for(storage, addresses);
+// While the browser module's status bar is up the page hides its own corner badge, which the reply says through the setting it already obeys, and reports what the bar shows.
+const with_bar = (reply: PageKeymap | undefined, bar: boolean): PageKeymap | undefined => (reply && bar ? { ...reply, keymap: { ...reply.keymap, mode_indicator: "off", bar: true } } : reply);
+
+export async function page_keymap_for(storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<JoinMode | undefined>, bar = false): Promise<PageKeymap | undefined> {
+  const trimmed = with_bar(await trimmed_keymap_for(storage, addresses), bar);
   const joined = trimmed && !trimmed.all_off ? await join?.() : undefined;
   const reply = trimmed && joined ? { ...trimmed, join: joined } : trimmed;
   if (!reply || recording === undefined) return reply;
@@ -184,7 +187,7 @@ async function trimmed_keymap_for(storage: KeymapStorage, addresses: readonly (s
 }
 
 // A string, not the object: the structured clone of the whole tree cost the page about 11 ms, and `JSON.parse` of the string costs a few.
-export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<JoinMode | undefined>): Promise<string | undefined> => {
-  const reply = await page_keymap_for(storage, addresses, recording, join);
+export const read_keymap_reply = async (storage: KeymapStorage, addresses: readonly (string | undefined)[], recording?: string, join?: () => Promise<JoinMode | undefined>, bar = false): Promise<string | undefined> => {
+  const reply = await page_keymap_for(storage, addresses, recording, join, bar);
   return reply && JSON.stringify(reply);
 };

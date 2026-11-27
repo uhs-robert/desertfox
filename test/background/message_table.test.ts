@@ -179,7 +179,7 @@ test("a message no handler owns gets no answer, as before", () => {
 });
 
 // Where each frame or tab handler needs its sender, and nothing else needs one at the table. From the chain the tables replaced.
-const FRAME_TYPES = ["mode_changed", "media_pin", "editor_open", "hint_frames_start", "hint_frames_report", "hint_frames_typed", "hint_frames_pick", "hint_frames_end", "hint_frames_unhover"];
+const FRAME_TYPES = ["mode_changed", "bar_state", "media_pin", "editor_open", "hint_frames_start", "hint_frames_report", "hint_frames_typed", "hint_frames_pick", "hint_frames_end", "hint_frames_unhover"];
 const TAB_TYPES = ["leave_tab_insert", "frame_cue"];
 
 test("the guard of each content type is the one the chain had", () => {
@@ -189,7 +189,7 @@ test("the guard of each content type is the one the chain had", () => {
     const expected = FRAME_TYPES.includes(type) ? "frame" : TAB_TYPES.includes(type) ? "tab" : "any";
     assert.equal(from, expected, type);
   }
-  assert.equal(Object.keys(content).length, 44);
+  assert.equal(Object.keys(content).length, 45);
 });
 
 test("a frame handler needs both a tab id and a frame id", () => {

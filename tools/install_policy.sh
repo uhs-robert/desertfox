@@ -3,7 +3,7 @@
 #
 # Usage: install_policy.sh [--dry-run] [stable | beta [xpi_url]]
 #   stable (default, what `just install` runs): copies the one signed xpi in web-ext-artifacts/ (`just sign`) to /usr/local/share/desertfox and pins a file:// URL to it.
-#   beta: pins the https URL of the latest beta xpi. It copies no local xpi. xpi_url defaults to the update_link in the beta-channel release's updates.json.
+#   beta: pins the https URL of desertfox-beta.xpi on the beta-channel release, an asset the beta workflow replaces on each build and the prune never deletes. It copies no local xpi. xpi_url overrides the URL. Without that asset (before the first beta build publishes it) it falls back to the update_link in updates.json.
 #   --dry-run: prints the merged policy and writes nothing, and runs no sudo.
 # Run `stable` to go back from beta. DESERTFOX_POLICIES_FILE overrides the policy path that is read, for tests.
 # Both modes keep every other policy entry, and block the id before the rename.
@@ -15,6 +15,7 @@ previous_extension_id="oasis""fox@uhs-robert"
 shared_dir="/usr/local/share/desertfox"
 policies_file="${DESERTFOX_POLICIES_FILE:-/etc/firefox/policies/policies.json}"
 distribution_file="/usr/lib/firefox/distribution/policies.json"
+beta_default_xpi_url="https://github.com/uhs-robert/desertfox/releases/download/beta-channel/desertfox-beta.xpi"
 beta_updates_url="https://github.com/uhs-robert/desertfox/releases/download/beta-channel/updates.json"
 
 dry_run=0
@@ -37,8 +38,14 @@ if [ -e "$distribution_file" ]; then
 fi
 
 if [ "$mode" = "beta" ]; then
+    # The fixed asset exists only after a beta build has published it. Until then pin the versioned URL from updates.json.
     if [ -z "$beta_xpi_url" ]; then
-        beta_xpi_url=$(curl -fsSL "$beta_updates_url" | jq -r --arg id "$extension_id" '.addons[$id].updates[0].update_link')
+        if curl -sfIL -o /dev/null "$beta_default_xpi_url"; then
+            beta_xpi_url="$beta_default_xpi_url"
+        else
+            echo "$beta_default_xpi_url does not exist yet, so the pin uses the xpi URL from updates.json." >&2
+            beta_xpi_url=$(curl -fsSL "$beta_updates_url" | jq -r --arg id "$extension_id" '.addons[$id].updates[0].update_link')
+        fi
     fi
     case "$beta_xpi_url" in
         https://*) ;;
