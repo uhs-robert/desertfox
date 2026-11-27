@@ -78,8 +78,8 @@ define("page.save_pdf", {
   },
 });
 
-// `isArticle` is Firefox's own verdict, the one that lights its address bar icon, so a page it cannot show fails here with a message and not a silent no-op. A tab already in Reader View is not an article, and the same call takes it back to the page.
-const READER_REFUSAL = "Firefox cannot show this page in Reader View";
+// Firefox rejects toggleReaderMode with "The specified tab cannot be placed into reader mode." when the tab is neither an article nor in Reader View. No pre-check of `isArticle`: Firefox sets it after load, so a check here could refuse an article Firefox would show. Any other rejection, such as a closed tab, keeps its own text.
+const NOT_READABLE = /reader mode/i;
 
 define("page.reader", {
   label: "Reader View",
@@ -87,12 +87,12 @@ define("page.reader", {
   bridge: false,
   runs_in: "background",
   run: async (ctx) => {
-    const tab_id = require_tab_id(ctx);
-    const tab = await browser.tabs.get(tab_id);
-    if (tab.isArticle !== true && tab.isInReaderMode !== true) throw new RuntimeRefusal(READER_REFUSAL);
-    await browser.tabs.toggleReaderMode(tab_id).catch(() => {
-      throw new RuntimeRefusal(READER_REFUSAL);
-    });
+    try {
+      await browser.tabs.toggleReaderMode(require_tab_id(ctx));
+    } catch (error) {
+      if (error instanceof Error && NOT_READABLE.test(error.message)) throw new RuntimeRefusal("Firefox cannot show this page in Reader View");
+      throw error;
+    }
   },
 });
 

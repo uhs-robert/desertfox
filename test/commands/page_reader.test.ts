@@ -9,14 +9,13 @@ import { require_openable } from "../../src/shared/url_build.ts";
 const CTX: CommandContext = { tab_id: 7, window_id: 3, frame_id: 0, mode: "normal" };
 const globals = globalThis as Record<string, unknown>;
 
-function stub(tab: Record<string, unknown>, toggle_fails = false) {
+function stub(rejection?: Error) {
   const toggled: number[] = [];
   globals.browser = {
     tabs: {
-      get: async () => tab,
       toggleReaderMode: async (tab_id: number) => {
         toggled.push(tab_id);
-        if (toggle_fails) throw new Error("not readable");
+        if (rejection) throw rejection;
       },
     },
   };
@@ -25,27 +24,20 @@ function stub(tab: Record<string, unknown>, toggle_fails = false) {
 
 const run = async () => void (await registry.get("page.reader")!.run!(CTX, {}));
 
-test("page.reader toggles Reader View on the active tab of an article", async () => {
-  const toggled = stub({ isArticle: true });
+test("page.reader toggles Reader View on the active tab", async () => {
+  const toggled = stub();
   await run();
   assert.deepEqual(toggled, [7]);
 });
 
-test("page.reader on a tab in Reader View toggles back to the page", async () => {
-  const toggled = stub({ isArticle: false, isInReaderMode: true });
-  await run();
-  assert.deepEqual(toggled, [7]);
-});
-
-test("page.reader refuses a page that is not an article, without toggling", async () => {
-  const toggled = stub({ isArticle: false });
+test("a not-readable rejection from Firefox becomes the refusal", async () => {
+  stub(new Error("The specified tab cannot be placed into reader mode."));
   await assert.rejects(run, (error: unknown) => error instanceof RuntimeRefusal && /cannot show this page in Reader View/.test(error.message));
-  assert.deepEqual(toggled, []);
 });
 
-test("page.reader turns a rejected toggle into a refusal", async () => {
-  stub({ isArticle: true }, true);
-  await assert.rejects(run, RuntimeRefusal);
+test("another rejection, such as a closed tab, keeps its own text", async () => {
+  stub(new Error("Invalid tab ID: 7"));
+  await assert.rejects(run, (error: unknown) => !(error instanceof RuntimeRefusal) && /Invalid tab ID: 7/.test((error as Error).message));
 });
 
 test("an about:reader address points at the gr key, other about: pages keep the general text", () => {
