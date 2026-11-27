@@ -335,7 +335,7 @@ const browser_module = create_browser_module({
     return checked?.ok ? checked.args : undefined;
   },
   locked_commands,
-  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, repeat_limit_of: (id) => registry.get(id)?.repeat_limit, run: router.run, show_refusal: router_deps.show_refusal }) },
+  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal }) },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);

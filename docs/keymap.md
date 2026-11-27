@@ -246,7 +246,7 @@ bound: 519 (normal 276, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `,fP` | `firefox processes` | Firefox processes | yes |
 | `,ff` | `firefox` (prompts) | Firefox page | yes |
 | `m` | `mark.add` | Set mark |  |
-| `q` | `macro.record` | Record macro | yes |
+| `q` | `macro.record` | Record macro |  |
 | `@` | `macro.play` | Play macro | yes |
 | `'` | `mark.jump` | Jump to mark |  |
 | `` ` `` | `mark.jump` | Jump to mark |  |

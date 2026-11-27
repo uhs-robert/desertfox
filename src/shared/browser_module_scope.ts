@@ -9,8 +9,8 @@ import { create_matcher } from "./keys/matcher.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "./prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch, TreeLeaf, TreeNode } from "./prefix_tree.ts";
 
-// Background commands that still make no sense with no DesertFox page: a mode needs a page to hold it, and `frame.exit` a frame to leave.
-const DENIED_IDS: readonly string[] = ["media.act", "frame.exit"];
+// Background commands that still make no sense with no DesertFox page: a mode needs a page to hold it, and `frame.exit` a frame to leave. `macro.record` stays out because a page swaps its key for `macro.stop` while a macro records, and the stored tree has no such swap.
+const DENIED_IDS: readonly string[] = ["media.act", "frame.exit", "macro.record"];
 const DENIED_GROUPS: readonly string[] = ["mode."];
 
 export function runs_on_locked_pages(command: Pick<CommandDef, "id" | "runs_in" | "needs">): boolean {
@@ -96,13 +96,4 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
     return { ok: true, leaf: result.leaf, count: count === 0 ? undefined : count };
   }
   return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
-}
-
-// The refusal for a count over a step's `repeat_limit`, as the router words it. A prompt step drops its count, so it is never over.
-export function over_repeat_limit(steps: readonly BoundInvocation[], limit_of: (id: string) => number | undefined): string | undefined {
-  for (const step of steps) {
-    const limit = limit_of(step.id);
-    if (limit !== undefined && step.prompt === undefined && step.count !== undefined && step.count > limit) return `A count of ${step.count} is over the limit of ${limit} for ${step.id}`;
-  }
-  return undefined;
 }

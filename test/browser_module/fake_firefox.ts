@@ -86,6 +86,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     fail_import: false,
     fail_tab_ids: false,
     fail_tab_moves: false,
+    // More exports every importESModule call gives, for a feature file that imports a module the core does not.
+    module_exports: {} as Record<string, unknown>,
     errors,
     broadcasts,
     frame_scripts,
@@ -203,6 +205,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
           off: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.delete(listener),
         },
         PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true },
+        ...firefox.module_exports,
       };
     },
   };
