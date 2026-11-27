@@ -43,7 +43,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, on_teardow
       return now != null && now !== started;
     }, { timeout_ms: 10000 });
     await poll_until("the new background to read its config", async () => (await read_local("desertfox_config_status")) != null, { timeout_ms: 10000 });
-    record("reinject_report", await read_local("desertfox_reinject_report"));
+    const reinject_report = await read_local("desertfox_reinject_report");
+    record("reinject_report", reinject_report);
+    expect(reinject_report == null, `a plain update ran the reload repair: ${JSON.stringify(reinject_report)}`);
     await poll_until("the new script to start in the open tab", async () => (await in_active_tab(`document.documentElement.hasAttribute("data-desertfox-tree-read-ms")`)) === true, { timeout_ms: 10000 });
     await settle_focus();
     // The focus check presses a key of its own.
