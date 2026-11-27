@@ -93,7 +93,8 @@ export async function run_cases(context) {
   await run_case("a tab that leaves a DesertFox page for about:support gets the module, so the old page's live mark is gone", async () => {
     await home("bm_stale_home");
     await context.open_page("page", "bm_stale_live", { new_tab: true });
-    await poll_until("the live mark of the DesertFox page", async () => Object.values((await state_now())?.tabs ?? {}).some((tab) => tab.live));
+    const tab_id = await chrome(`(async () => { const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs"); return ExtensionParent.apiManager.global.tabTracker.getId(${W}.gBrowser.selectedTab); })()`);
+    await poll_until("the live mark of the tab that holds the DesertFox page", async () => (await state_now())?.tabs?.[String(tab_id)]?.live === true);
     await chrome(`(async () => { const w = ${W}; w.gBrowser.selectedBrowser.fixupAndLoadURIString("about:support", { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); })()`);
     await steps.wait_loaded((spec) => spec === "about:support");
     await focus_page();

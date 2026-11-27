@@ -649,3 +649,14 @@ test("the real page_push kind with no feature to answer it gets an error reply",
   assert.deepEqual(plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)), [{ v: 1, reply_to: "p1", ok: false, error: "no handler for this kind" }]);
   assert.ok(protocol.validate_message_list(plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
 });
+
+test("a DesertFox reload while the pref is off gets no hello, and the pref turned on again says it", () => {
+  const firefox = create_firefox();
+  firefox.start_extension();
+  firefox.make_window().load();
+  firefox.set_pref(false);
+  firefox.start_extension();
+  assert.equal(firefox.hello(), undefined, "the module said its hello with the pref off");
+  firefox.set_pref(true);
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0" });
+});

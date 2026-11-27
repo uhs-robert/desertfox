@@ -1,8 +1,8 @@
 // The private Firefox copy every key-test run uses, made once per run in the run folder. launch_firefox.sh starts it through KEY_TEST_FIREFOX.
 // It is /usr/lib/firefox with the test loader (chrome_loader.cfg) in place of any AutoConfig file, and a chrome.d that holds the worktree's browser module and a drop-in that throws at load.
 // So a run never loads a browser module installed on the machine, and the whole suite runs with this worktree's module present and its pref off.
-import { chmodSync, copyFileSync, cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { chmodSync, copyFileSync, cpSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const key_test_dir = dirname(fileURLToPath(import.meta.url));
@@ -32,5 +32,14 @@ export function make_firefox_copy(run_dir, { source_dir = SYSTEM_FIREFOX_DIR, mo
   copyFileSync(join(key_test_dir, "chrome_throws.js"), join(drop_in_dir, THROWS_FILE));
   for (const name of module_files(modules_from)) copyFileSync(join(modules_from, name), join(drop_in_dir, name));
   for (const name of readdirSync(drop_in_dir)) chmodSync(join(drop_in_dir, name), 0o644);
-  return join(copy_dir, "firefox");
+  // `cpSync` keeps links, and a `firefox` that links back into the system install would start that install's GreD and skip the test loader.
+  const binary = join(copy_dir, "firefox");
+  if (lstatSync(binary).isSymbolicLink()) {
+    const target = realpathSync(binary);
+    rmSync(binary);
+    copyFileSync(target, binary);
+    chmodSync(binary, 0o755);
+  }
+  if (!realpathSync(binary).startsWith(realpathSync(copy_dir) + sep)) throw new Error(`the Firefox copy's binary resolves outside the copy: ${realpathSync(binary)}`);
+  return binary;
 }

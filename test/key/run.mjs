@@ -79,6 +79,7 @@ async function main() {
   // Made after the sweep, because a signal before the handlers below kills the coordinator outright.
   const run_dir = make_run_dir();
   // A KEY_TEST_FIREFOX from the caller wins, so a run can test another Firefox build. Then the browser module cases need the module installed in that build.
+  const own_copy = !process.env.KEY_TEST_FIREFOX;
   const firefox_bin = process.env.KEY_TEST_FIREFOX || make_firefox_copy(run_dir);
 
   const failures = [];
@@ -97,6 +98,8 @@ async function main() {
         ...process.env,
         KEY_TEST_DEBUG_PORT: String(debug_ports[index]),
         KEY_TEST_FIREFOX: firefox_bin,
+        // Only the run's own copy holds the drop-in that throws at load (firefox_copy.mjs).
+        KEY_TEST_THROWING_DROP_IN: own_copy ? "1" : "",
         KEY_TEST_STARTUP_DELAY_MS: String(index * STARTUP_STAGGER_MS),
         KEY_TEST_TIMINGS_FILE: timings_file,
         KEY_TEST_DIAGNOSTICS_DIR: join(diagnostics_root, `s${shard}`),

@@ -184,7 +184,7 @@
 
     // The hello goes once to each extension object, only while the module is on. The extension reads it as foreign input.
     function say_hello(extension) {
-      if (!active || !extension || hello_for.has(extension)) return;
+      if (!active || !extension || hello_for.has(extension) || !enabled_by_pref()) return;
       hello_for.add(extension);
       write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION });
     }
