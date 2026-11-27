@@ -54,15 +54,16 @@ The module runs the command first, then prevents and stops the key in the parent
 
 ## Popup walk
 
-`desertfox-popup-walk.js` makes `j`, `k`, `h` and `l` move in Firefox's own popups. It takes the letter and types the matching arrow key into the same window once the letter's event is over, through `nsITextInputProcessor`. Firefox then does all its own moving: subviews, submenus, trees, radio groups and the Picture-in-Picture seek and volume keys. The letters are fixed and are no key rows of the extension, since a menu has no DesertFox mode or keymap. The walk adds no protocol kind.
+`desertfox-popup-walk.js` makes `j`, `k`, `h` and `l` move in Firefox's own popups. It takes the letter and types the matching arrow key into the same window once the letter's event is over, through the core's `type_key`. Firefox then does all its own moving: subviews, submenus, trees, radio groups and the Picture-in-Picture seek and volume keys. The letters are fixed and are no key rows of the extension, since a menu has no DesertFox mode or keymap. The walk adds no protocol kind.
 
-- It takes a letter only where an open popup or a walking window owns the keys: an open menu, the app menu or the downloads panel open, the Library, Page Info or a Picture-in-Picture window, or a list with the focus in a settings sub-dialog. A permission prompt and another extension's popup never count, because an arrow key there goes to the page or to that extension. A DevTools window with a context menu open counts too.
+- It takes a letter only where an open popup or a walking window owns the keys: an open menu, the app menu or the downloads panel open, the Library, Page Info or a Picture-in-Picture window, or a list with the focus in a settings sub-dialog. A permission prompt and another extension's popup never count, because an arrow key there goes to the page or to that extension.
 - A field keeps its letters, except under an open menu: a menu opened over the focused address bar keeps the letter out of the field, so walking there steals no typing.
 - Escape also closes the Library from one of its trees when the search box is empty, since Firefox binds no Escape there.
+- The core's `type_key` refuses a key with the focus in a field. The walk passes `menu_owns_keys` for an open menu, which skips only that check, and only while the core itself sees an open menu popup that does not ignore keys. The DevTools refusal stays: a context menu over DevTools belongs to the DevTools feature, and the walk attaches to no DevTools window.
 - The arrow key is dropped when the popup closed, the window closed or the focus moved into a field before it goes out, so it never lands on what was under the popup.
 - The listener sits on the window root, which hears a key before the core's window listener. Otherwise the core would take `j` as a scroll key on a locked page under a context menu.
 - The feature reads the state itself (the pref, DesertFox, private window access, the state version and the toolbar switch), because the core shows it no gate. Its start error leaves it off alone.
-- A key the [key hold](#key-hold) gives to another feature is left alone, so the letters of hint labels never walk a menu.
+- A key the [key hold](#key-hold) gives to another feature is left alone, so the letters of hint labels never walk a menu. A key that begins a `hint.browser` binding waits for the window's own listeners where chrome hints can start (the Library, Page Info, a dialog frame, or inside an open panel), and the walk acts only if chrome hints left it alone.
 
 ## Hints over Firefox's own UI
 
@@ -88,9 +89,11 @@ The content script hears `gB` only with the focus in a page. With the focus in a
 
 ### Key hold
 
-Two features can see the same key in one window, and listener order cannot settle who goes first: Firefox calls the newest window watcher first. So the core keeps one owner per window. `hold_keys(win, owner)` claims every key of the window, `release_keys(win, owner)` ends the owner's hold and `keys_held_by(win)` names it. A feature leaves a key alone while another owner holds its window. The hints hold the keys from the binding's last key to the end of the session, a pending grant holds them until its Enter, and the popup walk stands aside for both.
+Two features can see the same key in one window, and listener order cannot settle who goes first: Firefox calls the newest window watcher first. So the core keeps one owner per window. `hold_keys(win, owner)` claims every key of the window and returns false while another owner holds it (a feature that gets false does not start), `release_keys(win, owner)` ends the owner's hold and `keys_held_by(win)` names it. A feature leaves a key alone while another owner holds its window. The hints hold the keys from the binding's last key to the end of the session, a pending grant holds them until its Enter, and the popup walk stands aside for both.
 
 ### Grants wait for the user's Enter
+
+A session started by a plain `chrome_hints.collect` (the extension's start for `gB` typed in a page) may not label or mark a control that grants unless the user's own start key came first. The module keeps the window's last keys that went on to the page, as many as the longest binding. It counts a start key only when they end in a whole `hint.browser` binding, each key at most 3 s after the one before, and the last one at most 1 s before the collect. A key typed in a field empties that list, so `gB` typed as text never counts. A start key is trusted, not a repeat, and starts one session. A session that no user key began (a plain collect with no start key, or a start from the command line or the native host) labels only the window's own buttons, and a pick of a grant control in it shows no Enter mark and refuses. A start in chrome focus carries the start token instead, which counts as the user's key. The gate holds again at pick time, because a control can come to grant after the collect, as a ticked Remember box does.
 
 Some picks give something away: they allow a permission, unblock a held-back download, open a downloaded file, send a client certificate or send a login. The extension names every pick, so a compromised extension could swap the user's Block for Allow. The module therefore never clicks such a control on a pick. It marks the control with a frame and the word "Enter", holds the window's keys and waits for an Enter that the user types in that window. The extension has no kind that confirms, and the module decides from the real key event alone.
 
@@ -106,7 +109,7 @@ What counts as a grant is a fixed table in the module, keyed by Firefox's own id
 An Enter confirms only when all of these hold:
 
 - The key is trusted, so a script's key does nothing. It has no modifier and is not a repeat, so a held-down Enter does nothing.
-- It was pressed after the mark showed, and at least the dwell later. The dwell is Firefox's own doorhanger delay, the pref `security.notification_enable_delay` (500 ms by default). A key inside the dwell ends the confirm, so tapping Enter through a page never carries over to a grant the user did not see marked. Times are in ms since the epoch on the key target's own clock, because a dialog's window starts later than the browser window that shows the mark.
+- It was pressed after the mark showed, and at least the dwell later. The dwell is Firefox's own doorhanger delay, the pref `security.notification_enable_delay`, but never under 500 ms, so a pref of 0 removes no dwell. A key inside the dwell ends the confirm, so tapping Enter through a page never carries over to a grant the user did not see marked. Times are in ms since the epoch on the key target's own clock, because a dialog's window starts later than the browser window that shows the mark.
 - The window is still in front, the module may still act there and the hold is still the confirm's.
 - The target is the same: the same prompt, the same download, the same control and row state, visible and where it was drawn. Else the confirm ends.
 - The control is ready. A doorhanger button and a dialog's accept button ignore a click for a moment after they show. Enter then does nothing, and the next Enter tries again.
@@ -123,7 +126,7 @@ Any other key or a click ends the confirm without a grant. So do the window leav
 - The feature passes a key with Ctrl, Alt or Meta, a key with no row, a key whose target is editable (an input, a textarea, a select, editable text, a code editor) and a key whose target is a frame element. So the console input and the markup view's inline editors type, and so does a field in an extension's DevTools panel, which runs in another process and shows only as its frame. Escape stays DevTools' (it opens the split console).
 - A taken key becomes an untrusted arrow keydown, dispatched on the key's own target, and the real key stops in the parent. No DevTools tree checks `isTrusted`. The core's listener skips the untrusted arrow when it passes.
 - No DesertFox page code runs in a DevTools document: they all have the system principal. The feature reads no DevTools internals and the extension sends it no selector.
-- An open DevTools context menu takes the letters ahead of the tree. Docked, it opens in the browser window, and in a DevTools window in that window, where the popup walk attaches too.
+- An open DevTools context menu takes the letters ahead of the tree. Docked, it opens in the browser window, and in a DevTools window in that window. The DevTools feature types the arrow key for it, since the core's `type_key` refuses in DevTools.
 - In the markup view `h` collapses, so DevTools' own `h` (hide the node) needs the context menu there.
 
 ## Liveness
