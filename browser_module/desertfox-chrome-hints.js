@@ -69,7 +69,8 @@
     // The external protocol prompt opens an application with a URL the page chose. The client certificate prompt sends the user's certificate to the site.
     const EXTERNAL_PROTOCOL_URL = "chrome://mozapps/content/handling/permissionDialog.xhtml";
     const CLIENT_CERT_URL = "chrome://pippki/content/clientauthask.xhtml";
-    const EXCEPTIONS_URL = `${PREFERENCES_DIALOGS}permissions.xhtml`;
+    // The Exceptions dialog and the site permissions dialog (Settings for location, camera and the rest) change what sites may do.
+    const PERMISSION_LIST_URLS = new Set([`${PREFERENCES_DIALOGS}permissions.xhtml`, `${PREFERENCES_DIALOGS}sitePermissions.xhtml`]);
     // The dialogs in a `dialogFrame` that get labels. Any other stays unlabelled, so a new grant dialog in a later Firefox gets no one-key pick.
     // A tab prompt names its kind on its dialog element once loaded (CommonDialog.sys.mjs). One with no kind yet gets no labels, since `grants` reads that kind.
     function labelled_dialog(doc) {
@@ -642,8 +643,6 @@
     const DENYING_PROMPTS = new Set(["geolocation", "xr", "web-notifications", "persistent-storage", "midi", "storage-access", "local-network", "loopback-network", "webRTC-shareDevices"]);
     // The tab prompt types that send a login to the site.
     const LOGIN_PROMPTS = new Set(["prompt:promptUserAndPass", "prompt:promptPassword"]);
-    // The Exceptions dialog's buttons that let a site do more: allow it, allow its cookies for the session, or turn a protection off for it.
-    const EXCEPTION_GRANTS = new Set(["btnAllow", "btnCookieSession", "btnDisableETP", "btnHttpsOnlyOff", "btnHttpsOnlyOffTmp"]);
     // Page Info's permission radios are `<permission>#<state>`. These states deny: Block (2) and Always Ask (3).
     const DENYING_STATE = /#[23]$/;
     // A download row's button by its icon: cancel (also delete a blocked file), retry, and the arrow to the blocked-download view. Show in folder is a fourth, but a blocked row's button with that icon asks to open or allow the file.
@@ -659,7 +658,7 @@
     const prompt_of = (element) => closest_of(element, (at) => at.localName === "popupnotification");
     const notification_of = (prompt) => prompt.notification ?? prompt.wrappedJSObject?.notification;
 
-    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions and the two grant dialogs), a control the table does not name grants.
+    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
     function grants(win, element) {
       const prompt = prompt_of(element);
       if (prompt) return prompt_grants(prompt, element);
@@ -669,9 +668,10 @@
       const button_type = element.getAttribute("dlgtype");
       // A drop-down only opens: the user then chooses in it with the keys.
       if (url === EXTERNAL_PROTOCOL_URL || url === CLIENT_CERT_URL) return !(button_type === "cancel" || element.localName === "menulist");
+      // Removing a Block entry there lets the site do more, and Save Changes applies it. So only adding a block, Cancel and a drop-down click at once.
+      if (PERMISSION_LIST_URLS.has(url)) return !(element.id === "btnBlock" || button_type === "cancel" || element.localName === "menulist");
       // A tab prompt's checkbox either stops the site's prompts or, on a prompt from a background tab, lets the site take the focus to its tab. Both read alike in the DOM, so each waits.
       if (url === PROMPT_URL) return (button_type === "accept" && LOGIN_PROMPTS.has(prompt_kind(element.ownerDocument))) || element.id === "checkbox";
-      if (url === EXCEPTIONS_URL) return EXCEPTION_GRANTS.has(element.id);
       return false;
     }
 
