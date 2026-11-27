@@ -13,18 +13,32 @@ async function sources(path: string): Promise<string[]> {
   return (await Promise.all(entries.map((entry) => sources(join(path, entry.name)).catch(() => [])))).flat().filter((file) => file.endsWith(".ts"));
 }
 
-// Each `type` literal in a `sendMessage(` call on the same line.
+// Each `type` literal inside a `sendMessage(` call, from its open parenthesis to the one that closes it, over as many lines as the call takes.
+function sent_types_in(source: string): string[] {
+  const types: string[] = [];
+  for (let start = source.indexOf("sendMessage("); start >= 0; start = source.indexOf("sendMessage(", start + 1)) {
+    let depth = 0;
+    let end = start + "sendMessage".length;
+    for (; end < source.length; end++) {
+      if (source[end] === "(") depth++;
+      else if (source[end] === ")" && --depth === 0) break;
+    }
+    for (const match of source.slice(start, end).matchAll(/type: "([a-z_]+)"/g)) types.push(match[1]!);
+  }
+  return types;
+}
+
 async function sent_types(): Promise<Map<string, string>> {
   const found = new Map<string, string>();
-  for (const file of (await Promise.all(ROOTS.map(sources))).flat()) {
-    for (const line of (await readFile(file, "utf8")).split("\n")) {
-      const call = line.indexOf("sendMessage(");
-      if (call < 0) continue;
-      for (const match of line.slice(call).matchAll(/type: "([a-z_]+)"/g)) found.set(match[1]!, file);
-    }
-  }
+  for (const file of (await Promise.all(ROOTS.map(sources))).flat()) for (const type of sent_types_in(await readFile(file, "utf8"))) found.set(type, file);
   return found;
 }
+
+test("the scan reads a call over several lines, and a call on one line", () => {
+  const source = ["const a = browser.runtime.sendMessage({", '  type: "new_request",', "  args: f(x),", "});", 'void browser.runtime.sendMessage({ type: "run", invocations: [] });', '// type: "outside" sits in no call'].join("\n");
+  assert.deepEqual(sent_types_in(source), ["new_request", "run"]);
+  assert.equal(Object.hasOwn(LOCKED_PAGE_ROUTES, "new_request"), false, "so an unrouted multi-line call fails the test below");
+});
 
 test("every type the page code sends has a locked page route, so a new type cannot slip past the allow list", async () => {
   const found = await sent_types();

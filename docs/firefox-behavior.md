@@ -524,7 +524,7 @@ Principals, read from inside the sandbox and checked from the page:
 | Content principal of the page address, null principal | no access | no access |
 
 Results:
-- The PDF viewer and Reader View work under the expanded `[page, extension]` principal. The two about: pages work only under the system principal.
+- The PDF viewer and Reader View work under the expanded `[page, extension]` principal. The two about: pages work only under the system principal. So `browser_module_pages` runs DesertFox's page code on the PDF viewer and Reader View only, and the background refuses a page call from any other about: page. The rows below keep what the spike measured on all four.
 - On the PDF viewer and Reader View a page script sees nothing of the sandbox. On the two about: pages the sandbox shares the page's principal, so the globals `content.js` sets on `window` (`desertfox_host` and the load flags) show to the page's own scripts. `browser` and the transport stay on the sandbox global and do not show.
 - `content.js` loads on all four, and the keydown listener counts for the module's liveness check. `f` draws labels on all four (21 to 23 on the toolbars and lists, about 105 ms from key to labels, as on a web page), and a pick clicks. Adopted stylesheets work. `v`, `e`, `y` copies text. Item mode works on the about:addons list.
 - The command line iframe (`cmdline.html`) loads on the PDF viewer and Reader View. On the two about: pages the frame stays `about:blank`.

@@ -309,11 +309,13 @@ const browser_module_rpc = create_browser_module_rpc({
     theme: () => stored_value(THEME_STORAGE_KEY),
     which_key: () => list_keys(browser.storage.local, (id) => registry.get(id), { mode: "normal", prefix: [] }),
   },
-  now: Date.now,
 });
 reach_locked_tabs(browser_module_rpc);
 browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.storage_changed(changes, area));
-browser.tabs.onUpdated.addListener((tab_id, change) => change.url === undefined || browser_module_rpc.tab_left(tab_id), { properties: ["url"] });
+// A reload of the same address reports only the status, so the status counts as a load too.
+browser.tabs.onUpdated.addListener((tab_id, change) => {
+  if (change.status === "loading" || change.url !== undefined) void browser_module_rpc.tab_loading(tab_id).catch(warn_and_go("browser_module_rpc.tab_loading"));
+}, { properties: ["status", "url"] });
 browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const browser_module = create_browser_module({
@@ -325,6 +327,7 @@ const browser_module = create_browser_module({
     return checked?.ok ? checked.args : undefined;
   },
   handlers: browser_module_rpc.handlers,
+  on_reply: browser_module_rpc.push_answered,
   read_disabled,
   read_keymap: () => stored_keymap(browser.storage.local),
   read_tab_records: async () => Object.fromEntries(Object.entries(await browser.storage.local.get(null)).filter(([key]) => key.startsWith(TAB_MODE_STORAGE_PREFIX))) as never,

@@ -27,8 +27,8 @@ export const HELLO_MIN_INTERVAL_MS = 1000;
 // The extension reads the module's message list at most this often. It is short because a call the module starts, such as a key on a locked page, must not wait a second. The list is capped, so a read is cheap.
 export const MESSAGE_MIN_GAP_MS = 50;
 
-// `text` is any string and `id` a message id. The kind's `max_bytes` bounds both.
-type ArgKind = "int" | "number" | "axis" | "text" | "id";
+// `text` is any string. The kind's `max_bytes` bounds it.
+type ArgKind = "int" | "number" | "axis" | "text";
 
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
@@ -64,7 +64,6 @@ const is_key_token = (key: unknown): key is string => typeof key === "string" &&
 
 function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "text") return typeof value === "string" ? undefined : "must be text";
-  if (kind === "id") return is_message_id(value) ? undefined : "must be a message id";
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
   return kind === "int" && !Number.isInteger(value) ? "must be a whole number" : undefined;
@@ -157,24 +156,25 @@ export type KindTable = Record<string, KindRow>;
 export const MAX_KIND_BYTES = 64 * 1024;
 // Room for the envelopes of the other messages beside the largest one.
 export const MESSAGE_ENVELOPE_BYTES = 512;
-// The page calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and `answer` are JSON text. `tab_id` is a fact chrome reads, never a field of the page's message.
+// The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
 const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
+// A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
-  // A message of the page for the background. The reply says only that it was taken. The answer comes back as a `page_reply`, so the queue never waits on a handler.
-  page_call: { args: { tab_id: "int", call_id: "id", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
-  // The page's answer to a `page_push`. Settling a call twice does nothing.
-  page_answer: { args: { tab_id: "int", call_id: "id", answer: "text" }, reply: false, max_bytes: PAGE_TEXT_BYTES },
+  // A message of the page for the background.
+  page_call: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
-  page_reply: { args: { tab_id: "int", call_id: "id", answer: "text" }, reply: false, max_bytes: PAGE_TEXT_BYTES },
-  // A message of the background for the page, in place of `tabs.sendMessage`. The page answers with a `page_answer` of the same call id.
-  page_push: { args: { tab_id: "int", call_id: "id", message: "text" }, reply: false, max_bytes: PAGE_TEXT_BYTES },
+  // A message of the background for the page, in place of `tabs.sendMessage`.
+  page_push: { args: { tab_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
 };
 
-// The byte cap of a whole list of a direction: room for its largest message and the envelopes beside it.
-export const message_list_bytes = (kinds: KindTable): number => Math.max(MAX_MESSAGE_LIST_BYTES, ...Object.values(kinds).map(kind_bytes)) + MESSAGE_ENVELOPE_BYTES;
+// The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
+export const message_list_bytes = (kinds: KindTable): number => Math.max(MAX_MESSAGE_LIST_BYTES, ...Object.values(kinds).map((row) => 2 * kind_bytes(row))) + MESSAGE_ENVELOPE_BYTES;
 const kind_bytes = (row: KindRow): number => Math.min(row.max_bytes ?? MAX_MESSAGE_LIST_BYTES, MAX_KIND_BYTES);
+
+// A reply's `value` fits the limit of the kind it answers. Its writer checks that limit. A reader, which does not know the kind, checks the ceiling.
+export const reply_fits = (reply: ModuleReply, request_kind: KindRow): boolean => (json_bytes(reply) ?? Number.POSITIVE_INFINITY) <= kind_bytes(request_kind);
 
 // The size of a value as JSON text, or undefined when it is not plain data (a cycle, a BigInt).
 export function json_bytes(value: unknown): number | undefined {
@@ -187,7 +187,8 @@ export function json_bytes(value: unknown): number | undefined {
 }
 
 export type ModuleRequest = { v: number; id: string; kind: string; args: ModuleArgs };
-export type ModuleReply = { v: number; reply_to: string; ok: boolean; error?: string };
+// `value` is optional JSON text. An older reader ignores it.
+export type ModuleReply = { v: number; reply_to: string; ok: boolean; error?: string; value?: string };
 export type ModuleMessage = ModuleRequest | ModuleReply;
 export const is_reply = (message: ModuleMessage): message is ModuleReply => "reply_to" in message;
 
@@ -199,7 +200,8 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
     if (!is_message_id(value.reply_to)) return bad("reply_to must be a message id");
     if (typeof value.ok !== "boolean") return bad("ok must be true or false");
     if (value.error !== undefined && (typeof value.error !== "string" || value.error.length > MAX_ERROR_CHARS)) return bad("error must be short text");
-    return { ok: true, value: { v: value.v, reply_to: value.reply_to, ok: value.ok, ...(value.error === undefined ? {} : { error: value.error }) } };
+    if (value.value !== undefined && (typeof value.value !== "string" || (json_bytes(value) ?? Number.POSITIVE_INFINITY) > MAX_KIND_BYTES)) return bad("value must be text within the size limit");
+    return { ok: true, value: { v: value.v, reply_to: value.reply_to, ok: value.ok, ...(value.error === undefined ? {} : { error: value.error }), ...(value.value === undefined ? {} : { value: value.value }) } };
   }
   if (!is_message_id(value.id)) return bad("a request needs an id of 1 to 32 letters, digits, - or _");
   if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return bad("the kind is not on the allow list");
@@ -287,7 +289,7 @@ export const LOCKED_PAGE_ROUTES = {
 
 export const locked_route_of = (type: unknown): LockedRoute => (typeof type === "string" && Object.hasOwn(LOCKED_PAGE_ROUTES, type) ? LOCKED_PAGE_ROUTES[type as keyof typeof LOCKED_PAGE_ROUTES] : "refused");
 
-// A page call's answer as JSON text: `{ value }`, `{}` for no answer, or `{ error }` when the handler failed.
+// The JSON text in the `value` of a reply to `page_call` or `page_push`: `{ value }`, `{}` for no answer, or `{ error }` when the handler failed.
 export type PageAnswer = { value?: unknown; error?: string };
 
 // Read-only data the in-page DesertFox needs whole, too big for a message: one key per part, written by the extension and rewritten when the part changes. The module reads each once and again on `storage.onChanged`, and never on a key press.

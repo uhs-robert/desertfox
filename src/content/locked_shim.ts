@@ -1,4 +1,4 @@
-// The `browser` global of DesertFox's own page code on a locked page (about:addons, about:preferences, the PDF viewer, Reader View). There the browser module runs `content.js` and the bundles in a sandbox that has no extension API (docs/firefox-behavior.md, "Locked pages").
+// The `browser` global of DesertFox's own page code on a locked page (the PDF viewer and Reader View). There the browser module runs `content.js` and the bundles in a sandbox that has no extension API (docs/firefox-behavior.md, "Locked pages").
 // The module puts its transport on the sandbox as `desertfox_locked_transport`, runs this file, then `content.js`. This file takes the transport off the global and gives the page code the typed surface it uses (`MessagingBrowser`), nothing more.
 // Every message goes past the allow list (`LOCKED_PAGE_ROUTES`) and a size cap here, and again in the background (`browser_module_rpc.ts`), which never trusts this file.
 
@@ -7,7 +7,7 @@ import { EXTENSION_TO_MODULE_KINDS, json_bytes, locked_route_of, MESSAGE_ENVELOP
 import { CONFIG_STATUS_STORAGE_KEY } from "../shared/storage_watch.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 
-// What the module gives. `call` sends a page call and settles with its answer text. `snapshot` returns the module's cached copy of a part. `on_push` hears each push and sends back the answer text the listener gives.
+// What the module gives. `call` sends a page call and settles with its reply's `value`, or rejects on an error reply. `snapshot` returns the module's cached copy of a part. `on_push` hears each push and sends back the answer text the listener gives as its reply's `value`.
 type Transport = {
   extension_id: string;
   base_url: string;
@@ -24,7 +24,7 @@ type Listener = (...args: never[]) => unknown;
 const GONE = "Extension context invalidated.";
 // The text of a page message rides inside an envelope, so it gets the kind's limit less the envelope.
 const CALL_TEXT_BYTES = MODULE_TO_EXTENSION_KINDS["page_call"]!.max_bytes! - MESSAGE_ENVELOPE_BYTES;
-const ANSWER_TEXT_BYTES = MODULE_TO_EXTENSION_KINDS["page_answer"]!.max_bytes! - MESSAGE_ENVELOPE_BYTES;
+const ANSWER_TEXT_BYTES = EXTENSION_TO_MODULE_KINDS["page_push"]!.max_bytes! - MESSAGE_ENVELOPE_BYTES;
 const PUSH_TEXT_BYTES = EXTENSION_TO_MODULE_KINDS["page_push"]!.max_bytes!;
 // The two `storage.local` keys the page code reads, each served from its snapshot.
 const LOCAL_PARTS: Record<string, SnapshotPart> = { [CONFIG_STATUS_STORAGE_KEY]: "config", [THEME_STORAGE_KEY]: "theme" };
@@ -59,7 +59,7 @@ function locked_browser(transport: Transport) {
     if (!alive()) throw new Error(GONE);
     const type = is_record(message) ? message.type : undefined;
     const route = locked_route_of(type);
-    if (route === "module") return transport.load_bundle(String((message as { name?: unknown }).name));
+    if (route === "module") return loaded_bundle(await transport.load_bundle(String((message as { name?: unknown }).name)));
     if (route === "snapshot") return snapshot_value("keymap");
     if (type === "list_keys" && is_root_panel(message as Record<string, unknown>)) {
       const panel = snapshot_value("which_key");
@@ -142,6 +142,9 @@ function locked_browser(transport: Transport) {
     },
   };
 }
+
+// `content.js` reads the answer of a bundle load as a `RunResponse`. Anything else the module gives counts as a failed load, so a bundle never counts as loaded without the module saying so.
+const loaded_bundle = (answer: unknown): unknown => (is_record(answer) && typeof answer.ok === "boolean" ? answer : { ok: false, refusal: { id: "load_bundle", message: "the browser module did not load the bundle" } });
 
 // The which-key panel of normal mode with no prefix, the one part of `list_keys` a snapshot holds.
 const is_root_panel = (message: Record<string, unknown>): boolean => message.mode === "normal" && Array.isArray(message.prefix) && message.prefix.length === 0;

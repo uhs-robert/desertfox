@@ -17,6 +17,7 @@ import {
   SNAPSHOT_PART_NAMES,
   SNAPSHOT_PARTS,
   validate_snapshot,
+  reply_fits,
   MAX_MESSAGES,
   MODULE_TO_EXTENSION_KINDS,
   status_of_hello,
@@ -96,8 +97,9 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only the page kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS).sort(), ["page_answer", "page_call"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS).sort(), ["page_push", "page_reply"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push"]);
+  assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(validate_message(msg({}), MODULE_TO_EXTENSION_KINDS).ok, false);
   assert.equal(validate_message(msg({}), EXTENSION_TO_MODULE_KINDS).ok, false);
 });
@@ -134,11 +136,11 @@ test("an older module's list, with the fields of its own version only, still par
   assert.ok(validate_message_list([{ v: V, id: "old", kind: "ask", args: { axis: "x" } }, { v: V, reply_to: "x1", ok: true }], KINDS).ok);
 });
 
-const page_call = (message: string, patch: Record<string, unknown> = {}) => ({ v: V, id: "c1", kind: "page_call", args: { tab_id: 7, call_id: "k1", message, ...patch } });
+const page_call = (message: string, patch: Record<string, unknown> = {}, id = "c1") => ({ v: V, id, kind: "page_call", args: { tab_id: 7, message, ...patch } });
 
-test("a page call checks the shape of its text and id args", () => {
+test("a page call checks the shape of its args", () => {
   assert.ok(validate_message(page_call("{}"), MODULE_TO_EXTENSION_KINDS).ok);
-  for (const args of [{ tab_id: "7" }, { tab_id: 1.5 }, { call_id: "a b" }, { call_id: "" }, { call_id: 5 }, { message: 5 }, { message: undefined }]) {
+  for (const args of [{ tab_id: "7" }, { tab_id: 1.5 }, { message: 5 }, { message: undefined }]) {
     assert.equal(validate_message(page_call("{}", args), MODULE_TO_EXTENSION_KINDS).ok, false, JSON.stringify(args));
   }
 });
@@ -162,12 +164,14 @@ test("a message over its own kind's limit is refused, and a kind with no limit k
 test("no kind passes the 64 KB ceiling, and a list makes room for its largest kind", () => {
   for (const kinds of [MODULE_TO_EXTENSION_KINDS, EXTENSION_TO_MODULE_KINDS]) {
     for (const row of Object.values(kinds)) assert.ok((row.max_bytes ?? 0) <= MAX_KIND_BYTES);
-    assert.equal(message_list_bytes(kinds), MAX_KIND_BYTES + MESSAGE_ENVELOPE_BYTES);
+    assert.equal(message_list_bytes(kinds), 2 * MAX_KIND_BYTES + MESSAGE_ENVELOPE_BYTES);
   }
   assert.equal(message_list_bytes({}), MAX_MESSAGE_LIST_BYTES + MESSAGE_ENVELOPE_BYTES);
-  assert.equal(message_list_bytes({ huge: { args: {}, reply: false, max_bytes: 10 * MAX_KIND_BYTES } }), MAX_KIND_BYTES + MESSAGE_ENVELOPE_BYTES, "a row past the ceiling counts as the ceiling");
-  const full = validate_message_list([page_call("m".repeat(MAX_KIND_BYTES - MESSAGE_ENVELOPE_BYTES)), page_call("{}", { call_id: "k2" })], MODULE_TO_EXTENSION_KINDS);
-  assert.ok(full.ok && full.value.messages.length === 2, "the largest call and a small one fit in one list");
+  assert.equal(message_list_bytes({ small: { args: {}, reply: false, max_bytes: 1000 } }), MAX_MESSAGE_LIST_BYTES + MESSAGE_ENVELOPE_BYTES);
+  assert.equal(message_list_bytes({ huge: { args: {}, reply: false, max_bytes: 10 * MAX_KIND_BYTES } }), 2 * MAX_KIND_BYTES + MESSAGE_ENVELOPE_BYTES, "a row past the ceiling counts as the ceiling");
+  const full_size = "m".repeat(MAX_KIND_BYTES - MESSAGE_ENVELOPE_BYTES);
+  const full = validate_message_list([page_call(full_size), page_call(full_size, {}, "c2"), page_call("{}", {}, "c3")], MODULE_TO_EXTENSION_KINDS);
+  assert.ok(full.ok && full.value.messages.length === 3, "two full-size calls and a small one fit in one list, so a full-size message survives the next write");
 });
 
 test("the locked page routes refuse every unlisted, page-only or junk type", () => {
@@ -194,4 +198,12 @@ test("each snapshot part has its own check and cap, under the 512 KB ceiling", (
   const cyclic: Record<string, unknown> = { v: V };
   cyclic.value = cyclic;
   assert.equal(validate_snapshot("config", cyclic).ok, false);
+});
+
+test("a reply may carry a value as text, which an older reader ignores, and junk or oversize values are refused", () => {
+  assert.deepEqual(validate_message({ v: V, reply_to: "c1", ok: true, value: '{"value":1}' }, KINDS), { ok: true, value: { v: V, reply_to: "c1", ok: true, value: '{"value":1}' } });
+  for (const value of [5, {}, null, "v".repeat(MAX_KIND_BYTES)]) assert.equal(validate_message({ v: V, reply_to: "c1", ok: true, value }, KINDS).ok, false, String(value).slice(0, 20));
+  const row = { args: {}, reply: true, max_bytes: 200 };
+  assert.ok(reply_fits({ v: V, reply_to: "c1", ok: true, value: "x".repeat(100) }, row));
+  assert.equal(reply_fits({ v: V, reply_to: "c1", ok: true, value: "x".repeat(200) }, row), false, "the writer checks the answered kind's own limit");
 });

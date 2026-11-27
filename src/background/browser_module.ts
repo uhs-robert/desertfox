@@ -22,6 +22,7 @@ import {
   status_of_hello,
   EXTENSION_TO_MODULE_KINDS,
   message_list_bytes,
+  reply_fits,
   MAX_MESSAGES,
   MODULE_TO_EXTENSION_KINDS,
   validate_message,
@@ -29,7 +30,7 @@ import {
   validate_module_state,
 } from "../shared/browser_module_protocol.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
-import { keep_chain } from "../shared/swallow.ts";
+import { keep_chain, warn_and_go } from "../shared/swallow.ts";
 import { mode_of_record } from "./tab_modes.ts";
 import type { TabModeRecord } from "./tab_modes.ts";
 
@@ -77,8 +78,8 @@ export type BrowserModuleDeps = {
   check_args: CheckCommandArgs;
   // The allow list of each direction. The protocol's lists are empty now, so a test passes its own.
   kinds?: { from_module: KindTable; from_extension: KindTable };
-  // One handler per kind the module may request. A handler never awaits `send`: handlers run inside the queue and `send` waits behind them, so it would never settle and every later step would hang. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
-  handlers: Record<string, (args: ModuleArgs) => Promise<void>>;
+  // One handler per kind the module may request. Handlers run outside the queue, so one may await `send`, and its reply is written when it settles. The text it gives is the reply's `value`, within its kind's limit. A handler that throws gives an error reply when the kind expects one. A push may run twice after a background restart, because its id leaves no trace here, so a handler is idempotent.
+  handlers: Record<string, (args: ModuleArgs) => Promise<string | void>>;
   // Hears each reply the module sends to a request of the extension.
   on_reply?: (reply: ModuleReply) => void;
   now: () => number;
@@ -141,19 +142,20 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   };
 
   const run_request = async (request: ModuleRequest): Promise<ModuleReply | undefined> => {
-    const expects_reply = kinds.from_module[request.kind]!.reply;
-    const reply = (ok: boolean, error?: string): ModuleReply | undefined => (expects_reply ? { v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: request.id, ok, ...(error === undefined ? {} : { error }) } : undefined);
+    const row = kinds.from_module[request.kind]!;
+    const reply = (ok: boolean, error?: string, value?: string): ModuleReply | undefined =>
+      row.reply ? { v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: request.id, ok, ...(error === undefined ? {} : { error }), ...(typeof value === "string" ? { value } : {}) } : undefined;
     const handler = deps.handlers[request.kind];
     if (handler === undefined) return reply(false, "no handler for this kind");
     try {
-      await handler(request.args);
-      return reply(true);
+      const answered = reply(true, undefined, (await handler(request.args)) ?? undefined);
+      return answered === undefined || reply_fits(answered, row) ? answered : reply(false, "the answer is too large");
     } catch {
       return reply(false, "the request failed");
     }
   };
 
-  // Handles each message of the module list that is new, and writes the replies in one rewrite of the extension's list.
+  // Handles each message of the module list that is new. Refusals go out in one rewrite of the extension's list, and each handler's reply when it settles.
   const answer_module_messages = async (): Promise<void> => {
     const checked = validate_message_list((await deps.session.get(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY))[BROWSER_MODULE_FROM_MODULE_STORAGE_KEY], kinds.from_module);
     if (!checked.ok) return;
@@ -167,8 +169,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
         handled.add(`reply:${message.reply_to}`);
       } else if (!seen(message.id)) {
         handled.add(message.id);
-        const reply = await run_request(message);
-        if (reply) replies.push(reply);
+        void run_request(message)
+          .then((reply) => reply && enqueue(async () => write_outbox([...(await read_outbox()), reply])))
+          .catch(warn_and_go("browser_module.reply"));
       }
     }
     for (const { id, error } of checked.value.refused) {

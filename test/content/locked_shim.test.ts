@@ -23,7 +23,7 @@ type Shimmed = {
 };
 
 function load(snapshots: Partial<Record<SnapshotPart, unknown>> = {}) {
-  const state = { alive: true, calls: [] as string[], bundles: [] as string[], answer: (_text: string): Promise<string> => Promise.resolve(JSON.stringify({ value: "ok" })) };
+  const state = { alive: true, calls: [] as string[], bundles: [] as string[], load_answer: { ok: true } as unknown, answer: (_text: string): Promise<string> => Promise.resolve(JSON.stringify({ value: "ok" })) };
   let push: ((message: string) => Promise<string>) | undefined;
   let snapshot_changed: ((part: SnapshotPart) => void) | undefined;
   const transport = {
@@ -36,7 +36,7 @@ function load(snapshots: Partial<Record<SnapshotPart, unknown>> = {}) {
     },
     load_bundle: async (name: string) => {
       state.bundles.push(name);
-      return { ok: true };
+      return state.load_answer;
     },
     snapshot: (part: SnapshotPart) => snapshots[part],
     on_snapshot: (listener: (part: SnapshotPart) => void) => void (snapshot_changed = listener),
@@ -92,7 +92,7 @@ test("read_keymap and the root which-key panel come from their snapshots, a bund
   assert.deepEqual(state.calls, []);
   await browser.runtime.sendMessage({ type: "list_keys", mode: "normal", prefix: ["g"], url: "about:addons" });
   assert.equal(state.calls.length, 1, "a prefix panel is a call");
-  assert.deepEqual(await browser.runtime.sendMessage({ type: "load_bundle", name: "hints" }), { ok: true });
+  assert.deepEqual(plain(await browser.runtime.sendMessage({ type: "load_bundle", name: "hints" })), { ok: true });
   assert.deepEqual(state.bundles, ["hints"]);
   // A snapshot that fails its check serves nothing.
   snapshots.keymap = { v: V + 1, value: '{"keymap":{}}' };
@@ -188,4 +188,14 @@ test("without a transport the shim defines nothing", () => {
   const context = vm.createContext({});
   vm.runInContext(bundle, context);
   assert.equal((context as { browser?: unknown }).browser, undefined);
+});
+
+test("a bundle load the module answers with anything but a RunResponse counts as failed", async () => {
+  const { browser, state } = load();
+  for (const answer of [undefined, null, "done", { ok: "yes" }, []]) {
+    state.load_answer = answer;
+    assert.deepEqual(plain(await browser.runtime.sendMessage({ type: "load_bundle", name: "hints" })), { ok: false, refusal: { id: "load_bundle", message: "the browser module did not load the bundle" } }, JSON.stringify(answer));
+  }
+  state.load_answer = { ok: false, refusal: { id: "x", message: "missing" } };
+  assert.deepEqual(plain(await browser.runtime.sendMessage({ type: "load_bundle", name: "hints" })), { ok: false, refusal: { id: "x", message: "missing" } });
 });
