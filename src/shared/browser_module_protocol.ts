@@ -59,6 +59,10 @@ export const is_sidebar_command_id = (id: unknown): id is SidebarCommandId => (S
 // `gg` needs two keys. The module holds one pending key, so no row is longer.
 export const MAX_SIDEBAR_KEY_TOKENS = 2;
 export type SidebarKeyRow = { keys: string[]; id: SidebarCommandId };
+// The command whose bindings the module takes with the focus in Firefox's own dialogs, windows and panels, where no content script hears a key. It starts the hints over that place.
+export const CHROME_HINT_COMMAND_ID = "hint.browser";
+export const MAX_CHROME_HINT_BINDINGS = 4;
+export const MAX_CHROME_HINT_KEY_TOKENS = 4;
 
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;
 export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleCommandId[];
@@ -77,7 +81,7 @@ export type BarTheme = { dark: BarColors; light: BarColors };
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[] };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][] };
 // The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
@@ -220,6 +224,15 @@ export function sidebar_keys_of(value: unknown): SidebarKeyRow[] | undefined {
   return rows;
 }
 
+// The key token lists of the `hint.browser` bindings, or undefined when any is bad: then no chrome focus starts hints, and the rest of the state stays. No list may begin another, as in the sidebar table.
+export function chrome_hint_keys_of(value: unknown): string[][] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_CHROME_HINT_BINDINGS) return undefined;
+  if (!value.every((keys) => Array.isArray(keys) && keys.length > 0 && keys.length <= MAX_CHROME_HINT_KEY_TOKENS && keys.every(is_key_token))) return undefined;
+  const joined = (value as string[][]).map((keys) => keys.join(" "));
+  if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return undefined;
+  return (value as string[][]).map((keys) => [...keys]);
+}
+
 export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
@@ -254,7 +267,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   const tree = value.tree === undefined ? undefined : validate_scope_tree(value.tree);
   if (tree && !tree.ok) return tree;
   const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }) } };
+  const chrome_hint_keys = chrome_hint_keys_of(value.chrome_hint_keys);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -322,6 +336,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: PANE_CALL_BYTES },
   // The session ended in chrome: Escape, a click, the window left the front or closed, or no labels came.
   "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // The user typed a `hint.browser` binding with the focus in a dialog, the Library, Page Info or an open panel. `start` is a token the module made for that key in that window. A reply, so a start read twice runs once.
+  "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
@@ -342,6 +358,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: PANEL_CALL_BYTES },
   // Starts a session in the window, which must be in front. `colors` is JSON text of the theme's dark and light hex colors, or "". The reply refuses when there is nothing to hint.
   "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+  // Starts a session where the user typed the binding, for a `chrome_hints.want`. The module takes its own `start` token once, while fresh, and only in the window that made it, so this names no window.
+  "chrome_hints.collect_here": { args: { session: "int", start: "int", colors: "text" }, reply: true, max_bytes: 1024 },
   // One part of the labels to show: `labels` is a list of [id, label]. Only a draw whose parts all came shows, and it replaces the one before.
   "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
   // Runs the target's fixed action. The reply refuses an id of another session and a target that is gone or moved.

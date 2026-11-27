@@ -21,7 +21,7 @@ export const chrome_hints = create_chrome_hints({
   letters: async () => clean_letters((await get_config()).settings.hint_letters),
   colors: async () => label_colors((await browser.storage.local.get(THEME_STORAGE_KEY))[THEME_STORAGE_KEY] as StoredTheme | undefined),
   notify: async (window_id, message) => {
-    const [tab] = await browser.tabs.query({ active: true, windowId: window_id });
+    const [tab] = await browser.tabs.query(window_id === undefined ? { active: true, lastFocusedWindow: true } : { active: true, windowId: window_id });
     await show_toast_on_tab({ tab_id: tab?.id }, "hint.browser", message, "error");
   },
   new_session: () => 1 + Math.floor(Math.random() * 0x7ffffffe),
@@ -29,7 +29,7 @@ export const chrome_hints = create_chrome_hints({
 
 define("hint.browser", {
   label: "Hint browser buttons",
-  intent: "Pick a button of Firefox itself by its label. It labels the toolbar buttons, the tabs, the bookmarks toolbar, the sidebar buttons and the menu bar. A button is clicked, a tab is selected, and a menu or a bookmarks folder opens. With the app menu open, it labels the rows of the menu instead. Escape ends it. Needs the browser module.",
+  intent: "Pick a button of Firefox itself by its label. It labels the toolbar buttons, the tabs, the bookmarks toolbar, the sidebar buttons and the menu bar. A button is clicked, a tab is selected, and a menu or a bookmarks folder opens. With the app menu open, it labels the rows of the menu instead. With the focus in a tab's prompt, a settings dialog, the Library or Page Info, it labels the buttons there, and its keys work there too. Escape ends it. Needs the browser module.",
   bridge: false,
   runs_in: "background",
   run: async (ctx) => {

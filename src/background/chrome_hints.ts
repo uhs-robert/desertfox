@@ -15,7 +15,8 @@ export type LabelRow = [number, string];
 
 export type ChromeHintSession = {
   session: number;
-  window_id: number;
+  // The browser window the session runs in, or none for one the user started in a dialog or in one of Firefox's other windows, which the extension cannot name.
+  window_id?: number;
   // Each part of the targets as it came, until the labels are made from all of them.
   parts?: number;
   targets: Record<string, TargetRow[]>;
@@ -35,8 +36,8 @@ export type ChromeHintDeps = {
   letters: () => Promise<readonly string[]>;
   // JSON text of the theme's colors for the labels, or "".
   colors: () => Promise<string>;
-  // Tells the user in that window why a pick did nothing.
-  notify: (window_id: number, message: string) => Promise<void>;
+  // Tells the user in that window, or the last focused one, why a pick or a start did nothing.
+  notify: (window_id: number | undefined, message: string) => Promise<void>;
   new_session: () => number;
 };
 
@@ -114,6 +115,24 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
     if (!result.ok) await deps.notify(session.window_id, result.error);
   }
 
+  async function begin(fields: { window_id?: number }, collect: (session: number, colors: string) => Promise<{ ok: true } | { ok: false; error: string }>): Promise<{ ok: true } | { ok: false; error: string }> {
+    const session: ChromeHintSession = { session: deps.new_session(), ...fields, targets: {}, typed: "", seq: 0, gen: 0 };
+    const previous = await in_turn(async () => {
+      const replaced = await read();
+      await write(session);
+      return replaced;
+    });
+    // The module ends the older session only when the newer one collects. A refused collect would leave it showing, with no stored session to narrow it.
+    if (previous) await deps.push("chrome_hints.clear", { session: previous.session });
+    const result = await collect(session.session, await deps.colors());
+    if (!result.ok) {
+      // A collect whose reply was lost can still have started a session in chrome, which would hold the keys until Escape.
+      await deps.push("chrome_hints.clear", { session: session.session });
+      await in_turn(async () => (await current(session.session)) && (await drop()));
+    }
+    return result;
+  }
+
   const handlers = {
     // Once every part is in, the labels go out. A part that never comes leaves the session without labels, and the module ends it.
     "chrome_hints.targets": (args: ModuleArgs): Promise<void> =>
@@ -156,28 +175,19 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       in_turn(async () => {
         if (await current(args.session)) await drop();
       }),
+    // The module heard the user's binding with the focus in chrome. Its token goes back as it came: only the module knows the window it belongs to.
+    "chrome_hints.want": async (args: ModuleArgs): Promise<void> => {
+      if (!is_whole(args.start)) return;
+      const start = args.start;
+      const result = await begin({}, (session, colors) => deps.call("chrome_hints.collect_here", { session, start, colors }));
+      if (!result.ok) await deps.notify(undefined, result.error);
+    },
   };
 
   return {
     handlers,
     // Starts a session in the window. A second start ends the first.
-    async start(window_id: number): Promise<{ ok: true } | { ok: false; error: string }> {
-      const session: ChromeHintSession = { session: deps.new_session(), window_id, targets: {}, typed: "", seq: 0, gen: 0 };
-      const previous = await in_turn(async () => {
-        const replaced = await read();
-        await write(session);
-        return replaced;
-      });
-      // The module ends the older session only when the newer one collects. A refused collect would leave it showing, with no stored session to narrow it.
-      if (previous) await deps.push("chrome_hints.clear", { session: previous.session });
-      const result = await deps.call("chrome_hints.collect", { session: session.session, window_id, colors: await deps.colors() });
-      if (!result.ok) {
-        // A collect whose reply was lost can still have started a session in chrome, which would hold the keys until Escape.
-        await deps.push("chrome_hints.clear", { session: session.session });
-        await in_turn(async () => (await current(session.session)) && (await drop()));
-      }
-      return result;
-    },
+    start: (window_id: number) => begin({ window_id }, (session, colors) => deps.call("chrome_hints.collect", { session, window_id, colors })),
   };
 }
 

@@ -1,6 +1,11 @@
-// DesertFox browser module, hints over Firefox's own UI: the nav bar, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, and the rows of an open app menu.
+// DesertFox browser module, hints over Firefox's own UI: the nav bar, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, the rows of an open app menu,
+// and the controls of a tab's prompt, a settings sub-dialog, the Library and Page Info.
 // The module collects the targets and sends only ids and boxes. The extension makes the labels, narrows them as the user types and names the target to pick. The module draws what it is told and runs one fixed action per target kind.
-// Requests: chrome_hints.collect starts a session, chrome_hints.draw shows labels, chrome_hints.pick runs a target, chrome_hints.clear ends it. Pushes back: chrome_hints.targets, chrome_hints.key and chrome_hints.end.
+// Requests: chrome_hints.collect starts a session, chrome_hints.collect_here starts one where the user typed the binding, chrome_hints.draw shows labels, chrome_hints.pick runs a target, chrome_hints.clear ends it.
+// Pushes and calls back: chrome_hints.targets, chrome_hints.key, chrome_hints.end and chrome_hints.want.
+//
+// With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
+// It makes a token for each such key: used once, within START_TOKEN_MS, and only in the window where the key was typed. No other start opens a session outside a browser window in front.
 
 (function desertfox_browser_module_chrome_hints(scope) {
   "use strict";
@@ -43,6 +48,19 @@
     // The alphabet the hint_letters setting allows: any key but a blank and "/".
     const LABEL = /^[^\s/]+$/u;
     const KEY_OWNER = "chrome_hints";
+    // Holds the window's keys while the first keys of a binding wait for the rest, so the popup walk leaves the next key alone.
+    const PREFIX_OWNER = "chrome_hints.prefix";
+    // A start token lives this long. Its key holds the window's keys meanwhile, as a session does.
+    const START_TOKEN_MS = 3000;
+    const ESCAPE = "<Escape>";
+    const BROWSER = "navigator:browser";
+    const LIBRARY = "Places:Organizer";
+    const PAGE_INFO = "Browser:page-info";
+    const WATCHED_TYPES = new Set([BROWSER, LIBRARY, PAGE_INFO]);
+    // The controls of a dialog, the Library and Page Info. No text field is one: a label never types into a field.
+    const CONTROLS = "button, toolbarbutton, checkbox, radio, menulist:not([editable]), menu, label.text-link, moz-button, moz-checkbox, moz-toggle, moz-radio, input[type=checkbox], input[type=radio], input[type=button], input[type=submit]";
+    // Left to a later confirm key, as the permission prompts are: the Library's download rows can unblock a download, and Page Info's permission rows grant a permission at once.
+    const LEFT_OUT = "#downloadsListBox, #permList";
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
     const WINDOW_GROUPS = [
@@ -84,6 +102,8 @@
 
     // ---- Collect.
 
+    // A dialog's buttons sit in its closed shadow root, which chrome code may open.
+    const shadow_of = (element) => element?.openOrClosedShadowRoot ?? element?.shadowRoot ?? null;
     const box_of = (element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
@@ -94,8 +114,8 @@
     // A tab scrolled out of the strip, or a button under another, is not what the user sees at its box. The hit test goes down through each shadow root and back up through each host.
     function shows_at_its_box(doc, element, box) {
       let hit = doc.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-      while (hit?.shadowRoot) {
-        const deeper = hit.shadowRoot.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      while (shadow_of(hit)) {
+        const deeper = shadow_of(hit).elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
         if (!deeper || deeper === hit) break;
         hit = deeper;
       }
@@ -103,10 +123,10 @@
       return false;
     }
 
-    // The fixed action of each target: a tab is selected, a menu or a bookmarks folder opens, a button runs its command or is clicked.
+    // The fixed action of each target: a tab is selected, a menu, a drop-down or a bookmarks folder opens, a button runs its command or is clicked.
     function kind_of(element) {
       if (element.localName === "tab") return "tab";
-      if (element.localName === "menu" || (element.localName === "toolbarbutton" && element.getAttribute("type") === "menu")) return "menu";
+      if (element.localName === "menu" || element.localName === "menulist" || (element.localName === "toolbarbutton" && element.getAttribute("type") === "menu")) return "menu";
       return "button";
     }
 
@@ -164,6 +184,64 @@
         if (big_enough(box) && within(box, area)) found.push({ element, box, place: "panel" });
       }
       return { view, found };
+    }
+
+    // The elements under `root` that match, in its shadow roots too.
+    function deep_all(root, selector) {
+      const found = [...root.querySelectorAll(selector)];
+      for (const element of root.querySelectorAll("*")) {
+        const shadow = shadow_of(element);
+        if (shadow) found.push(...deep_all(shadow, selector));
+      }
+      return found;
+    }
+
+    // An element's box in its window's own pixels. A dialog's document sits in frames of the window, so each frame's place adds up.
+    function window_box(win, element) {
+      const box = box_of(element);
+      let doc = element.ownerDocument;
+      while (doc && doc !== win.document) {
+        const frame = doc.defaultView?.browsingContext?.embedderElement;
+        if (!frame) break;
+        const outer = frame.getBoundingClientRect();
+        box.left += outer.left + (frame.clientLeft ?? 0);
+        box.top += outer.top + (frame.clientTop ?? 0);
+        doc = frame.ownerDocument;
+      }
+      return box;
+    }
+
+    // The controls of a dialog's document or of the Library or Page Info, labelled in the window's own layer.
+    function control_targets(win, doc) {
+      const view = { left: 0, top: 0, width: win.innerWidth, height: win.innerHeight };
+      const found = [];
+      const seen = new Set();
+      for (const element of deep_all(doc, CONTROLS)) {
+        if (seen.has(element) || element.closest?.(LEFT_OUT) || !usable(element)) continue;
+        seen.add(element);
+        const inner = box_of(element);
+        if (!big_enough(inner) || !shows_at_its_box(element.ownerDocument, element, inner)) continue;
+        const box = window_box(win, element);
+        if (within(box, view)) found.push({ element, box, place: "window" });
+      }
+      return found;
+    }
+
+    const window_type = (win) => win.document?.documentElement?.getAttribute("windowtype") ?? "";
+
+    // Where the focus sits in chrome, when it is a place this file labels: a tab's prompt or a settings sub-dialog (both a `dialogFrame`), an open panel this file labels, or the Library or Page Info.
+    // Undefined with the focus in a page, whose content script takes the keys, or anywhere else.
+    function chrome_place(win) {
+      const type = window_type(win);
+      if (type === LIBRARY || type === PAGE_INFO) return { doc: win.document };
+      if (type !== BROWSER) return undefined;
+      const focused = core.focused_element(win);
+      const doc = focused?.ownerDocument;
+      if (!doc) return undefined;
+      if (doc !== win.document && doc.defaultView?.browsingContext?.embedderElement?.classList?.contains("dialogFrame")) return { doc, frame_win: doc.defaultView };
+      const opened = open_panel(win.document);
+      if (opened?.panel.contains(focused)) return { opened };
+      return undefined;
     }
 
     // A XUL menu holds the keys while it is open, so a session would fight it. Tooltips and the address bar's results are popups too, but hold no keys.
@@ -244,34 +322,115 @@
       send("chrome_hints.key", { session: session.tag, seq: session.seq, key });
     }
 
+    const ENDS = Symbol("ends");
+
+    // A key while labels hold the window: ENDS for Escape or a key with Ctrl, Alt or Meta, the key to hand on, or undefined to leave it alone.
+    // A key that is no letter and no hint key (an arrow, F5) goes on as if no labels showed.
+    function held_key(event) {
+      if (event.ctrlKey || event.altKey || event.metaKey) return ENDS;
+      const key = [...event.key].length === 1 || NAMED_KEYS.has(event.key) ? event.key : undefined;
+      if (key === undefined && event.key !== "Escape") return undefined;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return event.key === "Escape" ? ENDS : key;
+    }
+
     // While a session runs, each letter and hint key in its window is the session's. Escape ends it here, so it works with no answer from the extension.
     function on_key(event) {
       if (!session || !event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
       if (!core.may_act(session.win)) return end_session(false);
-      if (event.ctrlKey || event.altKey || event.metaKey) return end_session(true);
-      // A key that is no letter and no hint key (an arrow, F5) goes on to the page as if no labels showed.
-      const key = [...event.key].length === 1 || NAMED_KEYS.has(event.key) ? event.key : undefined;
-      if (key === undefined && event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (event.key === "Escape") return end_session(true);
+      const key = held_key(event);
+      if (key === ENDS) return end_session(true);
+      if (key === undefined) return;
       if (session.drawn_gen === 0) {
         if (session.early_keys.length < MAX_EARLY_KEYS) session.early_keys.push(key);
       } else push_key(key);
     }
 
-    function listen(target, type, handler, capture = true) {
-      target.addEventListener(type, handler, capture);
-      session.undo.push(() => target.removeEventListener(type, handler, capture));
+    // ---- A start from chrome focus.
+
+    // The one matcher of the `hint.browser` bindings: `bindings` are their key token lists from the state, `held` the tokens typed so far.
+    // Returns whether to take the key, the tokens to hold next, and `done` once a whole binding is typed. A key that goes on no binding is tried alone, and Escape drops held keys.
+    function match_binding(bindings, held, event) {
+      const token = core.token_of(event);
+      if (token === null) return { take: false, held };
+      if (held.length > 0 && token === ESCAPE) return { take: true, held: [] };
+      const step = (keys) => {
+        const going = bindings.filter((binding) => keys.length <= binding.length && keys.every((key, index) => binding[index] === key));
+        if (going.some((binding) => binding.length === keys.length)) return { take: true, held: [], done: true };
+        return going.length > 0 ? { take: true, held: keys } : undefined;
+      };
+      return step([...held, token]) ?? (held.length > 0 ? step([token]) : undefined) ?? { take: false, held: [] };
     }
 
-    function start_session(tag, win, found, style_url, theme, panel) {
+    // The start the user's key asked for, while the extension answers: its token, its window and the keys typed meanwhile.
+    let starting = null;
+
+    function end_start() {
+      const ended = starting;
+      if (!ended) return;
+      starting = null;
+      for (const stop of ended.undo.splice(0)) {
+        try {
+          stop();
+        } catch (error) {
+          core.log_once(`a chrome hints cleanup step failed: ${error}`);
+        }
+      }
+    }
+
+    // The window's keys are held from the binding's last key on, so the labels' letters never reach the popup walk or the dialog.
+    function begin_start(win) {
+      end_start();
+      starting = { win, token: 1 + Math.floor(Math.random() * 0x7ffffffe), made_at: Date.now(), early_keys: [], undo: [] };
+      core.hold_keys(win, KEY_OWNER);
+      starting.undo.push(() => core.release_keys(win, KEY_OWNER));
+      for (const type of ["mousedown", "deactivate", "unload"]) listen(starting, win, type, end_start);
+      const timer = win.setTimeout(end_start, START_TOKEN_MS);
+      starting.undo.push(() => win.clearTimeout(timer));
+      if (!send("chrome_hints.want", { start: starting.token })) end_start();
+    }
+
+    function on_start_key(event) {
+      if (!event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
+      if (!core.may_act(starting.win)) return end_start();
+      const key = held_key(event);
+      if (key === ENDS) return end_start();
+      if (key !== undefined && starting.early_keys.length < MAX_EARLY_KEYS) starting.early_keys.push(key);
+    }
+
+    // A key in a window with no session or start of its own: one of a `hint.browser` binding, with the focus in a place this file labels and not in a field.
+    function on_free_key(win, record, event) {
+      if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229 || MODIFIER_KEYS.has(event.key)) return;
+      const holder = core.keys_held_by(win);
+      const bindings = core.chrome_hint_keys(win);
+      // The menu test reads every menu of the window, so it goes last: most keys are typed in a page, which `chrome_place` turns away cheaply.
+      const free = (holder === undefined || holder === PREFIX_OWNER) && bindings.length > 0 && chrome_place(win) && !field_focused(win) && !menu_open(win.document);
+      const step = free ? match_binding(bindings, record.held, event) : { take: false, held: [] };
+      record.held = step.held;
+      if (step.held.length > 0) core.hold_keys(win, PREFIX_OWNER);
+      else core.release_keys(win, PREFIX_OWNER);
+      if (!step.take) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (step.done) begin_start(win);
+    }
+
+    function listen(owner, target, type, handler, capture = true) {
+      target.addEventListener(type, handler, capture);
+      owner.undo.push(() => target.removeEventListener(type, handler, capture));
+    }
+
+    // `frame_win`: the window of the dialog the targets are in, whose close ends the session.
+    function start_session(tag, win, found, style_url, theme, { panel, frame_win, early_keys = [] } = {}) {
+      // A start's end releases the same hold a session takes, so it ends first.
+      end_start();
       end_session(true);
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys: [] };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys };
       core.hold_keys(win, KEY_OWNER);
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
-        add_session_parts(win, found, style_url, theme, panel);
+        add_session_parts(win, found, style_url, theme, panel, frame_win);
       } catch (error) {
         // A half-built session has no timer or listeners to end it, so it would swallow the window's letters until Escape.
         end_session(false);
@@ -279,7 +438,7 @@
       }
     }
 
-    function add_session_parts(win, found, style_url, theme, panel) {
+    function add_session_parts(win, found, style_url, theme, panel, frame_win) {
       const doc = win.document;
       for (const target of found) session.targets.set(next_target_id++, { ...target, kind: kind_of(target.element) });
       const window_layer = make_layer(doc, style_url, theme, true);
@@ -291,13 +450,19 @@
         panel.view.prepend(panel_layer.host);
         session.layers.panel = panel_layer;
         session.undo.push(() => panel_layer.host.remove());
-        listen(panel.panel, "popuphidden", (event) => event.target === panel.panel && end_session(true), false);
+        listen(session, panel.panel, "popuphidden", (event) => event.target === panel.panel && end_session(true), false);
       }
       const end_told = () => end_session(true);
-      listen(win, "mousedown", end_told);
-      listen(win, "deactivate", end_told);
-      listen(win, "resize", end_told);
-      listen(win, "unload", end_told);
+      if (frame_win) {
+        // A page can close its prompt at any time, and a click in the dialog lands in its own document. Another tab shows none of the dialog the labels mark.
+        listen(session, frame_win, "unload", end_told);
+        listen(session, frame_win, "mousedown", end_told);
+        listen(session, win, "TabSelect", end_told);
+      }
+      listen(session, win, "mousedown", end_told);
+      listen(session, win, "deactivate", end_told);
+      listen(session, win, "resize", end_told);
+      listen(session, win, "unload", end_told);
       const timer = win.setTimeout(() => session?.drawn_gen === 0 && end_session(true), FIRST_DRAW_MS);
       session.undo.push(() => win.clearTimeout(timer));
     }
@@ -314,22 +479,58 @@
       return parts;
     }
 
+    // The checks every start makes of its window, after the window itself.
+    function start_problem(win) {
+      if (menu_open(win.document)) return "Close the menu first";
+      if (field_focused(win)) return "Leave the field first";
+      return undefined;
+    }
+
+    function open_session(tag, win, found, colors, places) {
+      if (found.length === 0) return { ok: false, error: "Nothing to hint here" };
+      const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
+      start_session(tag, win, found.slice(0, MAX_TARGETS), extension.baseURI.resolve(STYLE_FILE), theme_text(colors), places);
+      const parts = target_parts();
+      parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
+      return { ok: true };
+    }
+
+    const panel_place = (opened) => {
+      const { view, found } = panel_targets(opened.panel, opened.row);
+      return { found, places: { panel: { panel: opened.panel, view } } };
+    };
+
     function collect({ session: tag, window_id, colors }) {
       if (!enabled_by_pref()) return { ok: false, error: "The browser module is off" };
       const { win, problem } = window_for(window_id);
       if (!win) return { ok: false, error: problem };
-      const doc = win.document;
-      if (menu_open(doc)) return { ok: false, error: "Close the menu first" };
-      if (field_focused(win)) return { ok: false, error: "Leave the field first" };
-      const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
-      const opened = open_panel(doc);
-      const panel = opened && panel_targets(opened.panel, opened.row);
-      const found = (panel ? panel.found : window_targets(win)).slice(0, MAX_TARGETS);
-      if (found.length === 0) return { ok: false, error: "Nothing to hint here" };
-      start_session(tag, win, found, extension.baseURI.resolve(STYLE_FILE), theme_text(colors), panel && { panel: opened.panel, view: panel.view });
-      const parts = target_parts();
-      parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
-      return { ok: true };
+      const refused = start_problem(win);
+      if (refused) return { ok: false, error: refused };
+      const opened = open_panel(win.document);
+      const { found, places } = opened ? panel_place(opened) : { found: window_targets(win), places: {} };
+      return open_session(tag, win, found, colors, places);
+    }
+
+    // A start the user's key asked for in chrome. The token is spent here whatever the answer, so a second request with it finds nothing.
+    function collect_here({ session: tag, start, colors }) {
+      const asked = starting;
+      if (!asked || asked.token !== start) return { ok: false, error: "The hint key is stale" };
+      end_start();
+      if (!enabled_by_pref()) return { ok: false, error: "The browser module is off" };
+      if (Date.now() - asked.made_at > START_TOKEN_MS) return { ok: false, error: "The hint key is stale" };
+      const win = asked.win;
+      if (win.closed) return { ok: false, error: "The window is gone" };
+      if (Services.focus.activeWindow !== win) return { ok: false, error: "The window is not in front" };
+      if (!core.may_act(win)) return { ok: false, error: "DesertFox cannot run in this window" };
+      const refused = start_problem(win);
+      if (refused) return { ok: false, error: refused };
+      const place = chrome_place(win);
+      if (!place) return { ok: false, error: "Nothing to hint here" };
+      if (place.opened) {
+        const { found, places } = panel_place(place.opened);
+        return open_session(tag, win, found, colors, { ...places, early_keys: asked.early_keys });
+      }
+      return open_session(tag, win, control_targets(win, place.doc), colors, { frame_win: place.frame_win, early_keys: asked.early_keys });
     }
 
     // ---- Draw.
@@ -362,7 +563,7 @@
       const origin = session.layers.panel?.host.getBoundingClientRect();
       for (const [id, text] of rows) {
         const target = session.targets.get(id);
-        target.drawn = box_of(target.element);
+        target.drawn = window_box(session.win, target.element);
         const node = label_node(doc, text, typed_length);
         if (target.place === "panel") {
           node.style.position = "absolute";
@@ -417,7 +618,7 @@
       const win = session.win;
       end_session(false);
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
-      const now = box_of(element);
+      const now = window_box(win, element);
       if (Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX) return { ok: false, error: "The hint's target moved" };
       const tabs = win.gBrowser ?? win.wrappedJSObject?.gBrowser;
       if (kind === "tab" && tabs) tabs.selectedTab = element;
@@ -433,28 +634,39 @@
       return { ok: true };
     }
 
-    // ---- The key listener of each browser window.
+    // ---- The key listener of each browser window, Library and Page Info.
     // It sits on the window root, which hears a key before the window does, so the core's keys never see a session's letters.
-    // The popup walk listens on the window root too, sometimes first. A session holds the window's keys in the core, so the walk's j and k leave them alone in an open app menu. With no session in the window it does nothing.
+    // The popup walk listens on the window root too, sometimes first. A session, a start and a binding's first keys hold the window's keys in the core, so the walk's j and k leave them alone.
     const watched = new Map();
     const loading = new Map();
 
     function watch(win) {
-      if (watched.has(win) || win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser") return;
+      if (watched.has(win) || !WATCHED_TYPES.has(window_type(win))) return;
       const root = win.windowRoot;
+      const record = { held: [] };
       const keydown = (event) => {
         try {
           if (session?.win === win) on_key(event);
+          else if (starting?.win === win) on_start_key(event);
+          else on_free_key(win, record, event);
         } catch (error) {
           core.log_once(`a key was left alone after an error in chrome hints: ${error}`);
         }
       };
       const unload = () => unwatch(win);
+      // Half a binding does not wait while the user is in another window: the walk would leave this window's keys alone meanwhile.
+      const deactivate = () => {
+        record.held = [];
+        core.release_keys(win, PREFIX_OWNER);
+      };
       root.addEventListener("keydown", keydown, true);
+      win.addEventListener("deactivate", deactivate);
       win.addEventListener("unload", unload, { once: true });
       watched.set(win, () => {
         root.removeEventListener("keydown", keydown, true);
+        win.removeEventListener("deactivate", deactivate);
         win.removeEventListener("unload", unload);
+        deactivate();
       });
     }
 
@@ -491,10 +703,13 @@
 
     // The pref off ends a session at once, so no layer or listener outlives the module.
     const on_pref = () => {
-      if (!enabled_by_pref()) end_session(false);
+      if (enabled_by_pref()) return;
+      end_start();
+      end_session(false);
     };
 
     function stop_all() {
+      end_start();
       end_session(false);
       Services.prefs.removeObserver(ENABLED_PREF, on_pref);
       try {
@@ -511,13 +726,14 @@
       core.on_shut_down(stop_all);
       Services.prefs.addObserver(ENABLED_PREF, on_pref);
       Services.ww.registerNotification(window_watcher);
-      for (const win of Services.wm.getEnumerator("navigator:browser")) watch_when_loaded(win);
+      for (const win of Services.wm.getEnumerator(null)) watch_when_loaded(win);
     } catch (error) {
       stop_all();
       throw error;
     }
 
     core.register_kind("chrome_hints.collect", collect);
+    core.register_kind("chrome_hints.collect_here", collect_here);
     core.register_kind("chrome_hints.draw", draw);
     core.register_kind("chrome_hints.pick", pick);
     core.register_kind("chrome_hints.clear", clear);

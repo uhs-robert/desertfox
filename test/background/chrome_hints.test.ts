@@ -27,7 +27,7 @@ function make({ collect = { ok: true } as { ok: true } | { ok: false; error: str
     },
     call: async (kind, args) => {
       called.push({ kind, args: args as Sent["args"] });
-      return kind === "chrome_hints.collect" ? collect : pick;
+      return kind === "chrome_hints.collect" || kind === "chrome_hints.collect_here" ? collect : pick;
     },
     letters: async () => [...DEFAULT_HINT_LETTERS],
     colors: async () => "",
@@ -190,4 +190,22 @@ test("a second start whose collect is refused clears the first session in chrome
   const cleared = pushed.filter((sent) => sent.kind === "chrome_hints.clear").map((sent) => sent.args.session);
   assert.ok(cleared.includes(first), "the first session was left in chrome");
   assert.equal(session(), undefined);
+});
+
+test("a start the module asks for from chrome focus hands its token back in a collect_here that names no window, and a refusal tells the user", async () => {
+  const { hints, called, session, notes } = make();
+  assert.equal(MODULE_TO_EXTENSION_KINDS["chrome_hints.want"]!.reply, true, "a start read twice would run twice");
+  await hints.handlers["chrome_hints.want"]({ start: 4242 });
+  assert.deepEqual(called.map((sent) => sent.kind), ["chrome_hints.collect_here"]);
+  assert.deepEqual(called[0]!.args, { session: session()!.session, start: 4242, colors: "" });
+  assert.ok(validate_message({ v: 1, id: "c1", kind: "chrome_hints.collect_here", args: called[0]!.args }, EXTENSION_TO_MODULE_KINDS).ok);
+  assert.equal("window_id" in session()!, false);
+
+  const refused = make({ collect: { ok: false, error: "The hint key is stale" } });
+  refused.hints.handlers["chrome_hints.want"]({ start: 1 });
+  await flush();
+  await refused.hints.handlers["chrome_hints.want"]({ start: 2 });
+  assert.equal(refused.session(), undefined);
+  assert.deepEqual(refused.notes, ["The hint key is stale", "The hint key is stale"]);
+  assert.deepEqual(notes, []);
 });
