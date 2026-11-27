@@ -536,6 +536,7 @@ browser.tabs.onUpdated.addListener((tab_id, change, tab) => {
   if (change.status === "loading") void inspect_relay.forget(tab_id);
   void hint_frames.navigated(tab_id, change).catch(warn_and_go("hint_frames.navigated"));
   void tab_modes.forget_on_navigation(tab_id, change);
+  if (change.discarded === true) void tab_modes.forget_live(tab_id);
 });
 
 browser.tabs.onRemoved.addListener((tab_id) => void jump_leave.forget(tab_id).catch(warn_and_go("jump_leave.forget")));

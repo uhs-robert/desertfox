@@ -506,3 +506,14 @@ test("a frame that answers the park with not free sends a fresh report: the reco
   assert.equal(record.parked, undefined);
   assert.equal(await modes.recall(4), "normal");
 });
+
+test("a discarded tab loses its live mark and keeps the rest of its record", async () => {
+  const storage = fake_storage();
+  const modes = create_tab_modes(storage);
+  await modes.report(4, { frame_id: TOP, mode: "ignore", focus: true });
+  assert.equal((storage.data.desertfox_tab_mode_4 as { live?: true }).live, true);
+  await modes.forget_live(4);
+  assert.deepEqual(storage.data, { desertfox_tab_mode_4: { top_mode: "ignore" } });
+  await modes.forget_live(5);
+  assert.equal("desertfox_tab_mode_5" in storage.data, false);
+});
