@@ -32,6 +32,7 @@ export class Node {
   open = false;
   state = "closed";
   listeners = new Map<string, Set<Handler>>();
+  #class_list: { contains(name: string): boolean } | undefined;
   constructor(local_name: string, props: Partial<Node> = {}) {
     this.localName = local_name;
     Object.assign(this, props);
@@ -46,6 +47,12 @@ export class Node {
   }
   set textContent(text: string) {
     this.text = text;
+  }
+  get classList(): { contains(name: string): boolean } {
+    return this.#class_list ?? { contains: (name: string) => this.className.split(/\s+/).includes(name) };
+  }
+  set classList(value: { contains(name: string): boolean }) {
+    this.#class_list = value;
   }
   checkVisibility() {
     return this.visible;
@@ -69,13 +76,20 @@ export class Node {
     if (selector === "*") return below;
     return below.filter((node) => node.matches(selector));
   }
+  querySelector(selector: string): Node | null {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
   descendants(): Node[] {
     return this.children.flatMap((child) => [child, ...child.descendants()]);
   }
-  matches(selector: string) {
+  // Selectors of one compound each (a tag, an #id or a .class, a [type=...] and the :not([editable]) the feature uses), or a parent > child pair of them.
+  matches(selector: string): boolean {
     return selector.split(",").some((part) => {
       const one = part.trim();
+      const child = one.lastIndexOf(">");
+      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child)) ?? false);
       if (one.startsWith("#")) return this.id === one.slice(1);
+      if (one.startsWith(".")) return this.classList.contains(one.slice(1));
       const tag = /^[a-z-]+/.exec(one)?.[0];
       const type = /\[type=([a-z]+)\]/.exec(one)?.[1];
       if (type !== undefined && this.getAttribute("type") !== type) return false;
