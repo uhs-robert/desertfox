@@ -11,7 +11,7 @@ const MAX_BYTES = {
   // Key listener, prefix tree, modes and scrolling. Runs on every page and frame (admission rule in AGENTS.md, "Content script size").
   "content.js": 22 * 1024,
   // Link hints and the grab target pass. Loads on the first hint command, not on every page.
-  "hints.js": 52.25 * 1024,
+  "hints.js": 52.75 * 1024,
   // Caret and visual mode.
   "caret.js": 32 * 1024,
   // The which-key panel. Loads on a pause in a prefix.

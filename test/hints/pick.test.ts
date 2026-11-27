@@ -136,16 +136,26 @@ test("entering text mode never picks, even with one hint", () => {
 
 test("in text mode / is text, and in label mode Tab does not enter text mode", () => {
   const picker = text_picker();
-  assert.deepEqual(picker.on_token_("<Tab>"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3] });
+  assert.deepEqual(picker.on_token_("<Tab>"), { kind: "rotate", back: false });
   picker.on_token_("/");
   assert.deepEqual(picker.on_token_("/"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3], text: "/", active: 0 });
 });
 
-test("Space in label mode asks for a rotation, and Enter, Tab and Shift-Tab are taken and do nothing", () => {
+test("in label mode Space asks for rapid, Tab and Shift-Tab ask for a rotation, and Enter is taken and does nothing", () => {
   const picker = text_picker();
-  assert.deepEqual(picker.on_token_("<Space>"), { kind: "rotate" });
+  assert.deepEqual(picker.on_token_("<Space>"), { kind: "rapid" });
+  assert.deepEqual(picker.on_token_("<Tab>"), { kind: "rotate", back: false });
+  assert.deepEqual(picker.on_token_("<S-Tab>"), { kind: "rotate", back: true });
   assert.deepEqual(picker.on_token_("<Enter>"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3] });
-  assert.deepEqual(picker.on_token_("<S-Tab>"), { kind: "handled", typed: "", still_possible_: [0, 1, 2, 3] });
+});
+
+test("in text mode Space is a character of the query and Tab and Shift-Tab move the active match", () => {
+  const picker = text_picker();
+  picker.on_token_("/");
+  assert.equal(picker.on_token_("<Space>").kind, "handled");
+  picker.on_token_("n");
+  assert.equal(picker.on_token_("<Tab>").kind, "handled");
+  assert.equal(picker.on_token_("<S-Tab>").kind, "handled");
 });
 
 test("the texts are read when text mode first needs them, not before", () => {

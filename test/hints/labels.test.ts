@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clean_letters, DEFAULT_HINT_LETTERS, item_first, make_labels, narrow, overlap_groups, rotate } from "../../src/shared/hints/labels.ts";
+import { clean_letters, DEFAULT_HINT_LETTERS, item_first, make_labels, narrow, overlap_groups, rotate, rotate_back } from "../../src/shared/hints/labels.ts";
 
 const HOME_ROW = [...DEFAULT_HINT_LETTERS];
 
@@ -78,4 +78,11 @@ test("item_first puts the item's targets first, also those in a shadow root, and
   const found = [c, a, d, in_shadow].map((element) => ({ element }));
   assert.deepEqual(item_first(found, item).map((target) => target.element), [a, in_shadow, c, d]);
   assert.equal(item_first(found, undefined), found);
+});
+
+test("rotate_back sends the bottom to the top, undoes rotate, and leaves short stacks alone", () => {
+  assert.deepEqual(rotate_back(["a", "b", "c"]), ["b", "c", "a"]);
+  assert.deepEqual(rotate_back(rotate(["a", "b", "c"])), ["a", "b", "c"]);
+  assert.deepEqual(rotate_back(["a"]), ["a"]);
+  assert.deepEqual(rotate_back([]), []);
 });

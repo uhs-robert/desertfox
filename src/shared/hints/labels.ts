@@ -74,3 +74,6 @@ export function overlap_groups(boxes: readonly Box[]): number[][] {
 
 // Bottom to top in, bottom to top out: the label on top goes to the bottom, so the next one shows.
 export const rotate = <T>(stack: readonly T[]): T[] => (stack.length < 2 ? [...stack] : [stack[stack.length - 1]!, ...stack.slice(0, -1)]);
+
+// The reverse of `rotate`: the label at the bottom comes to the top.
+export const rotate_back = <T>(stack: readonly T[]): T[] => (stack.length < 2 ? [...stack] : [...stack.slice(1), stack[0]!]);

@@ -14,8 +14,10 @@ export const is_text_key = (token: string): boolean => NAMED_KEYS.includes(token
 
 export type KeyOutcome =
   | { kind: "pass" }
-  // Space in label mode: the view turns the stacking order of overlapping labels.
-  | { kind: "rotate" }
+  // Tab or Shift+Tab in label mode: the view turns the stacking order of overlapping labels, forward or back.
+  | { kind: "rotate"; back: boolean }
+  // Space in label mode: the run turns rapid on, or off when it is on.
+  | { kind: "rapid" }
   // The key was taken. `picked` is the index of a completed label, or of the hint that text mode picked.
   // `text` is set only in text mode: what was typed, and `active` the best match, the one Enter picks.
   | { kind: "handled"; typed: string; still_possible_: number[]; picked?: number; text?: string | undefined; active?: number | undefined };
@@ -70,9 +72,10 @@ export function create_picker(labels: readonly string[], texts: () => readonly (
       active = 0;
       return text_outcome();
     }
-    if (token === "<Space>") return { kind: "rotate" };
-    // These mean nothing before text mode, and must not reach the page.
-    if (token === "<Enter>" || token === "<Tab>" || token === "<S-Tab>") return label_outcome();
+    if (token === "<Space>") return { kind: "rapid" };
+    if (token === "<Tab>" || token === "<S-Tab>") return { kind: "rotate", back: token === "<S-Tab>" };
+    // Enter means nothing before text mode, and must not reach the page.
+    if (token === "<Enter>") return label_outcome();
     if (token === "<Backspace>") {
       typed = typed.slice(0, -1);
       return label_outcome();

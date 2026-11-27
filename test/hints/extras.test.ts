@@ -5,7 +5,7 @@ import "../../src/commands/hint.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
 import type { Outcome } from "../../src/shared/messages/content.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
-import { KEY_LINE_LABELS, KEY_LINE_TEXT } from "../../src/content/hints/view.ts";
+import { KEY_LINE_LABELS, KEY_LINE_TEXT, label_key_line } from "../../src/content/hints/view.ts";
 import { is_editable_element } from "../../src/content/editable.ts";
 
 class FakeNode {
@@ -62,6 +62,11 @@ class FakeNode {
     node.remove();
     node.parent = this.parent;
     this.parent!.children.splice(this.parent!.children.indexOf(this), 0, node);
+  }
+  after(node: FakeNode) {
+    node.remove();
+    node.parent = this.parent;
+    this.parent!.children.splice(this.parent!.children.indexOf(this) + 1, 0, node);
   }
   matches(_selector: string) {
     return false;
@@ -157,6 +162,7 @@ async function page_with(texts: string[], settings: Record<string, unknown> = {}
         if (left_hint) sink?.exit();
       },
       get_mode: () => mode,
+      leaf_end_: () => undefined,
       is_editable_: is_editable_element,
       escape_: () => win.desertfox_host.set_mode_("normal"),
       // The caret bundle's `caret.mode` sets the caret mode it is asked for.
@@ -503,7 +509,7 @@ test("Escape during the grace cancels the pick", async () => {
   assert.equal(page.links.length, 2);
 });
 
-test("Space turns the stacking order of labels that overlap, reading the boxes again on each press", async () => {
+test("Tab and Shift-Tab turn the stacking order of labels that overlap, reading the boxes again on each press", async () => {
   const page = await page_with(["one", "two", "three"]);
   page.run({ action: "delete" });
   await settle();
@@ -514,17 +520,21 @@ test("Space turns the stacking order of labels that overlap, reading the boxes a
   second!.box = { ...overlap, left: 10 };
   third!.box = { left: 100, top: 100, right: 120, bottom: 110 };
   const before = order();
-  page.type("<Space>");
+  page.type("<Tab>");
   assert.deepEqual(order(), [before[1], before[0], before[2]]);
-  page.type("<Space>");
+  page.type("<Tab>");
   assert.deepEqual(order(), before);
   // A scroll moved the third label onto the others, so all three turn together now.
   third!.box = { ...overlap, left: 5 };
-  page.type("<Space>");
+  page.type("<Tab>");
   assert.deepEqual(order(), [before[2], before[0], before[1]]);
+  // Shift-Tab is the way back: the bottom label comes to the top.
+  page.type("<S-Tab>");
+  assert.deepEqual(order(), before);
+  page.type("<Tab>");
   // A label hidden by typing is not part of a group.
   first!.style.display = "none";
-  page.type("<Space>");
+  page.type("<Tab>");
   assert.deepEqual(order(), [before[1], before[2], before[0]]);
   page.escape();
 });
@@ -623,7 +633,7 @@ test("a rapid rebuild after a text pick is back in label mode", async () => {
   assert.equal(page.links.length, 2);
   assert.equal(page.nodes_with_class("desertfox-hint-text").length, 0);
   assert.equal(page.labels().length, 2);
-  assert.deepEqual(page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent), [KEY_LINE_LABELS]);
+  assert.deepEqual(page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent), [label_key_line({ rapid: "on" })]);
   page.type(page.labels()[0]!.toLowerCase());
   await settle();
   assert.equal(page.links.length, 1);
@@ -639,11 +649,12 @@ test("/ and text typed while the hints are found wait, then switch and filter", 
   assert.deepEqual(page.links.map((link) => link.textContent), ["Alpha one", "Alpha two"]);
 });
 
-test("Space in label mode keeps the labels and does not pick", async () => {
+test("Tab and Shift-Tab in label mode keep the labels and do not pick", async () => {
   const page = await page_with(["Alpha one", "Alpha two"]);
   page.run({ action: "delete" });
   await settle();
-  assert.equal(page.type("<Space>"), "handled");
+  assert.equal(page.type("<Tab>"), "handled");
+  assert.equal(page.type("<S-Tab>"), "handled");
   assert.equal(page.labels().length, 2);
   assert.equal(page.links.length, 2);
   page.escape();
@@ -1910,4 +1921,142 @@ test("the owner frame lets go of a hover only for the release that names the pic
     delete (globalThis as { PointerEvent?: unknown }).PointerEvent;
     delete (globalThis as { MouseEvent?: unknown }).MouseEvent;
   }
+});
+
+// Space turns rapid mode on and off in label mode (the `rapid` outcome of the picker).
+test("Space turns rapid on, so a pick keeps hint mode and labels again, and a second Space turns it off", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  page.run({ action: "background" });
+  await settle();
+  assert.deepEqual(page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent), [KEY_LINE_LABELS]);
+  assert.equal(page.type("<Space>"), "handled");
+  assert.deepEqual(page.nodes_with_class("desertfox-hint-keys").map((node) => node.textContent), [KEY_LINE_LABELS.replace("Space: rapid", "Space: stop rapid")]);
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 3);
+  // The next build draws the key line with the state.
+  assert.match(page.nodes_with_class("desertfox-hint-keys")[0]!.textContent, /Space: stop rapid/);
+  page.type("<Space>");
+  page.type(page.labels()[1]!.toLowerCase());
+  await settle();
+  assert.equal(page.mode(), "normal");
+  assert.equal(page.labels().length, 0);
+});
+
+test("Space on a mode action shows the refusal, keeps hint mode and the labels, and the pick still happens once", async () => {
+  const page = await page_with(["one", "two"]);
+  page.run({ action: "visual" });
+  await settle();
+  assert.equal(page.nodes_with_class("desertfox-hint-keys")[0]!.textContent, "/: type text \u00b7 Tab: turn labels");
+  assert.equal(page.type("<Space>"), "handled");
+  assert.deepEqual(page.messages(), ["This hint action does not repeat"]);
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 2);
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.notEqual(page.mode(), "hint");
+});
+
+test("Space on prompt, enter_item and enter_media refuses too", async () => {
+  for (const action of ["prompt", "enter_item", "enter_media"]) {
+    const page = await page_with(["one", "two"]);
+    page.run({ action, command: "open" });
+    await settle();
+    page.type("<Space>");
+    assert.deepEqual(page.messages(), ["This hint action does not repeat"], action);
+    page.escape();
+  }
+});
+
+test("Space-set rapid follows a pick that removes or moves its element", async () => {
+  const page = await page_with(["one", "two", "three"]);
+  const [removing, moving] = page.links as [Link, Link, Link];
+  removing.on_click = () => removing.remove();
+  moving.on_click = () => {
+    moving.rect_top = 300;
+  };
+  page.run({ action: "here" });
+  await settle();
+  page.type("<Space>");
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.labels().length, 2);
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.deepEqual(page.label_tops(), ["300px", "10px"]);
+  assert.equal(page.mode(), "hint");
+  page.escape();
+});
+
+test("a pick that leaves nothing to label after Space-set rapid ends hint mode with the notice", async () => {
+  const page = await page_with(["one"]);
+  page.run({ action: "delete" });
+  await settle();
+  page.type("<Space>");
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.mode(), "normal");
+  assert.deepEqual(page.messages(), ["No hints on this page"]);
+});
+
+test("a pick that focuses a field ends rapid mode, from --rapid and from Space", async () => {
+  for (const space of [false, true]) {
+    const page = await page_with(["one", "two"]);
+    Object.assign(page.links[0]!, { localName: "input", type: "text" });
+    page.run({ action: "here", rapid: !space });
+    await settle();
+    if (space) page.type("<Space>");
+    page.type(page.labels()[0]!.toLowerCase());
+    await settle();
+    assert.equal(page.mode(), "normal", space ? "space" : "rapid arg");
+    assert.equal(page.labels().length, 0);
+    assert.equal(page.active_listeners.size, 0);
+  }
+});
+
+test("a pick on a checkbox in rapid mode keeps hint mode", async () => {
+  const page = await page_with(["one", "two"]);
+  Object.assign(page.links[0]!, { localName: "input", type: "checkbox" });
+  page.run({ action: "here", rapid: true });
+  await settle();
+  page.type(page.labels()[0]!.toLowerCase());
+  await settle();
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 2);
+  page.escape();
+});
+
+test("across frames Space-set rapid in the keyboard frame picks a label of another frame, then labels again", async () => {
+  const page = await page_with(["one", "two"]);
+  let starts = 0;
+  page.answer_start(() => ({ ok: true, session_id: `s${++starts}`, labels: ["a", "s", "d"], own_labels: ["a", "s"] }));
+  void page.run({ action: "background", frames: "all_frames" });
+  await settle();
+  assert.equal(page.type("<Space>"), "handled");
+  page.type("<Tab>");
+  page.type("d");
+  await settle();
+  // No typed-ahead keys go with a rapid pick, and the keyboard frame keeps hint mode with a fresh session.
+  assert.deepEqual(page.sent.find((message) => (message as { type: string }).type === "hint_frames_pick"), { type: "hint_frames_pick", session_id: "s1", label: "d" });
+  assert.equal(starts, 2);
+  assert.equal(page.mode(), "hint");
+  assert.equal(page.labels().length, 2);
+  page.escape();
+  assert.deepEqual(page.sent.at(-1), { type: "hint_frames_end", session_id: "s2" });
+});
+
+test("rapid set in the keyboard frame keeps the collected copy list across the frames' picks", async () => {
+  const page = await page_with(["one", "two"]);
+  let starts = 0;
+  page.answer_start(() => ({ ok: true, session_id: `s${++starts}`, labels: ["a", "s", "d"], own_labels: ["a", "s"] }));
+  void page.run({ action: "copy", frames: "all_frames" });
+  await settle();
+  page.type("<Space>");
+  page.type("a");
+  await settle();
+  page.type("s");
+  await settle();
+  assert.equal(page.copied.at(-1), "https://example.com/one\nhttps://example.com/two");
+  page.escape();
 });
