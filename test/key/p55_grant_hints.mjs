@@ -1,4 +1,4 @@
-// Hints on the surfaces that grant (browser_module/desertfox-chrome-hints.js): a permission prompt and the downloads panel.
+// Hints on the surfaces that grant (browser_module/desertfox-chrome-hints.js): a permission prompt, a login prompt in a tab and the downloads panel.
 // A pick of a control that denies, closes or only shows something clicks at once. A pick of a control that grants or opens a file marks it, and only Enter typed by the user then clicks it.
 import { module_steps } from "./browser_module_steps.mjs";
 
@@ -130,6 +130,53 @@ export async function run_cases(context) {
     await sleep(800);
     expect((await geo_answer()) === "geo:waiting", `Enter after Escape answered the page: ${await geo_answer()}`);
     expect(await chrome(`(async () => ${W}.PopupNotifications.panel.state === "open")()`), "Escape closed the prompt");
+  });
+
+  // ---- A login prompt in a tab: its OK sends the login to the site, so it waits for Enter. The key lands in the prompt's own frame.
+
+  // Chrome code: the label in the browser window's layer on the login prompt's OK, placed in the window, and whether the prompt is open.
+  const LOGIN_FRAME = `[...${W}.document.querySelectorAll("browser.dialogFrame")].find((frame) => frame.contentDocument?.getElementById("commonDialog")?.getAttribute("windowtype") === "prompt:promptUserAndPass")`;
+  const login_ok_label = `(async () => {
+    const w = ${W};
+    const frame = ${LOGIN_FRAME};
+    if (!frame) return null;
+    const outer = frame.getBoundingClientRect();
+    const ok = frame.contentDocument.getElementById("commonDialog").getButton("accept").getBoundingClientRect();
+    const [left, top] = [outer.left + frame.clientLeft + ok.left, outer.top + frame.clientTop + ok.top];
+    for (const host of w.document.querySelectorAll(".desertfox-chrome-hints")) {
+      for (const node of host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint")) {
+        const box = node.getBoundingClientRect();
+        if (Math.abs(box.left - left) + Math.abs(box.top - top) <= 3) return node.textContent;
+      }
+    }
+    return null;
+  })()`;
+  const login_answer = () => chrome(`(async () => Services.desertfox_key_test_login ?? null)()`);
+
+  await prompt_case("on a login prompt a pick of OK marks it and sends nothing, and Enter typed in the prompt then sends the login", async () => {
+    await home("gh_login");
+    await open_tab(url_of("page", "gh_login"));
+    await chrome(`(async () => {
+      const w = ${W};
+      Services.desertfox_key_test_login = "waiting";
+      Services.prompt.asyncPromptUsernameAndPassword(w.gBrowser.selectedBrowser.browsingContext, Services.prompt.MODAL_TYPE_TAB, "DesertFox", "DesertFox asks", "user", "secret").then((bag) => { Services.desertfox_key_test_login = bag.getProperty("ok") ? "sent" : "cancelled"; });
+    })()`);
+    await poll_until("the login prompt to open", () => chrome(`(async () => !!${LOGIN_FRAME}?.contentDocument.getElementById("commonDialog").getButton("accept").checkVisibility())()`), { timeout_ms: 5000 });
+    await sleep(300);
+    // The prompt puts the focus in its user name field, where gB would type, so the focus moves to OK.
+    await chrome(`(async () => { ${LOGIN_FRAME}.contentDocument.getElementById("commonDialog").getButton("accept").focus(); })()`);
+    await sleep(200);
+    await press_keys("g", "B");
+    let ok = null;
+    await poll_until("a label on OK", async () => (ok = await chrome(login_ok_label)) !== null, { timeout_ms: 5000 });
+    await take_shot("/tmp/desertfox-grant-hints-login.png");
+    await press_keys(...ok.split(""));
+    await poll_until("the confirm mark to show", () => chrome(confirm_shown), { timeout_ms: 3000 });
+    await sleep(800);
+    expect((await login_answer()) === "waiting", `the pick alone answered the prompt: ${await login_answer()}`);
+    await press_keys("-k", "Return");
+    await poll_until("the login to be sent", async () => (await login_answer()) === "sent", { timeout_ms: 5000 });
+    await expect_ended("an OK confirmed");
   });
 
   // ---- The downloads panel.

@@ -519,3 +519,13 @@ test("a tab prompt's checkbox waits for Enter: on a prompt from a background tab
   chrome.press("Enter");
   assert.equal(element.clicks, 1);
 });
+
+test("an Enter in a dialog counts on the dialog's own clock: one pressed before the mark does nothing, and one after it confirms", async () => {
+  const { chrome, element } = await dialog_pick("chrome://global/content/commonDialog.xhtml", "accept", { windowtype: "prompt:promptUserAndPass" });
+  const dialog_clock = (chrome as unknown as { dialog_view: { performance: { now(): number } } }).dialog_view.performance;
+  chrome.press("Enter", { timeStamp: dialog_clock.now() - 1 });
+  assert.equal(element.clicks, 0, "an Enter pressed before the mark sent the login");
+  assert.ok(marked(chrome), "an Enter pressed before the mark ended the confirm");
+  chrome.press("Enter");
+  assert.equal(element.clicks, 1, "an Enter typed in the dialog after the mark did not send the login");
+});
