@@ -61,17 +61,20 @@ export const tab_state_of = (record: TabModeRecord): TabState => ({ mode: mode_o
 // The tab id of a tab mode key, or undefined for the manual insert hold key that shares the prefix.
 export const tab_id_of_key = (key: string): string | undefined => (key.startsWith(TAB_MODE_STORAGE_PREFIX) && /^\d{1,10}$/.test(key.slice(TAB_MODE_STORAGE_PREFIX.length)) ? key.slice(TAB_MODE_STORAGE_PREFIX.length) : undefined);
 
-// Whether the setting is on in the stored config status, which holds the settings in force. The status is written in the same `set` as the change event that asks, while `get_config` updates after it.
-export async function module_setting_on(storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> {
-  const status = (await storage.get(CONFIG_STATUS_STORAGE_KEY))[CONFIG_STATUS_STORAGE_KEY] as { settings?: { browser_module?: unknown } } | undefined;
-  return status?.settings?.browser_module === true;
+// Whether a boolean setting is on in the stored config status, which holds the settings in force. The status is written in the same `set` as the change event that asks, while `get_config` updates after it.
+export async function stored_setting_on(storage: Pick<typeof browser.storage.local, "get">, name: "browser_module" | "blur_on_load"): Promise<boolean> {
+  const status = (await storage.get(CONFIG_STATUS_STORAGE_KEY))[CONFIG_STATUS_STORAGE_KEY] as { settings?: Record<string, unknown> } | undefined;
+  return status?.settings?.[name] === true;
 }
+export const module_setting_on = (storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> => stored_setting_on(storage, "browser_module");
 
 export type BrowserModuleDeps = {
   session: SessionStorage;
   // Whether the setting is on (`module_setting_on`).
   is_on: () => Promise<boolean>;
   read_disabled: () => Promise<boolean>;
+  // The global `blur_on_load`. Locked pages match no site rule, so the global value is the one in force there.
+  read_blur_on_load?: () => Promise<boolean>;
   read_keymap: () => Promise<CompiledKeymap | undefined>;
   read_tab_records: () => Promise<Record<string, TabModeRecord>>;
   check_args: CheckCommandArgs;
@@ -205,7 +208,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       const id = tab_id_of_key(key);
       if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_state_of(record);
     }
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs });
+    const blur_on_load = (await deps.read_blur_on_load?.()) === true;
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(blur_on_load ? { blur_on_load } : {}) });
     request_hello_read();
     request_messages_read();
   };

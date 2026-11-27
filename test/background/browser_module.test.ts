@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { create_browser_module, key_rows_of, module_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
+import { create_browser_module, key_rows_of, module_setting_on, stored_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
@@ -57,7 +57,7 @@ const TEST_KINDS: { from_module: KindTable; from_extension: KindTable } = {
   from_extension: { note: { args: {}, reply: true }, nudge: { args: { n: "int" }, reply: false } },
 };
 
-function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord> } = {}) {
+function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord>; blur_on_load?: boolean } = {}) {
   const data = new Map<string, unknown>();
   const config = { on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000, gets: [] as string[] };
   const timers: (() => void)[] = [];
@@ -75,6 +75,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     session: session as never,
     is_on: async () => config.on,
     read_disabled: async () => config.disabled,
+    ...(options.blur_on_load === undefined ? {} : { read_blur_on_load: async () => options.blur_on_load! }),
     read_keymap: async () => keymap({ J: leaf("tab.next") }),
     read_tab_records: async () => config.records,
     check_args: real_check,
@@ -133,6 +134,17 @@ test("the setting turning on writes the state and turning off clears it, read fr
   assert.ok(data.has(BROWSER_MODULE_STATE_STORAGE_KEY));
   assert.equal(await module_setting_on({ get: async () => ({}) }), false, "no status yet means off");
   assert.equal(await module_setting_on({ get: async (key: string) => ({ [key]: { settings: { browser_module: "yes" } } }) }), false);
+});
+
+test("the state carries blur_on_load only while the setting is on, read from the stored config status", async () => {
+  for (const [blur_on_load, expected] of [[true, true], [false, undefined], [undefined, undefined]] as const) {
+    const { data, module } = setup(blur_on_load === undefined ? {} : { blur_on_load });
+    await module.sync();
+    assert.equal((data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as { blur_on_load?: boolean }).blur_on_load, expected, String(blur_on_load));
+  }
+  const status = (settings: Record<string, unknown>) => ({ get: async (key: string) => ({ [key]: { settings } }) });
+  assert.equal(await stored_setting_on(status({ blur_on_load: true }), "blur_on_load"), true);
+  assert.equal(await stored_setting_on(status({ blur_on_load: "yes", browser_module: true }), "blur_on_load"), false);
 });
 
 test("the toolbar switch off writes enabled false and no keys", async () => {

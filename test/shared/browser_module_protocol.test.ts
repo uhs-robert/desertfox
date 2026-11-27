@@ -22,6 +22,16 @@ import {
 
 const state = (patch: Record<string, unknown> = {}) => ({ v: V, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: { "7": { mode: "normal", live: false } }, ...patch });
 
+test("blur_on_load is optional: kept when true or false, absent when not given, and any other value fails", () => {
+  for (const blur_on_load of [true, false]) {
+    const checked = validate_module_state(state({ blur_on_load }));
+    assert.ok(checked.ok && checked.value.blur_on_load === blur_on_load);
+  }
+  const absent = validate_module_state(state());
+  assert.ok(absent.ok && !("blur_on_load" in absent.value));
+  assert.equal(validate_module_state(state({ blur_on_load: "yes" })).ok, false);
+});
+
 test("a well formed state validates and keeps the args it was given", () => {
   const checked = validate_module_state(state({ keys: [{ key: "j", id: "scroll.lines", args: { count: 10001 } }] }));
   assert.ok(checked.ok, "the command schema owns the limits, so the protocol takes any whole number");

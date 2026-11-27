@@ -43,7 +43,8 @@ export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleComm
 export type ModuleArgs = Record<string, number | string>;
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 export type TabState = { mode: Mode; live: boolean };
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState> };
+// `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; blur_on_load?: boolean };
 export type ModuleHello = { v: number; module_version: string };
 
 // What the module takes for a tab id the state does not list.
@@ -91,6 +92,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
   if (typeof value.enabled !== "boolean") return bad("enabled must be true or false");
+  if (value.blur_on_load !== undefined && typeof value.blur_on_load !== "boolean") return bad("blur_on_load must be true or false");
   if (!Array.isArray(value.keys) || value.keys.length > MAX_KEY_ROWS) return bad(`keys must be a list of at most ${MAX_KEY_ROWS} rows`);
   const keys: KeyRow[] = [];
   const seen = new Set<string>();
@@ -113,7 +115,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
     if (!is_record(tab) || typeof tab.live !== "boolean" || !(MODES as readonly unknown[]).includes(tab.mode)) return bad("a tab needs a mode and a live mark");
     tabs[id] = { mode: tab.mode as Mode, live: tab.live };
   }
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs } };
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the two fields it reads. An older or newer module may send more fields, which are ignored.

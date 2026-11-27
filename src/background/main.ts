@@ -61,7 +61,7 @@ import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import { create_browser_module, module_setting_on } from "./browser_module.ts";
+import { create_browser_module, module_setting_on, stored_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -302,6 +302,7 @@ const browser_module = create_browser_module({
   },
   handlers: {},
   read_disabled,
+  read_blur_on_load: () => stored_setting_on(browser.storage.local, "blur_on_load"),
   read_keymap: () => stored_keymap(browser.storage.local),
   read_tab_records: async () => Object.fromEntries(Object.entries(await browser.storage.local.get(null)).filter(([key]) => key.startsWith(TAB_MODE_STORAGE_PREFIX))) as never,
   now: Date.now,
