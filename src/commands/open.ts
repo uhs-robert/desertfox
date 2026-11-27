@@ -10,14 +10,44 @@ import { browser_register_store, is_private_context } from "../background/regist
 import { engine_url, home_page_url, search_engine_name } from "../shared/url_build.ts";
 import { decode_ref } from "../shared/anything_ref.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
+import { firefox_page_at } from "../shared/firefox_pages.ts";
+import { check_args } from "../shared/registry/check_args.ts";
+import { registry } from "../shared/registry/builtin.ts";
+import { open_firefox_page } from "./native.ts";
+import type { FirefoxPageArgs } from "./firefox_page.ts";
 
 const container_of = (args: Record<string, unknown>) => (typeof args.container === "string" ? args.container : undefined);
 
 // A blank url opens the built-in new tab page, the same page `page.home` opens for `desertfox`.
 // The param schema decides where a blank url is allowed, so this takes whatever the check let through.
 async function open_url_target(ctx: CommandContext, text: string): Promise<string> {
-  if (text.trim() !== "") return typed_url_target(text, own_pages_for(ctx));
+  if (text.trim() !== "") return with_firefox_page_hint(typed_url_target(text, own_pages_for(ctx)), text);
   return home_page_url(BUILT_IN_PAGE, () => browser.runtime.getURL(NEW_TAB_PAGE_FILE));
+}
+
+const FIREFOX_PAGE_COMMAND = "browser.open_firefox_page";
+const FIREFOX_PAGE_HINT = "Use :firefox to open Firefox's own pages";
+
+// Typed text that equals the address of a page `:firefox` opens runs that command, here or in a tab. Text a page sent never does, and the bridge refuses every about: address before the handler runs.
+async function open_typed_firefox_page(ctx: CommandContext, page: NonNullable<ReturnType<typeof firefox_page_at>>, where: Where, container: string | undefined): Promise<void> {
+  if (where !== "here" && where !== "tab") throw new RuntimeRefusal("Firefox pages open here or in a tab");
+  if (container !== undefined) throw new RuntimeRefusal("Firefox pages open with no container");
+  // The one validator, so a pair that :firefox refuses (the passwords page here) is refused the same way.
+  const checked = check_args(registry.get(FIREFOX_PAGE_COMMAND)!, { page, where });
+  if (!checked.ok) throw new RuntimeRefusal(checked.error);
+  await open_firefox_page(ctx, checked.args as FirefoxPageArgs);
+}
+
+// Any other about: address keeps the refusal of the one allow-list, with the command that opens Firefox's own pages named.
+async function with_firefox_page_hint(target: Promise<string>, text: string): Promise<string> {
+  try {
+    return await target;
+  } catch (error) {
+    const typed = text.trim();
+    const about_page = URL.canParse(typed) && new URL(typed).protocol === "about:" && !/^(blank|reader)$/i.test(new URL(typed).pathname);
+    if (error instanceof RuntimeRefusal && about_page) throw new RuntimeRefusal(`${error.message}. ${FIREFOX_PAGE_HINT}`);
+    throw error;
+  }
 }
 
 define("open.url", {
@@ -27,7 +57,11 @@ define("open.url", {
   params: [{ name: "url", type: "string", rest: true, main: true, default: [{ value: "", when: { where: ["tab", "window", "background"] } }], values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
   bridge: true,
   runs_in: "background",
-  run: async (ctx, args) => open_in(ctx, await open_url_target(ctx, args.url), args.where, container_of(args)),
+  run: async (ctx, args) => {
+    const page = ctx.from_page ? undefined : firefox_page_at(args.url);
+    if (page !== undefined) return open_typed_firefox_page(ctx, page, args.where, container_of(args));
+    await open_in(ctx, await open_url_target(ctx, args.url), args.where, container_of(args));
+  },
   jumps: (args) => args.where === "here",
 });
 

@@ -7,6 +7,7 @@ import type { Mode } from "./command.ts";
 import type { ContentRequests } from "./messages/map.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
 import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
+import { MODULE_FIREFOX_PAGES } from "./firefox_pages.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -35,7 +36,8 @@ export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys";
+// `firefox_page` is a name from MODULE_FIREFOX_PAGES. `optional_open_where` is absent, "tab" or "here".
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
@@ -43,6 +45,8 @@ export const PANE_DIRECTIONS = ["left", "right"] as const;
 // What a pick does in a hint session on one of Firefox's own pages: click or focus the target, or, for a link to a web address only, open it in a tab or a background tab, or copy it. The module reads the address itself, so none crosses the channel.
 export const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"] as const;
 export type PageHintAction = (typeof PAGE_HINT_ACTIONS)[number];
+// Where the module opens a Firefox page: a tab after the one that asked, or that tab itself.
+export const FIREFOX_PAGE_WHERE = ["tab", "here"] as const;
 
 // The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each tree action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
 // `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`). `visual.start` starts visual mode in the focused DevTools text area.
@@ -156,8 +160,8 @@ export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: strin
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`.
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -180,6 +184,8 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
   if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
   if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? undefined : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
+  if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? undefined : "must be a page from the list";
+  if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.some((where) => where === value) ? undefined : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
   if (kind === "optional_int" && value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
   if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? undefined : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
@@ -352,7 +358,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -450,7 +456,13 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
   // The keys of visual mode in DevTools, pushed with the key table and kept the same way. Each row maps a key to an op from the closed list, so the module moves and copies only the user's own selection. No text, selector or range comes or goes.
   "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86_400_000 },
+  // Opens one Firefox page from the fixed list, sent only to a module whose hello says `firefox_pages`. The module builds the address from its own table, so no address, query or fragment crosses the channel.
+  // `tab_id` names the tab that asked, as for `address_bar.open`: the page opens in that tab's window, and `here` replaces that tab only while it is still the selected tab. A reply, because an open read twice must open once.
+  "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
 };
+
+// The module core's fixed refusal of a request whose arg has the wrong shape (`checked_message` in browser_module/desertfox-browser.js). An older module that knows the kind but not a newer value of an arg answers with it.
+export const wrong_shape_refusal = (kind: string, arg: string): string => `${kind} ${arg} has the wrong shape`;
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
 export const message_list_bytes = (kinds: KindTable): number => Math.max(MAX_MESSAGE_LIST_BYTES, ...Object.values(kinds).map((row) => 2 * kind_bytes(row))) + MESSAGE_ENVELOPE_BYTES;

@@ -10,6 +10,7 @@ import {
   BROWSER_MODULE_STATE_STORAGE_KEY,
 } from "../../src/shared/config/storage_keys.ts";
 import { event_to_token } from "../../src/shared/keys/token.ts";
+import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import { COMMANDS_FILE, CORE_FILE, create_firefox, DEVTOOLS_FILE, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 
 const DEFAULT_KEYS = [
@@ -54,6 +55,9 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.deepEqual(plain(vm.runInNewContext(/const PANE_REGIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PANE_REGIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const DEVTOOLS_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.DEVTOOLS_ACTIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const DEVTOOLS_VISUAL_OPS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.DEVTOOLS_VISUAL_OPS);
+  assert.deepEqual(plain(vm.runInNewContext(/const PAGE_HINT_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PAGE_HINT_ACTIONS);
+  assert.deepEqual(plain(vm.runInNewContext(/const MODULE_FIREFOX_PAGES = (\[[^\]]*\]);/.exec(source)![1]!)), MODULE_FIREFOX_PAGES);
+  assert.deepEqual(plain(vm.runInNewContext(/const FIREFOX_PAGE_WHERE = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.FIREFOX_PAGE_WHERE);
   assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);
   assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
 });

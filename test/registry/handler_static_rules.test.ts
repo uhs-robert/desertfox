@@ -24,6 +24,8 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   // The stub's toggleReaderMode rejects, as Firefox does for a tab that is no article.
   "page.reader": [/cannot show this page in Reader View/],
   "help.key": [/has no normal-mode binding/],
+  // The stub has no browser module, and only the module opens the shortcuts view or replaces a tab.
+  "browser.open_firefox_page": [/^Needs the browser module/],
   // The stub config knows no theme or engine of that name, in the files or in the browser.
   "settings.set": [/no theme named "stub"/, /no search engine named "stub"/],
   "tab.alternate": [/no previous tab/],
