@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { build_config, read_commands_file } from "../tools/build-config/build_config.ts";
 import { ConfigErrors } from "../src/shared/config_build/errors.ts";
+import { DEFAULT_SETTINGS } from "../src/shared/config.ts";
 import { write_schemas } from "../tools/build-config/output.ts";
 import { fill_template } from "../src/shared/engines/index.ts";
 import { build_schemas } from "../src/shared/config_build/schemas.ts";
@@ -90,6 +91,29 @@ test("an empty string in the keymap is stored as null to remove a default bindin
 test("which_key_border must be square, round or chamfer", () => {
   const dir = config_dir_with({ "settings.toml": 'which_key_border = "wavy"' });
   assert.match(problems_of(dir).join("\n"), /settings\.toml: which_key_border: .*chamfer/);
+});
+
+test("the browser bar defaults to on, with mode and key state at the left and page state at the right", () => {
+  const settings = DEFAULT_SETTINGS;
+  assert.equal(settings.browser_bar, true);
+  assert.deepEqual(settings.browser_bar_left, ["mode", "pending", "recording"]);
+  assert.deepEqual(settings.browser_bar_right, ["container", "scroll", "tabs"]);
+  assert.equal(settings.browser_bar_border, "auto");
+});
+
+test("browser_bar_border must be auto, square, round or chamfer", () => {
+  const dir = config_dir_with({ "settings.toml": 'browser_bar_border = "wavy"' });
+  assert.match(problems_of(dir).join("\n"), /settings\.toml: browser_bar_border: .*chamfer/);
+  const ok = config_dir_with({ "settings.toml": 'browser_bar_border = "chamfer"' });
+  assert.equal(build_config(ok, commands).settings.browser_bar_border, "chamfer");
+});
+
+test("the browser bar lists take the known widgets, url included, and reject others", () => {
+  const ok = config_dir_with({ "settings.toml": 'browser_bar_left = ["url", "mode"]\nbrowser_bar_right = []' });
+  assert.deepEqual(build_config(ok, commands).settings.browser_bar_left, ["url", "mode"]);
+  assert.deepEqual(build_config(ok, commands).settings.browser_bar_right, []);
+  const bad = config_dir_with({ "settings.toml": 'browser_bar_right = ["clock"]' });
+  assert.match(problems_of(bad).join("\n"), /settings\.toml: browser_bar_right/);
 });
 
 test("mode_indicator must be always, not_normal or off", () => {

@@ -51,6 +51,10 @@ export const DEFAULT_ITEM_SELECT: Settings["item_select"] = "off";
 export const DEFAULT_CMDLINE_PROMPT: Settings["cmdline_prompt"] = "caret";
 export const DEFAULT_OPEN_COMPLETION: Settings["open_completion"] = ["bookmarks","history"];
 export const DEFAULT_STATUSBAR_WIDGETS: Settings["statusbar_widgets"] = ["url","scroll","tabs"];
+export const DEFAULT_BROWSER_BAR: Settings["browser_bar"] = true;
+export const DEFAULT_BROWSER_BAR_LEFT: Settings["browser_bar_left"] = ["mode","pending","recording"];
+export const DEFAULT_BROWSER_BAR_RIGHT: Settings["browser_bar_right"] = ["container","scroll","tabs"];
+export const DEFAULT_BROWSER_BAR_BORDER: Settings["browser_bar_border"] = "auto";
 export const DEFAULT_HISTORY_COMPLETION_MAX: Settings["history_completion_max"] = 10;
 export const DEFAULT_HISTORY_LIST_MAX: Settings["history_list_max"] = 20;
 export const DEFAULT_NEWTAB_CLOCK: Settings["newtab_clock"] = true;
@@ -119,6 +123,10 @@ export const DEFAULT_SETTINGS: Settings = {
   cmdline_prompt: DEFAULT_CMDLINE_PROMPT,
   open_completion: DEFAULT_OPEN_COMPLETION,
   statusbar_widgets: DEFAULT_STATUSBAR_WIDGETS,
+  browser_bar: DEFAULT_BROWSER_BAR,
+  browser_bar_left: DEFAULT_BROWSER_BAR_LEFT,
+  browser_bar_right: DEFAULT_BROWSER_BAR_RIGHT,
+  browser_bar_border: DEFAULT_BROWSER_BAR_BORDER,
   history_completion_max: DEFAULT_HISTORY_COMPLETION_MAX,
   history_list_max: DEFAULT_HISTORY_LIST_MAX,
   newtab_clock: DEFAULT_NEWTAB_CLOCK,
