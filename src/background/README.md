@@ -62,7 +62,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `site_keys.ts`: `answer_site_keys_request` checks the `site_keys` request.
 - `strip_patterns.ts`: answers `read_strip_patterns` and resolves `copy.tabs` per tab.
 - `keymap_source.ts`: the compiled keymap from `storage.local`, held in memory after the first read.
-- `page_keymap.ts`: answers `read_keymap` with the stored keymap resolved for the sender's site (the resolver is `shared/site/page_keymap_resolve.ts`), and the other per-site reads (hint selectors, quality, item start).
+- `page_keymap.ts`: answers `read_keymap` (resolver: `shared/site/page_keymap_resolve.ts`) and the other per-site reads (hint selectors, quality, item start).
 - `site_zoom.ts`: the `zoom` setting, applied on a tab's load through `tabs.setZoom`.
 - `list_keys.ts`: answers which-key: the title and a row per next key under a typed prefix, for the active page.
 - `bundle_loader.ts`: injects a bundle into a frame when the content script asks, once per document.

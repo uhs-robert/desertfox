@@ -20,7 +20,7 @@ const shared_files = [
   "src/shared/{command,index,key_test_build,load_commands,swallow}.ts",
   "src/shared/messages/*.ts",
   "src/shared/copy/link_escape.ts",
-  "src/shared/site/site_columns.ts",
+  "src/shared/site/{site_columns,page_keymap_resolve,item_select_rewrite}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
 
