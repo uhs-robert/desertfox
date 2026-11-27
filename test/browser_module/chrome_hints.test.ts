@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
-import { create_firefox, key_event, source_of } from "./fake_firefox.ts";
+import { create_firefox, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 import { label_parts } from "../../src/background/chrome_hints.ts";
 import { make_labels } from "../../src/shared/hints/labels.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
@@ -184,6 +184,7 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
     closed: false,
     private_window,
     windowRoot: window_root,
+    windowUtils: { IMEStatus: 0 },
     location: { href: loaded ? "chrome://browser/content/browser.xhtml" : "about:blank" },
     gBrowser: { selectedTab: tab_list[0] },
     setTimeout: (run: () => void, ms: number) => timers.push({ run, ms, live: true }) - 1,
@@ -501,6 +502,26 @@ test("a collect is refused while a field of the window has the focus, such as th
   assert.equal(held(), undefined);
   chrome.focus(new Node("browser", { isRemoteBrowser: true } as never));
   assert.equal((await collect(2))?.ok, true, "a collect with the focus in a page was refused");
+});
+
+test("a collect is refused while a field of a page in another process has the focus, as the window's input state says", async () => {
+  const { collect, chrome, held } = started();
+  chrome.focus(new Node("browser", { isRemoteBrowser: true } as never));
+  chrome.win.windowUtils.IMEStatus = IME_ENABLED;
+  assert.equal((await collect(1))?.error, "Leave the field first");
+  assert.equal(chrome.layers().length, 0);
+  assert.equal(held(), undefined);
+});
+
+test("a session whose start throws takes back its hold and what it added, so the window's letters stay free", async () => {
+  const { collect, chrome, held } = started();
+  chrome.document_element.append = () => {
+    throw new Error("the DOM changed");
+  };
+  assert.equal((await collect(1))?.ok, false);
+  assert.equal(held(), undefined, "a failed start left the window's keys held");
+  assert.ok(!chrome.press("a").prevented, "a failed start swallowed a letter");
+  assert.equal(chrome.session_listeners(), 0);
 });
 
 test("a key after DesertFox stops acting in the window ends the session and goes on to the page", async () => {

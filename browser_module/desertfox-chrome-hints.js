@@ -172,8 +172,9 @@
       return false;
     }
 
-    // A field of the window's own process: the address bar, the find bar, a tab-modal prompt. A session would read what the user types there, which no content script sees.
-    const chrome_field_focused = (win) => core.is_field(core.focused_element(win));
+    // A field where a session would read what the user types: the address bar, the find bar, a tab-modal prompt, or a page no content script reaches.
+    // `focused_element` stops at a page in another process, so the window's input state covers a field there.
+    const field_focused = (win) => core.is_field(core.focused_element(win)) || core.ime_in_field(win);
 
     // The window the request names, only when it is a browser window in front. A window that lost the focus between the key and the request gets no session.
     function window_for(window_id) {
@@ -266,10 +267,20 @@
 
     function start_session(tag, win, found, style_url, theme, panel) {
       end_session(true);
-      const doc = win.document;
       session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys: [] };
       core.hold_keys(win, KEY_OWNER);
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
+      try {
+        add_session_parts(win, found, style_url, theme, panel);
+      } catch (error) {
+        // A half-built session has no timer or listeners to end it, so it would swallow the window's letters until Escape.
+        end_session(false);
+        throw error;
+      }
+    }
+
+    function add_session_parts(win, found, style_url, theme, panel) {
+      const doc = win.document;
       for (const target of found) session.targets.set(next_target_id++, { ...target, kind: kind_of(target.element) });
       const window_layer = make_layer(doc, style_url, theme, true);
       doc.documentElement.append(window_layer.host);
@@ -309,7 +320,7 @@
       if (!win) return { ok: false, error: problem };
       const doc = win.document;
       if (menu_open(doc)) return { ok: false, error: "Close the menu first" };
-      if (chrome_field_focused(win)) return { ok: false, error: "Leave the field first" };
+      if (field_focused(win)) return { ok: false, error: "Leave the field first" };
       const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
       const opened = open_panel(doc);
       const panel = opened && panel_targets(opened.panel, opened.row);
