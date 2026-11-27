@@ -32,6 +32,7 @@ Firefox native tab groups (`tabs.group`, 138, and `tabGroups`, 139, under `stric
 Firefox split view shows two tabs side by side in one window. The extension API (`tabs.Tab.splitViewId`, Firefox 149) reads a split and moves within it, and creating or ending one is Firefox's alone (see `docs/firefox-behavior.md`, "Split view").
 
 - `gp` (`tab.split_other`) moves focus to the other tab of the split the tab is in, and `gP` (`tab.split_swap`) swaps the two. Both refuse with "This tab is not in a split view" otherwise. The handlers sit in `src/background/tab_split.ts` over an injected `TabSplitDeps`. A swap is a `tabs.move` of the partner onto the tab's place, because there is no swap call.
+- The `E` group (named "Pane") holds the split commands too: `Ep` is `tab.split_other` and `Es` is `tab.split_swap`, the same commands as `gp` and `gP`. The group needs no browser module. Later pieces add the module keys to it.
 - The tab model keeps `split_id` per tab (-1 for none). A tab list row of a split tab shows a split flag next to the pinned and unloaded flags.
 - `tab.next`, `tab.prev` and `tab.goto` count the two tabs of a pair as two stops, so `gp` is the jump to the other pane.
 - `tab.close` closes one tab, and the other tab stays and takes the focus. `tab.move` moves the pair as one unit: the move acts on the pair's first tab, the place is where the pair starts, and one step right moves the tab after the pair over it, because a move onto the partner's place would swap. Pinning one tab of a pair ends the split. A tab group command on one tab acts on both.
