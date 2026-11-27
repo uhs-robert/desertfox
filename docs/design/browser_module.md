@@ -61,8 +61,8 @@ The module runs the command first, then prevents and stops the key in the parent
 - Escape also closes the Library from one of its trees when the search box is empty, since Firefox binds no Escape there.
 - The core's `type_key` refuses a key with the focus in a field. The walk passes `menu_owns_keys` for an open menu, which skips only that check, and only while the core itself sees an open menu popup that does not ignore keys. The DevTools refusal stays: a context menu over DevTools belongs to the DevTools feature, and the walk attaches to no DevTools window.
 - The arrow key is dropped when the popup closed, the window closed or the focus moved into a field before it goes out, so it never lands on what was under the popup.
-- The listener sits on the window root, which hears a key before the core's window listener. Otherwise the core would take `j` as a scroll key on a locked page under a context menu.
-- The feature reads the state itself (the pref, DesertFox, private window access, the state version and the toolbar switch), because the core shows it no gate. Its start error leaves it off alone.
+- The listener sits on the window root, which hears a key before the core's window listener. Else the core takes `j` as a scroll key on a locked page under a context menu.
+- The feature reads no state of its own. It gates every key on the core's `may_act(win)`, as the other features do. Its start error leaves it off alone.
 - A key the [key hold](#key-hold) gives to another feature is left alone, so the letters of hint labels never walk a menu. A key that begins a `hint.browser` binding waits for the window's own listeners where chrome hints can start (the Library, Page Info, a dialog frame, or inside an open panel), and the walk acts only if chrome hints left it alone.
 
 ## Hints over Firefox's own UI
@@ -83,9 +83,10 @@ The content script hears `gB` only with the focus in a page. With the focus in a
 
 - The extension lists the key token lists of the `hint.browser` bindings in the optional state field `chrome_hint_keys` (at most 4 bindings of at most 4 tokens, none beginning another). A bad table is left out whole and the rest of the state stays. The module never knows the binding is `gB`.
 - The module matches those tokens only with the focus in one of those places, never in a field and never with a menu open. The first keys of a longer binding are held while they wait for the rest.
-- A whole binding makes the module hold the window's keys and push `chrome_hints.want` with a random start token. The extension answers with `chrome_hints.collect_here`, which names no window. The module takes its own token once, within 3 s of the key, and only in the window where the key was typed. So the extension cannot open a session where the user did not ask for one. An older or cancelled token gets the refusal "The hint key is stale", which shows no toast.
+- A whole binding makes the module hold the window's keys and push `chrome_hints.want` with a random start token. The extension answers with `chrome_hints.collect_here`, which names no window. The module takes its own token once, within 3 s of the key, and only in the window where the key was typed. So a start in chrome focus never opens where the user typed no binding. An older or cancelled token gets the refusal "The hint key is stale", which shows no toast.
 - Keys typed before the first labels show (at most 16) wait for them.
-- A start from a page or the toolbar goes the other way: the extension asks with `chrome_hints.collect`, which names the window, and the module refuses it unless that browser window is in front and may act. Both starts refuse with a short text while a menu is open or the focus is in a field. A start that lost to a newer one sends nothing. A collect that would label a grant control also needs the user's start key (see [Grants wait for the user's Enter](#grants-wait-for-the-users-enter)).
+- A start from a page or the toolbar goes the other way: the extension asks with `chrome_hints.collect`, which names the window, and the module refuses it unless that browser window is in front and the module can act there. Both starts refuse with a short text while a menu is open or the focus is in a field. A start that lost to a newer one sends nothing. A collect that labels a grant control also needs the user's start key (see [Grants wait for the user's Enter](#grants-wait-for-the-users-enter)). While the downloads panel is open, a plain collect refuses with "Type the hint key in the panel" whatever its targets are, because a pick there opens a downloaded file. Only the binding typed in the panel labels it.
+- A plain collect on a surface with no grant control (the nav bar, the tabs, the bookmarks toolbar) opens a session with no user key. This is the limit of the rule above, which holds for `collect_here` and for grant surfaces. The keys the user types while the labels show then go to the add-on (`chrome_hints.key`) until Escape, a click or a pick.
 
 ### Key hold
 
@@ -97,7 +98,7 @@ A plain `chrome_hints.collect` (the extension's start for `gB` typed in a page) 
 
 Known limit: the binding comes from the extension's state, so a compromised extension can rebind it. A grant still needs the user's own Enter on a visible mark.
 
-Some picks give something away: they allow a permission, unblock a held-back download, open a downloaded file, send a client certificate or send a login. The extension names every pick, so a compromised extension could swap the user's Block for Allow. The module therefore never clicks such a control on a pick. It marks the control with a frame and the word "Enter", holds the window's keys and waits for an Enter that the user types in that window. The extension has no kind that confirms, and the module decides from the real key event alone.
+Some picks give something away: they allow a permission, unblock a held-back download, open a downloaded file, send a client certificate or send a login. The extension names every pick, so a compromised extension can swap the user's Block for Allow. The module therefore never clicks such a control on a pick. It marks the control with a frame and the word "Enter", holds the window's keys and waits for an Enter that the user types in that window. The extension has no kind that confirms, and the module decides from the real key event alone.
 
 What counts as a grant is a fixed table in the module, keyed by Firefox's own ids, classes and attributes. The table sits in the module and not in the extension because the extension is the party it guards against. On a surface that can grant, a control the table does not name counts as a grant, so a button that a later Firefox adds waits as well.
 
@@ -112,7 +113,7 @@ An Enter confirms only when all of these hold:
 
 - The key is trusted, so a script's key does nothing. It has no modifier and is not a repeat, so a held-down Enter does nothing.
 - It was pressed after the mark showed, and at least the dwell later. The dwell is Firefox's own doorhanger delay, the pref `security.notification_enable_delay`, but never under 500 ms, so a pref of 0 removes no dwell. A key inside the dwell ends the confirm, so tapping Enter through a page never carries over to a grant the user did not see marked. Times are in ms since the epoch on the key target's own clock, because a dialog's window starts later than the browser window that shows the mark.
-- The window is still in front, the module may still act there and the hold is still the confirm's.
+- The window is still in front, the module can still act there and the hold is still the confirm's.
 - The target is the same: the same prompt, the same download, the same control and row state, visible and where it was drawn. Else the confirm ends.
 - The control is ready. A doorhanger button and a dialog's accept button ignore a click for a moment after they show. Enter then does nothing, and the next Enter tries again.
 
@@ -244,7 +245,7 @@ Lifecycle:
 - A Firefox internal that throws on a key leaves that key to the page and logs one line per distinct error.
 - With the pref off the module loads no frame script, says no hello and handles no message. It turns on at once when the pref does. Turning the pref off takes the hello back. The frame scripts stay loaded for the session once loaded, so they check the pref and do nothing while it is off. Turning it on again asks each tab for a fresh report.
 - The module makes no network request and runs no code it reads. A key row or tree leaf names a command a feature file defines, and a request names a kind on a fixed list, each with checked args. It writes the extension only the hello and the from-module list. The hello has one writer, the core: a feature sets a flag on its fixed list (`bar`) with `set_hello_flag`.
-- A finished match is the only key data the module sends: the tokens of a forward leaf and the count, never raw key events or the keys of an unfinished sequence. The one exception is the text held after a key that opens the command line (at most 32 characters), which goes to the line in the `cmdline_panel.open` reply or into the address bar.
+- A finished match is the only key data the module sends: the tokens of a forward leaf and the count, never raw key events or the keys of an unfinished sequence. There are two exceptions. One is the text held after a key that opens the command line (at most 32 characters), which goes to the line in the `cmdline_panel.open` reply or into the address bar. The other is the hint keys: while chrome hint labels show, each key the user types goes to the add-on in `chrome_hints.key` (any single character, Backspace, Enter or Tab), so the add-on can narrow the labels.
 
 ## Tests
 
