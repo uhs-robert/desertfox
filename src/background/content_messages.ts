@@ -83,6 +83,7 @@ export type ContentDeps = {
   router_deps: ReturnType<typeof make_router_deps>;
   media_quality: ReturnType<typeof create_media_quality>;
   browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active">;
+  is_locked_tab: (tab_id: number) => Promise<boolean>;
 };
 
 const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
@@ -228,6 +229,21 @@ export const content_handlers = (deps: ContentDeps) => {
               ),
             );
         return reply_after_hold(macro_replay, (tab_id, frame_id) => send_to_tab(tab_id, { type: "replay_hold" }, frame_id), sender.tab?.id, sender.frameId, reply);
+      },
+    },
+    // The part of the page's keymap that a locked page cannot read from its snapshot. The address is the browser's own for the tab. Only the insert join is exact, because the call has no document id to ask the media and item holds with.
+    read_keymap_state: {
+      from: "any",
+      run: async (request, sender) => {
+        const tab_id = sender.tab?.id;
+        const address = sender.tab?.url;
+        if (tab_id === undefined || address === undefined || !(await deps.is_locked_tab(tab_id))) return undefined;
+        const [recording, bar, join] = await Promise.all([
+          browser_macro_recorder.register_of(sender.tab?.incognito === true).catch(warn_and_go("macro register_of")),
+          deps.browser_module.bar_active(),
+          join_mode(request.join, () => tab_insert.join(tab_id, 0), () => Promise.resolve(false), () => Promise.resolve(false)),
+        ]);
+        return { address, ...(recording !== undefined && { recording }), ...(join === "insert" && { join }), ...(bar && { bar: true as const }) };
       },
     },
     replay_end: { from: "any", run: () => macro_replay.ended() },
