@@ -155,7 +155,7 @@ export const SETTINGS_TABLE = {
   browser_bar_left: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["mode", "pending", "recording"] },
   browser_bar_right: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["container", "scroll", "tabs"] },
   // `auto` follows the corners of the Firefox panes and falls back to `square` when it finds none.
-  browser_bar_border: { kind: "enum", values: BROWSER_BAR_BORDERS, default: "auto" },
+  browser_bar_border: { kind: "enum", values: BROWSER_BAR_BORDERS, default: "none" },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
   history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.

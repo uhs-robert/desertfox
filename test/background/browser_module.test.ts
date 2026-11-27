@@ -571,7 +571,7 @@ test("a flip of the bar tells the pages once, from a hello, from the setting and
   assert.equal(await read_bar_config(local({ browser_bar: false })), undefined);
   assert.deepEqual(await read_bar_config(local({ browser_bar_left: ["mode"], browser_bar_right: [], browser_bar_border: "round" })), { left: ["mode"], right: [], border: "round" });
   assert.deepEqual((await read_bar_config(local({})))?.left, ["mode", "pending", "recording"], "an absent value is the default");
-  assert.deepEqual((await read_bar_config(local({ browser_bar_left: ["nope"] })))?.border, "auto", "a refused value is the default");
+  assert.deepEqual((await read_bar_config(local({ browser_bar_left: ["nope"] })))?.border, "none", "a refused value is the default");
 });
 
 test("the state carries the bar settings while the bar setting is on and none when it is off", async () => {

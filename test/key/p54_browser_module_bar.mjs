@@ -91,7 +91,7 @@ export async function run_cases(context) {
       (await chrome(`(async () => ${W}.document.getElementById("desertfox-statusbar").getAttribute("data-corner"))()`)) === corner;
     for (const [textfox, label] of [[false, "plain"], [true, "textfox"]]) {
       await root_vars(textfox);
-      for (const border of ["chamfer", "square", "round"]) {
+      for (const border of ["none", "chamfer", "square", "round"]) {
         await run_line(`:set browser_bar_border ${border}`);
         await poll_until(`the ${border} corner`, corner_is(border), { timeout_ms: 8000 });
         await shot(`corner-${border}-${label}`);
