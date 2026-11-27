@@ -134,11 +134,9 @@ test("a blur marked escape works outside any window and after a key, but only fo
   frame.core_blurs({ inner: 7, escape: true });
 });
 
-test("a blur marked escape ends editing in a design mode document", () => {
+test("a blur marked escape leaves a design mode document alone", () => {
   const frame = report_frame();
-  let blurs = 0;
   frame.document.designMode = "on";
-  frame.document.activeElement = { localName: "body", blur: () => blurs++ };
+  frame.document.activeElement = { localName: "body", blur: () => assert.fail("body was blurred") };
   frame.core_blurs({ inner: 7, escape: true });
-  assert.equal(blurs, 1);
 });

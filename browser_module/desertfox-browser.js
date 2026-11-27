@@ -464,8 +464,10 @@
       if (!left_to_module(state, page.browser, tab)) return false;
       if (page.document) {
         // Only the tab's own document: a subdialog (Manage Exceptions) keeps its Escape to close itself.
-        if (page.document.defaultView?.browsingContext?.parent !== null || !field_has_focus(page.document)) return false;
-        deep_active(page.document)?.blur();
+        const focused = deep_active(page.document);
+        // A design mode document has no focused element to blur, so Escape stays the page's.
+        if (page.document.defaultView?.browsingContext?.parent !== null || !is_field(focused)) return false;
+        focused.blur();
       } else {
         // The report covers the top document only, so a field in an iframe leaves Escape to the page.
         const report = reports.get(page.browser);
@@ -664,7 +666,8 @@
         try {
           const win = content;
           if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || (data.escape !== true && !page_focus(win))) return;
-          if (field_has_focus(win.document)) deep_active(win.document)?.blur();
+          const focused = deep_active(win.document);
+          if (is_field(focused)) focused.blur();
         } catch (_) {
           // A document going away keeps its focus.
         }

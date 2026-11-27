@@ -552,7 +552,7 @@ test("Escape leaves the field alone with a modifier, with no field, in a tab Des
   assert.deepEqual([page.field.blurs, escape.prevented], [0, false], "an ignored tab");
 });
 
-test("Escape leaves a field in a subdialog, a field in an iframe of a remote page, and ends editing of a design mode page", () => {
+test("Escape leaves a field in a subdialog, a field in an iframe of a remote page, and a design mode page", () => {
   const dialog = started();
   const page = in_process_field(dialog.first.browser);
   (page.page_document.defaultView as { browsingContext: { parent: unknown } }).browsingContext.parent = {};
@@ -568,9 +568,8 @@ test("Escape leaves a field in a subdialog, a field in an iframe of a remote pag
   const editable = started();
   const design = in_process_field(editable.first.browser);
   design.page_document.designMode = "on";
-  let ended_editing = 0;
-  const body = { localName: "body", ownerDocument: design.page_document, blur: () => ended_editing++ };
+  const body = { localName: "body", ownerDocument: design.page_document, blur: () => assert.fail("body was blurred") };
   design.page_document.activeElement = body;
   const ended = editable.press("Escape", { target: body, originalTarget: body });
-  assert.deepEqual([ended_editing, ended.prevented], [1, true], "design mode");
+  assert.equal(ended.prevented, false, "design mode keeps Escape for the page");
 });
