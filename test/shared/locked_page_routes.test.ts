@@ -20,8 +20,11 @@ function sent_types_in(source: string): string[] {
     let depth = 0;
     let end = start + "sendMessage".length;
     for (; end < source.length; end++) {
-      if (source[end] === "(") depth++;
-      else if (source[end] === ")" && --depth === 0) break;
+      const quote = source[end]!;
+      if (quote === '"' || quote === "'" || quote === "`") {
+        for (end++; end < source.length && source[end] !== quote; end++) if (source[end] === "\\") end++;
+      } else if (quote === "(") depth++;
+      else if (quote === ")" && --depth === 0) break;
     }
     for (const match of source.slice(start, end).matchAll(/type: "([a-z_]+)"/g)) types.push(match[1]!);
   }
@@ -35,8 +38,9 @@ async function sent_types(): Promise<Map<string, string>> {
 }
 
 test("the scan reads a call over several lines, and a call on one line", () => {
-  const source = ["const a = browser.runtime.sendMessage({", '  type: "new_request",', "  args: f(x),", "});", 'void browser.runtime.sendMessage({ type: "run", invocations: [] });', '// type: "outside" sits in no call'].join("\n");
-  assert.deepEqual(sent_types_in(source), ["new_request", "run"]);
+  const source = ["const a = browser.runtime.sendMessage({", '  type: "new_request",', "  args: f(x),", "});", 'void browser.runtime.sendMessage({ type: "run", invocations: [] });',
+    'browser.runtime.sendMessage({ text: ")", type: "quoted" });', '// type: "outside" sits in no call'].join("\n");
+  assert.deepEqual(sent_types_in(source), ["new_request", "run", "quoted"]);
   assert.equal(Object.hasOwn(LOCKED_PAGE_ROUTES, "new_request"), false, "so an unrouted multi-line call fails the test below");
 });
 
