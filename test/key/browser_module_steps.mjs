@@ -115,7 +115,7 @@ export function module_steps({ rdp, poll_until, run_line, press_keys, sleep, on_
 }
 
 // The command line panel (browser_module/desertfox-cmdline-panel.js) of the most recent window, read from chrome, and its page read in its own process.
-export function panel_steps({ rdp, poll_until }, { chrome }) {
+export function panel_steps({ rdp, poll_until, press_keys }, { chrome }) {
   const PANEL = `${W}.document.getElementById("desertfox-cmdline-panel")`;
   const state = () =>
     chrome(`(async () => {
@@ -144,6 +144,15 @@ export function panel_steps({ rdp, poll_until }, { chrome }) {
       const shown = await state();
       return shown.state === "open" && shown.url?.endsWith("/cmdline.html") && shown.focused && (await in_panel(`(win) => win.document.hasFocus() && win.document.activeElement?.id === "line"`)) === true;
     }, { timeout_ms: 8000 });
+    // A key typed just after the panel took the focus can miss the line. A probe key that nothing binds shows when the keys arrive.
+    const before = await line_text();
+    await poll_until(`${what}: the panel to take typed keys`, async () => {
+      if ((await line_text()) === before) await press_keys("|");
+      return /^\|+$/.test((await line_text())?.slice(before.length) ?? "");
+    }, { timeout_ms: 5000 });
+    const probes = (await line_text()).length - before.length;
+    for (let probe = 0; probe < probes; probe++) await press_keys("-k", "BackSpace");
+    await poll_until(`${what}: the probe key to leave the line`, async () => (await line_text()) === before);
     return state();
   }
   // Waits for the line to hold `text`, and names what it holds when it never does.
