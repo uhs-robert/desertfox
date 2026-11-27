@@ -359,9 +359,12 @@
       return active_element;
     }
 
+    // A text field has the focus, or the document is editable as a whole.
+    const field_has_focus = (doc) => is_field(deep_active(doc)) || doc.designMode === "on";
+
     // A page in this process is read directly. A remote page is read from its frame script's report, and the widget's input state covers a key that comes before the report: Firefox sets it when a text field takes the focus.
     function in_field(win, page, event) {
-      if (page.document) return is_field(event.originalTarget) || is_field(deep_active(page.document)) || page.document.designMode === "on";
+      if (page.document) return is_field(event.originalTarget) || field_has_focus(page.document);
       const report = reports.get(page.browser);
       if (report?.inner === page.browser.innerWindowID && report.field) return true;
       return ime_in_field(win);
@@ -460,11 +463,13 @@
       const tab = win.gBrowser.getTabForBrowser(page.browser);
       if (!left_to_module(state, page.browser, tab)) return false;
       if (page.document) {
-        const focused = deep_active(page.document);
-        if (!is_field(focused)) return false;
-        focused.blur();
+        // Only the tab's own document: a subdialog (Manage Exceptions) keeps its Escape to close itself.
+        if (page.document.defaultView?.browsingContext?.parent !== null || !field_has_focus(page.document)) return false;
+        deep_active(page.document)?.blur();
       } else {
-        if (!in_field(win, page, event)) return false;
+        // The report covers the top document only, so a field in an iframe leaves Escape to the page.
+        const report = reports.get(page.browser);
+        if (report?.inner !== page.browser.innerWindowID || !report.field) return false;
         page.browser.messageManager.sendAsyncMessage(BLUR_MESSAGE, { inner: page.browser.innerWindowID, escape: true });
       }
       key_taker?.reset(win);
@@ -604,6 +609,7 @@
         while (active_element?.shadowRoot?.activeElement) active_element = active_element.shadowRoot.activeElement;
         return active_element;
       }
+      const field_has_focus = (doc) => is_field(deep_active(doc)) || doc.designMode === "on";
       // Loaded once for the session, so it does nothing while the pref is off.
       const module_on = () => {
         try {
@@ -628,7 +634,7 @@
         try {
           const win = content;
           if (!module_on() || !win?.document || !win.windowGlobalChild) return;
-          const field = is_field(deep_active(win.document)) || win.document.designMode === "on";
+          const field = field_has_focus(win.document);
           sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, listeners: desertfox_listeners(win), field, load_focus: field && page_focus(win) });
         } catch (_) {
           // A document going away mid-report sends nothing. The next report covers it.
@@ -658,8 +664,7 @@
         try {
           const win = content;
           if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || (data.escape !== true && !page_focus(win))) return;
-          const focused = deep_active(win.document);
-          if (is_field(focused)) focused.blur();
+          if (field_has_focus(win.document)) deep_active(win.document)?.blur();
         } catch (_) {
           // A document going away keeps its focus.
         }
