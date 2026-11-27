@@ -471,7 +471,7 @@
       } else {
         // The report covers the top document only, so a field in an iframe leaves Escape to the page.
         const report = reports.get(page.browser);
-        if (report?.inner !== page.browser.innerWindowID || !report.field) return false;
+        if (report?.inner !== page.browser.innerWindowID || !report.text_field) return false;
         page.browser.messageManager.sendAsyncMessage(BLUR_MESSAGE, { inner: page.browser.innerWindowID, escape: true });
       }
       key_taker?.reset(win);
@@ -637,7 +637,9 @@
           const win = content;
           if (!module_on() || !win?.document || !win.windowGlobalChild) return;
           const field = field_has_focus(win.document);
-          sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, listeners: desertfox_listeners(win), field, load_focus: field && page_focus(win) });
+          // text_field is a real field, which field is not: design mode counts for the key gate but has nothing to blur.
+          const text_field = is_field(deep_active(win.document));
+          sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, listeners: desertfox_listeners(win), field, text_field, load_focus: field && page_focus(win) });
         } catch (_) {
           // A document going away mid-report sends nothing. The next report covers it.
         }
@@ -919,7 +921,7 @@
       try {
         const data = message.data;
         if (!is_record(data) || typeof data.inner !== "number" || typeof data.listeners !== "number" || typeof data.field !== "boolean") return;
-        reports.set(message.target, { inner: data.inner, listeners: data.listeners, field: data.field });
+        reports.set(message.target, { inner: data.inner, listeners: data.listeners, field: data.field, text_field: data.text_field === true });
         if (data.load_focus === true && data.field) blur_load_focus(message.target, data.inner);
       } catch (error) {
         log_once(`a report was dropped after an error: ${error}`);
