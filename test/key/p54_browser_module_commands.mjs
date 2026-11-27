@@ -1,5 +1,5 @@
 // The browser module's commands feature (browser_module/desertfox-commands.js) on the pages it exists for: key sequences, counts and the command line panel on about:preferences, about:addons, the PDF viewer and Reader View.
-// Also what it must leave alone: f and / on about:addons, typed text, the toolbar switch, a DesertFox page. And that a remapped key follows and the ignore toggle gives j back to pdf.js.
+// Also what it must leave alone: / on about:addons, typed text, the toolbar switch, a DesertFox page. And that a remapped key follows and the ignore toggle gives j back to pdf.js.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -198,16 +198,16 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  await run_case("on about:addons f and / reach the page, and the module sends nothing for them", async () => {
+  // f there is a hint key, which p54_browser_module_hint_notice.mjs covers.
+  await run_case("on about:addons / reaches the page, and the module sends nothing for it", async () => {
     await home("bmc_addons_keys");
     await open_tab("about:addons");
     await page_ready("about:addons");
     await in_selected_page(`(win) => { win.document.documentElement.dataset.seen = ""; win.addEventListener("keydown", (event) => { win.document.documentElement.dataset.seen += event.key; }); return true; }`);
     const before = (await session_value("desertfox_browser_module_from_module")) ?? [];
-    await press_keys("f");
     await press_keys("/");
     // Firefox puts the focus in the add-ons search box on /.
-    await poll_until("f and / to reach about:addons", async () => (await in_selected_page(`(win) => win.document.documentElement.dataset.seen`)) === "f/");
+    await poll_until("/ to reach about:addons", async () => (await in_selected_page(`(win) => win.document.documentElement.dataset.seen`)) === "/");
     await sleep(NO_EFFECT_MS);
     const after = (await session_value("desertfox_browser_module_from_module")) ?? [];
     const runs = after.filter((message) => message.kind === "run" && !before.some((old) => old.id === message.id));

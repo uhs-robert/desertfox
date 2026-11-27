@@ -28,7 +28,7 @@ const ROWS = [{ key: "J", id: "tab.next", args: {} }];
 const state = (patch: Record<string, unknown> = {}) => ({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: true, keys: ROWS, tabs: {}, tree: DEFAULT_TREE, ...patch });
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 
-type Core = { take_held_keys(win: unknown, end?: boolean): string; module_pending(win: unknown): unknown; set_hello_flag(name: unknown, on: unknown): boolean; status(): { commands: string[] } };
+type Core = { share_locked_page_rule(rule: { hint_notice(browser: unknown): string | undefined }): void; take_held_keys(win: unknown, end?: boolean): string; module_pending(win: unknown): unknown; set_hello_flag(name: unknown, on: unknown): boolean; status(): { commands: string[] } };
 
 // One window with two tabs, the core, the tab and scroll feature and the commands feature loaded, and the state written.
 function started({ written = state() as unknown, private_window = false, private_access = false } = {}) {
@@ -95,6 +95,75 @@ test("keys the tree leaves out reach the page: f, / and i", () => {
   const { press, runs } = started();
   for (const key of ["f", "/", "i"]) assert.equal(press(key).prevented, false, key);
   assert.deepEqual(runs(), []);
+});
+
+// The commands feature with a stand-in for the locked pages feature's rule: the notice each tab browser gets, as the test sets it.
+function with_notices() {
+  const setup = started();
+  const notices = new Map<unknown, string | undefined>();
+  setup.core.share_locked_page_rule({ hint_notice: (browser) => notices.get(browser) });
+  return { ...setup, notices };
+}
+
+test("where hints cannot run, the hint keys are claimed and the first one per document is sent, so the extension says why", () => {
+  const { press, type, runs, first, notices } = with_notices();
+  notices.set(first.browser, "pages_off");
+  assert.ok(press("f").prevented, "f is claimed");
+  assert.ok(press("f").prevented, "f stays claimed after the notice");
+  assert.ok(type(";", "l").every((event) => event.prevented), "a hint sequence is claimed");
+  assert.deepEqual(runs(), [{ keys: "f", count: 0 }], "one notice per document");
+  first.browser.innerWindowID = 11;
+  type("3", "F");
+  assert.deepEqual(runs(), [{ keys: "f", count: 0 }, { keys: "F", count: 0 }], "a new document says it again, without the count");
+  type("x", "x");
+  assert.deepEqual(runs().at(-1), { keys: "x x", count: 0 }, "the tree's own keys still run");
+});
+
+test("an about: page claims the hint keys too, and a page with no notice, a web page among them, leaves them to the page", () => {
+  const { press, runs, first, second, on_tab, notices } = with_notices();
+  notices.set(first.browser, "not_here");
+  assert.ok(press("f").prevented);
+  on_tab(second);
+  for (const key of ["f", ";", "F"]) assert.equal(press(key).prevented, false, key);
+  assert.deepEqual(runs(), [{ keys: "f", count: 0 }]);
+});
+
+test("the hint keys go to the page at once when the notice ends, as when browser_module_pages turns on", () => {
+  const { press, runs, first, notices, core, window } = with_notices();
+  notices.set(first.browser, "pages_off");
+  assert.ok(press(";").prevented, "a hint prefix is claimed");
+  notices.set(first.browser, undefined);
+  assert.equal(press("f").prevented, false, "the half-typed ; ends with the notice, and f goes to the page");
+  assert.equal(core.module_pending(window.win), undefined);
+  assert.equal(press(";").prevented, false);
+  assert.deepEqual(runs(), []);
+});
+
+test("no hint key is claimed with the focus in a field, where DesertFox is live, or from a tree with no hint keys", () => {
+  const field = with_notices();
+  field.notices.set(field.first.browser, "not_here");
+  field.window.win.windowUtils.IMEStatus = IME_ENABLED;
+  assert.equal(field.press("f").prevented, false);
+  const live = with_notices();
+  live.notices.set(live.first.browser, "pages_off");
+  live.firefox.report(live.first.browser, { inner: 10, listeners: 1, field: false });
+  assert.equal(live.press("f").prevented, false);
+  const older = with_notices();
+  older.notices.set(older.first.browser, "pages_off");
+  const { hint_keys: _hint_keys, ...tree } = DEFAULT_TREE;
+  older.firefox.write_state(state({ tree }));
+  assert.equal(older.press("f").prevented, false);
+  for (const each of [field, live, older]) assert.deepEqual(each.runs(), []);
+});
+
+test("a tree binding wins over a hint key on its way", () => {
+  const { press, runs, first, notices, firefox } = with_notices();
+  notices.set(first.browser, "pages_off");
+  firefox.write_state(state({ tree: { children: { f: "forward" }, hint_keys: ["f", "f g"] } }));
+  press("f");
+  assert.deepEqual(runs(), [{ keys: "f", count: 0 }]);
+  press("f");
+  assert.deepEqual(runs().length, 2, "f runs its binding each time, never the notice");
 });
 
 test("the token of a key event is event_to_token's, for every key shape", () => {

@@ -100,6 +100,17 @@
       return undefined;
     }
 
+    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on the PDF viewer and Reader View while page code is off, "not_here" on an about: page, where page code never runs. Undefined everywhere else, so the key goes on.
+    // An initial about:blank and a srcdoc frame are no page the user sees as Firefox's own.
+    function hint_notice_of(browser) {
+      const global = browser?.browsingContext?.currentWindowGlobal;
+      const principal = global?.documentPrincipal;
+      if (!principal || principal.addonId) return undefined;
+      if (page_kind_of(browser, global.innerWindowId)) return pages_on(desertfox()) ? undefined : "pages_off";
+      const address = global.documentURI?.spec ?? "";
+      return /^about:(?!blank\b|srcdoc\b|reader\b)/.test(address) ? "not_here" : undefined;
+    }
+
     const tab_id_of = (browser) => tab_tracker().getBrowserData(browser).tabId;
 
     function browser_of_tab(tab_id) {
@@ -273,6 +284,7 @@
       detach_all();
     });
 
+    if (typeof core.share_locked_page_rule === "function") core.share_locked_page_rule({ hint_notice: hint_notice_of });
     core.add_frame_script(locked_pages_frame_script);
   }
 

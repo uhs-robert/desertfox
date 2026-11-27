@@ -385,6 +385,24 @@ test("each snapshot part is written whole, rewritten on its own change, and remo
   assert.equal(data.has(SNAPSHOT_PARTS.theme.key), false);
 });
 
+test("a part dropped over its cap warns once per part with its size and cap, and a part of the wrong shape does not warn", async (t) => {
+  const warn = t.mock.method(console, "warn", () => undefined);
+  const { rpc, config } = setup();
+  config.parts.keymap = { format_version: 1, modes: {}, pad: "k".repeat(SNAPSHOT_PARTS.keymap.max_bytes) };
+  await rpc.sync();
+  await rpc.sync();
+  assert.equal(warn.mock.callCount(), 1, "the same part warns once");
+  const text = String(warn.mock.calls[0]!.arguments[0]);
+  assert.match(text, /the keymap snapshot .* is \d+ bytes, over its cap of 524288/);
+  config.parts.theme = { dark: {}, light: {}, pad: "t".repeat(SNAPSHOT_PARTS.theme.max_bytes) };
+  await rpc.sync();
+  assert.equal(warn.mock.callCount(), 2, "another part warns on its own");
+  assert.match(String(warn.mock.calls[1]!.arguments[0]), /the theme snapshot/);
+  config.parts.which_key = "not a panel";
+  await rpc.sync();
+  assert.equal(warn.mock.callCount(), 2);
+});
+
 test("a push names the document whose call locked the tab, and once chrome says it is gone no push goes out", async () => {
   const { rpc, from_module, pushes, answer_push } = setup();
   await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 3 })]);

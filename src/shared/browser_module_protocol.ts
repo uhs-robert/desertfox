@@ -146,7 +146,8 @@ export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: R
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
 export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
 // `line_keys`, on the root only: the key paths (tokens joined by one space) of the forward leaves that open the command line. After one of them the module holds the keys that follow until the line has the focus, so they never run on the page. An older module ignores the field.
-export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[] };
+// `hint_keys`, on the root only: the key paths of the hint leaves, which need page code and so are not in the tree. Where hints cannot run now, the module claims them and sends the first one as a `run`, so the extension says why. An older module ignores the field.
+export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[] };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
@@ -222,17 +223,18 @@ function tree_problem(node: unknown, depth: number): string | undefined {
   return undefined;
 }
 
-function line_keys_problem(line_keys: unknown): string | undefined {
-  if (line_keys === undefined) return undefined;
+function key_paths_problem(paths: unknown, name: string): string | undefined {
+  if (paths === undefined) return undefined;
   const fits = (path: unknown) => typeof path === "string" && path.split(" ").length <= MAX_SEQUENCE_KEYS && path.split(" ").every(is_key_token);
-  return Array.isArray(line_keys) && line_keys.every(fits) ? undefined : "the line keys are not key paths";
+  return Array.isArray(paths) && paths.every(fits) ? undefined : `the ${name} keys are not key paths`;
 }
 
 export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   const size = json_bytes(value);
   if (size === undefined) return bad("the tree is not plain data");
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
-  const problem = tree_problem(value, 0) ?? line_keys_problem((value as { line_keys?: unknown }).line_keys);
+  const root = value as { line_keys?: unknown; hint_keys?: unknown };
+  const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
   return problem === undefined ? { ok: true, value: value as ScopeTree } : bad(problem);
 }
 
