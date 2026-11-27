@@ -1,5 +1,5 @@
 // The extension side of the browser module channel (`src/shared/browser_module_protocol.ts`). While the `browser_module` setting is on, it keeps the module's state in `storage.session`:
-// the toolbar switch, the single-key bindings the module may run, and per tab the mode and whether DesertFox is live there. It also reads the module's hello and records what became of it.
+// the toolbar switch, the single-key bindings and the locked-page key tree the module may run, and per tab the mode and whether DesertFox is live there. It also reads the module's hello and records what became of it.
 // Everything here is a copy rebuilt from stored data (the keymap, the disabled flag, the tab mode records), so a background restart loses nothing. An extension reload empties `storage.session`, and the module then claims nothing until the start writes the state again.
 
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -16,11 +16,9 @@ import {
   bar_config_of,
   bar_fields_of,
   bar_theme_of,
-  check_module_args,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
-  is_module_command_id,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
   status_of_hello,
@@ -32,8 +30,11 @@ import {
   validate_message,
   validate_message_list,
   validate_module_state,
+  validate_scope_tree,
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
+import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
+import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { is_reply } from "../shared/browser_module_protocol.ts";
 import { touches_settings } from "../shared/storage_watch.ts";
@@ -43,21 +44,15 @@ import type { TabModeRecord } from "./tab_modes.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
 
-// Checks a command's args through the one validator and gives them back with every default filled, or undefined when the registry refuses them.
-export type CheckCommandArgs = (id: string, args: Record<string, unknown> | undefined) => Record<string, unknown> | undefined;
+export type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 
 // A leaf the module may run: one step, no guard, no key to wait for, and a command from the protocol's list whose args the registry accepts. Anything else stays with the content script.
 function row_of(key: string, node: TreeNode, check_args: CheckCommandArgs): KeyRow | undefined {
-  if (node.kind !== "leaf" || node.steps.length !== 1) return undefined;
-  if (node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) return undefined;
-  const { invocation, capture, register } = node.steps[0]!;
-  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !is_module_command_id(invocation.id)) return undefined;
-  const filled = check_args(invocation.id, invocation.args);
-  const args = filled && check_module_args(invocation.id, filled);
-  return args?.ok ? { key, id: invocation.id, args: args.value } : undefined;
+  const native = node.kind === "leaf" ? native_leaf(node, check_args) : undefined;
+  return native && { key, id: native.native, args: native.args };
 }
 
-// The single-key normal bindings the module may run, in key order. Sequences (`gg`) and counts are the content script's.
+// The single-key normal bindings the module may run, in key order. The scope tree beside them holds sequences and counts, for a module that reads it.
 export function key_rows_of(keymap: CompiledKeymap | undefined, check_args: CheckCommandArgs): KeyRow[] {
   const children = keymap?.modes.normal?.children ?? {};
   const rows = Object.entries(children).flatMap(([key, node]) => row_of(key, node, check_args) ?? []);
@@ -94,6 +89,8 @@ export type BrowserModuleDeps = {
   read_keymap: () => Promise<CompiledKeymap | undefined>;
   read_tab_records: () => Promise<Record<string, TabModeRecord>>;
   check_args: CheckCommandArgs;
+  // The commands a locked page runs (`locked_page_command_ids`). With them the state carries the scope tree, so the module takes key sequences and counts too.
+  locked_commands?: ReadonlySet<string>;
   // The status bar's inputs. Without them the bar counts as off.
   // The bar settings, or undefined while `browser_bar` is off.
   read_bar_config?: () => Promise<BarConfig | undefined>;
@@ -292,7 +289,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     }
     const bar_theme = bar_theme_of(await deps.read_theme?.());
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}) });
+    const keymap = disabled ? undefined : await deps.read_keymap();
+    // A tree over its cap is left out, and the module falls back to the single keys, which stay.
+    const tree = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, deps.check_args);
+    const fits = tree && validate_scope_tree(tree).ok;
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }) });
     request_hello_read();
     request_messages_read();
   };

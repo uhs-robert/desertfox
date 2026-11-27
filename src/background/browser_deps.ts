@@ -12,6 +12,8 @@ import { is_dynamic_values } from "../shared/registry/params.ts";
 import { registry } from "../shared/registry/builtin.ts";
 import { runs_with_empty } from "./availability.ts";
 import { create_bundle_loader } from "./bundle_loader.ts";
+import { browser_module_call } from "./browser_module_call.ts";
+import { with_address_bar } from "./browser_module_run.ts";
 import type { BundleLoaderDeps, LoadSender } from "./bundle_loader.ts";
 import { is_extension_page } from "./extension_page.ts";
 import type { ImageDeps, ImageKind } from "./image_actions.ts";
@@ -159,7 +161,7 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
     search_query: async (url) => (url === undefined ? undefined : engine_of_page((await get_config()).search_engines, url)?.query),
     has_permission: (permission) => browser.permissions.contains({ permissions: [permission as browser._manifest.OptionalPermission] }),
     send_to_tab,
-    open_cmdline: (tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id),
+    open_cmdline: with_address_bar((tab_id, frame_id, text) => send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "cmdline.open", args: { text }, bundle: "cmdline" }] }, frame_id), has_content_script, (kind, args) => browser_module_call.call(kind, args)),
     show_refusal: (tab_id, refusal, frame_id) => deliver_refusal(channels, tab_id, refusal, frame_id),
     is_disabled: browser_disabled_source ?? read_disabled,
     repeat_memory,
