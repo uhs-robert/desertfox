@@ -107,14 +107,16 @@ function page_info(firefox: Firefox) {
 // A browser window with a dialog in a `dialogFrame`: a tab's prompt at the frame's place, or a settings sub-dialog inside about:preferences inside a tab.
 const PROMPT_URL = "chrome://global/content/commonDialog.xhtml";
 
-function browser_with_dialog(firefox: Firefox, { nested = false, url = PROMPT_URL, extra = [] as Node[] } = {}) {
+function browser_with_dialog(firefox: Firefox, { nested = false, url = PROMPT_URL, extra = [] as Node[], prompt_type = "confirm" } = {}) {
   const window = chrome_window(firefox, "navigator:browser", (root) => root.append(button("reload-button", 10)));
   const outer = nested ? new Node("browser", { box: box(0, 80, 1200, 700) }) : undefined;
   const frame = Object.assign(new Node("browser", { box: box(300, 200, 400, 200) }), { classList: { contains: (name: string) => name === "dialogFrame" }, clientLeft: 0, clientTop: 0 });
   const dialog_view = Object.assign(new Node("#dialogwindow"), { browsingContext: { embedderElement: frame } });
   const dialog_root = new Node("window");
   const field = new Node("input", { id: "loginTextbox", box: box(20, 60, 200) });
-  const dialog = new Node("dialog", { box: box(0, 0, 400, 200) });
+  const dialog = new Node("dialog", { id: "commonDialog", box: box(0, 0, 400, 200) });
+  // Firefox marks a tab prompt's kind on its dialog element once the prompt has loaded.
+  if (prompt_type) dialog.setAttribute("windowtype", `prompt:${prompt_type}`);
   const shadow = new Node("#shadow");
   const accept = button("accept", 200, 150, "button");
   const cancel = button("cancel", 300, 150, "button");
@@ -441,4 +443,15 @@ test("a moz- widget gets one label, not one on the host and one on the control i
   run.type_binding();
   await run.collect_here(5);
   assert.equal(run.target_rows().length, 3, "the toggle got two labels, or the dialog's buttons lost theirs");
+});
+
+test("a tab prompt that asks for a site's password, or one whose kind is not known yet, takes no binding and gets no labels", () => {
+  for (const prompt_type of ["promptUserAndPass", "promptPassword", ""]) {
+    const run = started((firefox) => browser_with_dialog(firefox, { prompt_type }));
+    assert.ok(!run.type_binding().some((event) => event.prevented), `${prompt_type || "no kind"}: the binding was taken`);
+    assert.deepEqual(run.tokens(), [], prompt_type);
+  }
+  const alert = started((firefox) => browser_with_dialog(firefox, { prompt_type: "alert" }));
+  alert.type_binding();
+  assert.equal(alert.tokens().length, 1, "an alert lost the binding");
 });

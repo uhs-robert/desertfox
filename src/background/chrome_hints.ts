@@ -127,7 +127,15 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
     });
     // The module ends the older session only when the newer one collects. A refused collect would leave it showing, with no stored session to narrow it.
     if (previous) await deps.push("chrome_hints.clear", { session: previous.session });
-    const result = await collect(session.session, await deps.colors());
+    const colors = await deps.colors();
+    // A newer start can store its session while the colors load. This one then sends nothing and reports no failure, so its collect never replaces the newer session in the module. The check and the send share one turn, so no start comes between them.
+    const replaced_by_newer = async () => {
+      const stored = await read();
+      return stored !== undefined && stored.session !== session.session;
+    };
+    const sent = await in_turn(async () => ((await replaced_by_newer()) ? undefined : { reply: collect(session.session, colors) }));
+    if (!sent) return { ok: true };
+    const result = await sent.reply;
     if (!result.ok) {
       // A collect whose reply was lost can still have started a session in chrome, which would hold the keys until Escape.
       await deps.push("chrome_hints.clear", { session: session.session });
