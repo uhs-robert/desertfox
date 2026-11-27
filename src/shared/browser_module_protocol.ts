@@ -47,6 +47,7 @@ export const MODULE_COMMAND_ARGS = {
   "scroll.pixels": { dx: "int", dy: "int" },
   "scroll.pages": { fraction: "number", count: "int" },
   "scroll.to": { percent: "number", axis: "axis" },
+  "page.stop": {},
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;

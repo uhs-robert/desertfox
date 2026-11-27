@@ -5,6 +5,10 @@ default:
 docs-gen: install_deps
     npm run --silent docs:gen
 
+# Rebuild browser_module/desertfox-commands.js from browser_module/sources/ and the src/shared code it bundles. The file is committed, because install.sh builds nothing, and `just test` fails when it is stale.
+browser-module: install_deps
+    node --no-warnings tools/build_browser_module.ts --write
+
 # Regenerate src/shared/themes.ts from themes/oasis/*.css and themes/*.toml, and the theme names in src/shared/setting_completion.ts.
 themes: install_deps
     npm run --silent themes:write

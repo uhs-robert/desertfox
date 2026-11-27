@@ -10,7 +10,7 @@ import {
   BROWSER_MODULE_STATE_STORAGE_KEY,
 } from "../../src/shared/config/storage_keys.ts";
 import { event_to_token } from "../../src/shared/keys/token.ts";
-import { CORE_FILE, create_firefox, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
+import { COMMANDS_FILE, CORE_FILE, create_firefox, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 
 const DEFAULT_KEYS = [
   { key: "J", id: "tab.next", args: {} },
@@ -56,8 +56,9 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
 });
 
-test("the feature file defines every command of the protocol with the protocol's arg shapes", () => {
-  const { firefox } = started();
+test("the feature files define every command of the protocol with the protocol's arg shapes", () => {
+  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE) } });
+  firefox.make_window().load();
   const core = firefox.Services.desertfox_browser_module as { status(): { commands: string[] } };
   assert.deepEqual(plain(core.status().commands).sort(), Object.keys(MODULE_COMMAND_ARGS).sort());
   const source = source_of(FEATURE_FILE);

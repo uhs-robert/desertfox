@@ -16,6 +16,12 @@
 //                              fn(args) gets checked args and returns { ok, error?, value? } or a promise of it. `value` is text, copied into the reply. A throw or a rejection replies with a fixed error.
 //   send(kind, args)           In the sandbox: start a call to the extension, a kind on the copy of MODULE_TO_EXTENSION_KINDS. Returns { ok: true, id } or { ok: false, problem }.
 //   log_once(text)             One line in the browser console per distinct text.
+//   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
+//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), pending(win) }.
+//                              key gets every key the module may take on a page, after the guards: context = { window, browser, tab, event, tree }, `tree` the state's raw tree or undefined.
+//                              It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the single-key rows decide.
+//   run_command(id, args, context)  In the sandbox: run a command a feature defined, with its args checked as for a row. Returns false when no feature defines it or the args do not fit.
+//   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The status bar reads it.
 // A feature file lets an error in its start throw: the core then turns the module off for the session, so no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -166,6 +172,8 @@
       if (!Array.isArray(value.keys) || value.keys.length > MAX_KEY_ROWS) return undefined;
       if (value.blur_on_load !== undefined && typeof value.blur_on_load !== "boolean") return undefined;
       if (value.tabs !== undefined && !is_record(value.tabs)) return undefined;
+      // The taker checks the tree itself, with the extension's own validator bundled in.
+      const tree = is_record(value.tree) ? value.tree : undefined;
       const keys = new Map();
       for (const row of value.keys) {
         if (!is_record(row) || typeof row.key !== "string" || !KEY_TOKEN.test(row.key) || typeof row.id !== "string" || keys.has(row.key)) continue;
@@ -180,7 +188,7 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree };
     }
 
     // The read is synchronous. The bucket keeps the holder the extension wrote until the next write, so the same holder means the same state.
@@ -196,11 +204,16 @@
     const deserialized = (holder) => (typeof holder?.deserialize === "function" ? holder.deserialize(sandbox, true) : holder);
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
-    // The hello goes once to each extension object, only while the module is on. The extension reads it as foreign input.
-    function say_hello(extension) {
-      if (!active || !extension || hello_for.has(extension) || !enabled_by_pref()) return;
+    // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads `bar` only when it is true.
+    const HELLO_FLAGS = ["bar"];
+    const hello_flags = new Set();
+
+    // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
+    function say_hello(extension, again = false) {
+      if (!active || !extension || (hello_for.has(extension) && !again) || !enabled_by_pref()) return;
       hello_for.add(extension);
-      write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION });
+      const flags = Object.fromEntries([...hello_flags].map((name) => [name, true]));
+      write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION, ...flags });
     }
 
     function take_back_hello() {
@@ -307,6 +320,10 @@
       if (!page) return;
       const state = state_for(win);
       if (!state) return;
+      if (key_taker) {
+        const taken = offer_key(win, page, state, event);
+        if (taken !== undefined) return;
+      }
       const row = state.keys.get(token_of(event));
       const command = row && commands.get(row.id);
       if (!command) return;
@@ -318,6 +335,19 @@
       command.run({ window: win, browser: page.browser, tab, args, repeat: event.repeat });
       event.preventDefault();
       event.stopPropagation();
+    }
+
+    // The taker sees a key only where a row could run: not in a field, and on a tab left to the module.
+    function offer_key(win, page, state, event) {
+      if (in_field(win, page, event)) return false;
+      const tab = win.gBrowser.getTabForBrowser(page.browser);
+      if (!left_to_module(state, page.browser, tab)) return false;
+      const taken = key_taker.key({ window: win, browser: page.browser, tab, event, tree: state.tree });
+      if (taken === true) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return taken === true || taken === false ? taken : undefined;
     }
 
     // `blur_on_load`, as DesertFox does on web pages: a field the page focused as it loaded, before any key or click, loses the focus, so the keys work at once.
@@ -452,6 +482,7 @@
     const MESSAGE_ID = /^[A-Za-z0-9_-]{1,32}$/;
     const HANDLER_FAILED = "the request failed";
     const kind_handlers = new Map();
+    let key_taker;
     // The one storage listener: DesertFox's bucket and its listeners belong to one extension object, so a reloaded DesertFox needs it again.
     let listening = { extension: undefined, stop: () => undefined };
     // Per extension object: the ids already handled, and the module's own list as last written. An extension reload empties both lists.
@@ -700,6 +731,33 @@
         return { ok: true, id: message.id };
       },
       log_once,
+      set_hello_flag(name, on) {
+        if (!HELLO_FLAGS.includes(name) || typeof on !== "boolean") {
+          log_once(`refused the hello flag ${String(name)}`);
+          return false;
+        }
+        if (hello_flags.has(name) === on) return true;
+        if (on) hello_flags.add(name);
+        else hello_flags.delete(name);
+        const extension = desertfox();
+        if (extension && hello_for.has(extension)) say_hello(extension, true);
+        return true;
+      },
+      take_keys(taker) {
+        if (key_taker) log_once("two feature files take keys, the first one does");
+        else if (typeof taker?.key === "function") key_taker = taker;
+      },
+      run_command(id, args, context) {
+        const command = commands.get(id);
+        const checked = command && checked_args(command, args);
+        if (!checked) return false;
+        command.run({ ...context, args: checked });
+        return true;
+      },
+      module_pending(win) {
+        if (typeof key_taker?.pending !== "function") return undefined;
+        return key_taker.pending(win);
+      },
       shut_down() {
         for (const win of [...windows.keys()]) detach(win);
         for (const step of undo) step();

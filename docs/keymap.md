@@ -47,7 +47,7 @@ bound: 519 (normal 276, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `R` | `page.reload --hard` | Hard reload | yes |
 | `rc` | `page.reload --site` | Clear site data, reload | yes |
 | `rC` | `page.reload --all` (prompts) | Clear all data, reload | yes |
-| `xp` | `page.stop` | Stop loading |  |
+| `xp` | `page.stop` | Stop loading | yes |
 | `gh` | `page.home` | Home page | yes |
 | `gH` | `page.home --tab` | Home page | yes |
 | `]]` | `page.follow --next` | Next page |  |
