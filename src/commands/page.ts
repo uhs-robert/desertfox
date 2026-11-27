@@ -78,6 +78,24 @@ define("page.save_pdf", {
   },
 });
 
+// `isArticle` is Firefox's own verdict, the one that lights its address bar icon, so a page it cannot show fails here with a message and not a silent no-op. A tab already in Reader View is not an article, and the same call takes it back to the page.
+const READER_REFUSAL = "Firefox cannot show this page in Reader View";
+
+define("page.reader", {
+  label: "Reader View",
+  intent: "Toggle Reader View on the page.",
+  bridge: false,
+  runs_in: "background",
+  run: async (ctx) => {
+    const tab_id = require_tab_id(ctx);
+    const tab = await browser.tabs.get(tab_id);
+    if (tab.isArticle !== true && tab.isInReaderMode !== true) throw new RuntimeRefusal(READER_REFUSAL);
+    await browser.tabs.toggleReaderMode(tab_id).catch(() => {
+      throw new RuntimeRefusal(READER_REFUSAL);
+    });
+  },
+});
+
 // Firefox has no stop call for the tabs API, so the page itself stops.
 define("page.stop", {
   label: "Stop loading",

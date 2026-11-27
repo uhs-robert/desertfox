@@ -21,6 +21,8 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // container, bookmark or home page, a tab that cannot unload, nothing to repeat. A refusal that matches no entry fails, so a
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
+  // The stub tab is no article.
+  "page.reader": [/cannot show this page in Reader View/],
   "help.key": [/has no normal-mode binding/],
   // The stub config knows no theme or engine of that name, in the files or in the browser.
   "settings.set": [/no theme named "stub"/, /no search engine named "stub"/],

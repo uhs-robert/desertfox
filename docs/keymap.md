@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 535 (normal 282, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -50,6 +50,7 @@ bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `rc` | `page.reload --site` | Clear site data, reload | yes |
 | `rC` | `page.reload --all` (prompts) | Clear all data, reload | yes |
 | `xp` | `page.stop` | Stop loading | yes |
+| `gr` | `page.reader` | Reader View | yes |
 | `gh` | `page.home` | Home page | yes |
 | `gH` | `page.home --tab` | Home page | yes |
 | `]]` | `page.follow --next` | Next page |  |
