@@ -876,10 +876,22 @@ test("after the keymap reply, a held key's repeat in a field is dropped while a 
   const { flow, state, ran } = make_flow(true, false, undefined, { on: false }, true, undefined, blur_window);
   flow.set_matcher_(create_matcher(keymap));
   state.focus_entered_editable_();
-  assert.equal(flow.drops_repeat_(true), true, "the caller keeps no press record for it");
+  assert.equal(flow.drops_repeat_(true, "J"), true, "the caller keeps no press record for it");
   assert.equal(flow.handle_token_("J", true), "cancel", "a repeat in a field the page focused on a show is cancelled");
   assert.equal(flow.handle_token_("J", false), "pass", "a first press still reaches the field");
   assert.deepEqual(ran, []);
+});
+
+test("while a blur window is open, a held browser chord in a field and a repeat outside a field still go on", () => {
+  const field = { on: true };
+  const { flow, state, ran } = make_flow(true, false, undefined, { on: false }, true, field, { open: true });
+  flow.set_matcher_(create_matcher(keymap), keymap.modes.browser);
+  state.focus_entered_editable_();
+  assert.equal(flow.handle_token_("<C-Tab>", true), "pass", "a held Ctrl+Tab keeps cycling tabs");
+  field.on = false;
+  state.focus_left_editable_();
+  flow.handle_token_("j", true);
+  assert.deepEqual(ran, ["down!"], "outside a field the repeat runs its bind");
 });
 
 test("a held key's repeat in a field passes again once the blur window ends", () => {
@@ -903,7 +915,7 @@ test("a dropped repeat leaves the press record of the queued press of the same k
   keys.record_keydown_("KeyJ", "cancel", queued);
   field.on = true;
   const later: HeldPress = { keyup_seen_: false };
-  const dropped = flow.drops_repeat_(true);
+  const dropped = flow.drops_repeat_(true, "J");
   assert.equal(dropped, true);
   keys.record_keydown_("KeyJ", flow.handle_token_("J", true), dropped ? undefined : later);
   assert.equal(keys.release_for_replay_("KeyJ", queued), false);
