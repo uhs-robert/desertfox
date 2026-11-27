@@ -57,8 +57,6 @@ define("open.url", {
   params: [{ name: "url", type: "string", rest: true, main: true, default: [{ value: "", when: { where: ["tab", "window", "background"] } }], values: { from: "open" } }, WHERE_PARAM, CONTAINER_PARAM],
   bridge: true,
   runs_in: "background",
-  // A mapped Firefox page runs :firefox, which `.` never replays.
-  repeatable: (args) => firefox_page_at(String(args.url)) === undefined,
   run: async (ctx, args) => {
     const page = ctx.from_page ? undefined : firefox_page_at(args.url);
     if (page !== undefined) return open_typed_firefox_page(ctx, page, args.where, container_of(args));
