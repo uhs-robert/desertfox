@@ -14,7 +14,7 @@ A register prefix `"<reg>` and a count go before any command in normal, caret, v
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
-The Locked pages column of the normal table marks the keys that also work on pages DesertFox cannot reach, such as about:addons, when the browser module is installed. A key that prompts there opens the address bar with `df ` and the command typed in. The column comes from the same derivation as the module's key tree (`src/shared/browser_module_scope.ts`).
+The Locked pages column of the normal table marks the keys that also work on pages DesertFox cannot reach, such as about:addons, when the browser module is installed. A key that prompts there opens the address bar with `df ` and the command typed in. The column comes from the same derivation as the module's key tree (`src/shared/browser_module_scope.ts`). It covers pages with no page code. With `browser_module_pages` on, the PDF viewer and Reader View run DesertFox's own page code, so every key of the tables works there, not only the marked ones (see [Page code on locked pages](design/browser_module.md#page-code-on-locked-pages)).
 
 A note "(prompts)" means the binding sets a `prompt` for a param, so the command line asks for it.
 

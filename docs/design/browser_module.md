@@ -125,6 +125,40 @@ On a locked page `:` and a key that asks for a value open DesertFox's own comman
 - The page stands in for its host: Enter sends `run` with `from_line` and closes the window, a close closes the window, and the line has no page search.
 - The module's keys stay out of the panel: its browser is no tab browser, so the core's key guard leaves every key there to the page.
 
+## Page code on locked pages
+
+Status: built, off by default. The module side is `desertfox-locked-pages.js`. The extension side is `src/content/locked_shim.ts` and `src/background/browser_module_rpc.ts`. The kinds and snapshots are in `src/shared/browser_module_protocol.ts`. What Firefox does there is measured in [firefox-behavior.md](../firefox-behavior.md#locked-pages-locked-page-modes).
+
+With the setting `browser_module_pages` on, DesertFox's own `content.js` and bundles run inside the PDF viewer and Reader View, so every key that works on a web page works there too (hints, caret, which-key, the command line). The module's key tree (above) still covers about:addons, about:preferences and every other locked page.
+
+What runs where:
+
+- In the extension: the background answers each page call through the same router as a content script's message. It refuses a type the route table (`LOCKED_PAGE_ROUTES`) does not list for a locked page, such as snippets.
+- In the module core: the attach rule, the calls and pushes, and the snapshots. Chrome code never parses a page message.
+- In the page's process, a sandbox: `locked_shim.js` (the `browser` global, a typed surface over the module's transport), then `content.js`, then bundles. The module loads files only by name from a fixed list.
+
+Trust boundary and principal:
+
+- The sandbox runs under the expanded principal `[page, extension]`, as Firefox gives a content script on a web page. It never runs under the system principal, so the feature adds no privilege over a content script. For this reason about:addons and about:preferences are out of scope: they work only under the system principal.
+- A page script sees nothing of the sandbox. The transport sits on the sandbox global, not on the page window.
+- Chrome relays the JSON text of a page message as it came. The extension reads it, checks it against the route table and a size cap, and answers. The shim checks the same list, but the background never trusts it. `tab_id` and `document_id` are facts chrome reads, never fields of the page's message.
+
+Channel kinds (all JSON text with a size limit and an age limit, in both kind tables):
+
+- `page_call`, from the module: a page message for the background, with a reply.
+- `page_push`, to the module: a background message for the page, in place of `tabs.sendMessage`, with a reply. A push settles when the page answers or its attach ends.
+- `page_gone`, from the module: chrome says an attach ended, on pagehide and when the page's window goes away. The background marks a document left only on this word. A same-address load event does not end a lock, because the PDF viewer sends a second one with no new document.
+
+Both calls name a `document_id`, one id per attach, so a call from a document that a load replaced is refused. A page that Back restores from the cache attaches again under a new id.
+
+Snapshots carry the read-only data a message is too small for: the keymap with its site rules, the config status, the theme and the which-key panel of normal mode. The extension writes one session storage key per part with its own cap and rewrites it when the part changes. The module checks each part once (`validate_snapshot`) and hands the shim a copy. A missing, invalid or over-cap keymap or config snapshot leaves the page code stopped and the module keys in force. Site rules on a locked page match the tab's address, which the background reads.
+
+Lifecycle:
+
+- The module attaches a page only when the kill switch pref, `browser_module` and `browser_module_pages` are on, the snapshots are present with protocol version 1, the tab is not private (unless DesertFox has private access), and chrome reads the page kind as the PDF viewer or Reader View.
+- Pagehide destroys the sandbox and settles every open call and push with an error. Turning either setting off, the kill switch, a version mismatch or a failed start does the same and takes the page code out. Tab close clears the tab's lock.
+- The setting is off by default and works only with `browser_module` on. [privacy.md](../privacy.md) states what it writes and relays.
+
 ## Safety
 
 - Startup: every step at load and per window runs in a `try`. A failure logs one line, turns the module off for the session (all windows lose their listener) and never throws into the loader.
