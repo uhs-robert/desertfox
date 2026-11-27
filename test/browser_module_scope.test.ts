@@ -5,7 +5,7 @@ import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
-import { locked_page_command_ids, matcher_keymap_of, over_repeat_limit, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
+import { locked_page_command_ids, matcher_keymap_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
@@ -36,7 +36,7 @@ test("the locked-page set: background commands that need no page, minus the deny
   assert.deepEqual([...allowed].sort(), [
     "bookmark.add", "bookmark.edit_url", "bookmark.move", "bookmark.open", "bookmark.open_folder", "bookmark.remove", "bookmark.rename",
     "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
-    "help.issue", "help.key", "help.open", "history.open", "macro.play", "macro.record", "macro.stop", "mark.clear", "mark.delete", "mark.list",
+    "help.issue", "help.key", "help.open", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
     "page.back", "page.forward", "page.home", "page.print", "page.reload", "page.save_pdf",
     "pane.close_both", "pane.focus", "pane.resize", "pane.split", "pane.unsplit", "permissions.grant",
@@ -46,7 +46,7 @@ test("the locked-page set: background commands that need no page, minus the deny
     "tabgroup.add", "tabgroup.close", "tabgroup.collapse", "tabgroup.color", "tabgroup.expand", "tabgroup.name", "tabgroup.next", "tabgroup.prev", "tabgroup.remove", "tabgroup.toggle",
     "url.increment", "url.parent", "url.root", "window.close", "window.new", "window.undo_close", "zoom.by", "zoom.set",
   ]);
-  for (const id of ["media.act", "frame.exit", "mode.insert", "hint.run", "scroll.lines", "page.stop"]) assert.equal(allowed.has(id), false, id);
+  for (const id of ["media.act", "frame.exit", "macro.record", "mode.insert", "hint.run", "scroll.lines", "page.stop"]) assert.equal(allowed.has(id), false, id);
   assert.equal(runs_on_locked_pages({ id: "x.y", runs_in: "background", needs: ["content"] }), false);
 });
 
@@ -57,7 +57,9 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.deepEqual(node_at(DEFAULT_TREE, ["g", "g"]), { native: "scroll.to", args: { percent: 0, axis: "y" } });
   assert.deepEqual(node_at(DEFAULT_TREE, ["<C-d>"]), { native: "scroll.pages", args: { fraction: 0.5, count: 1 }, count_rule: { param: "count" } });
   // A capture key keeps its any-key child.
-  assert.equal(node_at(DEFAULT_TREE, ["q", ""]), "forward");
+  assert.equal(node_at(DEFAULT_TREE, ["@", ""]), "forward");
+  // A page swaps the record key for macro.stop while a macro records, which the stored tree cannot follow, so `q` stays with the page.
+  assert.equal(node_at(DEFAULT_TREE, ["q"]), undefined);
   // Hints, find, the command line, marks, insert mode and the copy keys need DesertFox's page code.
   for (const keys of [["f"], ["/"], [":"], ["i"], ["m"], ["y", "y"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
@@ -107,7 +109,7 @@ test("the module's matcher walks the tree: sequences, counts and the any-key chi
   const closed = matcher.feed("normal", "x");
   assert.equal(scope_of(closed), "forward");
   assert.equal(closed.kind_ === "match" && closed.count, 5);
-  matcher.feed("normal", "q");
+  matcher.feed("normal", "@");
   assert.equal(scope_of(matcher.feed("normal", "a")), "forward");
   assert.equal(matcher.feed("normal", "f").kind_, "no_match");
 });
@@ -137,8 +139,8 @@ test("a run request's keys are matched again against the full tree", () => {
   const counted = ran("x x", 3);
   assert.ok(counted.ok && counted.count === 3);
   // A capture key fills its param from the last key.
-  const record = ran("q a");
-  assert.ok(record.ok && record.leaf.steps[0]!.invocation.args?.reg === "a", JSON.stringify(record));
+  const play = ran("@ a");
+  assert.ok(play.ok && Object.values(play.leaf.steps[0]!.invocation.args ?? {}).includes("a"), JSON.stringify(play));
   // A prompt key resolves with its prompt, and the router opens the line.
   const open = ran("o");
   assert.ok(open.ok && open.leaf.steps[0]!.invocation.prompt !== undefined);
@@ -163,12 +165,4 @@ test("a forged, stale or page key, a typed count or register and junk are refuse
   // A tree the module still holds from before a remap: the keymap now unbinds xx.
   refused("x x", 0, compiled({ normal: { xx: null } }));
   assert.equal(resolve_run(undefined, "x x", 0, allowed).ok, false);
-});
-
-test("a count over a step's repeat limit is refused, a prompt step drops its count", () => {
-  const limit_of = (id: string) => registry.get(id)?.repeat_limit;
-  assert.match(over_repeat_limit([{ id: "tab.close", count: 21 }], limit_of)!, /over the limit of 20/);
-  assert.equal(over_repeat_limit([{ id: "tab.close", count: 20 }], limit_of), undefined);
-  assert.equal(over_repeat_limit([{ id: "tab.close", count: 99, prompt: { param: "x" } }], limit_of), undefined);
-  assert.equal(over_repeat_limit([{ id: "page.back", count: 999 }], limit_of), undefined);
 });

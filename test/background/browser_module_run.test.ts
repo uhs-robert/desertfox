@@ -3,6 +3,7 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { create_browser_module } from "../../src/background/browser_module.ts";
 import { create_module_run, with_address_bar } from "../../src/background/browser_module_run.ts";
+import { create_router } from "../../src/background/router.ts";
 import { compile_config } from "../../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 import type { RouteRequest } from "../../src/background/router.ts";
@@ -34,7 +35,6 @@ function run_setup(answer: RunResponse = { ok: true }) {
   const run = create_module_run({
     read_keymap: async () => state.keymap,
     locked_commands,
-    repeat_limit_of: (id) => registry.get(id)?.repeat_limit,
     run: async (request) => (runs.push(request), answer),
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
   });
@@ -60,14 +60,37 @@ test("a prompt key reaches the router with its prompt, and the router opens the 
   assert.ok(runs[0]!.invocations[0]!.prompt);
 });
 
-test("a forged key, a page key and a count over the limit never reach the router, and the user sees why", async () => {
+test("a forged key and a page key never reach the router, and the user sees why", async () => {
   const { run, runs, shown } = run_setup();
   await assert.rejects(run({ keys: "Q Q Q", count: 0 }), /not a key/);
   await assert.rejects(run({ keys: "f", count: 0 }), /needs a page/);
-  await assert.rejects(run({ keys: "x x", count: 21 }), /over the limit of 20/);
   assert.equal(runs.length, 0);
-  assert.equal(shown.length, 3);
+  assert.equal(shown.length, 2);
   assert.ok(shown.every((refusal) => refusal.id === "browser_module.run"));
+});
+
+test("a count over the limit reaches the router, which refuses it before the command runs and tells the user", async () => {
+  const shown: { tab_id: number | undefined; refusal: Refusal }[] = [];
+  const ran: string[] = [];
+  const get_command = (id: string) => {
+    const command = registry.get(id);
+    return command && { ...command, run: () => void ran.push(id) };
+  };
+  // A locked tab: no content script, so the refusal becomes a notification in `show_refusal`.
+  const router = create_router({
+    get_command,
+    is_disabled: async () => false,
+    active_tab: async () => ({ tab_id: 9, window_id: 1, url: "about:preferences" }),
+    get_tab: async () => undefined,
+    show_refusal: async (tab_id: number | undefined, refusal: Refusal) => void shown.push({ tab_id, refusal }),
+    repeat_memory: { save: async () => undefined },
+  } as never);
+  const run = create_module_run({ read_keymap: async () => DEFAULT, locked_commands, run: router.run, show_refusal: async () => assert.fail("the handler showed its own refusal") });
+  await assert.rejects(run({ keys: "x x", count: 21 }), /over the limit of 20/);
+  assert.deepEqual(ran, []);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0]!.tab_id, 9);
+  assert.match(shown[0]!.refusal.message, /A count of 21 is over the limit of 20 for tab.close/);
 });
 
 test("junk keys and a bad count are refused without a notification", async () => {

@@ -2,7 +2,7 @@
 // A run request is foreign input from chrome code. Its keys are matched again against the stored keymap, and only a leaf of the locked-page set runs, in the active tab.
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
-import { counted_steps, over_repeat_limit, resolve_run } from "../shared/browser_module_scope.ts";
+import { counted_steps, resolve_run } from "../shared/browser_module_scope.ts";
 import type { Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
@@ -11,7 +11,6 @@ import type { CallResult } from "./browser_module_call.ts";
 export type ModuleRunDeps = {
   read_keymap: () => Promise<CompiledKeymap | undefined>;
   locked_commands: ReadonlySet<string>;
-  repeat_limit_of: (command_id: string) => number | undefined;
   run: (request: RouteRequest) => Promise<RunResponse>;
   // With no tab, a refusal shows as a desktop notification.
   show_refusal: (tab_id: undefined, refusal: Refusal) => Promise<unknown>;
@@ -30,11 +29,8 @@ export function create_module_run(deps: ModuleRunDeps) {
     const { keys, count } = args as { keys: string; count: number };
     const resolved = resolve_run(await deps.read_keymap(), keys, count, deps.locked_commands);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
-    const invocations = counted_steps(resolved.leaf.steps, resolved.count);
-    const over = over_repeat_limit(invocations, deps.repeat_limit_of);
-    if (over) return refuse(over, true);
-    // No sender tab: the router runs the binding in the active tab, so a module cannot aim it at another one. The router shows its own refusals.
-    const response = await deps.run({ invocations, mode: "normal", may_prompt: true });
+    // No sender tab: the router runs the binding in the active tab, so a module cannot aim it at another one. The router shows its own refusals, a count over a step's `repeat_limit` among them.
+    const response = await deps.run({ invocations: counted_steps(resolved.leaf.steps, resolved.count), mode: "normal", may_prompt: true });
     if (!response.ok) throw new Error(response.refusal.message);
   };
 }
