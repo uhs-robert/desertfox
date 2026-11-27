@@ -1,31 +1,47 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_browser_module, key_rows_of, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
+import "../../src/background/command_modules.ts";
+import { create_browser_module, key_rows_of, module_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
+import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
-import { BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
+import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf, TreeNode } from "../../src/shared/prefix_tree.ts";
-import { DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../../src/shared/config/storage_keys.ts";
+import { check_args } from "../../src/shared/registry/check_args.ts";
+import { registry } from "../../src/shared/registry/builtin.ts";
+import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../../src/shared/config/storage_keys.ts";
+
+const real_check: CheckCommandArgs = (id, args) => {
+  const command = registry.get(id);
+  const checked = command && check_args(command, args);
+  return checked?.ok ? checked.args : undefined;
+};
 
 const leaf = (id: string, args?: Record<string, unknown>, more: Partial<TreeLeaf> = {}): TreeLeaf => ({ kind: "leaf", steps: [{ invocation: { id, ...(args && { args }) }, runs_in: "background", count_rule: "repeat" }], ...more });
 const keymap = (children: Record<string, TreeNode>): CompiledKeymap => ({ format_version: COMPILED_KEYMAP_VERSION, modes: { normal: { kind: "branch", children } }, mode_indicator: "always", which_key_delay_ms: 0, toast_ms: 1, toast_error_ms: 1 });
 
 test("key rows take single-key leaves of the listed commands and follow a remap", () => {
-  const rows = key_rows_of(keymap({ J: leaf("tab.next"), K: leaf("tab.prev"), j: leaf("scroll.lines", { count: 10 }), x: leaf("tab.close"), g: { kind: "branch", children: { g: leaf("scroll.to", { percent: 0 }) } } }));
+  const rows = key_rows_of(keymap({ J: leaf("tab.next"), K: leaf("tab.prev"), j: leaf("scroll.lines", { count: 10 }), x: leaf("tab.close"), g: { kind: "branch", children: { g: leaf("scroll.to", { percent: 0 }) } } }), real_check);
   assert.deepEqual(rows.map((row) => [row.key, row.id]), [["J", "tab.next"], ["K", "tab.prev"], ["j", "scroll.lines"]]);
   assert.deepEqual(rows[2]!.args, { count: 10 });
-  const remapped = key_rows_of(keymap({ "<A-j>": leaf("tab.next") }));
-  assert.deepEqual(remapped.map((row) => row.key), ["<A-j>"]);
+  assert.deepEqual(key_rows_of(keymap({ "<A-j>": leaf("tab.next") }), real_check).map((row) => row.key), ["<A-j>"]);
 });
 
-test("key rows skip guarded leaves, bad args, multi-step leaves and an absent keymap, and stop at the cap", () => {
-  assert.deepEqual(key_rows_of(undefined), []);
+test("the registry owns arg limits and defaults: a count the registry accepts is kept, a default is filled from it", () => {
+  const [big, plain] = key_rows_of(keymap({ a: leaf("scroll.lines", { count: 10001 }), b: leaf("scroll.pages", { fraction: 0.5 }) }), real_check);
+  assert.deepEqual(big!.args, { count: 10001 });
+  assert.deepEqual(plain!.args, { fraction: 0.5, count: 1 });
+});
+
+test("key rows skip guarded leaves, args the registry refuses, multi-step leaves and an absent keymap, and stop at the cap", () => {
+  assert.deepEqual(key_rows_of(undefined, real_check), []);
   const two = leaf("tab.next");
   two.steps.push(two.steps[0]!);
-  assert.deepEqual(key_rows_of(keymap({ a: leaf("tab.next", undefined, { when_focus: "input" }), b: leaf("scroll.lines", { count: "x" }), c: two, d: leaf("scroll.lines", { count: 1, evil: "x" }) })).map((row) => row.key), ["d"]);
+  assert.deepEqual(key_rows_of(keymap({ a: leaf("tab.next", undefined, { when_focus: "input" }), b: leaf("scroll.lines", { count: "x" }), c: two, d: leaf("scroll.lines", { count: 1 }), e: leaf("scroll.lines", { count: 1, evil: "x" }) }), real_check).map((row) => row.key), ["d"]);
   const many = Object.fromEntries(Array.from({ length: MAX_KEY_ROWS + 5 }, (_, index) => [`<F${index + 1}>`, leaf("tab.next")]));
-  assert.equal(key_rows_of(keymap(many)).length, MAX_KEY_ROWS);
+  assert.equal(key_rows_of(keymap(many), real_check).length, MAX_KEY_ROWS);
 });
 
 test("a tab record gives its mode and live mark, and only tab mode keys name a tab", () => {
@@ -35,12 +51,22 @@ test("a tab record gives its mode and live mark, and only tab mode keys name a t
   assert.equal(tab_id_of_key(`${TAB_MODE_STORAGE_PREFIX}insert_12`), undefined);
 });
 
+const TEST_KINDS: { from_module: KindTable; from_extension: KindTable } = {
+  from_module: { push: { args: { n: "int" }, reply: false }, ask: { args: { axis: "axis" }, reply: true } },
+  from_extension: { note: { args: {}, reply: true }, nudge: { args: { n: "int" }, reply: false } },
+};
+
 function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord> } = {}) {
   const data = new Map<string, unknown>();
-  const config = { on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000 };
+  const config = { on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000, gets: [] as string[] };
   const timers: (() => void)[] = [];
+  const calls: unknown[] = [];
+  const replies: unknown[] = [];
   const session = {
-    get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, data.get(name)])),
+    get: async (key: string | string[]) => {
+      config.gets.push(...[key].flat());
+      return Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, data.get(name)]));
+    },
     set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, structuredClone(value))),
     remove: async (keys: string | string[]) => void [keys].flat().forEach((key) => data.delete(key)),
   };
@@ -50,20 +76,62 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     read_disabled: async () => config.disabled,
     read_keymap: async () => keymap({ J: leaf("tab.next") }),
     read_tab_records: async () => config.records,
+    check_args: real_check,
+    kinds: TEST_KINDS,
+    handlers: {
+      push: async (args) => void calls.push(["push", args]),
+      ask: async (args) => {
+        if (args.axis === "y") throw new Error("boom");
+        calls.push(["ask", args]);
+      },
+    },
+    on_reply: (reply) => void replies.push(reply),
     now: () => config.now,
     later: (run) => void timers.push(run),
   });
-  return { data, config, timers, module };
+  // The queue is first in, first out, and a sync asks for an input read behind itself, so three turns settle it.
+  const flush = async () => {
+    for (let turn = 0; turn < 3; turn++) await module.tab_changed("0", undefined);
+  };
+  const hello_reads = () => config.gets.filter((key) => key === BROWSER_MODULE_HELLO_STORAGE_KEY).length;
+  return { data, config, timers, module, flush, calls, replies, hello_reads };
 }
+const status_of = (data: Map<string, unknown>) => (data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string } | undefined)?.result;
 
 test("sync writes the state while the setting is on and removes it when off", async () => {
-  const { data, config, module } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true }, [`${TAB_MODE_STORAGE_PREFIX}insert_3`]: true as never } });
+  const { data, config, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true }, [`${TAB_MODE_STORAGE_PREFIX}insert_3`]: true as never } });
   await module.sync();
+  await flush();
   assert.deepEqual(data.get(BROWSER_MODULE_STATE_STORAGE_KEY), { v: 1, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: { "3": { mode: "normal", live: true } } });
   assert.deepEqual(data.get(BROWSER_MODULE_STATUS_STORAGE_KEY), { result: "waiting" });
   config.on = false;
   await module.sync();
-  assert.equal(data.has(BROWSER_MODULE_STATE_STORAGE_KEY) || data.has(BROWSER_MODULE_STATUS_STORAGE_KEY), false);
+  assert.equal([BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY].some((key) => data.has(key)), false);
+});
+
+test("the setting turning on writes the state and turning off clears it, read from the stored config status", async () => {
+  const local = new Map<string, unknown>([[CONFIG_STATUS_STORAGE_KEY, { settings: { browser_module: false } }]]);
+  const storage = { get: async (key: string) => (local.has(key) ? { [key]: local.get(key) } : {}) };
+  assert.equal(await module_setting_on(storage), false);
+  const { data, module, flush, config } = setup();
+  const watched = (value: boolean) => {
+    local.set(CONFIG_STATUS_STORAGE_KEY, { settings: { browser_module: value } });
+    return value;
+  };
+  // The module under test reads the same stored value, as main.ts does.
+  const sync_with = async (value: boolean) => {
+    config.on = await module_setting_on({ get: async (key: string) => ({ [key]: { settings: { browser_module: watched(value) } } }) });
+    module.storage_changed({ [CONFIG_STATUS_STORAGE_KEY]: {} }, "local");
+    await flush();
+  };
+  await sync_with(true);
+  assert.ok(data.has(BROWSER_MODULE_STATE_STORAGE_KEY), "turned on, the state is written");
+  await sync_with(false);
+  assert.equal(data.has(BROWSER_MODULE_STATE_STORAGE_KEY), false, "turned off, the state is gone");
+  await sync_with(true);
+  assert.ok(data.has(BROWSER_MODULE_STATE_STORAGE_KEY));
+  assert.equal(await module_setting_on({ get: async () => ({}) }), false, "no status yet means off");
+  assert.equal(await module_setting_on({ get: async (key: string) => ({ [key]: { settings: { browser_module: "yes" } } }) }), false);
 });
 
 test("the toolbar switch off writes enabled false and no keys", async () => {
@@ -81,45 +149,154 @@ test("a tab change patches one tab, and a removed record drops it", async () => 
   assert.deepEqual((data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as { tabs: unknown }).tabs, {});
 });
 
-test("storage changes route to the writer and the hello reader", async () => {
-  const { data, module } = setup();
-  module.storage_changed({ [COMPILED_KEYMAP_STORAGE_KEY]: {} }, "local");
-  module.storage_changed({ [`${TAB_MODE_STORAGE_PREFIX}9`]: { newValue: { top_mode: "normal", live: true } } }, "local");
+test("a hello event on the session area reads the hello and nothing else does", async () => {
+  const { data, module, flush, hello_reads } = setup();
   data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "0.2" });
+  module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "sync");
+  module.storage_changed({ other: {} }, "session");
+  module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "local");
+  await flush();
+  assert.equal(hello_reads(), 0, "another area or key reads nothing");
+  assert.equal(status_of(data), undefined);
   module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "session");
-  module.storage_changed({ [DISABLED_STORAGE_KEY]: {} }, "sync");
-  await module.sync();
+  await flush();
   assert.deepEqual(data.get(BROWSER_MODULE_STATUS_STORAGE_KEY), { result: "matched", module_version: "0.2", module_v: 1 });
+  assert.equal(hello_reads(), 1);
 });
 
-test("the hello is read at most once a second, and a hello inside the interval is read when it ends", async () => {
-  const { data, config, timers, module } = setup();
+test("a flood of hellos, with the queue busy and syncs between, reads at most once a second and the last hello wins", async () => {
+  const { data, config, timers, module, flush, hello_reads } = setup();
+  for (let index = 0; index < 50; index++) {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: `v${index}` });
+    module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: {} }, "session");
+    if (index % 5 === 0) void module.sync();
+    void module.tab_changed(String(index), { top_mode: "normal", live: true });
+    config.now += 15;
+  }
+  await flush();
+  assert.equal(hello_reads(), 1, "within one second, one read");
+  assert.equal(timers.length, 1, "the rest wait for one timer");
+  config.now += HELLO_MIN_INTERVAL_MS;
+  timers.shift()!();
+  await flush();
+  assert.equal(hello_reads(), 2);
+  assert.equal((data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { module_version: string }).module_version, "v49");
+});
+
+test("a hello inside the interval is read when the timer fires, and only then", async () => {
+  const { data, config, timers, module, flush } = setup();
   data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1" });
-  await module.read_hello();
-  assert.equal((data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string }).result, "matched");
+  module.read_hello();
+  await flush();
+  assert.equal(status_of(data), "matched");
   data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 2, module_version: "2" });
   config.now += 100;
-  await module.read_hello();
-  await module.read_hello();
-  assert.equal((data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string }).result, "matched");
+  module.read_hello();
+  await flush();
   assert.equal(timers.length, 1);
+  assert.equal(status_of(data), "matched", "a timer that does nothing leaves the old status: the barrier cannot satisfy this");
   config.now += HELLO_MIN_INTERVAL_MS;
   timers[0]!();
-  await module.sync();
-  assert.equal((data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string }).result, "mismatch");
+  await flush();
+  assert.equal(status_of(data), "mismatch");
+});
+
+test("a timer that fires before the interval ended waits again", async () => {
+  const { data, config, timers, module, flush, hello_reads } = setup();
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1" });
+  module.read_hello();
+  await flush();
+  module.read_hello();
+  await flush();
+  const before = hello_reads();
+  timers.shift()!();
+  await flush();
+  assert.equal(hello_reads(), before, "the interval had not ended");
+  assert.equal(timers.length, 1);
+  config.now += HELLO_MIN_INTERVAL_MS;
+  timers.shift()!();
+  await flush();
+  assert.equal(hello_reads(), before + 1);
 });
 
 test("a junk hello gives an invalid status and leaves the state alone", async () => {
-  const { data, config, module } = setup();
+  const { data, config, module, flush } = setup();
   await module.sync();
+  await flush();
   config.now += HELLO_MIN_INTERVAL_MS;
   const before = JSON.stringify(data.get(BROWSER_MODULE_STATE_STORAGE_KEY));
-  config_hello(data, { v: 1, module_version: "x".repeat(500) });
-  await module.read_hello();
-  assert.equal((data.get(BROWSER_MODULE_STATUS_STORAGE_KEY) as { result: string }).result, "invalid");
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "x".repeat(500) });
+  module.read_hello();
+  await flush();
+  assert.equal(status_of(data), "invalid");
   assert.equal(JSON.stringify(data.get(BROWSER_MODULE_STATE_STORAGE_KEY)), before);
 });
-const config_hello = (data: Map<string, unknown>, value: unknown) => void data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, value);
+
+const outbox_of = (data: Map<string, unknown>) => (data.get(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY) ?? []) as Record<string, unknown>[];
+const from_module = (data: Map<string, unknown>, list: unknown[]) => data.set(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, list);
+
+test("a request of the module runs its handler, is answered once, and a push is answered never", async () => {
+  const { data, config, module, flush, calls } = setup();
+  from_module(data, [{ v: 1, id: "a1", kind: "ask", args: { axis: "x" } }, { v: 1, id: "p1", kind: "push", args: { n: 4 } }]);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.deepEqual(calls, [["ask", { axis: "x" }], ["push", { n: 4 }]]);
+  assert.deepEqual(outbox_of(data), [{ v: 1, reply_to: "a1", ok: true }]);
+  // The module rewrites its list with the same messages and one more: only the new one runs.
+  config.now += HELLO_MIN_INTERVAL_MS;
+  from_module(data, [{ v: 1, id: "a1", kind: "ask", args: { axis: "x" } }, { v: 1, id: "p1", kind: "push", args: { n: 4 } }, { v: 1, id: "a2", kind: "ask", args: { axis: "y" } }]);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.equal(calls.length, 2);
+  assert.deepEqual(outbox_of(data), [{ v: 1, reply_to: "a1", ok: true }, { v: 1, reply_to: "a2", ok: false, error: "the request failed" }]);
+});
+
+test("an unlisted kind, bad args and a wrong version get an error reply or silence, never a handler", async () => {
+  const { data, module, flush, calls } = setup();
+  from_module(data, [{ v: 1, id: "u1", kind: "eval", args: { code: "1" } }, { v: 1, id: "b1", kind: "ask", args: { axis: "q" } }, { v: 1, id: "b2", kind: "push", args: { n: "x" } }, { v: 2, id: "w1", kind: "ask", args: { axis: "x" } }, "junk"]);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.deepEqual(calls, []);
+  assert.deepEqual(outbox_of(data).map((reply) => reply.reply_to), ["u1", "b1"]);
+});
+
+test("a kind with no handler answers an error when it expects a reply", async () => {
+  const { data } = setup();
+  from_module(data, [{ v: 1, id: "n1", kind: "ask", args: { axis: "x" } }]);
+  const lone = create_browser_module({ session: { get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, data.get(name)])), set: async (items: Record<string, unknown>) => void Object.entries(items).forEach(([key, value]) => data.set(key, value)), remove: async () => undefined } as never, is_on: async () => true, read_disabled: async () => false, read_keymap: async () => undefined, read_tab_records: async () => ({}), check_args: real_check, kinds: TEST_KINDS, handlers: {}, now: () => 0, later: () => undefined });
+  lone.read_hello();
+  await lone.tab_changed("0", undefined);
+  await lone.tab_changed("0", undefined);
+  assert.deepEqual(outbox_of(data), [{ v: 1, reply_to: "n1", ok: false, error: "no handler for this kind" }]);
+});
+
+test("the extension starts a call: a listed kind is written, an unlisted one is refused, and the module's reply is heard once", async () => {
+  const { data, config, module, flush, replies } = setup();
+  const sent = await module.send("note");
+  assert.ok(sent.ok);
+  assert.deepEqual(outbox_of(data).map((message) => [message.kind, message.id]), [["note", sent.ok ? sent.id : ""]]);
+  assert.equal((await module.send("eval", { code: "1" })).ok, false);
+  assert.equal((await module.send("nudge", { n: "x" })).ok, false);
+  assert.ok((await module.send("nudge", { n: 2 })).ok);
+  const id = sent.ok ? sent.id : "";
+  from_module(data, [{ v: 1, reply_to: id, ok: true }]);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  config.now += HELLO_MIN_INTERVAL_MS;
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.deepEqual(replies, [{ v: 1, reply_to: id, ok: true }]);
+  config.on = false;
+  assert.equal((await module.send("note")).ok, false, "nothing is sent while the setting is off");
+});
+
+test("the extension's list keeps at most 16 messages, newest last", async () => {
+  const { data, module } = setup();
+  for (let index = 0; index < 20; index++) await module.send("nudge", { n: index });
+  const list = outbox_of(data);
+  assert.equal(list.length, 16);
+  assert.deepEqual((list.at(-1)!.args as { n: number }).n, 19);
+});
 
 test("the top frame's report sets live and a load start clears it with the record", async () => {
   assert.equal(apply_mode_report({}, { frame_id: 0, mode: "normal", focus: true }).live, true);

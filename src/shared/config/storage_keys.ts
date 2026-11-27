@@ -172,3 +172,6 @@ export const FONT_NAMES_STORAGE_KEY = "desertfox_font_names";
 export const BROWSER_MODULE_STATE_STORAGE_KEY = "desertfox_browser_module_state";
 export const BROWSER_MODULE_HELLO_STORAGE_KEY = "desertfox_browser_module_hello";
 export const BROWSER_MODULE_STATUS_STORAGE_KEY = "desertfox_browser_module_status";
+// The two message lists of the channel (`browser_module_protocol.ts`). Each has one writer: chrome writes the first, the extension the second.
+export const BROWSER_MODULE_FROM_MODULE_STORAGE_KEY = "desertfox_browser_module_from_module";
+export const BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY = "desertfox_browser_module_from_extension";

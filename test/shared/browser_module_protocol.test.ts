@@ -2,20 +2,35 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
+  ABSENT_TAB,
   check_module_args,
+  EXTENSION_TO_MODULE_KINDS,
   MAX_HELLO_BYTES,
   MAX_KEY_ROWS,
+  MAX_MESSAGE_LIST_BYTES,
+  MAX_MESSAGES,
+  MODULE_TO_EXTENSION_KINDS,
   status_of_hello,
+  tab_state_in,
+  validate_message,
+  validate_message_list,
   validate_module_hello,
   validate_module_state,
 } from "../../src/shared/browser_module_protocol.ts";
 
 const state = (patch: Record<string, unknown> = {}) => ({ v: V, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: { "7": { mode: "normal", live: false } }, ...patch });
 
-test("a well formed state validates, and defaults fill the args", () => {
-  const checked = validate_module_state(state({ keys: [{ key: "j", id: "scroll.lines", args: {} }] }));
+test("a well formed state validates and keeps the args it was given", () => {
+  const checked = validate_module_state(state({ keys: [{ key: "j", id: "scroll.lines", args: { count: 10001 } }] }));
+  assert.ok(checked.ok, "the command schema owns the limits, so the protocol takes any whole number");
+  assert.deepEqual(checked.value.keys[0]!.args, { count: 10001 });
+});
+
+test("an absent tab is in normal mode and not live", () => {
+  const checked = validate_module_state(state({ tabs: undefined }));
   assert.ok(checked.ok);
-  assert.deepEqual(checked.value.keys[0]!.args, { count: 1 });
+  assert.deepEqual(tab_state_in(checked.value, 42), ABSENT_TAB);
+  assert.deepEqual(ABSENT_TAB, { mode: "normal", live: false });
 });
 
 test("junk, a wrong version and oversize state are refused", () => {
@@ -25,7 +40,7 @@ test("junk, a wrong version and oversize state are refused", () => {
 });
 
 test("a row naming an unlisted command, a bad key or a bad arg is refused", () => {
-  for (const row of [{ key: "x", id: "page.eval", args: {} }, { key: "", id: "tab.next", args: {} }, { key: "a b", id: "tab.next", args: {} }, { key: "x".repeat(25), id: "tab.next", args: {} }, { key: "j", id: "scroll.lines", args: { count: 1.5 } }, { key: "j", id: "scroll.lines", args: { count: 1e9 } }, { key: "j", id: "scroll.to", args: {} }, { key: "j", id: "scroll.to", args: { percent: 5, axis: "z" } }, { key: "j", id: "scroll.pixels", args: { dx: "5" } }, "J"]) {
+  for (const row of [{ key: "x", id: "page.eval", args: {} }, { key: "", id: "tab.next", args: {} }, { key: "a b", id: "tab.next", args: {} }, { key: "x".repeat(25), id: "tab.next", args: {} }, { key: "j", id: "scroll.lines", args: { count: 1.5 } }, { key: "j", id: "scroll.lines", args: {} }, { key: "j", id: "scroll.to", args: {} }, { key: "j", id: "scroll.to", args: { percent: 5, axis: "z" } }, { key: "j", id: "scroll.pixels", args: { dx: "5" } }, "J"]) {
     assert.equal(validate_module_state(state({ keys: [row] })).ok, false, JSON.stringify(row));
   }
   assert.equal(validate_module_state(state({ keys: [{ key: "J", id: "tab.next", args: {} }, { key: "J", id: "tab.prev", args: {} }] })).ok, false);
@@ -39,19 +54,21 @@ test("the protocol stays backward compatible: unknown fields are ignored and lat
   const newer = validate_module_state({ v: V, enabled: false, later: { a: 1 }, keys: [{ key: "J", id: "tab.next", args: { later_arg: 1 }, later_field: true }] });
   assert.ok(newer.ok, "a state with no tabs and with unknown fields");
   assert.deepEqual(newer.value, { v: V, enabled: false, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: {} });
+  assert.ok(validate_module_state({ v: V, enabled: true, keys: [{ key: "j", id: "scroll.lines", args: { count: 1 } }] }).ok, "a state without tabs");
   const older_hello = validate_module_hello({ v: V, module_version: "0.1" });
   assert.ok(older_hello.ok);
   assert.ok(validate_module_hello({ v: V, module_version: "9.9", later: "field" }).ok);
 });
 
-test("check_module_args fills defaults and keeps required args required", () => {
-  assert.deepEqual(check_module_args("scroll.pages", { fraction: 0.5 }), { ok: true, value: { fraction: 0.5, count: 1 } });
-  assert.deepEqual(check_module_args("scroll.to", { percent: 100 }), { ok: true, value: { percent: 100, axis: "y" } });
+test("check_module_args checks the shape of each arg and ignores others", () => {
+  assert.deepEqual(check_module_args("scroll.pages", { fraction: 0.5, count: 1, later: true }), { ok: true, value: { fraction: 0.5, count: 1 } });
+  assert.equal(check_module_args("scroll.to", { percent: 5 }).ok, false);
   assert.equal(check_module_args("scroll.to", undefined).ok, false);
+  assert.equal(check_module_args("scroll.lines", { count: Number.NaN }).ok, false);
 });
 
 test("a hello is checked as foreign input", () => {
-  for (const junk of [undefined, null, "hi", [], {}, { v: 1.5, module_version: "1" }, { v: "1", module_version: "1" }, { v: 1 }, { v: 1, module_version: "" }, { v: 1, module_version: 5 }, { v: 1, module_version: "x".repeat(33) }, { v: 1, module_version: "a\u0000b" }, { v: 1, module_version: "1", pad: "p".repeat(MAX_HELLO_BYTES) }]) {
+  for (const junk of [undefined, null, "hi", [], {}, { v: 1.5, module_version: "1" }, { v: "1", module_version: "1" }, { v: 1 }, { v: 1, module_version: "" }, { v: 1, module_version: 5 }, { v: 1, module_version: "x".repeat(33) }, { v: 1, module_version: "a\u0000b" }, { v: 1, module_version: "a\u202eb" }, { v: 1, module_version: "1", pad: "p".repeat(MAX_HELLO_BYTES) }]) {
     assert.equal(validate_module_hello(junk).ok, false, JSON.stringify(junk)?.slice(0, 40));
   }
   const cyclic: Record<string, unknown> = { v: 1, module_version: "1" };
@@ -64,4 +81,45 @@ test("the status says waiting, matched, mismatch or invalid", () => {
   assert.deepEqual(status_of_hello({ v: V, module_version: "1.0" }), { result: "matched", module_version: "1.0", module_v: V });
   assert.equal(status_of_hello({ v: V + 1, module_version: "2.0" }).result, "mismatch");
   assert.equal(status_of_hello({ v: "x" }).result, "invalid");
+});
+
+const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args: { axis: "axis" as const }, reply: true } };
+const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
+
+test("both directions start with empty allow lists, so every request is refused", () => {
+  assert.deepEqual([MODULE_TO_EXTENSION_KINDS, EXTENSION_TO_MODULE_KINDS], [{}, {}]);
+  assert.equal(validate_message(msg({}), MODULE_TO_EXTENSION_KINDS).ok, false);
+  assert.equal(validate_message(msg({}), EXTENSION_TO_MODULE_KINDS).ok, false);
+});
+
+test("a request and a reply validate, with unknown fields ignored and no later field required", () => {
+  assert.deepEqual(validate_message(msg({ later: 1, args: { axis: "y", later_arg: 2 } }), KINDS), { ok: true, value: { v: V, id: "m1", kind: "ask", args: { axis: "y" } } });
+  assert.deepEqual(validate_message({ v: V, id: "p", kind: "push" }, KINDS).ok, false, "a push still needs the args its kind names");
+  assert.ok(validate_message({ v: V, id: "p", kind: "push", args: { n: 3 } }, KINDS).ok);
+  assert.deepEqual(validate_message({ v: V, reply_to: "m1", ok: true, newer: {} }, KINDS), { ok: true, value: { v: V, reply_to: "m1", ok: true } });
+  assert.ok(validate_message({ v: V, reply_to: "m1", ok: false, error: "no" }, KINDS).ok);
+});
+
+test("a message with junk, a wrong version, a bad id, an unlisted kind or bad args is refused", () => {
+  for (const junk of [null, 1, "x", [], msg({ v: V + 1 }), msg({ v: "1" }), msg({ id: "" }), msg({ id: "a b" }), msg({ id: "x".repeat(33) }), msg({ kind: "eval" }), msg({ kind: 5 }), msg({ args: { axis: "z" } }), msg({ args: [] }), { v: V, reply_to: 5, ok: true }, { v: V, reply_to: "a", ok: "yes" }, { v: V, reply_to: "a", ok: true, error: "e".repeat(200) }]) {
+    assert.equal(validate_message(junk, KINDS).ok, false, JSON.stringify(junk));
+  }
+});
+
+test("a list is capped in count and bytes, and a bad message never takes a good one down", () => {
+  assert.equal(validate_message_list("x", KINDS).ok, false);
+  assert.equal(validate_message_list(Array.from({ length: MAX_MESSAGES + 1 }, (_, index) => msg({ id: `m${index}` })), KINDS).ok, false);
+  assert.equal(validate_message_list([msg({ args: { axis: "x", pad: "p".repeat(MAX_MESSAGE_LIST_BYTES) } })], KINDS).ok, false);
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  assert.equal(validate_message_list([cyclic], KINDS).ok, false);
+  const list = validate_message_list([msg({ id: "a" }), "junk", msg({ id: "b", kind: "nope" }), msg({ id: "c", args: { axis: "q" } }), { v: V, id: "d", kind: "push", args: {} }, { v: V + 1, id: "e", kind: "ask" }, msg({ id: "f" })], KINDS);
+  assert.ok(list.ok);
+  assert.deepEqual(list.value.messages.map((m) => ("id" in m ? m.id : "")), ["a", "f"]);
+  // An unlisted kind and a failed request that expects a reply are answered. A failed push and a wrong version are dropped.
+  assert.deepEqual(list.value.refused.map((r) => r.id), ["b", "c"]);
+});
+
+test("an older module's list, with the fields of its own version only, still parses", () => {
+  assert.ok(validate_message_list([{ v: V, id: "old", kind: "ask", args: { axis: "x" } }, { v: V, reply_to: "x1", ok: true }], KINDS).ok);
 });

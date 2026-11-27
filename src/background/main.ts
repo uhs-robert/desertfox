@@ -61,7 +61,8 @@ import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import { create_browser_module } from "./browser_module.ts";
+import { create_browser_module, module_setting_on } from "./browser_module.ts";
+import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
@@ -293,7 +294,13 @@ const toolbar = create_toolbar({
 void toolbar.sync_look();
 const browser_module = create_browser_module({
   session: browser.storage.session,
-  is_on: async () => effective_settings((await get_config()).settings).browser_module,
+  is_on: () => module_setting_on(browser.storage.local),
+  check_args: (id, args) => {
+    const command = registry.get(id);
+    const checked = command && check_args(command, args);
+    return checked?.ok ? checked.args : undefined;
+  },
+  handlers: {},
   read_disabled,
   read_keymap: () => stored_keymap(browser.storage.local),
   read_tab_records: async () => Object.fromEntries(Object.entries(await browser.storage.local.get(null)).filter(([key]) => key.startsWith(TAB_MODE_STORAGE_PREFIX))) as never,
