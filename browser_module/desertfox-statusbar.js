@@ -302,7 +302,7 @@
     const CSS = `
 #${BAR_ID} {
   --dfx-gap: 8px;
-  --dfx-radius: 0px; --dfx-cut: 12px; --dfx-outside: var(--tf-bg, var(--toolbar-bgcolor, -moz-dialog));
+  --dfx-radius: 0px; --dfx-cut: 12px; --dfx-bw: 1px; --dfx-outside: var(--tf-bg, var(--toolbar-bgcolor, -moz-dialog));
   display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px;
   box-sizing: border-box; position: relative; z-index: 5; overflow: hidden; white-space: pre;
   min-height: 24px; padding: 2px 8px;
@@ -314,19 +314,25 @@
 }
 #${BAR_ID}[data-textfox] {
   margin: 0 var(--dfx-gap) var(--dfx-gap); padding: 4px 8px; background: var(--tf-bg, -moz-dialog);
-  border: var(--tf-border-width, 2px) solid var(--tf-border, var(--panel-border-color));
+  --dfx-bw: var(--tf-border-width, 2px);
+  border: var(--dfx-bw) solid var(--tf-border, var(--panel-border-color));
   border-radius: var(--dfx-radius); transition: border-color var(--tf-border-transition, 0.2s ease);
   --tf-bevel-line: var(--tf-border);
 }
 #${BAR_ID}[data-textfox]:hover { border-color: var(--tf-accent, currentColor); --tf-bevel-line: var(--tf-accent); }
 #${BAR_ID}[data-corner="round"] { --dfx-radius: var(--dfx-round, 6px); }
+/* The polygon cuts the bar itself, so the square border corner is gone. overflow is visible here because hidden would clip the ::after to the padding box, and the polygon already clips everything to the border box. */
+#${BAR_ID}[data-corner="chamfer"] {
+  overflow: visible;
+  clip-path: polygon(var(--dfx-cut) 0, calc(100% - var(--dfx-cut)) 0, 100% var(--dfx-cut), 100% calc(100% - var(--dfx-cut)), calc(100% - var(--dfx-cut)) 100%, var(--dfx-cut) 100%, 0 calc(100% - var(--dfx-cut)), 0 var(--dfx-cut));
+}
 #${BAR_ID}[data-corner="chamfer"]::after {
-  content: ""; position: absolute; inset: calc(-1 * var(--tf-border-width, 1px)); pointer-events: none;
+  content: ""; position: absolute; inset: calc(-1 * var(--dfx-bw)); pointer-events: none;
   background:
-    linear-gradient(135deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--tf-border-width, 1px)), transparent calc(50% + var(--tf-border-width, 1px))) left top / var(--dfx-cut) var(--dfx-cut) no-repeat,
-    linear-gradient(225deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--tf-border-width, 1px)), transparent calc(50% + var(--tf-border-width, 1px))) right top / var(--dfx-cut) var(--dfx-cut) no-repeat,
-    linear-gradient(315deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--tf-border-width, 1px)), transparent calc(50% + var(--tf-border-width, 1px))) right bottom / var(--dfx-cut) var(--dfx-cut) no-repeat,
-    linear-gradient(45deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--tf-border-width, 1px)), transparent calc(50% + var(--tf-border-width, 1px))) left bottom / var(--dfx-cut) var(--dfx-cut) no-repeat;
+    linear-gradient(135deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--dfx-bw)), transparent calc(50% + var(--dfx-bw))) left top / var(--dfx-cut) var(--dfx-cut) no-repeat,
+    linear-gradient(225deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--dfx-bw)), transparent calc(50% + var(--dfx-bw))) right top / var(--dfx-cut) var(--dfx-cut) no-repeat,
+    linear-gradient(315deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--dfx-bw)), transparent calc(50% + var(--dfx-bw))) right bottom / var(--dfx-cut) var(--dfx-cut) no-repeat,
+    linear-gradient(45deg, var(--dfx-outside) 50%, var(--tf-bevel-line, currentColor) 50%, var(--tf-bevel-line, currentColor) calc(50% + var(--dfx-bw)), transparent calc(50% + var(--dfx-bw))) left bottom / var(--dfx-cut) var(--dfx-cut) no-repeat;
   transition: --tf-bevel-line var(--tf-border-transition, 0.2s ease);
 }
 #${BAR_ID}:not([data-on]),

@@ -78,6 +78,28 @@ export async function run_cases(context) {
     await poll_until("the badge to leave", async () => !(await badge_present()));
   });
 
+  await run_case("the bar corner draws one shape for each border setting, with and without TextFox variables", async () => {
+    const root_vars = (set) =>
+      chrome(`(async () => {
+        const root = ${W}.document.documentElement;
+        const vars = { "--tf-bg": "#1c1c24", "--tf-border": "#7fa3c9", "--tf-border-width": "2px", "--tf-rounding": "0px" };
+        for (const [name, value] of Object.entries(vars)) ${set} ? root.style.setProperty(name, value) : root.style.removeProperty(name);
+      })()`);
+    on_teardown(() => root_vars(false));
+    on_teardown(() => run_line(":unset browser_bar_border"));
+    const corner_is = (corner) => async () =>
+      (await chrome(`(async () => ${W}.document.getElementById("desertfox-statusbar").getAttribute("data-corner"))()`)) === corner;
+    for (const [textfox, label] of [[false, "plain"], [true, "textfox"]]) {
+      await root_vars(textfox);
+      for (const border of ["chamfer", "square", "round"]) {
+        await run_line(`:set browser_bar_border ${border}`);
+        await poll_until(`the ${border} corner`, corner_is(border), { timeout_ms: 8000 });
+        await shot(`corner-${border}-${label}`);
+      }
+    }
+    await root_vars(false);
+  });
+
   await run_case("the bar in a private window with private access", async () => {
     const EXTENSION_ID = "desertfox@uhs-robert";
     // The grant is the add-on manager's own switch. The restore is registered first, so a failure after the grant still puts it back.
