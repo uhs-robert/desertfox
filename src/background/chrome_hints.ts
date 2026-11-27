@@ -1,4 +1,4 @@
-// Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window and sends their ids and boxes (`browser_module/desertfox-chrome-hints.js`). This file makes the labels, narrows them as the module reports each typed key, and names the target to pick.
+// Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window and sends their ids and boxes (`browser_module/desertfox-chrome-hints.js`, and `desertfox-devtools.js` for DevTools). This file makes the labels, narrows them as the module reports each typed key, and names the target to pick.
 // The session lives in `storage.session`, so a restarted background still narrows and picks. Every message carries the session number, so a message of an older session finds nothing.
 
 import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, json_bytes } from "../shared/browser_module_protocol.ts";
@@ -15,8 +15,10 @@ export type LabelRow = [number, string];
 
 export type ChromeHintSession = {
   session: number;
-  // The browser window the session runs in, or none for one the user started in a dialog or in one of Firefox's other windows, which the extension cannot name.
+  // The browser window the session runs in, or none for one the user started in a dialog, in one of Firefox's other windows or in DevTools, which the extension cannot name.
   window_id?: number;
+  // `devtools`: the module's DevTools file holds the session, so draw, pick and clear go on its own kinds. Absent for a session of chrome hints.
+  surface?: "devtools";
   // Each part of the targets as it came, until the labels are made from all of them.
   parts?: number;
   targets: Record<string, TargetRow[]>;
@@ -47,6 +49,8 @@ const MAX_ROWS = 400;
 
 // The module's refusal of a start token the user cancelled (Escape, a click, another window) or let expire. The user ended it, so no toast says why.
 const STALE_START = "The hint key is stale";
+
+const kind_of = (session: ChromeHintSession, verb: "draw" | "pick" | "clear"): string => `${session.surface === "devtools" ? "devtools_hints" : "chrome_hints"}.${verb}`;
 
 const is_whole = (value: unknown): value is number => Number.isSafeInteger(value);
 const is_part_of = (part: unknown, parts: unknown): boolean => is_whole(parts) && parts >= 1 && parts <= CHROME_HINT_MAX_PARTS && is_whole(part) && part >= 0 && part < parts;
@@ -110,15 +114,15 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
   async function send_draw(session: ChromeHintSession): Promise<void> {
     const shown = session.labels!.filter(([, label]) => label.startsWith(session.typed));
     const parts = label_parts(shown);
-    for (const [part, rows] of parts.entries()) await deps.push("chrome_hints.draw", { session: session.session, gen: session.gen, part, parts: parts.length, typed: session.typed, labels: JSON.stringify(rows) });
+    for (const [part, rows] of parts.entries()) await deps.push(kind_of(session, "draw"), { session: session.session, gen: session.gen, part, parts: parts.length, typed: session.typed, labels: JSON.stringify(rows) });
   }
 
   async function pick(session: ChromeHintSession, id: number): Promise<void> {
-    const result = await deps.call("chrome_hints.pick", { session: session.session, id });
+    const result = await deps.call(kind_of(session, "pick"), { session: session.session, id });
     if (!result.ok) await deps.notify(session.window_id, result.error);
   }
 
-  async function begin(fields: { window_id?: number }, collect: (session: number, colors: string) => Promise<{ ok: true } | { ok: false; error: string }>): Promise<{ ok: true } | { ok: false; error: string }> {
+  async function begin(fields: { window_id?: number; surface?: "devtools" }, collect: (session: number, colors: string) => Promise<{ ok: true } | { ok: false; error: string }>): Promise<{ ok: true } | { ok: false; error: string }> {
     const session: ChromeHintSession = { session: deps.new_session(), ...fields, targets: {}, typed: "", seq: 0, gen: 0 };
     const previous = await in_turn(async () => {
       const replaced = await read();
@@ -126,7 +130,7 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       return replaced;
     });
     // The module ends the older session only when the newer one collects. A refused collect would leave it showing, with no stored session to narrow it.
-    if (previous) await deps.push("chrome_hints.clear", { session: previous.session });
+    if (previous) await deps.push(kind_of(previous, "clear"), { session: previous.session });
     const colors = await deps.colors();
     // A newer start can store its session while the colors load. This one then sends nothing and reports no failure, so its collect never replaces the newer session in the module. The check and the send share one turn, so no start comes between them.
     const replaced_by_newer = async () => {
@@ -138,7 +142,7 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
     const result = await sent.reply;
     if (!result.ok) {
       // A collect whose reply was lost can still have started a session in chrome, which would hold the keys until Escape.
-      await deps.push("chrome_hints.clear", { session: session.session });
+      await deps.push(kind_of(session, "clear"), { session: session.session });
       await in_turn(async () => (await current(session.session)) && (await drop()));
     }
     return result;
@@ -191,6 +195,13 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
       if (!is_whole(args.start)) return;
       const start = args.start;
       const result = await begin({}, (session, colors) => deps.call("chrome_hints.collect_here", { session, start, colors }));
+      if (!result.ok && result.error !== STALE_START) await deps.notify(undefined, result.error);
+    },
+    // The module heard the hint key in DevTools. As with `want`, its token goes back as it came.
+    "devtools_hints.ask": async (args: ModuleArgs): Promise<void> => {
+      if (!is_whole(args.ask)) return;
+      const ask = args.ask;
+      const result = await begin({ surface: "devtools" }, (session, colors) => deps.call("devtools_hints.collect", { session, ask, colors }));
       if (!result.ok && result.error !== STALE_START) await deps.notify(undefined, result.error);
     },
   };

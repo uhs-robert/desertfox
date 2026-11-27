@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
   ABSENT_TAB,
+  DEVTOOLS_ACTIONS,
+  DEVTOOLS_HINT_KEY,
   DEVTOOLS_TREE_KEYS,
   MAX_DEVTOOLS_KEY_ROWS,
   check_module_args,
@@ -125,8 +127,8 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "devtools.keys"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -343,4 +345,25 @@ test("the DevTools key table is a push of one-character keys with actions from t
   for (const bad of [undefined, "j", [], [...full, { key: "i", action: "tree.up" }], [{ key: "<C-j>", action: "tree.down" }], [{ key: "Escape", action: "tree.down" }], [{ key: "\t", action: "tree.down" }], [{ key: "j", action: "eval" }], [{ key: "j", action: "tree.down" }, { key: "j", action: "tree.up" }], [null]]) {
     assert.equal(push(bad).ok, false, JSON.stringify(bad));
   }
+});
+
+test("the hint key is one more DevTools action, and the hello says devtools_hints only when it is true", () => {
+  const push = (keys: unknown) => validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys } }, EXTENSION_TO_MODULE_KINDS);
+  assert.ok(push([...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY]).ok);
+  // The reason for the flag: a table with an action the reader does not know fails whole, as it does in a module before hints.
+  const older_actions = DEVTOOLS_ACTIONS.filter((action) => action !== "hints.start");
+  const older_fit = (keys: { action: string }[]) => keys.every(({ action }) => (older_actions as readonly string[]).includes(action));
+  assert.equal(older_fit([...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY]), false);
+  assert.equal(push([...DEVTOOLS_TREE_KEYS, { key: "f", action: "hints.later" }]).ok, false);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_hints: true }), { ok: true, value: { v: V, module_version: "1", devtools_hints: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_hints: flag }), { ok: true, value: { v: V, module_version: "1" } });
+  const largest = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY] }, sent_at: Number.MAX_SAFE_INTEGER };
+  assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes!);
+});
+
+test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {
+  for (const verb of ["draw", "pick", "clear"]) assert.deepEqual(EXTENSION_TO_MODULE_KINDS[`devtools_hints.${verb}`], EXTENSION_TO_MODULE_KINDS[`chrome_hints.${verb}`], verb);
+  assert.deepEqual(EXTENSION_TO_MODULE_KINDS["devtools_hints.collect"], { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 });
+  assert.deepEqual(MODULE_TO_EXTENSION_KINDS["devtools_hints.ask"], { args: { ask: "int" }, reply: true, max_bytes: 256 });
+  assert.equal(validate_message({ v: V, id: "a1", kind: "devtools_hints.ask", args: { ask: "1" } }, MODULE_TO_EXTENSION_KINDS).ok, false);
 });

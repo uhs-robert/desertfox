@@ -41,8 +41,9 @@ export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
 export const PANE_DIRECTIONS = ["left", "right"] as const;
 
-// The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
-export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand"] as const;
+// The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each tree action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
+// `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`).
+export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start"] as const;
 export type DevtoolsAction = (typeof DEVTOOLS_ACTIONS)[number];
 export type DevtoolsKeyRow = { key: string; action: DevtoolsAction };
 export const MAX_DEVTOOLS_KEY_ROWS = 8;
@@ -52,6 +53,8 @@ export const DEVTOOLS_TREE_KEYS: DevtoolsKeyRow[] = [
   { key: "h", action: "tree.collapse" },
   { key: "l", action: "tree.expand" },
 ];
+// Pushed only to a module whose hello says `devtools_hints`: a module before it refuses a table with an action it does not know, and would lose the tree keys too.
+export const DEVTOOLS_HINT_KEY: DevtoolsKeyRow = { key: "f", action: "hints.start" };
 const is_devtools_key = (key: unknown): key is string => typeof key === "string" && [...key].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(key);
 
 // A table that is not a list, is empty or too long, repeats a key or holds a row of the wrong shape fails whole. A row's unknown fields are ignored.
@@ -117,8 +120,8 @@ export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: strin
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
-// `bar` says the module built its status bar.
-export type ModuleHello = { v: number; module_version: string; bar?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row.
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -310,7 +313,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -364,6 +367,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
   // The user typed a `hint.browser` binding with the focus in a dialog, the Library, Page Info or an open panel. `start` is a token the module made for that key in that window. A reply, so a start read twice runs once.
   "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  // The user typed the `hints.start` key in DevTools. `ask` is a token the module made for that key, and the module drops the keys typed until the labels show. A reply, as for `chrome_hints.want`, so an ask read twice runs once and never clears the session it started. The session's targets, keys and end come on the chrome_hints rows.
+  "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
@@ -395,6 +400,11 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // The DevTools key table, pushed after each matched hello, since the module keeps it in memory only. A module without DevTools code refuses the kind, and one that never got it claims no key in DevTools.
   // A day to be read, not the default 2 s: the push sets a table rather than pressing a key, so a late one does no harm, and a dropped one leaves DevTools keys off until the next hello.
   "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86_400_000 },
+  // Hints over DevTools, for a `devtools_hints.ask`: the module takes its own `ask` token once, while fresh, and only with the focus still in DevTools. Draw, pick and clear match the chrome_hints rows, apart so that the file that holds a DevTools session gets them.
+  "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+  "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.

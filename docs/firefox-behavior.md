@@ -603,6 +603,18 @@ Results:
 - Docked DevTools is a `<browser class="devtools-toolbox-iframe">` in the tab's browser container. The toolbox (`about:devtools-toolbox`) and every panel document (`chrome://devtools/content/...`) run in the parent process with the system principal. A capture keydown listener on the browser window sees every key typed in any panel, with the panel's element as the target.
 - A key is in docked DevTools when the walk up from its document meets that class. `frameElement` stops at the toolbox `<browser>`, so the walk takes the browsing context's `embedderElement` there. About five steps, synchronous.
 - A DevTools window (`hostType: "window"`) is its own top-level window of type `devtools:toolbox`. A listener on the browser window never sees its keys, so the module attaches to it on `domwindowopened` after its document loads.
-- An untrusted `KeyboardEvent("keydown")` with the arrow's `key` and `keyCode`, dispatched on the focused element, moves, expands and collapses the Inspector markup, the Debugger sources tree and the Storage tree, and moves the Network request rows, as the real arrows do. No handler checks `isTrusted`. `nsITextInputProcessor` fails from this context with `NS_ERROR_NOT_INITIALIZED`.
+- A `KeyboardEvent("keydown")` with the arrow's `key` and `keyCode`, made by chrome code and dispatched on the focused element, moves, expands and collapses the Inspector markup, the Debugger sources tree and the Storage tree, and moves the Network request rows, as the real arrows do. Gecko marks it trusted, because its maker has the system principal, so key listeners in chrome see it as a real arrow. With a DevTools context menu open, it moves the menu. `nsITextInputProcessor` fails from this context with `NS_ERROR_NOT_INITIALIZED`.
 - DevTools keys that meet DesertFox's: Escape toggles the split console, and `h` hides the node in the markup view. Plain `j`, `k` and `l` do nothing in the markup view, the Debugger tree, Storage and Network. The console input takes every key.
 - The Browser Toolbox runs in a second Firefox process with its own profile and no DesertFox.
+
+## Hints in DevTools (devtools-keys)
+
+Question: can chrome code draw hint labels in DevTools documents, and which events pick a tool tab and a markup line?
+
+Setup: Firefox 161, a private copy with a temporary profile in the key-test session, docked DevTools on a data: page, then a DevTools window. Each probe added a closed shadow root to the toolbox and to the Inspector, markup, Console, Debugger, Network and Storage documents.
+
+Results:
+- A `<link>` to the extension's `chrome_hints.css` (a `moz-extension:` address) loads in every one of those documents, with its rules, despite their CSP.
+- An inline `<style>` applies in the Inspector, markup, Console, Debugger and Network documents (`style-src chrome: 'unsafe-inline'`), and is ignored in the toolbox and Storage documents, whose CSP has `default-src chrome:` and no `style-src`. A constructed sheet in `adoptedStyleSheets` applies in all of them.
+- The labels in a docked toolbox showed in a screenshot taken 700 ms after they were in the documents, and not in one taken at once.
+- A tool tab (`.devtools-tab`) selects its tool on mousedown: `element.click()` does nothing. A `mousedown`, `mouseup`, `click` sequence made by chrome code selects it. The same sequence on a markup `.tag-line` selects its node, and the markup view keeps the keyboard focus, so j then moves on from it.

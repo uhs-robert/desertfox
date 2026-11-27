@@ -16,6 +16,7 @@ import {
   bar_config_of,
   bar_fields_of,
   bar_theme_of,
+  DEVTOOLS_HINT_KEY,
   DEVTOOLS_TREE_KEYS,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
@@ -206,6 +207,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
 
+  const devtools_keys_for = (stored_hello: unknown) => {
+    const hello = validate_module_hello(stored_hello);
+    return hello.ok && hello.value.devtools_hints === true ? [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY] : DEVTOOLS_TREE_KEYS;
+  };
   const bar_built = (stored_hello: unknown): boolean => {
     const hello = validate_module_hello(stored_hello);
     return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.bar === true;
@@ -308,7 +313,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const status = status_of_hello(hello);
     await deps.session.set({ [BROWSER_MODULE_STATUS_STORAGE_KEY]: status });
     deps.on_status?.(status);
-    if (status.result === "matched" && !devtools_keys_sent) devtools_keys_sent = (await send_now("devtools.keys", { keys: DEVTOOLS_TREE_KEYS })).ok;
+    if (status.result === "matched" && !devtools_keys_sent) devtools_keys_sent = (await send_now("devtools.keys", { keys: devtools_keys_for(hello) })).ok;
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
     if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();

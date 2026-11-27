@@ -47,6 +47,8 @@
 //                              Listener order cannot settle this, because Firefox calls the newest window watcher first.
 //   release_keys(win, owner)   In the sandbox: end `owner`'s hold on `win`. A release by another owner does nothing.
 //   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
+//   share_hint_drawing(drawing)  In the sandbox: chrome hints lend their label drawing (the layer, the label checks, a whole draw from its parts), so other hints draw alike. The first one stays.
+//   hint_drawing()             In the sandbox: that drawing, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -116,7 +118,7 @@
     const MESSAGE_ENVELOPE_BYTES = 512;
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
-    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand"];
+    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start"];
     const MAX_DEVTOOLS_KEY_ROWS = 8;
     const EXTENSION_TO_MODULE_KINDS = {
       page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -136,6 +138,10 @@
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
+      "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+      "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
+      "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -145,6 +151,7 @@
       "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: 256 },
       "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
+      "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: 256 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
@@ -274,8 +281,8 @@
     const deserialized = (holder) => (typeof holder?.deserialize === "function" ? holder.deserialize(sandbox, true) : holder);
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
-    // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads `bar` only when it is true.
-    const HELLO_FLAGS = ["bar"];
+    // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
+    const HELLO_FLAGS = ["bar", "devtools_hints"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -899,6 +906,7 @@
     // Turning off for the session also takes every window's listener away, and every feature's.
     const shut_down_steps = [];
     const key_holders = new WeakMap();
+    let hint_drawing;
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -1033,6 +1041,11 @@
         if (key_holders.get(win) === owner) key_holders.delete(win);
       },
       keys_held_by: (win) => key_holders.get(win),
+      share_hint_drawing(drawing) {
+        if (hint_drawing) log_once("two feature files share a hint drawing, the first one stays");
+        else hint_drawing = Object.freeze({ ...drawing });
+      },
+      hint_drawing: () => hint_drawing,
       shut_down() {
         fail_awaited("the module shut down");
         try {

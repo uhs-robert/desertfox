@@ -403,13 +403,13 @@ test("address_bar.open refuses with no focused window, a private window DesertFo
 test("set_hello_flag puts bar in the hello, takes it out again, and refuses other names and values", () => {
   const { firefox, core } = started();
   assert.equal(core.set_hello_flag("bar", true), true);
-  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", bar: true });
+  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, bar: true });
   const checked = validate_module_hello(firefox.hello());
   assert.ok(checked.ok && checked.value.bar === true);
   for (const [name, on] of [["keys", true], ["bar", "yes"], ["bar", 1]] as const) assert.equal(core.set_hello_flag(name, on), false, `${name} ${on}`);
   assert.equal(firefox.errors.filter((line) => line.includes("refused the hello flag")).length, 2);
   core.set_hello_flag("bar", false);
-  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0" });
+  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true });
 });
 
 test("a flag set while the pref is off goes in the hello when it comes on", () => {
@@ -418,5 +418,5 @@ test("a flag set while the pref is off goes in the hello when it comes on", () =
   core.set_hello_flag("bar", true);
   assert.equal(firefox.hello(), undefined);
   firefox.set_pref(true);
-  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", bar: true });
+  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, bar: true });
 });

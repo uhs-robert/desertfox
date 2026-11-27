@@ -4,7 +4,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 
 - `desertfox-browser.js`: the core. The state, the hello, the message lists, the guards (fields, DevTools, modes, liveness, private windows), the report frame script and the surface feature files use. Start here.
 - `desertfox-tabs-scroll.js`: the tab and scroll feature. It defines `tab.next`, `tab.prev` and the four scroll commands, and holds the scroll frame script.
-- `desertfox-devtools.js`: the DevTools feature. It takes the pushed tree keys while the focus is in DevTools, docked or in a DevTools window, and turns each into an arrow key.
+- `desertfox-devtools.js`: the DevTools feature: the pushed tree keys as arrow keys, docked or in a DevTools window, and hints over DevTools from its own target table.
 - `desertfox-panes.js`: the pane feature. It answers the extension's `pane.*` requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused window.
 - `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type arrow keys in open menus and panels and in the Library, Page Info and Picture-in-Picture windows.
 - `desertfox-cmdline-panel.js`: the command line panel. It answers `cmdline_panel.open` with DesertFox's own `cmdline.html` in a panel over the selected tab.
@@ -13,7 +13,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
 - `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
 - `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
-- `desertfox-chrome-hints.js`: hints over Firefox's UI, its panels, prompts and dialogs, the Library and Page Info: collect, draw, pick, the Enter a grant waits for, and `hint.browser` in chrome.
+- `desertfox-chrome-hints.js`: hints over Firefox's UI, panels, prompts, dialogs, the Library and Page Info: collect, draw, pick, a grant's Enter, `hint.browser`, and the drawing DevTools hints share.
 - `install.sh`: `sudo browser_module/install.sh [--uninstall]` copies or removes every `desertfox-*.js` file here.
 
 Rules:
