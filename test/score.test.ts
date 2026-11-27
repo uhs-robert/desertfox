@@ -144,3 +144,37 @@ test("a family word that matches through a dotted id gains exactly the full cove
   const gain = score_candidate("tab.", row, undefined, true)!.score - score_candidate("tab.", row)!.score;
   assert.equal(gain, 30);
 });
+
+// Rows as the command line lists them: a command with a short name also answers to its dotted id.
+const command_rows = [
+  { name: "tag" }, { name: "tab.goto" }, { name: "tab.close" }, { name: "tab.next" }, { name: "pane.toggle" }, { name: "tracing" },
+  { name: "tab", also_named: ["tab.switch"] },
+  { name: "search", also_named: ["search.threads"] }, { name: "thread.fold_all" }, { name: "thread.next" },
+];
+const top_names = (query: string, name_coverage = true) => rank(query, command_rows, undefined, name_coverage).map((row) => row.name);
+
+test("name coverage on a command list: tg finds tag, pt and tc keep their word-start hits", () => {
+  assert.equal(top_names("tg")[0], "tag");
+  assert.equal(top_names("pt")[0], "pane.toggle");
+  assert.equal(top_names("tc")[0], "tab.close");
+});
+
+test("name coverage keeps the family row first for a typed family word and dot", () => {
+  assert.equal(top_names("tab.")[0], "tab");
+});
+
+test("name coverage does not lift a row that matches only through a hidden id", () => {
+  for (const query of ["th", "thread"]) {
+    const names = top_names(query);
+    assert.ok(names.indexOf("thread.fold_all") < names.indexOf("search"), query);
+  }
+  const names = top_names("tabc");
+  assert.ok(names.indexOf("tab.close") < names.indexOf("tab"));
+});
+
+test("with name coverage off, the command list keeps its order", () => {
+  assert.deepEqual(top_names("th", false), ["thread.next", "thread.fold_all", "search", "tab"]);
+  assert.equal(top_names("tg", false)[0], "tab.goto");
+  assert.equal(top_names("tab.", false)[0], "tab");
+  assert.equal(top_names("tabc", false)[0], "tab.close");
+});
