@@ -87,6 +87,7 @@ const GOLDEN_LISTENERS = [
   "listen windows.onFocusChanged from background/main.ts",
   "listen windows.onRemoved from background/main.ts",
   "listen runtime.onConnect from background/main.ts",
+  "listen storage.onChanged from background/main.ts",
   "listen windows.onFocusChanged from background/bridge_browser.ts",
   "listen tabs.onActivated from background/bridge_browser.ts",
   "listen tabs.onUpdated from background/bridge_browser.ts",

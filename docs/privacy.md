@@ -45,6 +45,12 @@ The setting `bridge_share_tabs` is off by default and needs the desktop link (br
 
 The same host also serves DesertBird, the Thunderbird add-on. Its share settings are off by default and need its bridge setting on. With them on, programs on your computer that connect to its own local socket (readable by your user only) can list your mail folders, list messages with sender, subject and date, read a message body and list attachment names. The host passes each answer to the program that asked and keeps none of it. Nothing goes over the network.
 
+## The optional browser module
+
+The browser module is a script you install yourself, with administrator rights, into the folder where Firefox loads its own startup scripts. It is not part of the add-on, and DesertFox never installs or loads it. It stays off until you turn on the setting `browser_module`, which is off by default.
+
+Key events stay on your device. The module sees your key presses in the browser window, because that is how it takes the tab and scroll keys on pages an extension cannot reach. It sends none of them to DesertFox and to nobody else. While the setting is on, DesertFox writes to its own session storage the on or off switch, at most 32 single-key bindings for tab and scroll commands, and the mode of each tab. The module sends DesertFox one value, a hello that holds a protocol version number and its version text. DesertFox sends the module no code, address, selector or page text, and the module makes no network request.
+
 ## Permissions
 
 DesertFox asks for `nativeMessaging`, `browsingData`, `geolocation` and the location information data collection permission only when you click the button that needs them.

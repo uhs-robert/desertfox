@@ -314,7 +314,7 @@ const PER_SITE_SPECS: ColumnSpecs = Object.fromEntries(PER_SITE_SETTING_NAMES.ma
 export const SETTING_SPECS = Object.fromEntries(SETTING_NAMES.map((name) => [name, spec_of(name, SETTINGS_TABLE[name])])) as Record<SettingName, SettingSpec>;
 
 // Each of these is a consent the user gives on this machine, so a file from elsewhere must not switch it on, and a change stays in the browser.
-export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update", "newtab_ip_info"] as const;
+export const CONSENT_SETTINGS = ["bridge", "bridge_share_tabs", "host_auto_update", "newtab_ip_info", "browser_module"] as const;
 
 export const is_consent_setting = (name: string): boolean => (CONSENT_SETTINGS as readonly string[]).includes(name);
 

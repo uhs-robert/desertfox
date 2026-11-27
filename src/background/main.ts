@@ -60,7 +60,8 @@ import { MEDIA_PANEL_HANDLER } from "../shared/bundles.ts";
 import { create_tab_insert } from "./tab_insert.ts";
 import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
-import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
+import { DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
+import { create_browser_module } from "./browser_module.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
@@ -290,6 +291,17 @@ const toolbar = create_toolbar({
   set_tab_mode: (tab_id, mode) => send_to_tab(tab_id, { type: "set_mode", mode }),
 });
 void toolbar.sync_look();
+const browser_module = create_browser_module({
+  session: browser.storage.session,
+  is_on: async () => effective_settings((await get_config()).settings).browser_module,
+  read_disabled,
+  read_keymap: () => stored_keymap(browser.storage.local),
+  read_tab_records: async () => Object.fromEntries(Object.entries(await browser.storage.local.get(null)).filter(([key]) => key.startsWith(TAB_MODE_STORAGE_PREFIX))) as never,
+  now: Date.now,
+  later: (run, ms) => void setTimeout(run, ms),
+});
+browser.storage.onChanged.addListener((changes, area) => browser_module.storage_changed(changes, area));
+void get_config().then(() => browser_module.sync()).catch(warn_and_go("browser_module.sync"));
 const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_theme, host_update.bridge_ready);
 const refresh_font_names = () => void refused_as(font_names.refresh(), undefined);
 host_update.on_updated(() => {
