@@ -3,17 +3,18 @@
 
 (function desertfox_browser_module_tabs_scroll(scope) {
   "use strict";
-  try {
-    const core = Services.desertfox_browser_module;
-    if (typeof core !== "object" || core === null) return;
-    if (typeof scope.gBrowser === "object" && scope.gBrowser !== null) {
+  const core = Services.desertfox_browser_module;
+  if (typeof core !== "object" || core === null) return;
+  if (typeof scope.gBrowser === "object" && scope.gBrowser !== null) {
+    try {
       core.adopt(Components.stack.filename.split(" -> ").pop());
-      return;
+    } catch (error) {
+      Components.utils.reportError(`DesertFox browser module: the tab and scroll feature failed to load: ${error}`);
     }
-    define(core);
-  } catch (error) {
-    Components.utils.reportError(`DesertFox browser module: the tab and scroll feature failed to load: ${error}`);
+    return;
   }
+  // In the sandbox an error goes on to the core's `adopt`, which turns the module off for the session.
+  define(core);
 
   function define(core) {
     const SCROLL_MESSAGE = "desertfox-browser-module:scroll";
@@ -87,6 +88,7 @@
 
     addMessageListener(MESSAGE, ({ data }) => {
       try {
+        if (!Services.prefs.getBoolPref("desertfox.browser_module.enabled", false)) return;
         const { id, args, repeat } = data;
         const behavior = repeat ? "instant" : "smooth";
         if (id === "scroll.lines") scroll_box("y").scrollBy({ top: args.count * LINE_PIXELS, behavior: "instant" });

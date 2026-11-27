@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import vm from "node:vm";
+import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_PROTOCOL_VERSION, MODULE_COMMAND_ARGS } from "../../src/shared/browser_module_protocol.ts";
-import { BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
+import {
+  BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY,
+  BROWSER_MODULE_FROM_MODULE_STORAGE_KEY,
+  BROWSER_MODULE_HELLO_STORAGE_KEY,
+  BROWSER_MODULE_STATE_STORAGE_KEY,
+} from "../../src/shared/config/storage_keys.ts";
 import { event_to_token } from "../../src/shared/keys/token.ts";
 import { CORE_FILE, create_firefox, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 
@@ -30,11 +37,22 @@ function started({ pref = true as boolean | string | null, private_window = fals
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 const constant_in = (source: string, name: string) => new RegExp(`const ${name} = ("[^"]*"|\\d+);`).exec(source)?.[1];
 
-test("the module's copy of the key names and the version equals src/shared", () => {
+const table_in = (source: string, name: string) => {
+  const text = new RegExp(`const ${name} = (\\{[^;]*\\});`).exec(source)?.[1];
+  return text === undefined ? undefined : plain(vm.runInNewContext(`(${text})`));
+};
+
+test("the module's copy of the key names, the version, the limits and the kind lists equals src/shared", () => {
   const source = source_of(CORE_FILE);
   assert.equal(constant_in(source, "STATE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_STATE_STORAGE_KEY));
   assert.equal(constant_in(source, "HELLO_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_HELLO_STORAGE_KEY));
+  assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
+  assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
+  assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);
+  assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
 });
 
 test("the feature file defines every command of the protocol with the protocol's arg shapes", () => {
@@ -310,4 +328,300 @@ test("the core loads only feature files from its own folder", () => {
   core.adopt("file:///usr/lib/firefox/chrome.d/sub/evil.js");
   assert.deepEqual(plain(core.status().features), [FEATURE_FILE]);
   assert.equal(firefox.errors.filter((line) => line.includes("refused a feature file")).length, 2);
+});
+
+test("a command that throws leaves the key to the page: the module cancels a key only after its command ran", () => {
+  const { firefox, window, press } = started();
+  firefox.fail_tab_moves = true;
+  const event = press("J");
+  assert.equal(event.prevented || event.stopped, false);
+  assert.deepEqual(window.tab_moves, []);
+  assert.equal(firefox.errors.filter((line) => line.includes("advanceSelectedTab changed")).length, 1);
+});
+
+test("a feature file that fails partway through its start turns the module off for the session", () => {
+  const broken = `(function (scope) {
+    const core = Services.desertfox_browser_module;
+    if (typeof core !== "object" || core === null) return;
+    if (scope.gBrowser) return core.adopt(Components.stack.filename);
+    core.define_command("broken.first", { args: {}, run: () => undefined });
+    throw new Error("half started");
+  })(this);`;
+  const firefox = create_firefox({ extra_files: { "desertfox-zz-broken.js": broken } });
+  firefox.start_extension();
+  const window = firefox.make_window();
+  window.load();
+  const { browser } = window.add_tab();
+  firefox.write_state(state());
+  assert.equal(firefox.Services.desertfox_browser_module, "off");
+  assert.equal(window.press(key_event("J", { target: browser, originalTarget: browser })).prevented, false);
+  assert.deepEqual(window.tab_moves, []);
+  assert.deepEqual(firefox.errors.filter((line) => line.startsWith("loader:")), []);
+  assert.equal(firefox.errors.filter((line) => line.includes("half started")).length, 1);
+});
+
+test("a feature file of the tab and scroll set that throws in its start turns the module off too", () => {
+  const firefox = create_firefox({ patch_source: (name, source) => (name === FEATURE_FILE ? source.replace(`core.add_frame_script(scroll_frame_script);`, `throw new Error("no frame scripts");`) : source) });
+  firefox.start_extension();
+  firefox.make_window().load();
+  assert.equal(firefox.Services.desertfox_browser_module, "off");
+});
+
+test("a state past the protocol's limits or with a malformed tab claims nothing and never throws", () => {
+  const many_keys = Array.from({ length: 33 }, (_, index) => ({ key: index === 0 ? "J" : `<F${index}>`, id: "tab.next", args: {} }));
+  const many_tabs = Object.fromEntries(Array.from({ length: 1025 }, (_, index) => [String(index + 100), { mode: "normal", live: false }]));
+  for (const written of [state({ keys: many_keys }), state({ tabs: many_tabs }), state({ tabs: { "1": null } }), state({ tabs: { "1": { mode: 3, live: false } } }), state({ tabs: { "1": { mode: "normal", live: "no" } } }), state({ tabs: { tab: { mode: "normal", live: false } } }), state({ blur_on_load: "yes" })]) {
+    const { firefox, window, press } = started({ written });
+    assert.equal(press("J").prevented, false, JSON.stringify(written).slice(0, 80));
+    assert.deepEqual(window.tab_moves, []);
+    assert.deepEqual(firefox.errors, []);
+  }
+});
+
+// ---- The messages. Both kind lists of the protocol are empty, so these tests put test-only rows into the module's copy.
+
+const TEST_EXTENSION_KINDS = {
+  note: { args: { n: "int" }, reply: true },
+  nudge: { args: { n: "int" }, reply: false },
+  quick: { args: {}, reply: true, max_age_ms: 100 },
+  fails: { args: {}, reply: true },
+  rejects: { args: {}, reply: true },
+  shapeless: { args: {}, reply: true },
+  wordy: { args: {}, reply: true },
+  later: { args: {}, reply: true },
+  unanswered: { args: {}, reply: true },
+};
+const TEST_MODULE_KINDS = { ping: { args: { axis: "axis" }, reply: true } };
+
+// A feature file that answers the test kinds and notes each call on `Services`, which the test shares with the module.
+const ANSWERING_FEATURE = `(function (scope) {
+  const core = Services.desertfox_browser_module;
+  if (typeof core !== "object" || core === null) return;
+  if (scope.gBrowser) return core.adopt(Components.stack.filename);
+  const calls = (Services.test_calls = []);
+  core.register_kind("note", (args) => (calls.push("note " + args.n), { ok: true, value: "seen " + args.n }));
+  core.register_kind("nudge", (args) => void calls.push("nudge " + args.n));
+  core.register_kind("quick", () => ({ ok: true }));
+  core.register_kind("fails", () => { throw new Error("secret detail"); });
+  core.register_kind("rejects", () => Promise.reject(new Error("secret detail")));
+  core.register_kind("shapeless", () => "yes");
+  core.register_kind("wordy", () => ({ ok: false, error: "x".repeat(500) }));
+  core.register_kind("later", () => new Promise((resolve) => { Services.test_resolve = resolve; }));
+  core.register_kind("tab.close", () => ({ ok: true }));
+})(this);`;
+
+function messaging({ pref = true as boolean | null } = {}) {
+  const firefox = create_firefox({
+    pref,
+    extra_files: { "desertfox-zz-answers.js": ANSWERING_FEATURE },
+    patch_source: (name, source) => {
+      if (name !== CORE_FILE) return source;
+      const patched = source.replace("const EXTENSION_TO_MODULE_KINDS = {};", `const EXTENSION_TO_MODULE_KINDS = ${JSON.stringify(TEST_EXTENSION_KINDS)};`).replace("const MODULE_TO_EXTENSION_KINDS = {};", `const MODULE_TO_EXTENSION_KINDS = ${JSON.stringify(TEST_MODULE_KINDS)};`);
+      assert.notEqual(patched, source, "the kind lists moved, so the test rows went nowhere");
+      return patched;
+    },
+  });
+  firefox.start_extension();
+  firefox.make_window().load();
+  const services = firefox.Services as Record<string, unknown>;
+  const send = (list: unknown, extension = firefox.extension) => firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, list, extension);
+  const replies = (extension = firefox.extension) => plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, extension) ?? []);
+  const calls = () => plain(services.test_calls);
+  const core = services.desertfox_browser_module as { send(kind: string, args?: unknown): { ok: boolean; id?: string; problem?: string }; register_kind(kind: string, fn: unknown): void; status(): { errors: string[] } };
+  return { firefox, send, replies, calls, core, services };
+}
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const request = (id: string, kind: string, args: Record<string, unknown> = {}, more: Record<string, unknown> = {}) => ({ v: 1, id, kind, args, sent_at: Date.now(), ...more });
+
+test("a request is answered once and a push gets no reply, though the extension rewrites its list whole", async () => {
+  const { send, replies, calls } = messaging();
+  send([request("a", "note", { n: 1 }), request("b", "nudge", { n: 2 })]);
+  await settle();
+  assert.deepEqual(calls(), ["note 1", "nudge 2"]);
+  assert.deepEqual(replies(), [{ v: 1, reply_to: "a", ok: true, value: "seen 1" }]);
+  send([request("a", "note", { n: 1 }), request("b", "nudge", { n: 2 }), request("c", "note", { n: 3 })]);
+  await settle();
+  assert.deepEqual(calls(), ["note 1", "nudge 2", "note 3"]);
+  assert.deepEqual(replies(), [
+    { v: 1, reply_to: "a", ok: true, value: "seen 1" },
+    { v: 1, reply_to: "c", ok: true, value: "seen 3" },
+  ]);
+});
+
+test("junk, another version, a bad id, too many messages and too many bytes are dropped without a word", async () => {
+  const { firefox, send, replies, calls } = messaging();
+  const too_many = Array.from({ length: protocol.MAX_MESSAGES + 1 }, (_, index) => request(`m${index}`, "note", { n: index }));
+  const too_big = [request("big", "note", { n: 1, pad: "x".repeat(protocol.MAX_MESSAGE_LIST_BYTES) })];
+  for (const list of ["junk", { 0: request("o", "note", { n: 1 }) }, [request("v", "note", { n: 1 }, { v: 2 })], [request("bad id!", "note", { n: 1 })], [42, null, "x"], too_many, too_big]) send(list);
+  await settle();
+  assert.deepEqual(calls(), []);
+  assert.deepEqual(replies(), []);
+  assert.deepEqual(firefox.errors.filter((line) => !line.includes("is not a kind the extension sends")), []);
+});
+
+test("a request of a kind not on the list or with bad args is refused with an error reply, and a bad push is dropped", async () => {
+  const { send, replies, calls } = messaging();
+  send([request("u", "tab.close"), request("w", "note", { n: "1" }), request("p", "nudge", { n: 1.5 }), request("t", "note", { n: 1 }, { sent_at: -1 })]);
+  await settle();
+  assert.deepEqual(calls(), []);
+  assert.deepEqual(replies(), [
+    { v: 1, reply_to: "u", ok: false, error: "the kind is not on the allow list" },
+    { v: 1, reply_to: "w", ok: false, error: "note n has the wrong shape" },
+    { v: 1, reply_to: "t", ok: false, error: "sent_at must be whole ms since the epoch" },
+  ]);
+});
+
+test("a request older than its kind allows is dropped, and refused when it expects a reply; one with no sent_at is accepted", async () => {
+  const { send, replies, calls } = messaging();
+  const old = Date.now() - protocol.DEFAULT_MAX_AGE_MS - 500;
+  send([request("o", "note", { n: 1 }, { sent_at: old }), request("p", "nudge", { n: 1 }, { sent_at: old }), request("q", "quick", {}, { sent_at: Date.now() - 500 }), request("n", "note", { n: 2 }, { sent_at: undefined })]);
+  await settle();
+  assert.deepEqual(calls(), ["note 2"]);
+  assert.deepEqual(replies(), [
+    { v: 1, reply_to: "o", ok: false, error: "the request is too old" },
+    { v: 1, reply_to: "q", ok: false, error: "the request is too old" },
+    { v: 1, reply_to: "n", ok: true, value: "seen 2" },
+  ]);
+});
+
+test("a handler that throws, rejects or gives no result replies with a fixed error, never its own text, and a long error is cut", async () => {
+  const { firefox, send, replies } = messaging();
+  send([request("f", "fails"), request("r", "rejects"), request("s", "shapeless"), request("l", "wordy"), request("x", "unanswered")]);
+  await settle();
+  const got = replies() as { reply_to: string; ok: boolean; error?: string }[];
+  assert.deepEqual(
+    got.map(({ reply_to, ok, error }) => [reply_to, ok, error?.length ?? 0]).sort(),
+    [
+      ["f", false, "the request failed".length],
+      ["l", false, protocol.MAX_ERROR_CHARS],
+      ["r", false, "the request failed".length],
+      ["s", false, "the request failed".length],
+      ["x", false, "no handler for this kind".length],
+    ],
+  );
+  assert.ok(!JSON.stringify(got).includes("secret"), "the exception text reached the reply");
+  assert.ok(got.every((reply) => protocol.validate_message(reply, {}).ok), "a reply the extension refuses");
+  assert.equal(firefox.errors.filter((line) => line.includes("failed: Error: secret detail")).length, 2);
+});
+
+test("a kind not on the list gets no handler", () => {
+  const { firefox } = messaging();
+  assert.equal(firefox.errors.filter((line) => line.includes("tab.close is not a kind the extension sends")).length, 1);
+});
+
+test("one storage listener for many windows, and a reloaded DesertFox gets its own while the old one goes", async () => {
+  const { firefox, send, replies, calls, services } = messaging();
+  firefox.make_window().load();
+  firefox.make_window().load();
+  const first = firefox.extension!;
+  assert.equal(first.listeners.size, 1);
+  send([request("slow", "later")]);
+  await settle();
+  const second = firefox.start_extension();
+  assert.equal(first.listeners.size, 0);
+  assert.equal(second.listeners.size, 1);
+  // The old extension's handler answers after the reload: its bucket is gone, and the new one never heard the request.
+  (services.test_resolve as (result: unknown) => void)({ ok: true });
+  await settle();
+  assert.deepEqual(replies(first), []);
+  assert.deepEqual(replies(second), []);
+  // A new extension starts its ids again, so an id the old one used is new here.
+  send([request("slow", "note", { n: 7 })]);
+  await settle();
+  assert.deepEqual(calls(), ["note 7"]);
+  assert.deepEqual(replies(second), [{ v: 1, reply_to: "slow", ok: true, value: "seen 7" }]);
+});
+
+test("with the pref off the reader runs nothing, and a reply that settles after the pref went off is not written", async () => {
+  const { firefox, send, replies, calls, services } = messaging();
+  send([request("slow", "later")]);
+  await settle();
+  firefox.set_pref(false);
+  (services.test_resolve as (result: unknown) => void)({ ok: true });
+  send([request("a", "note", { n: 1 })]);
+  await settle();
+  assert.deepEqual(calls(), []);
+  assert.deepEqual(replies(), []);
+
+  const unset = messaging({ pref: null });
+  unset.send([request("a", "note", { n: 1 })]);
+  await settle();
+  assert.deepEqual(unset.calls(), []);
+  assert.deepEqual(unset.replies(), []);
+});
+
+test("send writes a checked request with sent_at to the module's own list, and nothing while the pref is off", () => {
+  const { firefox, core, replies } = messaging();
+  const before = Date.now();
+  const sent = core.send("ping", { axis: "x", extra: "dropped" });
+  assert.equal(sent.ok, true);
+  const [written] = replies() as { id: string; sent_at: number }[];
+  assert.deepEqual(plain({ ...written, sent_at: 0 }), { v: 1, id: sent.id, kind: "ping", args: { axis: "x" }, sent_at: 0 });
+  assert.ok(written!.sent_at >= before && written!.sent_at <= Date.now());
+  const read_back = protocol.validate_message_list(replies(), TEST_MODULE_KINDS as never, Date.now());
+  assert.ok(read_back.ok && read_back.value.messages.length === 1, "the extension refuses what send wrote");
+  assert.equal(core.send("ping", { axis: "z" }).ok, false);
+  assert.equal(core.send("tab.close").ok, false);
+  for (let count = 0; count < 20; count++) core.send("ping", { axis: "y" });
+  assert.equal((replies() as unknown[]).length, protocol.MAX_MESSAGES, "the list keeps the newest messages within the cap");
+  firefox.set_pref(false);
+  assert.equal(core.send("ping", { axis: "x" }).ok, false);
+});
+
+test("turning off for the session stops the storage listener and every other registration", () => {
+  const { firefox } = messaging();
+  const broken = firefox.make_window();
+  broken.win.addEventListener = () => {
+    throw new Error("no listeners here");
+  };
+  broken.load();
+  assert.equal(firefox.Services.desertfox_browser_module, "off");
+  assert.equal(firefox.extension!.listeners.size, 0);
+  assert.equal(firefox.pref_observer_count(), 0);
+  assert.equal(firefox.ready_listener_count(), 0);
+  assert.equal(firefox.message_listener_count(), 0);
+});
+
+test("a core whose start fails halfway undoes what it registered", () => {
+  const firefox = create_firefox({ patch_source: (name, source) => (name === CORE_FILE ? source.replace("listen(desertfox());", `throw new Error("halfway");`) : source) });
+  firefox.start_extension();
+  firefox.make_window().load();
+  assert.equal(firefox.Services.desertfox_browser_module, "off");
+  assert.equal(firefox.pref_observer_count(), 0);
+  assert.equal(firefox.ready_listener_count(), 0);
+  assert.equal(firefox.message_listener_count(), 0);
+  firefox.set_pref(false);
+  firefox.set_pref(true);
+  assert.deepEqual(firefox.frame_scripts, []);
+});
+
+test("blur_on_load: a field the page focused on load gets a blur back, only with the setting on and only where the module takes keys", () => {
+  const load_focus = { inner: 10, listeners: 0, field: true, load_focus: true };
+  const blurs = (firefox: ReturnType<typeof create_firefox>) => firefox.sent_to_frames.filter(({ name }) => name === "desertfox-browser-module:blur").map(({ data }) => plain(data));
+  const on = started({ written: state({ blur_on_load: true }) });
+  on.firefox.report(on.browser, load_focus);
+  assert.deepEqual(blurs(on.firefox), [{ inner: 10 }]);
+  on.firefox.report(on.browser, { ...load_focus, load_focus: false });
+  assert.equal(blurs(on.firefox).length, 1, "a focus the user gave stays");
+
+  for (const [what, written, report] of [
+    ["the setting off", state(), load_focus],
+    ["DesertFox live", state({ blur_on_load: true }), { ...load_focus, listeners: 1 }],
+    ["a tab in insert mode", state({ blur_on_load: true, tabs: { "1": { mode: "insert", live: false } } }), load_focus],
+    ["the toolbar switch off", state({ blur_on_load: true, enabled: false }), load_focus],
+  ] as const) {
+    const { firefox, browser } = started({ written });
+    firefox.report(browser, report);
+    assert.deepEqual(blurs(firefox), [], what);
+  }
+});
+
+test("the pref turned off forgets the reports, and turned on again asks every tab for a fresh one", () => {
+  const { firefox, browser, press } = started();
+  firefox.report(browser, { inner: 10, listeners: 1, field: false });
+  assert.equal(press("J").prevented, false);
+  firefox.set_pref(false);
+  firefox.set_pref(true);
+  assert.deepEqual(firefox.broadcasts, ["desertfox-browser-module:report-now"]);
+  assert.equal(press("J").prevented, true, "a report from before the pref went off still counted");
 });

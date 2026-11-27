@@ -1,4 +1,4 @@
-// The browser module (browser_module/) on the pages it exists for: the tab keys and hjkl on about:preferences, about:addons, the PDF viewer and Reader View, a tab still loading, fields on those pages, and a DesertFox page where it must stay out.
+// The browser module (browser_module/) on the pages it exists for: the tab keys and hjkl on about:preferences, about:addons, the PDF viewer and Reader View, a tab still loading, fields on those pages, blur_on_load on about:preferences, and a DesertFox page where it must stay out.
 // Also its start: the run's Firefox copy holds a drop-in that throws at load before the module (firefox_copy.mjs), and Firefox must still work with the module loaded.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import { make_article, make_pdf, module_steps } from "./browser_module_steps.mjs
 export const areas = ["tabs", "scroll"];
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, url_of, sleep, in_background } = context;
+  const { run_case, setup, expect, poll_until, press_keys, url_of, sleep, in_background, run_line } = context;
   const steps = module_steps(context);
   const { chrome, module_status, open_tab, focus_page, switches_one, switches_none, scrolls, page_scroll, in_selected_page, close_selected_tab, home } = steps;
   const files_dir = mkdtempSync(join(tmpdir(), "desertfox-module-pages-"));
@@ -39,15 +39,18 @@ export async function run_cases(context) {
 
   await setup("turn the module on", () => steps.turn_on_module());
 
-  for (const [page, url, scroll] of [
+  // The list of add-ons is too short to scroll in a test profile, so the case makes it long.
+  const lengthen = () => in_selected_page(`(win) => { const spacer = win.document.createElement("div"); spacer.style.height = "4000px"; (win.document.querySelector("#main") ?? win.document.body).append(spacer); return true; }`);
+  for (const [page, url, scroll, prepare] of [
     ["about:preferences", "about:preferences", true],
-    ["about:addons", "about:addons", false],
+    ["about:addons", "about:addons", true, lengthen],
     ["the PDF viewer", file_url("long.pdf"), true],
     ["Reader View", `about:reader?url=${encodeURIComponent(article_url)}`, true],
   ]) {
     await run_case(`J and K switch exactly one tab on ${page}${scroll ? ", and j and k scroll it" : ""}`, async () => {
       await home(`bm_from_${page.replace(/\W+/g, "_")}`);
       await open_tab(url);
+      await prepare?.();
       // The PDF viewer and Reader View fill the page after the load.
       if (scroll) await poll_until(`${page} to have room to scroll`, () => in_selected_page(`(win) => [win.document.scrollingElement, ...win.document.querySelectorAll("*")].some((node) => node && node.scrollHeight > node.clientHeight + 200 && (node === win.document.scrollingElement || /auto|scroll/.test(win.getComputedStyle(node).overflowY)))`), { timeout_ms: 8000 });
       await focus_page();
@@ -72,6 +75,25 @@ export async function run_cases(context) {
     const typed = await in_selected_page(`(win) => { let node = win.document.activeElement; while (node?.shadowRoot?.activeElement) node = node.shadowRoot.activeElement; return node?.value ?? null; }`);
     expect(typed === "JjkG", `the search box holds ${JSON.stringify(typed)}`);
     await close_selected_tab();
+  });
+
+  await run_case("with blur_on_load on, about:preferences loses the search box focus it took on load, so J switches at once", async () => {
+    await home("bm_prefs_blur");
+    await run_line(":set blur_on_load true");
+    try {
+      await poll_until("the module state to carry blur_on_load", async () => (await steps.session_value("desertfox_browser_module_state"))?.blur_on_load === true);
+      await open_tab("about:preferences");
+      // The case before this one shows the page focusing its search box on load. Past the load window the focus must be out of it.
+      await poll_until("about:preferences to finish loading", () => in_selected_page(`(win) => win.document.readyState === "complete"`));
+      await sleep(1500);
+      expect((await chrome(`(async () => Services.wm.getMostRecentWindow("navigator:browser").windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`)) === true, "the search box kept the focus with blur_on_load on");
+      await switches_one("J on about:preferences just after it opened");
+      await close_selected_tab();
+    } finally {
+      // The command line opens from a DesertFox page.
+      await home("bm_prefs_blur_end");
+      await run_line(":set blur_on_load false");
+    }
   });
 
   await run_case("a field on a page in a content process types, even for a key that comes right after the focus", async () => {
@@ -103,6 +125,14 @@ export async function run_cases(context) {
     await poll_until("the new tab to show its first empty page", async () => (await steps.selected_spec()) === "about:blank");
     await switches_one("J in a tab that has not committed");
     await chrome(`(async () => { const w = Services.wm.getMostRecentWindow("navigator:browser"); const tab = [...w.gBrowser.tabs].find((t) => t.linkedBrowser.currentURI.spec === "about:blank" || t.linkedBrowser.currentURI.spec.includes("slow_pixel")); if (tab) w.gBrowser.removeTab(tab); })()`);
+  });
+
+  await run_case("the module hears the extension's message list and refuses a kind it does not know with an error reply", async () => {
+    // No kind is on either list yet, so a refusal is the one answer a real Firefox can give. It runs the storage listener, the checks and the module's write.
+    const id = `kt${Date.now().toString(36)}`;
+    await steps.set_session_value("desertfox_browser_module_from_extension", [{ v: 1, id, kind: "no.such.kind", args: {}, sent_at: Date.now() }]);
+    await poll_until("the module's refusal", async () => ((await steps.session_value("desertfox_browser_module_from_module")) ?? []).some((reply) => reply.reply_to === id && reply.ok === false && reply.error === "the kind is not on the allow list"));
+    expect((await module_status()).errors.length === 0, `the module logged: ${(await module_status()).errors.join("; ")}`);
   });
 
   await run_case("on a DesertFox page J switches exactly one tab: DesertFox takes it and the module stays out", async () => {

@@ -10,8 +10,9 @@ const module_dir = new URL("../../browser_module/", import.meta.url).pathname;
 const module_names = readdirSync(module_dir).filter((name) => /^desertfox-[a-z0-9-]+\.js$/.test(name)).sort();
 
 // A user namespace maps the test user to root, so the root checks pass on files the test owns, with no sudo.
-const as_root = (firefox_dir: string, ...args: string[]) =>
-  spawnSync("unshare", ["-r", "bash", script, ...args], { env: { ...process.env, DESERTFOX_FIREFOX_DIR: firefox_dir }, encoding: "utf8" });
+const as_root = (firefox_dir: string, ...args: string[]) => as_root_with(firefox_dir, {}, ...args);
+const as_root_with = (firefox_dir: string, env: Record<string, string>, ...args: string[]) =>
+  spawnSync("unshare", ["-r", "bash", script, ...args], { env: { ...process.env, DESERTFOX_FIREFOX_DIR: firefox_dir, ...env }, encoding: "utf8" });
 const as_user = (firefox_dir: string, ...args: string[]) => spawnSync("bash", [script, ...args], { env: { ...process.env, DESERTFOX_FIREFOX_DIR: firefox_dir }, encoding: "utf8" });
 
 const namespaces_work = spawnSync("unshare", ["-r", "true"]).status === 0;
@@ -74,6 +75,17 @@ test("install refuses a missing, linked or group-writable folder, and a run with
   const result = as_user(plain);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /sudo/);
+});
+
+// In a user namespace every file the test can make belongs to root, so a `stat` ahead on PATH gives the folder another owner.
+test("install refuses a folder that root does not own", { skip: !namespaces_work }, (t) => {
+  const dir = firefox_dir_with_drop_ins(t);
+  const shims = make_tmp_dir("desertfox-module-install-shims-", t);
+  writeFileSync(join(shims, "stat"), `#!/usr/bin/env bash\nif [ "$1" = -c ] && [ "$2" = %u ]; then echo 1000; else exec /usr/bin/env -u PATH PATH=/usr/bin:/bin stat "$@"; fi\n`, { mode: 0o755 });
+  const result = as_root_with(dir, { PATH: `${shims}:${process.env.PATH}` });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /not owned by root/);
+  assert.deepEqual(readdirSync(join(dir, "chrome.d")), []);
 });
 
 test("install refuses an unknown argument", { skip: !namespaces_work }, (t) => {

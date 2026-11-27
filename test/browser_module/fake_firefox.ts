@@ -61,27 +61,31 @@ export function key_event(key: string, patch: Partial<FakeEvent> = {}): FakeEven
   return event;
 }
 
-export type FakeExtension = { id: string; privateBrowsingAllowed: boolean; bucket: Map<string, unknown> };
+type StorageChanges = Record<string, { oldValue?: unknown; newValue?: unknown }>;
+export type FakeExtension = { id: string; privateBrowsingAllowed: boolean; bucket: Map<string, unknown>; listeners: Set<(changes: StorageChanges) => void> };
 // The holder the extension's storage keeps: the module must deserialize it.
 const holder_of = (value: unknown) => ({ deserialize: () => structuredClone(value) });
 
-// `pref: null` leaves the pref unset.
-export function create_firefox({ pref = true as boolean | string | null } = {}) {
+// `pref: null` leaves the pref unset. `extra_files` are more drop-ins by name, loaded after the module's own in name order. `patch_source` rewrites a file before it runs, for test-only rows.
+export function create_firefox({ pref = true as boolean | string | null, extra_files = {} as Record<string, string>, patch_source = (_name: string, source: string) => source } = {}) {
   const errors: string[] = [];
   const prefs = new Map<string, unknown>();
   if (pref !== null) prefs.set("desertfox.browser_module.enabled", pref);
-  const pref_observers: (() => void)[] = [];
-  const ready_listeners: ((name: string, extension: FakeExtension) => void)[] = [];
+  const pref_observers = new Set<() => void>();
+  const ready_listeners = new Set<(name: string, extension: FakeExtension) => void>();
   const frame_scripts: string[] = [];
   const message_listeners = new Map<string, ((message: { target: unknown; data: unknown }) => void)[]>();
   const sent_to_frames: { browser: unknown; name: string; data: unknown }[] = [];
+  const broadcasts: string[] = [];
   const tab_ids = new Map<unknown, number>();
   let next_tab_id = 1;
   const firefox = {
     extension: undefined as FakeExtension | undefined,
     fail_import: false,
     fail_tab_ids: false,
+    fail_tab_moves: false,
     errors,
+    broadcasts,
     frame_scripts,
     sent_to_frames,
     sandboxes: 0,
@@ -100,7 +104,7 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
     const before = running_file;
     running_file = MODULE_DIR_URL + name;
     try {
-      vm.runInContext(source_of(name), context, { filename: name });
+      vm.runInContext(patch_source(name, extra_files[name] ?? source_of(name)), context, { filename: name });
     } finally {
       running_file = before;
     }
@@ -115,7 +119,10 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
         return value;
       },
       addObserver(_name: string, observer: () => void) {
-        pref_observers.push(observer);
+        pref_observers.add(observer);
+      },
+      removeObserver(_name: string, observer: () => void) {
+        pref_observers.delete(observer);
       },
     },
     mm: {
@@ -124,6 +131,12 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
       },
       addMessageListener(name: string, listener: (message: { target: unknown; data: unknown }) => void) {
         message_listeners.set(name, [...(message_listeners.get(name) ?? []), listener]);
+      },
+      removeMessageListener(name: string, listener: (message: { target: unknown; data: unknown }) => void) {
+        message_listeners.set(name, (message_listeners.get(name) ?? []).filter((each) => each !== listener));
+      },
+      broadcastAsyncMessage(name: string) {
+        broadcasts.push(name);
       },
     },
     scriptSecurityManager: { getSystemPrincipal: () => ({}) },
@@ -143,7 +156,7 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
       reportError: (text: unknown) => errors.push(String(text)),
       Sandbox: () => {
         firefox.sandboxes++;
-        return contextify({ Services, Components, ChromeUtils });
+        return contextify({ Services, Components, ChromeUtils, TextEncoder });
       },
     },
   };
@@ -168,13 +181,46 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
         ExtensionStorage: { serialize: (_name: string, _anonymized: string, value: unknown) => holder_of(value) },
         extensionStorageSession: {
           get: (extension: FakeExtension, keys: string[]) => Object.fromEntries(keys.filter((key) => extension.bucket.has(key)).map((key) => [key, extension.bucket.get(key)])),
-          set: (extension: FakeExtension, items: Record<string, unknown>) => Object.entries(items).forEach(([key, value]) => extension.bucket.set(key, value)),
-          remove: (extension: FakeExtension, keys: string[]) => keys.forEach((key) => extension.bucket.delete(key)),
+          set: (extension: FakeExtension, items: Record<string, unknown>) => session_set(extension, items),
+          remove: (extension: FakeExtension, keys: string[]) => {
+            const changes: StorageChanges = {};
+            for (const key of keys) if (extension.bucket.has(key)) changes[key] = { oldValue: extension.bucket.get(key) };
+            keys.forEach((key) => extension.bucket.delete(key));
+            notify(extension, changes);
+          },
+          // As in Firefox: per extension object, and the call gives back the way to stop.
+          registerListener(extension: FakeExtension, listener: (changes: StorageChanges) => void) {
+            extension.listeners.add(listener);
+            return () => extension.listeners.delete(listener);
+          },
         },
-        Management: { on: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.push(listener) },
+        Management: {
+          on: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.add(listener),
+          off: (_event: string, listener: (name: string, extension: FakeExtension) => void) => ready_listeners.delete(listener),
+        },
         PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true },
       };
     },
+  };
+
+  // Firefox calls each listener in its own try, so a listener that throws never reaches the writer.
+  const notify = (extension: FakeExtension, changes: StorageChanges) => {
+    if (Object.keys(changes).length === 0) return;
+    for (const listener of [...extension.listeners]) {
+      try {
+        listener(changes);
+      } catch (error) {
+        errors.push(`storage listener threw ${String(error)}`);
+      }
+    }
+  };
+  const session_set = (extension: FakeExtension, items: Record<string, unknown>) => {
+    const changes: StorageChanges = {};
+    for (const [key, value] of Object.entries(items)) {
+      changes[key] = { oldValue: extension.bucket.get(key), newValue: value };
+      extension.bucket.set(key, value);
+    }
+    notify(extension, changes);
   };
 
   const make_window = ({ private_window = false } = {}) => {
@@ -188,7 +234,12 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
       windowUtils: { IMEStatus: IME_DISABLED },
       gBrowser: {
         getTabForBrowser: (browser: unknown) => [...tabs.values()].find((tab) => tab.browser === browser) ?? null,
-        tabContainer: { advanceSelectedTab: (step: number) => tab_moves.push(step) },
+        tabContainer: {
+          advanceSelectedTab: (step: number) => {
+            if (firefox.fail_tab_moves) throw new Error("advanceSelectedTab changed");
+            tab_moves.push(step);
+          },
+        },
       },
       addEventListener(type: string, listener: Listener) {
         listeners.set(type, (listeners.get(type) ?? new Set()).add(listener));
@@ -202,7 +253,7 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
     const load = () => {
       // The window is the global of the files it loads, as with the loader's `target: win`.
       win.context ??= contextify(Object.assign(win, { Services, Components, ChromeUtils, window: win }));
-      for (const name of [CORE_FILE, FEATURE_FILE]) {
+      for (const name of [CORE_FILE, FEATURE_FILE, ...Object.keys(extra_files).sort()]) {
         try {
           run_file(name, win.context);
         } catch (error) {
@@ -233,17 +284,33 @@ export function create_firefox({ pref = true as boolean | string | null } = {}) 
   const set_pref = (value: boolean | string | undefined) => {
     if (value === undefined) prefs.delete("desertfox.browser_module.enabled");
     else prefs.set("desertfox.browser_module.enabled", value);
-    pref_observers.forEach((observer) => observer());
+    [...pref_observers].forEach((observer) => observer());
   };
 
   const start_extension = ({ private_access = false } = {}) => {
-    firefox.extension = { id: "desertfox@uhs-robert", privateBrowsingAllowed: private_access, bucket: new Map() };
-    ready_listeners.forEach((listener) => listener("ready", firefox.extension!));
+    firefox.extension = { id: "desertfox@uhs-robert", privateBrowsingAllowed: private_access, bucket: new Map(), listeners: new Set() };
+    [...ready_listeners].forEach((listener) => listener("ready", firefox.extension!));
     return firefox.extension;
   };
 
-  const write_state = (state: unknown) => firefox.extension!.bucket.set("desertfox_browser_module_state", holder_of(state));
-  const hello = () => (firefox.extension?.bucket.get("desertfox_browser_module_hello") as { deserialize(): unknown } | undefined)?.deserialize();
+  // What the extension's own `storage.session.set` does: the holder goes in the bucket and the listeners hear it.
+  const extension_writes = (key: string, value: unknown, extension = firefox.extension!) => session_set(extension, { [key]: holder_of(value) });
+  const write_state = (state: unknown) => extension_writes("desertfox_browser_module_state", state);
+  const read_holder = (key: string, extension = firefox.extension) => (extension?.bucket.get(key) as { deserialize(): unknown } | undefined)?.deserialize();
+  const hello = () => read_holder("desertfox_browser_module_hello");
 
-  return Object.assign(firefox, { Services, make_window, report, set_pref, start_extension, write_state, hello, message_listener_count: () => [...message_listeners.values()].flat().length });
+  return Object.assign(firefox, {
+    Services,
+    make_window,
+    report,
+    set_pref,
+    start_extension,
+    write_state,
+    extension_writes,
+    read_holder,
+    hello,
+    message_listener_count: () => [...message_listeners.values()].flat().length,
+    pref_observer_count: () => pref_observers.size,
+    ready_listener_count: () => ready_listeners.size,
+  });
 }
