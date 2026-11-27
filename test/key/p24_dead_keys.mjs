@@ -86,7 +86,8 @@ export async function run_cases(context) {
     let typed = "";
     await run_case(`${what}: held Shift+J and Shift+K keep switching and type nothing`, async () => {
       const order = await tab_order();
-      const forward = await hold("j", 1500);
+      // Each discarded tab loads as the held key reaches it, and no repeat switches on until its content script has the keymap, so on a busy machine 1.5 s reaches only a few tabs. A tab that stops taking keys still fails the count. K runs over loaded tabs, so it keeps 1.5 s.
+      const forward = await hold("j", discard ? 4000 : 1500);
       log(`J switched ${forward.length}: ${forward.join(",")}`);
       const back = await hold("k", 1500);
       log(`K switched ${back.length}: ${back.join(",")}`);
