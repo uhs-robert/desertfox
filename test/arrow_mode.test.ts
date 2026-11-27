@@ -240,7 +240,7 @@ test("typed keys run the mode binds while the mode is on, and the normal binds o
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
-    in_editable_field_: () => false, escape_to_page_: () => false, get_mode_: state.get_mode_, take_pass_next_: state.take_pass_next_,
+    in_editable_field_: () => false, user_input_seen_: () => false, escape_to_page_: () => false, get_mode_: state.get_mode_, take_pass_next_: state.take_pass_next_,
     run_leaf_: (leaf) => void ran.push(leaf.steps.map((step) => `${step.invocation.id}:${step.invocation.args?.direction ?? step.invocation.args?.name ?? step.invocation.args?.key ?? ""}`).join("+")),
     leave_insert_: () => {}, is_loading_: () => false, loading_sink_bundles_: () => [], sink_of_: () => undefined, on_prefix_: () => {},
   });

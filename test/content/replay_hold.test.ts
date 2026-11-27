@@ -31,6 +31,7 @@ function make_page() {
   const events: string[] = [];
   const loads: Load[] = [];
   const flow = create_key_flow({
+    user_input_seen_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
     in_editable_field_: () => false,
