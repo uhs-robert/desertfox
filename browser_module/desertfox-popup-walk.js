@@ -30,7 +30,10 @@
     const BROWSER = "navigator:browser";
     const LIBRARY = "Places:Organizer";
     // In these windows every list, tree and radio group walks, so no open popup is needed.
-    const WALK_WINDOWS = new Set([LIBRARY, "Browser:page-info", "Toolkit:PictureInPicture"]);
+    const PAGE_INFO = "Browser:page-info";
+    const WALK_WINDOWS = new Set([LIBRARY, PAGE_INFO, "Toolkit:PictureInPicture"]);
+    // The windows chrome hints label as a whole.
+    const HINT_WINDOWS = new Set([LIBRARY, PAGE_INFO]);
     // A DevTools window opens its context menus in its own document. With no menu open the walk leaves every key there to the core's DevTools keys.
     const ATTACHED_TYPES = new Set([BROWSER, "devtools:toolbox", ...WALK_WINDOWS]);
     const DIALOG_LISTS = new Set(["tree", "richlistbox", "listbox", "radiogroup", "radio"]);
@@ -78,6 +81,7 @@
 
     // Why the walk takes this key here, or undefined to leave the key alone. `still_holds` must still be true when the arrow key goes out.
     // `menu_owns_keys` marks the open menu that takes the window's keys, a focused field's too.
+    // `in_hint_place` marks a focus where chrome hints can start, as their `chrome_place` reads it: the Library, Page Info, a dialog frame or inside an open panel.
     function walk_reason(win, record, event) {
       const popups = open_popups(record);
       const menu = popups.find(takes_keys);
@@ -85,10 +89,10 @@
       const focused = core.focused_element(win);
       if (in_field(win, event.originalTarget) || in_extension_popup(event.target) || in_extension_popup(focused)) return undefined;
       const panel = popups.find(walking_panel);
-      if (panel) return { still_holds: () => is_open(panel) && !field_focused(win) };
-      if (WALK_WINDOWS.has(record.type)) return { still_holds: () => !field_focused(win) };
+      if (panel) return { still_holds: () => is_open(panel) && !field_focused(win), in_hint_place: !!panel.contains?.(focused) };
+      if (WALK_WINDOWS.has(record.type)) return { still_holds: () => !field_focused(win), in_hint_place: HINT_WINDOWS.has(record.type) };
       const list = dialog_list(win, focused);
-      if (list) return { still_holds: () => core.focused_element(win) === list };
+      if (list) return { still_holds: () => core.focused_element(win) === list, in_hint_place: true };
       return undefined;
     }
 
@@ -105,11 +109,11 @@
       const arrow = Object.hasOwn(WALK_KEYS, event.key) ? WALK_KEYS[event.key] : undefined;
       if (arrow) {
         const reason = walk_reason(win, record, event);
-        return reason && { act: () => walk(win, arrow, reason), menu_owns_keys: reason.menu_owns_keys === true };
+        return reason && { act: () => walk(win, arrow, reason), in_hint_place: reason.in_hint_place === true };
       }
       if (event.key !== "Escape" || event.shiftKey || record.type !== LIBRARY) return undefined;
       if (in_field(win, event.originalTarget) || !library_closes_on_escape(win, record)) return undefined;
-      return { act: () => (win.setTimeout(() => win.close(), 0), true), menu_owns_keys: false };
+      return { act: () => (win.setTimeout(() => win.close(), 0), true), in_hint_place: true };
     }
 
     // Chrome hints match the first key of a `hint.browser` binding on the window root too, and in a window opened after startup they hear it after the walk.
@@ -120,19 +124,19 @@
 
     function on_key(win, record, event) {
       record.waiting = undefined;
-      if (core.keys_held_by(win) !== undefined) return;
       if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
       if (!Object.hasOwn(WALK_KEYS, event.key) && event.key !== "Escape") return;
       if (!core.may_act(win)) return;
       const action = action_for(win, record, event);
       if (!action) return;
-      // Under a menu that takes keys chrome hints start nothing, so the walk acts at once, before the core could scroll the page under the menu.
-      if (!action.menu_owns_keys && may_start_hints(win, event)) record.waiting = { event, act: action.act };
+      // A hold can end within this key: chrome hints drop a binding's first keys on a key off the binding and leave that key alone.
+      const waits = core.keys_held_by(win) !== undefined || (action.in_hint_place && may_start_hints(win, event));
+      if (waits) record.waiting = { event, act: action.act };
       else if (action.act()) take(event);
     }
 
-    // A key that may start chrome hints waits for the window's own listeners. Chrome hints stop a key they take, so it never gets here, and their first keys hold the window.
-    // Those listeners run after the core's on a browser window, so the core's own row for the key comes first there.
+    // A key that waits gets here after the window root's listeners, chrome hints' among them. Chrome hints stop a key they take, so it never gets here, and their first keys hold the window.
+    // On a browser window the core's listener runs before this one, so the core's own row for the key comes first. A key waits only where chrome hints can start, so an open menu and a panel the page's focus sits outside of keep the key from the core.
     function on_key_after_root(win, record, event) {
       const waiting = record.waiting;
       record.waiting = undefined;

@@ -286,6 +286,44 @@ test("the core types from a field for menu_owns_keys only while it sees a menu t
   assert.equal(type_key(browser.win, "ArrowDown", () => true, owns), false, "typed into DevTools under a menu");
 });
 
+const J_SCROLL_AND_J_HINTS = { v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: true, keys: [{ key: "j", id: "scroll.lines", args: { count: 1 } }], tabs: {}, chrome_hint_keys: [["j", "B"]] };
+
+test("with a hint binding that starts with j, an open panel the page's focus sits outside of still walks on j, and the page does not scroll", () => {
+  const { firefox, browser, tab, typed, run_timers } = setup({ state: J_SCROLL_AND_J_HINTS });
+  browser.focus(tab.browser as Node);
+  for (const panel of [popup("panel", "downloadsPanel"), popup("panel", "appMenu-popup", {}, true)]) {
+    browser.show(panel);
+    assert.ok(browser.press("j").prevented, `${panel.id} did not walk`);
+    run_timers();
+    browser.hide(panel);
+  }
+  assert.equal(firefox.sent_to_frames.length, 0, "the core scrolled the page under a walking panel");
+  assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown", "ArrowDown"]);
+});
+
+test("a key that waits for chrome hints is not walked when the core took it meanwhile, as in a list of a dialog inside a page", () => {
+  const { firefox, browser, tab, typed, run_timers } = setup({ state: J_SCROLL_AND_J_HINTS });
+  const frame = { classList: { contains: (name: string) => name === "dialogFrame" } };
+  const dialog_doc = { defaultView: { browsingContext: { isContent: true, top: { embedderElement: tab.browser }, embedderElement: frame } } };
+  browser.focus({ localName: "richlistbox", ownerDocument: dialog_doc });
+  browser.press("j");
+  run_timers();
+  assert.equal(firefox.sent_to_frames.length, 1, "the core did not take its row");
+  assert.deepEqual(typed, [], "the walk typed an arrow key for a key the core took");
+});
+
+test("menu_owns_keys finds a menu open in a dialog's own document, where the focused field is", () => {
+  const { firefox, browser, typed, run_timers } = setup();
+  type TypeKey = (win: unknown, key: string, still_holds: () => boolean, options?: { menu_owns_keys?: boolean }) => boolean;
+  const type_key = (firefox.Services.desertfox_browser_module as { type_key: TypeKey }).type_key;
+  const dialog_menu = popup("menupopup");
+  const dialog_doc = { querySelectorAll: (selector: string) => (selector === "menupopup" ? [dialog_menu] : []) };
+  browser.focus({ localName: "input", type: "text", ownerDocument: dialog_doc });
+  assert.equal(type_key(browser.win, "ArrowDown", () => true, { menu_owns_keys: true }), true, "a menu in the dialog's document was not seen");
+  run_timers();
+  assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"]);
+});
+
 test("only a plain trusted letter walks: no modifier, no capital, no composition, no untrusted or prevented key", () => {
   const { browser, typed } = setup();
   browser.show(popup("menupopup"));

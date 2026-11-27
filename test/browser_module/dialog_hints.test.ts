@@ -154,6 +154,31 @@ test("in a window opened after startup, where the walk hears keys first, a bindi
   assert.deepEqual(run.typed, ["ArrowDown"]);
 });
 
+test("in a window opened after startup, a key off a binding's held first j walks once chrome hints drop the held key", () => {
+  const run = started(library, { walk: true, state: { ...STATE, chrome_hint_keys: [["j", "B"]] } });
+  const other = library(run.firefox);
+  Object.assign(other.win, { KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } } });
+  run.open_window(other);
+  (run.firefox.Services.focus as { activeWindow: unknown }).activeWindow = other.win;
+  other.press("j");
+  assert.equal(run.held(other.win), "chrome_hints.prefix");
+  assert.ok(other.press("k").prevented, "k reached the tree as a letter");
+  assert.equal(run.held(other.win), undefined);
+  other.fire_timers();
+  assert.deepEqual(run.typed, ["ArrowUp"]);
+});
+
+test("a start whose hold the core refuses asks the extension nothing and holds nothing", () => {
+  const run = started(library);
+  const core = run.firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): boolean };
+  const hold_keys = core.hold_keys;
+  core.hold_keys = (win, owner) => owner !== "chrome_hints" && hold_keys(win, owner);
+  run.type_binding();
+  assert.deepEqual(run.tokens(), [], "the start asked the extension without the window's keys held");
+  assert.equal(run.held(), undefined);
+  assert.equal(run.chrome.press("x").prevented, false, "a refused start took a key");
+});
+
 test("in a tab's prompt the buttons in the dialog's shadow root get labels at their place in the window, the prompt's field gets none, and a pick clicks", async () => {
   const run = started(browser_with_dialog);
   run.type_binding();
