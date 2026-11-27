@@ -23,7 +23,7 @@
   }
 
   function start(core) {
-    const missing = ["may_act", "on_shut_down", "sidebar_row", "type_key", "token_of", "is_field", "deep_active", "focused_element"].find((name) => typeof core[name] !== "function");
+    const missing = ["may_act", "on_shut_down", "sidebar_row", "type_key", "token_of", "is_field", "deep_active", "focused_element", "keys_held_by"].find((name) => typeof core[name] !== "function");
     if (missing) {
       core.log_once(`the core has no ${missing}, so the sidebar keys stay off`);
       return;
@@ -271,7 +271,8 @@
         record.pending = undefined;
         return;
       }
-      if (popup_owns_keys(win) || !core.may_act(win)) return;
+      // Another feature holds the window's keys (a hint session on the chrome): the sidebar claims nothing until it lets go.
+      if (core.keys_held_by(win) !== undefined || popup_owns_keys(win) || !core.may_act(win)) return;
       const token = core.token_of(event);
       if (!token) return;
       const choice = decide(place, token, record.pending, (keys) => core.sidebar_row(win, keys));
