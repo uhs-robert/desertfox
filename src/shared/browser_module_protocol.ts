@@ -294,12 +294,16 @@ export const MAX_KIND_BYTES = 64 * 1024;
 // Room for the envelopes of the other messages beside the largest one.
 export const MESSAGE_ENVELOPE_BYTES = 512;
 // The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
-const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
+export const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
 const PANEL_CALL_BYTES = 256;
+// The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
+export const CHROME_HINT_PART_BYTES = 4096;
+// The most parts a session's targets or one draw may come in. The module keeps the same number.
+export const CHROME_HINT_MAX_PARTS = 32;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
@@ -307,6 +311,12 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
   // A forward leaf of the tree matched: `keys` holds the tokens of its path, joined by one space, and `count` the typed count or 0 for none. The background matches the keys again against its own tree and runs the binding in the active tab. Chrome names no tab.
   run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
+  // One part of a session's targets: `targets` is a list of [id, left, top, width, height] in CSS pixels.
+  "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // A key typed while the labels show. `seq` counts up per session, so a key read twice runs once.
+  "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // The session ended in chrome: Escape, a click, the window left the front or closed, or no labels came.
+  "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`.
@@ -325,6 +335,14 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
   // The command line on a locked page: the module opens DesertFox's own `cmdline.html` in a panel over the tab, at a fixed address with the extension's principal. It refuses when `tab_id` is no longer the selected tab of its window, so a late request never opens over another page.
   "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: PANEL_CALL_BYTES },
+  // Starts a session in the window, which must be in front. `colors` is JSON text of the theme's dark and light hex colors, or "". The reply refuses when there is nothing to hint.
+  "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+  // One part of the labels to show: `labels` is a list of [id, label]. Only a draw whose parts all came shows, and it replaces the one before.
+  "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // Runs the target's fixed action. The reply refuses an id of another session and a target that is gone or moved.
+  "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  // Ends the session in chrome. The extension sends it after a failed collect, whose lost reply can hide a session that started.
+  "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.

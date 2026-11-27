@@ -11,7 +11,8 @@ import type { CompiledKeymap, LeafStep, TreeBranch, TreeLeaf, TreeNode } from ".
 
 // Background commands that still make no sense with no DesertFox page: a mode needs a page to hold it, and `frame.exit` a frame to leave. `macro.record` stays out because a page swaps its key for `macro.stop` while a macro records, and the stored tree has no such swap.
 const DENIED_IDS: readonly string[] = ["media.act", "frame.exit", "macro.record"];
-const DENIED_GROUPS: readonly string[] = ["mode."];
+// `sidebar.` commands run only in the module, in the sidebar, and refuse in the extension.
+const DENIED_GROUPS: readonly string[] = ["mode.", "sidebar."];
 
 export function runs_on_locked_pages(command: Pick<CommandDef, "id" | "runs_in" | "needs">): boolean {
   if (command.runs_in !== "background" || command.needs?.includes("content")) return false;

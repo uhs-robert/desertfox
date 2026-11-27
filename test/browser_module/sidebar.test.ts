@@ -304,6 +304,16 @@ test("nothing is taken with the module off, without a sidebar table, or while a 
   }
 });
 
+test("the sidebar takes no key while another feature holds the window's keys, and takes them again after the release", () => {
+  const { firefox, win, panel_doc, focus, press } = setup();
+  focus(panel_row(panel_doc));
+  const core = firefox.Services.desertfox_browser_module as { hold_keys(win: unknown, owner: string): void; release_keys(win: unknown, owner: string): void };
+  core.hold_keys(win, "chrome_hints");
+  assert.equal(press("j").prevented, false, "j was taken while a hint session held the keys");
+  core.release_keys(win, "chrome_hints");
+  assert.ok(press("j").prevented, "j was not taken after the release");
+});
+
 test("gg needs both keys: a g then another key runs that key alone, and Escape, a focus move or a window blur drop the g", () => {
   const { panel_doc, focus, press, typed, run_timers, own } = setup();
   const row = panel_row(panel_doc);

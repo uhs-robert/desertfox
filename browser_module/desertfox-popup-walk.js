@@ -143,6 +143,7 @@
     };
 
     function on_key(win, record, event) {
+      if (core.keys_held_by(win) !== undefined) return;
       if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
       const arrow = Object.hasOwn(WALK_KEYS, event.key) ? WALK_KEYS[event.key] : undefined;
       const escape = event.key === "Escape" && !event.shiftKey && record.type === LIBRARY;

@@ -95,6 +95,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     frame_scripts,
     sent_to_frames,
     sandboxes: 0,
+    // The windows `windowTracker.getWindow` finds, by id. A feature that reads windows by id gets its own stand-ins here.
+    windows_by_id: new Map<number, unknown>(),
   };
 
   // The file a load runs, so Components.stack names it as Firefox does.
@@ -148,7 +150,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     obs: { addObserver: () => undefined, removeObserver: () => undefined },
     scriptSecurityManager: { getSystemPrincipal: () => ({}) },
     // The window a test gives the focus.
-    focus: { activeWindow: undefined as unknown },
+    focus: { activeWindow: null as unknown },
     scriptloader: {
       loadSubScriptWithOptions(url: string, { target }: { target: vm.Context }) {
         if (!url.startsWith(MODULE_DIR_URL)) throw new Error(`untrusted ${url}`);
@@ -180,6 +182,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
           GlobalManager: { getExtension: (id: string) => (firefox.extension?.id === id ? firefox.extension : undefined) },
           apiManager: {
             global: {
+              windowTracker: { getWindow: (id: number) => firefox.windows_by_id.get(id) ?? null },
               tabTracker: {
                 getId(tab: unknown) {
                   if (firefox.fail_tab_ids) throw new Error("tabTracker changed");

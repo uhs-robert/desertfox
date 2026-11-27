@@ -194,6 +194,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ES: { id: "pane.focus", args: { region: "sidebar" } },
     ED: { id: "pane.focus", args: { region: "devtools" } },
     gF: { id: "frame.exit" },
+    gB: { id: "hint.browser" },
     g0: { id: "tab.goto", args: { index: 1 }, label: "First tab" },
     g$: { id: "tab.goto", args: { index: -1 }, label: "Last tab" },
     T: { id: "tab.switch", prompt: { param: "tab" } },
@@ -342,6 +343,7 @@ const BASE_SECTIONS: KeymapConfig = {
     ",i": { id: "mode.set", args: { mode: "ignore" } },
     ",,": { id: "open.anything", prompt: { param: "query" }, label: "Find anything" },
     ",b": { id: "page.blur" },
+    ",e": { id: "pane.focus", args: { region: "sidebar" }, label: "Focus the sidebar" },
     ",?": { id: "help.whichkey" },
     "<A-?>": { id: "help.whichkey", label: "Show the keys" },
     ",\"": { id: "register.list", prompt: { param: "name" }, label: "List registers" },
@@ -606,7 +608,21 @@ const GRAB_KEYS: ModeBindings = {
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
+// The keys the browser module claims in Firefox's own sidebar: the history, bookmarks and open tabs panels and the vertical tab strip. This mode never runs in a page. The extension writes these rows into the module's state, and the module acts on them with the focus in the sidebar.
+const SIDEBAR_KEYS: ModeBindings = {
+  j: { id: "sidebar.down", label: "Next row" },
+  k: { id: "sidebar.up", label: "Previous row" },
+  gg: { id: "sidebar.first", label: "First row" },
+  G: { id: "sidebar.last", label: "Last row" },
+  "<Enter>": { id: "sidebar.open", label: "Open the row" },
+  l: { id: "sidebar.expand", label: "Expand the row" },
+  h: { id: "sidebar.collapse", label: "Collapse the row" },
+  d: { id: "sidebar.close_item", label: "Close the tab" },
+  "/": { id: "sidebar.filter", label: "Filter the list" },
+  "<Escape>": { id: "sidebar.leave", label: "Leave the sidebar" },
+};
+
 // Each child mode takes the keys of its parent that it does not bind itself (`src/shared/keys/mode_parents.ts`).
 const MODE_PARENTS: KeymapConfig["mode_parents"] = { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true } };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS, mode_parents: MODE_PARENTS };
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, sidebar: SIDEBAR_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS, mode_parents: MODE_PARENTS };

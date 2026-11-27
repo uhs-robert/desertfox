@@ -162,6 +162,9 @@ export const TAB_MEDIA_TOP_STORAGE_PREFIX = "desertfox_tab_media_top_";
 
 // The cross-frame hint session of a tab, in `storage.session`. See `hint_frames.ts`.
 export const HINT_FRAMES_STORAGE_PREFIX = "desertfox_hint_frames_";
+
+// The session of hints over Firefox's own UI, in `storage.session`. See `background/chrome_hints.ts`.
+export const CHROME_HINTS_STORAGE_KEY = "desertfox_chrome_hints";
 // The open external-editor jobs, `{ [job]: { job, tab_id, token, frame_id, is_private, orphaned? } }`, in `storage.session`, so a restarted background resumes collecting. See `external_editor.ts`.
 export const EDITOR_JOBS_STORAGE_KEY = "desertfox_editor_jobs";
 

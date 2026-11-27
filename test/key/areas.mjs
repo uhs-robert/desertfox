@@ -39,7 +39,7 @@ export const area_rules = [
   { globs: ["src/content/strip_setting.ts", "src/shared/copy/{link_list,strip_tracking}.ts", "src/background/strip_patterns.ts"], areas: ["hints", "bundles"] },
   // The user-left watch serves the next_page load wait and the end follow of page.item.
   { globs: ["src/content/user_left.ts", "src/content/pointer_events.ts"], areas: ["hints", "engines", "bundles", "keys"] },
-  { globs: ["src/content/hints/**", "src/content/lib/{actions,candidates,drop_targets,follow,heading_match,headings,hover,selector_of,visible}.ts", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,heading,page}.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts", "src/content/page/focus_input.ts", "src/content/lib/{hint_keys,page_reader}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
+  { globs: ["src/content/hints/**", "src/content/lib/{actions,candidates,drop_targets,follow,heading_match,headings,hover,selector_of,visible}.ts", "src/shared/hints/labels.ts", "src/content/next_page/**", "src/content/grab/**", "src/shared/grab_steps.ts", "src/commands/{grab,hint,hint_text,hint_browser,heading,page}.ts", "src/background/chrome_hints.ts", "src/background/image_actions.ts", "src/content/handlers/page.ts", "src/content/page/focus_input.ts", "src/content/lib/{hint_keys,page_reader}.ts", "src/background/inspect_relay.ts", "src/background/hint_frames.ts", "src/devtools/**", "src/shared/inspect.ts"], areas: ["hints"] },
   // The page bundle answers the selection ask that the engine keys read.
   // Ahead of page/**: first match wins, and scroll.align belongs to the scroll area.
   { globs: ["src/content/page/align.ts"], areas: ["scroll"] },
@@ -54,7 +54,7 @@ export const area_rules = [
   // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
   { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
-  { globs: ["src/background/browser_module.ts", "src/background/browser_module_call.ts", "src/background/browser_module_run.ts", "src/shared/browser_module_protocol.ts", "src/shared/browser_module_scope.ts"], areas: ["keys", "tabs"] },
+  { globs: ["src/background/browser_module.ts", "src/commands/sidebar.ts", "src/background/browser_module_call.ts", "src/background/browser_module_run.ts", "src/shared/browser_module_protocol.ts", "src/shared/browser_module_scope.ts"], areas: ["keys", "tabs"] },
   // DesertFox page code on a locked page (the PDF viewer, Reader View): the keys, hints and caret mode run there.
   { globs: ["src/background/browser_module_rpc.ts", "src/content/locked_shim.ts"], areas: ["keys", "tabs", "hints", "caret"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
