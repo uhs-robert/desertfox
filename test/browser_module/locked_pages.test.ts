@@ -523,3 +523,80 @@ test("one tab's frame can neither end another tab's attach, call under it, nor a
   void a.frame.transport()!.call("A still calls");
   assert.deepEqual(a.from_module().find((message) => message.kind === "page_call")?.args, { tab_id: 1, document_id: 1, message: "A still calls" }, "A's attach still stands");
 });
+
+type Core = { send(kind: string, args: unknown, on_reply?: (reply: { ok: boolean; error?: string }) => void): { ok: boolean; id?: string; problem?: string }; shut_down(): void };
+const core_of = (firefox: ReturnType<typeof create_firefox>) => firefox.Services.desertfox_browser_module as Core;
+
+test("the core ends a call that waits past its cap of awaited replies with a failure, never drops it", () => {
+  const firefox = create_firefox();
+  firefox.start_extension();
+  firefox.make_window().load();
+  const replies: { ok: boolean; error?: string }[] = [];
+  for (let index = 0; index < 257; index++) core_of(firefox).send("page_call", { tab_id: 1, document_id: 1, message: "{}" }, (reply) => replies.push(plain(reply)));
+  assert.deepEqual(replies.map((reply) => reply.ok), [false]);
+  assert.match(replies[0]!.error!, /too many/);
+});
+
+test("a call whose write throws gets a failure and leaves no wait behind", async () => {
+  const { frame, load, extension } = locked();
+  await load();
+  extension.bucket.set = () => {
+    throw new Error("over the storage quota");
+  };
+  await assert.rejects(frame.transport()!.call("{}"), /off/);
+});
+
+test("the module pref going off and the core's shut down end every call waiting for a reply, and the shut down takes back the hello", () => {
+  for (const end of ["pref", "shut down"] as const) {
+    const firefox = create_firefox();
+    firefox.start_extension();
+    firefox.make_window().load();
+    assert.ok(firefox.hello(), "the module said hello");
+    const replies: { ok: boolean }[] = [];
+    core_of(firefox).send("page_call", { tab_id: 1, document_id: 1, message: "{}" }, (reply) => replies.push(plain(reply)));
+    if (end === "pref") firefox.set_pref(false);
+    else core_of(firefox).shut_down();
+    assert.deepEqual(replies.map((reply) => reply.ok), [false], end);
+    assert.equal(firefox.hello(), undefined, `${end}: no hello claims a module`);
+  }
+});
+
+test("a page call whose reply never comes ends at its deadline, and a reply in time cancels it", async () => {
+  const { firefox, frame, load, from_module, extension_sends } = locked();
+  await load();
+  const lost = frame.transport()!.call("lost");
+  firefox.run_timers();
+  await assert.rejects(lost, /no answer came/);
+  const answered = frame.transport()!.call("answered");
+  extension_sends([{ v: V, reply_to: from_module().at(-1)!.id, ok: true, value: "in time" }]);
+  assert.equal(await answered, "in time");
+  assert.equal(firefox.timer_count(), 0);
+});
+
+test("a push the page never answers ends at its deadline, and a push to a frame that is gone ends at once", async () => {
+  const { firefox, frame, load, from_module, extension_sends, tab } = locked();
+  await load();
+  frame.transport()!.on_push(() => new Promise(() => undefined));
+  extension_sends([push_request("slow", 1, "{}")]);
+  await settle();
+  assert.equal(from_module().find((message) => message.reply_to === "slow"), undefined);
+  firefox.run_timers();
+  await settle();
+  assert.deepEqual(from_module().find((message) => message.reply_to === "slow"), { v: V, reply_to: "slow", ok: false, error: "no answer came" });
+  tab.linkedBrowser.messageManager = undefined;
+  extension_sends([push_request("lost", 1, "{}")]);
+  await settle();
+  assert.deepEqual(from_module().find((message) => message.reply_to === "lost"), { v: V, reply_to: "lost", ok: false, error: "the page went away" });
+  assert.equal(firefox.timer_count(), 0);
+});
+
+test("the keymap snapshot going away drops the page code, and a good keymap brings it back", async () => {
+  const { firefox, frame, load } = locked();
+  await load();
+  // The background removes a keymap over the snapshot's cap.
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, undefined);
+  assert.equal(frame.nuked.length, 1);
+  firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);
+  await settle();
+  assert.equal(frame.sandboxes.length, 2);
+});

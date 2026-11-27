@@ -536,6 +536,7 @@
         } else if (active) {
           take_back_hello();
           reports = new WeakMap();
+          fail_awaited("the module turned off");
         }
       } catch (error) {
         log_once(`the switch change failed: ${error}`);
@@ -706,6 +707,11 @@
       }
     }
 
+    // Every call still waiting for its reply gets a failure, as no reply can come once the module stops reading.
+    function fail_awaited(why) {
+      for (const id of [...awaited_replies.keys()]) hand_reply(reply_to(id, false, why));
+    }
+
     function hand_reply(reply) {
       const on_reply = awaited_replies.get(reply.reply_to);
       if (!on_reply) return;
@@ -822,11 +828,18 @@
         const extension = desertfox();
         // Set before the write, so a reply the extension writes at once finds it.
         if (typeof on_reply === "function") awaited_replies.set(message.id, on_reply);
-        if (!extension || !append_own(extension, [message])) {
+        let written = false;
+        try {
+          written = !!extension && append_own(extension, [message]);
+        } catch (error) {
+          log_once(`a call was not written: ${error}`);
+        }
+        if (!written) {
           awaited_replies.delete(message.id);
           return { ok: false, problem: "the module or DesertFox is off" };
         }
-        for (const id of awaited_replies.keys()) if (awaited_replies.size > MAX_AWAITED_REPLIES) awaited_replies.delete(id);
+        // The oldest waits past the cap end with a failure, so no caller waits forever.
+        for (const id of awaited_replies.keys()) if (awaited_replies.size > MAX_AWAITED_REPLIES) hand_reply(reply_to(id, false, "too many calls wait for a reply"));
         return { ok: true, id: message.id };
       },
       watch_session(keys, watcher) {
@@ -855,6 +868,12 @@
       },
       keys_held_by: (win) => key_holders.get(win),
       shut_down() {
+        fail_awaited("the module shut down");
+        try {
+          take_back_hello();
+        } catch (error) {
+          log_once(`the hello was not taken back: ${error}`);
+        }
         for (const step of shut_down_steps.splice(0)) {
           try {
             step();

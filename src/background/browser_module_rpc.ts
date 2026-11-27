@@ -2,7 +2,7 @@
 // It answers the page's calls through the message table, stands in for `tabs.sendMessage` to such a tab, and keeps the snapshots of read-only data the page needs whole. Nothing is written or served while the `browser_module_pages` setting is off.
 // Every call is foreign input from chrome storage: the base channel (`browser_module.ts`) checks the envelope and the size, this file checks the message and builds the sender itself.
 
-import type { ModuleArgs, ModuleReply, PageAnswer, SnapshotPart } from "../shared/browser_module_protocol.ts";
+import type { ModuleArgs, ModuleReply, ModuleStatus, PageAnswer, SnapshotPart } from "../shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_PROTOCOL_VERSION, locked_route_of, MAX_ERROR_CHARS, MAX_STATE_TABS, SNAPSHOT_PART_NAMES, SNAPSHOT_PARTS, validate_snapshot } from "../shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY, CONFIG_STATUS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
@@ -16,6 +16,8 @@ type Sent = { ok: true; id: string } | { ok: false; problem: string };
 // What the locked tabs key holds per tab: the address and document of the page code's first call, and the documents that later loads left.
 type LockedTab = { url?: string; document_id?: number; left?: number[] };
 const LEFT_DOCUMENTS_KEPT = 8;
+// How long a push waits for the module's reply. The module ends its own wait at the same time, so this catches a reply that was lost on the way.
+export const PUSH_ANSWER_MS = 60000;
 
 // Whether both settings are on in the stored config status, for the reason `module_setting_on` gives.
 export async function pages_setting_on(storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> {
@@ -33,6 +35,8 @@ export type BrowserModuleRpcDeps = {
   dispatch: (message: unknown, sender: Sender) => Promise<unknown> | undefined | void;
   // What each snapshot holds now, or undefined for nothing.
   read_part: Record<SnapshotPart, () => Promise<unknown>>;
+  // Runs `run` once after `ms`. The returned function cancels it.
+  later: (run: () => void, ms: number) => () => void;
 };
 
 // A message of the page that the background may take, or undefined. Its own `tab`, `frameId` or sender fields mean nothing: the sender is built apart.
@@ -72,7 +76,7 @@ async function answer_of(run: () => Promise<unknown> | undefined | void): Promis
 
 export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   // The page's answers to pushes that are on their way, by the push's message id. In memory only, as the promise of a `tabs.sendMessage` is.
-  const waiting = new Map<string, { tab_id: number; resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  const waiting = new Map<string, { tab_id: number; resolve: (value: unknown) => void; reject: (error: Error) => void; cancel: () => void }>();
 
   // One queue for every write of this file: the locked marks, their removal, the snapshots and the cleanup when the setting goes off. Two writes of the marks never interleave, so neither loses the other's tab.
   let queue: Promise<unknown> = Promise.resolve();
@@ -108,14 +112,25 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   // Counts the loads of each tab, and every setting off in `epoch`, so a push whose send spans one knows its page went away.
   const loads = new Map<number, number>();
   let epoch = 0;
+  // Every end of a waiting push goes through here, once: the reply, a load, the tab closing, the setting or the module going off, a failed send or the deadline.
+  const settle_waiting = (id: string, why: string): void => {
+    const entry = waiting.get(id);
+    waiting.delete(id);
+    entry?.reject(new Error(why));
+  };
   const drop_waiting = (tab_id: number | undefined, why: string): void => {
     if (tab_id === undefined) epoch += 1;
     else loads.set(tab_id, (loads.get(tab_id) ?? 0) + 1);
-    for (const [id, entry] of waiting) {
-      if (tab_id !== undefined && entry.tab_id !== tab_id) continue;
-      waiting.delete(id);
-      entry.reject(new Error(why));
-    }
+    for (const [id, entry] of [...waiting]) if (tab_id === undefined || entry.tab_id === tab_id) settle_waiting(id, why);
+  };
+
+  // No lock outlives the module: with no module to read the pushes, a locked tab is an ordinary tab again.
+  const end_all_locks = (why: string): Promise<void> => {
+    drop_waiting(undefined, why);
+    locked_urls.clear();
+    return in_turn(async () => {
+      if (Object.keys(await read_locked()).length > 0) await deps.session.remove(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY);
+    });
   };
 
   // The tab closed: its pushes reject, as a `tabs.sendMessage` to it would, and it keeps nothing.
@@ -138,6 +153,8 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       const locked = await read_locked();
       const entry = locked[tab_id];
       if (entry === undefined && Object.keys(locked).length >= MAX_STATE_TABS) return;
+      // A late word about a tab that closed would leave a row no close removes.
+      if (entry === undefined && (await deps.get_tab(tab_id)) === undefined) return;
       const left = entry?.left?.includes(document_id) ? entry.left : [...(entry?.left ?? []), document_id].slice(-LEFT_DOCUMENTS_KEPT);
       const newer_document = entry?.document_id !== undefined && entry.document_id !== document_id;
       if (!newer_document) locked_urls.delete(tab_id);
@@ -172,6 +189,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     const entry = waiting.get(reply.reply_to);
     if (entry === undefined) return;
     waiting.delete(reply.reply_to);
+    entry.cancel();
     if (!reply.ok) return entry.reject(new Error(reply.error ?? "the page refused the message"));
     let answer: unknown;
     try {
@@ -201,16 +219,31 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     const document_id = (await read_locked())[tab_id]?.document_id;
     if (document_id === undefined) throw new Error("the page went away");
     let answer: Promise<unknown> | undefined;
+    let wait_id: string | undefined;
     // The wait is set before the module can see the push, so a fast reply finds it. A load or a setting off during the send sets none and leaves the push unwritten, so the next document never gets it.
-    const sent = await deps.send("page_push", { tab_id, document_id, message: JSON.stringify(message) }, (id) => {
+    const on_id = (id: string): boolean => {
       if (page_left()) return false;
-      answer = new Promise<unknown>((resolve, reject) => waiting.set(id, { tab_id, resolve, reject }));
+      wait_id = id;
+      answer = new Promise<unknown>((resolve, reject) => {
+        const cancel = deps.later(() => settle_waiting(id, "the page did not answer"), PUSH_ANSWER_MS);
+        waiting.set(id, { tab_id, resolve, reject: (error) => (cancel(), reject(error)), cancel });
+      });
       // A load can reject it before this function hands it back. The caller still gets the rejection.
       void best_effort(answer);
       return true;
-    });
+    };
+    let sent: Awaited<ReturnType<BrowserModuleRpcDeps["send"]>>;
+    try {
+      sent = await deps.send("page_push", { tab_id, document_id, message: JSON.stringify(message) }, on_id);
+    } catch (error) {
+      if (wait_id !== undefined) settle_waiting(wait_id, error_text(error));
+      throw error;
+    }
     if (answer === undefined && page_left()) throw new Error(epoch === epoch_at_start ? "the page went away" : "the browser_module_pages setting is off");
-    if (!sent.ok || answer === undefined) throw new Error(sent.ok ? "the push was not sent" : sent.problem);
+    if (!sent.ok || answer === undefined) {
+      if (wait_id !== undefined) settle_waiting(wait_id, sent.ok ? "the push was not sent" : sent.problem);
+      throw new Error(sent.ok ? "the push was not sent" : sent.problem);
+    }
     return answer;
   };
 
@@ -254,5 +287,9 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       drop_waiting(tab_id, "the page went away");
     },
     tab_removed: forget_tab,
+    // Hears each change of the module's status. Anything but a matched module ends every lock and every waiting push.
+    module_status_changed(status: ModuleStatus | undefined): Promise<void> | undefined {
+      return status?.result === "matched" ? undefined : end_all_locks("the browser module is off");
+    },
   };
 }

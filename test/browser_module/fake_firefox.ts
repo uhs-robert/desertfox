@@ -83,6 +83,9 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   const tab_of_browser = new Map<unknown, unknown>();
   let next_tab_id = 1;
   let next_browser_id = 100;
+  // Timer.sys.mjs: a timer runs only when a test calls `run_timers`.
+  const timers = new Map<number, () => void>();
+  let next_timer = 1;
   const firefox = {
     extension: undefined as FakeExtension | undefined,
     fail_import: false,
@@ -225,6 +228,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         },
         ContextualIdentityService: firefox.identity_service,
         PrivateBrowsingUtils: { isWindowPrivate: (win: { private_window?: boolean }) => win.private_window === true, isBrowserPrivate: (browser: { private_browser?: boolean }) => browser.private_browser === true },
+        setTimeout: (run: () => void) => (timers.set(next_timer, run), next_timer++),
+        clearTimeout: (id: number) => void timers.delete(id),
         ...firefox.module_exports,
       };
     },
@@ -356,6 +361,13 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     report,
     from_frame,
     move_tab,
+    // Runs every timer set so far, as if its time had passed.
+    run_timers: () => {
+      const due = [...timers.values()];
+      timers.clear();
+      due.forEach((run) => run());
+    },
+    timer_count: () => timers.size,
     emit_message,
     set_named_pref,
     set_pref,

@@ -314,6 +314,10 @@ const browser_module_rpc = create_browser_module_rpc({
     theme: () => stored_value(THEME_STORAGE_KEY),
     which_key: () => list_keys(browser.storage.local, (id) => registry.get(id), { mode: "normal", prefix: [] }),
   },
+  later: (run, ms) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
 });
 reach_locked_tabs(browser_module_rpc);
 browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.storage_changed(changes, area));
@@ -341,7 +345,10 @@ const browser_module = create_browser_module({
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);
   },
-  on_status: (status) => browser_module_call.status_changed(status),
+  on_status: (status) => {
+    browser_module_call.status_changed(status);
+    void browser_module_rpc.module_status_changed(status)?.catch(warn_and_go("browser_module_rpc.module_status_changed"));
+  },
   read_disabled,
   read_blur_on_load: () => stored_setting_on(browser.storage.local, "blur_on_load"),
   read_keymap: () => stored_keymap(browser.storage.local),

@@ -44,7 +44,11 @@
       ask: "desertfox-browser-module:locked-ask",
     };
     const WENT_AWAY = "the page went away";
+    // How long a page call or a push may wait for its answer. A wait whose answer was lost (a full message list, a frame that died) ends then with an error.
+    const ANSWER_DEADLINE_MS = 60000;
+    const NO_ANSWER = "no answer came";
 
+    const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
     const { extensionStorageSession } = ChromeUtils.importESModule("resource://gre/modules/ExtensionStorage.sys.mjs");
     const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
@@ -106,13 +110,29 @@
       }
     }
 
+    // False when the message could not go: a tab that closed has no frame to tell.
     const send_to = (browser, name, data) => {
       try {
-        browser?.messageManager?.sendAsyncMessage(name, data);
+        if (!browser?.messageManager) return false;
+        browser.messageManager.sendAsyncMessage(name, data);
+        return true;
       } catch (_) {
-        // A tab that closed has no frame to tell.
+        return false;
       }
     };
+
+    // `settle` runs once with the answer, or with an error once the deadline passes.
+    function once_within_deadline(settle) {
+      let timer = 0;
+      const once = (result) => {
+        if (timer === null) return;
+        clearTimeout(timer);
+        timer = null;
+        settle(result);
+      };
+      timer = setTimeout(() => once({ ok: false, error: NO_ANSWER }), ANSWER_DEADLINE_MS);
+      return once;
+    }
 
     // The <browser> that shows the attach's tab now, or undefined once the tab closed.
     function element_of(browser_id) {
@@ -121,12 +141,14 @@
       return browser?.browserId === browser_id ? browser : undefined;
     }
 
+    function end_push(push_id, result) {
+      const push = pushes.get(push_id);
+      pushes.delete(push_id);
+      push?.resolve(result);
+    }
+
     function end_pushes(browser_id) {
-      for (const [id, push] of pushes) {
-        if (browser_id !== undefined && push.browser_id !== browser_id) continue;
-        pushes.delete(id);
-        push.resolve({ ok: false, error: WENT_AWAY });
-      }
+      for (const [id, push] of [...pushes]) if (browser_id === undefined || push.browser_id === browser_id) end_push(id, { ok: false, error: WENT_AWAY });
     }
 
     function forget(browser_id) {
@@ -197,11 +219,15 @@
       const answer = (to, fields) => send_to(to, MESSAGE.answer, { attach_id, call_id, ...fields });
       const attach = attached.get(browser_id);
       if (attach?.attach_id !== attach_id || attach.extension !== desertfox() || typeof message !== "string") return answer(browser, { ok: false, error: WENT_AWAY });
-      const sent = core.send("page_call", { tab_id: attach.tab_id, document_id: attach_id, message }, (reply) => {
-        if (attached.get(browser_id) !== attach) return;
-        answer(element_of(browser_id), reply.ok && typeof reply.value === "string" ? { ok: true, value: reply.value } : { ok: false, error: reply.error ?? "the call failed" });
+      // The frame takes an answer only for an attach it still runs, so the answer goes even after a detach.
+      const settle = once_within_deadline((fields) => {
+        const now = browser_of_tab(attach.tab_id);
+        answer(now?.browserId === browser_id ? now : browser, fields);
       });
-      if (!sent.ok) answer(browser, { ok: false, error: sent.problem });
+      const sent = core.send("page_call", { tab_id: attach.tab_id, document_id: attach_id, message }, (reply) =>
+        settle(reply.ok && typeof reply.value === "string" ? { ok: true, value: reply.value } : { ok: false, error: reply.error ?? "the call failed" }),
+      );
+      if (!sent.ok) settle({ ok: false, error: sent.problem });
     });
 
     // A push: the page's answer text becomes the reply's value, as it came. It goes only to the document the extension named, never to the one that replaced it in the tab.
@@ -212,22 +238,22 @@
       if (!attach || attach.attach_id !== document_id || attach.extension !== desertfox() || !pages_on(attach.extension)) return { ok: false, error: WENT_AWAY };
       const push_id = ++last_push_id;
       return new Promise((resolve) => {
-        pushes.set(push_id, { browser_id, resolve });
-        send_to(browser, MESSAGE.push, { attach_id: attach.attach_id, push_id, message });
+        pushes.set(push_id, { browser_id, resolve: once_within_deadline(resolve) });
+        if (!send_to(browser, MESSAGE.push, { attach_id: attach.attach_id, push_id, message })) end_push(push_id, { ok: false, error: WENT_AWAY });
       });
     });
 
     on(MESSAGE.push_answer, (browser, { push_id, ok, text, error }) => {
       const push = pushes.get(push_id);
       if (push?.browser_id !== browser.browserId) return;
-      pushes.delete(push_id);
-      push.resolve(ok === true && typeof text === "string" ? { ok: true, value: text } : { ok: false, error: typeof error === "string" ? error : "the page refused the message" });
+      end_push(push_id, ok === true && typeof text === "string" ? { ok: true, value: text } : { ok: false, error: typeof error === "string" ? error : "the page refused the message" });
     });
 
     // A snapshot changed: each page of this DesertFox gets the new copy, every page drops the code of an older DesertFox, and the open pages ask again.
     core.watch_session(Object.values(SNAPSHOT_KEYS), (key, value) => {
       const extension = desertfox();
-      if (key === SNAPSHOT_KEYS.config && !pages_on(extension, value)) return detach_all();
+      // Without either snapshot the page code cannot run, so it goes, and the next good snapshot attaches it again.
+      if (!pages_on(extension, key === SNAPSHOT_KEYS.config ? value : undefined)) return detach_all();
       if ([...attached.values()].some((attach) => attach.extension !== extension)) detach_all();
       const part = Object.keys(SNAPSHOT_KEYS).find((name) => SNAPSHOT_KEYS[name] === key);
       for (const [browser_id, attach] of [...attached]) send_to(element_of(browser_id), MESSAGE.snapshot, { attach_id: attach.attach_id, part, snapshot: value });
