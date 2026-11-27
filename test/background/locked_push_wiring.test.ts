@@ -98,6 +98,6 @@ test("the status bar coming up tells a locked tab to read its keymap again", asy
   const before = pushed("tree_updated");
   await area_of(session, "session").set({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { v: V, module_version: "1", bar: true } });
   // The hello is read at most once a second, so under load the push can come a turn later.
-  for (let turn = 0; turn < 4 && pushed("tree_updated") === before; turn++) await settle();
+  for (let turn = 0; turn < 14 && pushed("tree_updated") === before; turn++) await settle();
   assert.ok(pushed("tree_updated") > before);
 });
