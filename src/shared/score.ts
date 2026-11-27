@@ -94,11 +94,13 @@ function match_term(term: string, text: string): Hit | null {
   return { score, positions };
 }
 
-// The share is taken against the shown name, so a family word such as `tab` that matches through a dotted id still counts as full cover. The cap gives an id hit full coverage.
+// An alias hit earns the coverage bonus only when the term spells the whole shown name and runs on into the alias (`tab.` on `tab` through `tab.switch`), which is the family row. Any other alias hit (`th` on `search.threads`) is a hidden id and earns none.
 function name_hit(term: string, name: string, shown_name: string, name_coverage: boolean): Hit | null {
   const hit = match_term(term, name);
   if (!hit || !name_coverage) return hit;
-  return { ...hit, score: hit.score + NAME_COVERAGE_WEIGHT * Math.min(1, term.length / shown_name.length) };
+  const spells_family = term.startsWith(shown_name.toLowerCase()) && name.toLowerCase().startsWith(term);
+  const covered = name === shown_name ? term.length / name.length : spells_family ? 1 : 0;
+  return { ...hit, score: hit.score + NAME_COVERAGE_WEIGHT * covered };
 }
 
 const query_terms = (query: string): string[] => query.toLowerCase().split(/\s+/).filter(Boolean);
