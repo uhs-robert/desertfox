@@ -52,24 +52,25 @@ function locked_browser(transport: Transport) {
     return is_record(value) && is_record(value.modes) ? current_keymap(value as unknown as CompiledKeymap) : undefined;
   };
 
+  const refuse = (): undefined => {
+    refused = true;
+    return undefined;
+  };
+
   // The page's keymap as the background would answer `read_keymap`: the snapshot resolved for the tab's own address. The page's `url` is not read, because the page is not trusted with its address.
   async function read_keymap(message: unknown): Promise<string | undefined> {
     const keymap = snapshot_keymap();
     // No usable keymap (over its cap, never written, another version): the page code would run with no keys at all, so it stops and the module's own keys stay in use, as when the extension unloads.
-    if (keymap === undefined) {
-      refused = true;
-      return undefined;
-    }
+    if (keymap === undefined) return refuse();
     // The same stop for a state that fails or is malformed, or a row the resolver cannot read: an empty tree would leave the page with no keys.
     try {
       const state = (await call({ type: "read_keymap_state", join: is_record(message) && message.join === true })) as KeymapPageState | undefined;
-      if (!is_record(state) || typeof state.address !== "string") throw new Error("no state");
+      if (!is_record(state) || typeof state.address !== "string") return refuse();
       const { address, recording, join, bar } = state;
       const page = page_keymap_of(keymap, [address], { recording: typeof recording === "string" ? recording : undefined, join: join === "insert" ? join : undefined, bar: bar === true });
       return page && JSON.stringify(page);
     } catch {
-      refused = true;
-      return undefined;
+      return refuse();
     }
   }
 
