@@ -94,8 +94,12 @@
       "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: 256 },
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
+      "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: 4096 },
     };
-    const MODULE_TO_EXTENSION_KINDS = { page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
+    const MODULE_TO_EXTENSION_KINDS = {
+      page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 },
+      run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: 512 },
+    };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
     const ENABLED_PREF = "desertfox.browser_module.enabled";

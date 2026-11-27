@@ -110,8 +110,8 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "run"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(validate_message(msg({}), MODULE_TO_EXTENSION_KINDS).ok, false);
   assert.equal(validate_message(msg({}), EXTENSION_TO_MODULE_KINDS).ok, false);

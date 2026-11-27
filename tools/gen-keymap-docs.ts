@@ -8,6 +8,7 @@ import { DEFAULT_KEYMAP } from "../src/shared/keys/default_keymap.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { registry } from "../src/shared/registry/builtin.ts";
 import { render } from "./keymap_docs/render.ts";
+import { locked_keys } from "./keymap_docs/locked_keys.ts";
 import { render_site_rows } from "./keymap_docs/render_site_rows.ts";
 import { splice } from "./keymap_docs/splice.ts";
 
@@ -23,7 +24,7 @@ if (write === check) {
 }
 
 const docs = [
-  { path: doc_path, block: render(DEFAULT_KEYMAP, registry), what: "keymap tables" },
+  { path: doc_path, block: render(DEFAULT_KEYMAP, registry, locked_keys(DEFAULT_KEYMAP, DEFAULT_SITE_ROWS, registry)), what: "keymap tables" },
   // --doc points at a copy of keymap.md, so a run with it leaves the site rows doc alone.
   ...(doc_flag >= 0 ? [] : [{ path: fileURLToPath(new URL("docs/site_rows.md", root)), block: render_site_rows(DEFAULT_SITE_ROWS, DEFAULT_KEYMAP, registry), what: "site row tables" }]),
 ];

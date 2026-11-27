@@ -67,7 +67,16 @@ export type BarTheme = { dark: BarColors; light: BarColors };
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree };
+// The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
+// A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
+export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
+export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
+export type ScopeTree = { children: Record<string, ScopeNode> };
+// The longest key sequence the tree holds and a run request names. A count is no key of it.
+export const MAX_SEQUENCE_KEYS = 8;
+// The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
+export const MAX_TREE_BYTES = 32 * 1024;
 // `bar` says the module built its status bar.
 export type ModuleHello = { v: number; module_version: string; bar?: true };
 
@@ -115,6 +124,33 @@ function check_key_row(row: unknown): Checked<KeyRow> {
   const args = check_module_args(row.id, row.args);
   if (!args.ok) return args;
   return { ok: true, value: { key: row.key, id: row.id, args: args.value } };
+}
+
+// The capture child of a branch (`ANY_KEY` in prefix_tree.ts) has the empty token.
+function tree_problem(node: unknown, depth: number): string | undefined {
+  if (!is_record(node) || !is_record(node.children)) return "a tree branch needs its children";
+  if (depth >= MAX_SEQUENCE_KEYS) return "the tree is too deep";
+  for (const [token, child] of Object.entries(node.children)) {
+    if (token !== "" && !is_key_token(token)) return "a tree key is not a key token";
+    if (child === "forward") continue;
+    if (is_record(child) && "native" in child) {
+      if (!is_module_command_id(child.native) || !check_module_args(child.native, child.args).ok) return "a native leaf names a command the module does not run";
+      const rule = child.count_rule;
+      if (rule !== undefined && rule !== "repeat" && !(is_record(rule) && typeof rule.param === "string" && Object.hasOwn(MODULE_COMMAND_ARGS[child.native], rule.param))) return "a native leaf has a bad count rule";
+      continue;
+    }
+    const problem = tree_problem(child, depth + 1);
+    if (problem !== undefined) return problem;
+  }
+  return undefined;
+}
+
+export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
+  const size = json_bytes(value);
+  if (size === undefined) return bad("the tree is not plain data");
+  if (size > MAX_TREE_BYTES) return bad("the tree is too large");
+  const problem = tree_problem(value, 0);
+  return problem === undefined ? { ok: true, value: value as ScopeTree } : bad(problem);
 }
 
 const is_color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
@@ -183,7 +219,10 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);
   const bar = bar_config_of(value.bar);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }) } };
+  // A bad tree fails the state, as a bad key row does: the module must not take keys from half a tree.
+  const tree = value.tree === undefined ? undefined : validate_scope_tree(value.tree);
+  if (tree && !tree.ok) return tree;
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -225,11 +264,16 @@ export const MESSAGE_ENVELOPE_BYTES = 512;
 // The calls of the in-page DesertFox on a locked page (`locked_shim.ts`, `background/browser_module_rpc.ts`). `message` and the reply's `value` are JSON text that chrome relays as it is. `tab_id` is a fact chrome reads, never a field of the page's message.
 const PAGE_TEXT_BYTES = MAX_KIND_BYTES;
 const PANE_CALL_BYTES = 256;
+const RUN_BYTES = 512;
+// The command text a prompt key prints, with a selection or clipboard text it may take.
+const ADDRESS_BAR_BYTES = 4096;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   // A message of the page for the background. `document_id` names the page's document (chrome's inner window id), so a call from a document that a load left is refused.
   page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES },
+  // A forward leaf of the tree matched: `keys` holds the tokens of its path, joined by one space, and `count` the typed count or 0 for none. The background matches the keys again against its own tree and runs the binding in the active tab. Chrome names no tab.
+  run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`.
@@ -243,6 +287,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.equalize": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
+  // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
+  "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
