@@ -79,7 +79,7 @@ export const SETTINGS_TABLE = {
   hint_remove: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
   // Each frame resolves it against its own address, so a frame of another site follows its own rows.
   blur_on_load: { kind: "boolean", default: false, per_site: true },
-  // A CSS selector. In the window of `blur_on_load`, the first match takes the focus in place of the blur, and the window opens for it alone too. A selector that does not parse and no match leave the plain blur.
+  // A CSS selector. In the load window of `blur_on_load`, the first match takes the focus in place of the blur, and the window opens for it alone too. A selector that does not parse and no match leave the plain blur.
   focus_on_load: { kind: "custom", schema: { type: "string" }, default: "", per_site: true },
   // CSS selectors for what counts as a text field in a frame, so insert mode follows focus there. `editable_add` makes matches count, `editable_remove` makes them not count and wins. With `editable_remove_unsized` the removal holds only while the element has no width.
   editable_add: { kind: "text_list", expectation: "a list of CSS selectors", default: [], per_site: true },
@@ -155,7 +155,7 @@ export const SETTINGS_TABLE = {
   browser_bar_left: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["mode", "pending", "recording"] },
   browser_bar_right: { kind: "enum_list", values: BROWSER_BAR_WIDGETS, default: ["container", "scroll", "tabs"] },
   // `auto` follows the corners of the Firefox panes and falls back to `square` when it finds none.
-  browser_bar_border: { kind: "enum", values: BROWSER_BAR_BORDERS, default: "auto" },
+  browser_bar_border: { kind: "enum", values: BROWSER_BAR_BORDERS, default: "none" },
   history_completion_max: { kind: "number", whole: true, min: 0, default: 10 },
   history_list_max: { kind: "number", whole: true, min: 0, default: 20 },
   // `true` means analog, as it did before the digital face.

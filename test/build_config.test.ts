@@ -98,10 +98,10 @@ test("the browser bar defaults to on, with mode and key state at the left and pa
   assert.equal(settings.browser_bar, true);
   assert.deepEqual(settings.browser_bar_left, ["mode", "pending", "recording"]);
   assert.deepEqual(settings.browser_bar_right, ["container", "scroll", "tabs"]);
-  assert.equal(settings.browser_bar_border, "auto");
+  assert.equal(settings.browser_bar_border, "none");
 });
 
-test("browser_bar_border must be auto, square, round or chamfer", () => {
+test("browser_bar_border must be none, auto, square, round or chamfer", () => {
   const dir = config_dir_with({ "settings.toml": 'browser_bar_border = "wavy"' });
   assert.match(problems_of(dir).join("\n"), /settings\.toml: browser_bar_border: .*chamfer/);
   const ok = config_dir_with({ "settings.toml": 'browser_bar_border = "chamfer"' });

@@ -628,8 +628,9 @@ export const SETTING_COMPLETION: readonly SettingCompletion[] = [
     "settable": true,
     "is_toggle": false,
     "is_list": false,
-    "expectation": "\"auto\", \"square\", \"round\" or \"chamfer\"",
+    "expectation": "\"none\", \"auto\", \"square\", \"round\" or \"chamfer\"",
     "values": [
+      "none",
       "auto",
       "square",
       "round",

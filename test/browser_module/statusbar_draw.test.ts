@@ -276,6 +276,18 @@ test("a chamfer bar is clipped to the chamfer shape, and its border widths agree
   assert.match(plain, /inset:\s*calc\(-1 \* var\(--dfx-bw\)\) 0 0/);
 });
 
+test("the border setting none is the default and draws no ring, diagonal or clip", () => {
+  const fixture = started();
+  fixture.firefox.write_state(state_with({}, { ...BAR_CONFIG, border: "none" }));
+  fixture.run_frames();
+  assert.equal(fixture.bar()!.getAttribute("data-corner"), "none");
+  const css = decodeURIComponent([...fixture.sheets][0]!.replace("data:text/css;charset=utf-8,", ""));
+  const none = css.match(/#desertfox-statusbar\[data-corner="none"\]\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(none, /border:\s*0/);
+  assert.doesNotMatch(css, /\[data-corner="none"\]::after/);
+  assert.doesNotMatch(none, /clip-path:\s*polygon/);
+});
+
 test("a private window without private access draws nothing", () => {
   const fixture = create_bar_fixture({ private_window: true });
   fixture.firefox.start_extension({ private_access: false });

@@ -7,6 +7,7 @@ import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts"
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
 import type { CallResult } from "./browser_module_call.ts";
+import { runs_page_code } from "./browser_module_rpc.ts";
 import { warn_and_go } from "../shared/swallow.ts";
 
 export type ModuleRunDeps = {
@@ -17,7 +18,15 @@ export type ModuleRunDeps = {
   show_refusal: (tab_id: undefined, refusal: Refusal) => Promise<unknown>;
   // The command line over the active tab, for the bare `:`: the panel, else the address bar.
   open_line: () => Promise<unknown>;
+  // The active tab's address and whether `browser_module_pages` is on, for the reason a hint key gives.
+  active_url: () => Promise<string | undefined>;
+  pages_on: () => Promise<boolean>;
 };
+
+// The module sends a hint key only from the PDF viewer, Reader View or an about: page, and only the first one per document. The PDF viewer shows the PDF's own address.
+export function hint_refusal_text(url: string | undefined, pages_on: boolean): string {
+  return url !== undefined && runs_page_code(url) && !pages_on ? "Hints here need :set browser_module_pages true" : "Hints do not run on this page";
+}
 
 const REFUSAL_ID = "browser_module.run";
 const HANDED_TO_ADDRESS_BAR: Outcome = { ok: true, cancelled: true };
@@ -32,6 +41,7 @@ export function create_module_run(deps: ModuleRunDeps) {
     // The kind row checked the shapes: `keys` is text and `count` a whole number.
     const { keys, count } = args as { keys: string; count: number };
     const resolved = resolve_run(await deps.read_keymap(), keys, count, deps.locked_commands);
+    if (!resolved.ok && resolved.hint) return refuse(hint_refusal_text(await deps.active_url(), await deps.pages_on()), true);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
     if (opens_line_leaf(resolved.leaf)) {
       await deps.open_line();

@@ -89,6 +89,26 @@ export async function run_cases(context) {
       await sleep(1500);
       expect((await chrome(`(async () => Services.wm.getMostRecentWindow("navigator:browser").windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`)) === true, "the search box kept the focus with blur_on_load on");
       await switches_one("J on about:preferences just after it opened");
+      // A switch back blurs the box the page focuses as it is shown, though a typed key gave the page sticky activation, which the load window refuses.
+      const ime_enabled = () => chrome(`(async () => Services.wm.getMostRecentWindow("navigator:browser").windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`);
+      const select_prefs = (wanted) => chrome(`(async () => { const w = Services.wm.getMostRecentWindow("navigator:browser"); w.gBrowser.selectedTab = w.gBrowser.tabs.find((tab) => tab.linkedBrowser.currentURI.spec.startsWith("about:preferences") === ${wanted}); })()`);
+      await select_prefs(true);
+      // Past the window this switch opened, which would blur this focus too.
+      await sleep(1200);
+      await in_selected_page(`(win) => { win.document.getElementById("searchInput").focus(); return true; }`);
+      await poll_until("the search box to hold the focus", ime_enabled);
+      await press_keys("x");
+      await poll_until("x to reach the search box", () => in_selected_page(`(win) => win.document.getElementById("searchInput").value === "x" && win.navigator.userActivation.hasBeenActive`));
+      // The page stands in for one that focuses its field on each show, as a chat page does.
+      await in_selected_page(`(win) => { win.document.addEventListener("visibilitychange", () => { if (win.document.hidden) return; win.document.getElementById("searchInput").focus(); win.document.documentElement.dataset.p54ShowFocus = String(Number(win.document.documentElement.dataset.p54ShowFocus ?? 0) + 1); }); return true; }`);
+      await select_prefs(false);
+      await sleep(300);
+      await select_prefs(true);
+      await poll_until("the page to focus its search box on the show", () => in_selected_page(`(win) => win.document.documentElement.dataset.p54ShowFocus === "1"`), { timeout_ms: 3000 });
+      await sleep(300);
+      await poll_until("the search box to lose the focus after the switch back", async () => !(await ime_enabled()), { timeout_ms: 3000 });
+      await switches_one("J on about:preferences just after a switch back");
+      await select_prefs(true);
       await close_selected_tab();
     } finally {
       // The command line opens from a DesertFox page.

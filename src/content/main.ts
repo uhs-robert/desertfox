@@ -182,7 +182,10 @@ let pressed_keys = 0;
 function on_keydown(event: KeyboardEvent): void {
   if (!extension_context_alive()) return stop_listening();
   cancelled_keys.saw_keydown_(event.code);
-  if (!event.isTrusted || event.isComposing) return;
+  if (!event.isTrusted) return;
+  // Before the token filter: a key that starts a composition or has no token (Dead, Process) is the user typing too. A held key's repeats and a modifier alone are not.
+  if (!event.repeat && !/^(Shift|Control|Alt|Meta|AltGraph|OS|CapsLock)$/.test(event.key)) end_blur();
+  if (event.isComposing) return;
   const token = event_to_token(event);
   if (token === null) return;
   if (!event.repeat) pressed_keys++;
@@ -241,8 +244,11 @@ function stop_listening(): void {
   page_listeners.abort();
 }
 
+// Showing the tab again opens a switch window: a page such as a chat app focuses its prompt each time it is shown.
 function on_visibility_change(): void {
-  if (document.hidden) bundles.page_hidden_();
+  if (!document.hidden) return void (page_reply?.site_values?.blur_on_load && open_blur(true));
+  end_blur();
+  bundles.page_hidden_();
 }
 
 // A closed shadow root hides its inner field from the event path, which then ends at the host. The focus settles after the event, so the mode follows it a tick later.
@@ -281,10 +287,13 @@ function follow_field_change(): void {
   field_at_last_key = field;
 }
 
-// `blur_on_load`: the time the window of about 1 s ends, opened at the first install.
-// A key or click gives the page user activation, which ends the window. It also counts input from before this script started, as in any subframe, which starts on its first focus.
-let load_blur_ends_ms = 0;
-// True when it blurred. `blur()` returns undefined, so `!` of it is true: the shortest form for the byte cap.
+// `blur_on_load`: the time the window of about 1 s ends, opened at the first install and each time the tab is shown again.
+// A key that is no repeat, a mouse press, a command run here or the tab going hidden ends it.
+// A load window also refuses while the page has user activation, which counts input from before this script started, as in any subframe, which starts on its first focus.
+// A switch window skips that check: the held Shift+J that switched tabs gives the new tab user activation too.
+let blur_ends_ms = 0;
+let blur_by_switch = false;
+const end_blur = () => (blur_ends_ms = 0);
 // Whether a click or key has reached this window.
 const activated = (): boolean => navigator.userActivation.hasBeenActive;
 
@@ -299,11 +308,18 @@ const load_focus_target = (): HTMLElement | null => {
 };
 
 // Body stands for no focus, so the target can take the focus before the page focuses anything.
+// True when it blurred or moved the focus. A switch only blurs: focus_on_load is for loads.
 const blur_load_focus = (target: EventTarget | null) => {
-  if (Date.now() >= load_blur_ends_ms || navigator.userActivation.isActive || !(target === document.body || is_editable_element(target))) return false;
-  const wanted = load_focus_target();
+  if (Date.now() >= blur_ends_ms || (!blur_by_switch && navigator.userActivation.isActive) || !(target === document.body || is_editable_element(target))) return false;
+  const wanted = !blur_by_switch && load_focus_target();
   wanted ? wanted.focus() : (target as HTMLElement).blur();
   return true;
+};
+
+const open_blur = (by_switch: boolean) => {
+  blur_by_switch = by_switch;
+  blur_ends_ms = Date.now() + 1e3;
+  blur_load_focus(deepest_focused_element());
 };
 
 let matcher_installed = false;
@@ -342,8 +358,7 @@ function install_matcher(reply: PageKeymap | undefined): void {
   // A field the page focused before the reply came already put the frame in insert mode, and the blur's focusout takes it back.
   if (first_install && (reply?.site_values?.blur_on_load || reply?.site_values?.focus_on_load)) {
     load_focus_selector = reply.site_values.focus_on_load ?? "";
-    load_blur_ends_ms = Date.now() + 1e3;
-    blur_load_focus(deepest_focused_element());
+    open_blur(false);
   }
   // The rule's own ignore mode ends with the rule, so removing or rewriting it takes effect on the open page.
   const step = all_off_step(keymap !== undefined, all_off, was_all_off, page_mode.get_mode_());
@@ -404,7 +419,7 @@ function start(): void {
   watch_roots_around_focus();
   listen("pagehide", bundles.page_hidden_, false);
   listen("visibilitychange", on_visibility_change, false, document);
-  listen("mousedown", site_mode.end_on_input_);
+  listen("mousedown", (event: MouseEvent) => (event.isTrusted && end_blur(), site_mode.end_on_input_()));
   site_mode.on_change_ = () => {
     install_tree();
     refresh_mode_indicator();
@@ -487,7 +502,7 @@ function start(): void {
     }
     if (message.type === "run_in_content") {
       // A command's own focus, such as `gi` in a macro replay right after the load, is no page focus.
-      load_blur_ends_ms = 0;
+      end_blur();
       // The router already applied the count, so each invocation runs once. The router shows a failure.
       return run_in_order(message.invocations, message.repeat);
     } else if (message.type === "replay_hold") {

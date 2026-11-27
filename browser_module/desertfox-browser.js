@@ -49,6 +49,8 @@
 //   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
 //   share_hint_drawing(drawing)  In the sandbox: chrome hints lend their label drawing (the layer, the label checks, a whole draw from its parts), so other hints draw alike. The first one stays.
 //   hint_drawing()             In the sandbox: that drawing, or undefined while no feature lent one.
+//   share_locked_page_rule(rule)  In the sandbox: the locked pages feature lends its page rule, rule = { hint_notice(browser) }, so the key taker knows where hints cannot run now. The first one stays.
+//   locked_page_rule()         In the sandbox: that rule, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -611,11 +613,17 @@
         }
       };
       let load_blur_ends = 0;
-      const open_load_blur = () => {
+      let blur_by_switch = false;
+      const open_load_blur = (by_switch = false) => {
+        blur_by_switch = by_switch;
         load_blur_ends = Date.now() + LOAD_BLUR_MS;
       };
-      // Whether the focus is still the page's own: no key or click reached the document yet, and the load window is open.
-      const page_focus = (win) => Date.now() < load_blur_ends && !win.navigator.userActivation?.hasBeenActive;
+      const end_load_blur = () => {
+        load_blur_ends = 0;
+      };
+      // Whether the focus is still the page's own: the window is open, and for a load window no key or click reached the document yet.
+      // A switch window skips the activation check, which never resets: a page used once would never blur again. Input since the switch ends the window instead.
+      const page_focus = (win) => Date.now() < load_blur_ends && (blur_by_switch || !win.navigator.userActivation?.hasBeenActive);
       function report() {
         try {
           const win = content;
@@ -633,6 +641,16 @@
       addEventListener("pageshow", for_top(report), true);
       // A content script that came after DOMContentLoaded shows on this later look.
       addEventListener("load", for_top(() => (open_load_blur(), setTimeout(report, 500))), true);
+      // The tab shown again: a page that focuses its field on each show gets the same blur as on load. The report covers a field that already holds the focus.
+      addEventListener(
+        "visibilitychange",
+        for_top(() => (content.document.hidden ? end_load_blur() : (open_load_blur(true), report()))),
+        true,
+      );
+      // A held key repeats into each tab it switches to, and a modifier alone is no input to the page, so neither ends the window.
+      const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "OS"]);
+      addEventListener("keydown", (event) => event.isTrusted && !event.repeat && !MODIFIER_KEYS.has(event.key) && end_load_blur(), true);
+      addEventListener("mousedown", (event) => event.isTrusted && end_load_blur(), true);
       addEventListener("focusin", report, true);
       addEventListener("focusout", () => setTimeout(report, 0), true);
       addMessageListener("desertfox-browser-module:report-now", report);
@@ -934,6 +952,7 @@
     const shut_down_steps = [];
     const key_holders = new WeakMap();
     let hint_drawing;
+    let locked_page_rule;
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -1073,6 +1092,11 @@
         else hint_drawing = Object.freeze({ ...drawing });
       },
       hint_drawing: () => hint_drawing,
+      share_locked_page_rule(rule) {
+        if (locked_page_rule) log_once("two feature files share a locked page rule, the first one stays");
+        else locked_page_rule = Object.freeze({ ...rule });
+      },
+      locked_page_rule: () => locked_page_rule,
       shut_down() {
         fail_awaited("the module shut down");
         try {

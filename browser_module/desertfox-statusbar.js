@@ -40,7 +40,7 @@
 
     // Copies of the lists in src/shared/browser_module_protocol.ts and src/shared/settings_table.ts. A name that is not here is not drawn.
     const WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"];
-    const BORDERS = ["auto", "square", "round", "chamfer"];
+    const BORDERS = ["none", "auto", "square", "round", "chamfer"];
     const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"];
     // The label of each mode, as src/shared/ui/mode_label.ts has it. Hint and command line mode get a label here because the bar overlaps nothing.
     const MODE_LABELS = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE", media: "MEDIA", grab: "GRAB", item: "ITEM", item_visual: "VISUAL", hint: "HINT", cmdline: "COMMAND" };
@@ -123,7 +123,7 @@
         enabled: raw.enabled === true,
         left: list(raw.bar.left),
         right: list(raw.bar.right),
-        border: BORDERS.includes(raw.bar.border) ? raw.bar.border : "auto",
+        border: BORDERS.includes(raw.bar.border) ? raw.bar.border : "none",
         tabs: is_record(raw.tabs) ? raw.tabs : {},
         theme: is_record(raw.bar_theme) ? raw.bar_theme : undefined,
       };
@@ -344,6 +344,7 @@
   --tf-bevel-line: var(--tf-border);
 }
 #${BAR_ID}[data-textfox]:hover { border-color: var(--tf-accent, currentColor); --tf-bevel-line: var(--tf-accent); }
+#${BAR_ID}[data-corner="none"] { border: 0; padding: 4px 8px; }
 #${BAR_ID}[data-corner="round"] { --dfx-radius: var(--dfx-round, 6px); }
 /* The polygon cuts the bar itself, so the square border corner is gone. overflow is visible here because hidden would clip the ::after to the padding box, and the polygon already clips everything to the border box. */
 #${BAR_ID}[data-corner="chamfer"] {

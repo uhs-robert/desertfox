@@ -91,16 +91,17 @@
     }
     return void 0;
   }
-  function line_keys_problem(line_keys) {
-    if (line_keys === void 0) return void 0;
+  function key_paths_problem(paths, name) {
+    if (paths === void 0) return void 0;
     const fits = (path) => typeof path === "string" && path.split(" ").length <= MAX_SEQUENCE_KEYS && path.split(" ").every(is_key_token);
-    return Array.isArray(line_keys) && line_keys.every(fits) ? void 0 : "the line keys are not key paths";
+    return Array.isArray(paths) && paths.every(fits) ? void 0 : `the ${name} keys are not key paths`;
   }
   function validate_scope_tree(value) {
     const size = json_bytes(value);
     if (size === void 0) return bad("the tree is not plain data");
     if (size > MAX_TREE_BYTES) return bad("the tree is too large");
-    const problem = tree_problem(value, 0) ?? line_keys_problem(value.line_keys);
+    const root = value;
+    const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
     return problem === void 0 ? { ok: true, value } : bad(problem);
   }
   var MAX_KIND_BYTES = 64 * 1024;
@@ -277,6 +278,26 @@
     const ignored = /* @__PURE__ */ new WeakMap();
     const holds = /* @__PURE__ */ new Map();
     const is_ignored = (browser2) => ignored.get(browser2) === browser2.innerWindowID;
+    const NOTICE_LEAF = "notice";
+    const noticed = /* @__PURE__ */ new WeakMap();
+    const hint_notice_of = (browser2) => core2.locked_page_rule?.()?.hint_notice(browser2);
+    function with_notice_leaves(tree) {
+      for (const path of Array.isArray(tree.hint_keys) ? tree.hint_keys : []) {
+        const tokens = path.split(" ");
+        let node = tree;
+        for (const [index, token] of tokens.entries()) {
+          const child = Object.hasOwn(node.children, token) ? node.children[token] : void 0;
+          const last = index === tokens.length - 1;
+          if (child === void 0) {
+            const added = last ? NOTICE_LEAF : { children: {} };
+            Object.defineProperty(node.children, token, { value: added, enumerable: true, writable: true, configurable: true });
+            node = added;
+          } else if (!last && typeof child === "object" && "children" in child) node = child;
+          else break;
+        }
+      }
+      return tree;
+    }
     function end_hold(win) {
       holds.get(win)?.stop();
       holds.delete(win);
@@ -321,12 +342,13 @@
       }
       return text;
     }
-    function walk_for(win, browser2, text) {
+    function walk_for(win, browser2, text, notice) {
       const walk = walks.get(win);
-      if (walk?.text === text && walk.browser === browser2 && walk.inner === browser2.innerWindowID) return walk;
-      const tree = JSON.parse(text);
+      if (walk?.text === text && walk.notice === notice && walk.browser === browser2 && walk.inner === browser2.innerWindowID) return walk;
+      const parsed = JSON.parse(text);
+      const tree = notice === void 0 ? parsed : with_notice_leaves(parsed);
       const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
-      const fresh = { text, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: void 0 };
+      const fresh = { text, notice, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: void 0 };
       walks.set(win, fresh);
       return fresh;
     }
@@ -348,6 +370,13 @@
       else if (walk.line_keys.has(keys)) start_hold(win, walk.browser);
       return sent.ok;
     }
+    function notice_once(result, browser2) {
+      if (noticed.get(browser2) === browser2.innerWindowID) return true;
+      const sent = core2.send("run", { keys: path_of(result).join(" "), count: 0 });
+      if (sent.ok) noticed.set(browser2, browser2.innerWindowID);
+      else core2.log_once(`a hint key was not sent to DesertFox: ${sent.problem}`);
+      return true;
+    }
     function take_key(context) {
       const { window: win, browser: browser2, event, tree } = context;
       const token = event_to_token(event);
@@ -367,7 +396,7 @@
         return true;
       }
       const text = tree === void 0 ? "" : tree_text(tree);
-      const walk = text === "" ? void 0 : walk_for(win, browser2, text);
+      const walk = text === "" ? void 0 : walk_for(win, browser2, text, hint_notice_of(browser2));
       if (!walk && context.row_runs) return void 0;
       const idle = walk === void 0 || walk.pending === void 0;
       if (idle && token === IGNORE_TOGGLE_KEY && !walk?.matcher.binds_after_("normal", [], token)) {
@@ -390,6 +419,7 @@
       const leaf = result.leaf.scope;
       if (result.register_keys_ !== void 0) return true;
       if (leaf === "forward") return forward(result, walk, win);
+      if (leaf === NOTICE_LEAF) return notice_once(result, browser2);
       return run_native(leaf, result, context);
     }
     function pending_in(win) {
