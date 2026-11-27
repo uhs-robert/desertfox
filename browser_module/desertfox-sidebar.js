@@ -230,12 +230,24 @@
     }
 
     // A remembered page counts while its tab is shown: selected, or the other half of the selected tab's split view.
+    // A docked toolbox stays connected while its tab is in the background. It sits in its tab's browser container, so it counts while that tab is shown.
     function still_shown(win, element) {
       if (!element?.isConnected) return false;
-      if (element.localName !== "browser") return true;
-      const tab = win.gBrowser.getTabForBrowser(element);
       const selected = win.gBrowser.selectedTab;
-      return !!tab && (tab === selected || (!!tab.splitview && tab.splitview === selected?.splitview));
+      if (element.localName === "browser") {
+        const tab = win.gBrowser.getTabForBrowser(element);
+        return !!tab && (tab === selected || (!!tab.splitview && tab.splitview === selected?.splitview));
+      }
+      const frame = frame_in_window(win, element);
+      const shown_tabs = Array.isArray(selected?.splitview?.tabs) ? selected.splitview.tabs : [selected];
+      return shown_tabs.some((tab) => win.gBrowser.getBrowserContainer?.(tab?.linkedBrowser)?.contains?.(frame) === true);
+    }
+
+    // The frame in the window's own document that holds `element`, through the frames of a toolbox and its tools.
+    function frame_in_window(win, element) {
+      let node = element;
+      while (node && node.ownerDocument !== win.document) node = node.ownerDocument?.defaultView?.browsingContext?.embedderElement;
+      return node;
     }
 
     function leave_to_page(win) {

@@ -136,6 +136,15 @@ function setup({ written = state() as unknown, vertical = false, panel_url = HIS
   group.labelElement = label;
   strip_tabs[1]!.group = group;
   const removed: unknown[] = [];
+  // Each tab's browser container, where Firefox docks the tab's DevTools.
+  const containers = new Map<unknown, FakeNode>();
+  const container_of = (each_tab: { browser: unknown }) => {
+    const contains = (node: FakeNode | null): boolean => !!node && (node === container || contains(node.parentElement));
+    const container = make_node(main_doc, "vbox", { contains });
+    Object.assign(each_tab, { linkedBrowser: each_tab.browser });
+    containers.set(each_tab.browser, container);
+    return container;
+  };
   const all_tabs_panel: number[] = [];
   const tab_container = { verticalMode: vertical, ariaFocusableItems: [strip_tabs[0], label, strip_tabs[1], strip_tabs[2]], ariaFocusedItem: null as FakeNode | null };
   const win = fake.win as unknown as Record<string, unknown> & { gBrowser: Record<string, unknown> };
@@ -162,6 +171,7 @@ function setup({ written = state() as unknown, vertical = false, panel_url = HIS
     selectedBrowser: page,
     removeTab: (each: unknown) => removed.push(each),
     removeTabs: (list: unknown[]) => removed.push(...list),
+    getBrowserContainer: (each: unknown) => containers.get(each),
   });
   firefox.Services.wm = { getEnumerator: () => [win] };
   fake.load();
@@ -190,7 +200,7 @@ function setup({ written = state() as unknown, vertical = false, panel_url = HIS
   const run_timers = () => {
     while (timers.length > 0) timers.splice(0).forEach((run) => run());
   };
-  return { firefox, win, fake, main_doc, panel_doc, page, tab, strip_tabs, label, group, tab_container, removed, all_tabs_panel, typed, timers, run_timers, focus, press, root, own, watchers };
+  return { firefox, win, fake, main_doc, panel_doc, page, tab, container_of, strip_tabs, label, group, tab_container, removed, all_tabs_panel, typed, timers, run_timers, focus, press, root, own, watchers };
 }
 
 const panel_row = (doc: FakeDocument, more: Partial<FakeNode> = {}) => make_node(doc, "sidebar-tab-row", { attributes: { tabindex: "0" }, ...more });
@@ -383,8 +393,8 @@ test("in the vertical strip h folds the focused tab's group onto its label and l
 });
 
 test("Escape goes back to the page region that had the focus, and to the shown page when that one is hidden", () => {
-  const { win, fake, main_doc, page, panel_doc, focus, press } = setup();
-  const devtools = make_node(main_doc, "iframe", { className: "devtools-toolbox-bottom-iframe" });
+  const { win, fake, main_doc, page, tab, container_of, panel_doc, focus, press } = setup();
+  const devtools = make_node(main_doc, "iframe", { className: "devtools-toolbox-bottom-iframe", parentElement: container_of(tab) });
   focus(devtools);
   focus(panel_row(panel_doc));
   assert.ok(press("Escape").prevented);
@@ -403,6 +413,21 @@ test("Escape goes back to the page region that had the focus, and to the shown p
   focus(panel_row(panel_doc));
   press("Escape");
   assert.equal(other_page.focused, 1);
+});
+
+test("Escape skips a docked DevTools whose tab went to the background", () => {
+  const { win, fake, main_doc, tab, container_of, panel_doc, focus, press } = setup();
+  const devtools = make_node(main_doc, "iframe", { className: "devtools-toolbox-bottom-iframe", parentElement: container_of(tab) });
+  focus(devtools);
+  const other = fake.add_tab();
+  container_of(other);
+  const other_page = other.browser as unknown as FakeNode;
+  Object.assign(other_page, { ownerDocument: main_doc, isConnected: true, focused: 0, focus: () => (other_page.focused as number)++ });
+  win.gBrowser.selectedTab = other.tab;
+  win.gBrowser.selectedBrowser = other_page;
+  focus(panel_row(panel_doc));
+  assert.ok(press("Escape").prevented);
+  assert.deepEqual([devtools.focused, other_page.focused], [0, 1]);
 });
 
 test("an action that meets a changed Firefox leaves the key to Firefox and logs one line", () => {
