@@ -25,8 +25,21 @@ class InstallPolicyCase(unittest.TestCase):
         self.artifacts = os.path.join(self.tmp.name, "web-ext-artifacts")
         os.makedirs(self.artifacts)
 
+    def stub_curl(self, fixed_asset_exists):
+        """Put a curl on PATH that answers the HEAD check for the fixed asset and serves updates.json."""
+        bin_dir = os.path.join(self.tmp.name, "bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        updates = json.dumps({"addons": {"desertfox@uhs-robert": {"updates": [{"update_link": BETA_URL}]}}})
+        head_status = 0 if fixed_asset_exists else 22
+        with open(os.path.join(bin_dir, "curl"), "w") as handle:
+            handle.write(f"#!/bin/sh\ncase \"$*\" in *-sfIL*) exit {head_status};; esac\necho '{updates}'\n")
+        os.chmod(os.path.join(bin_dir, "curl"), 0o755)
+        self.extra_path = bin_dir
+
     def dry_run(self, *args):
         env = dict(os.environ, DESERTFOX_POLICIES_FILE=self.policies)
+        if getattr(self, "extra_path", None):
+            env["PATH"] = self.extra_path + os.pathsep + env["PATH"]
         result = subprocess.run(["bash", SCRIPT, "--dry-run", *args], cwd=self.tmp.name, env=env, capture_output=True, text=True)
         return result
 
@@ -44,8 +57,22 @@ class InstallPolicyCase(unittest.TestCase):
         self.assertIs(policies["DisableTelemetry"], True)
 
     def test_beta_defaults_to_the_fixed_channel_asset(self):
+        self.stub_curl(fixed_asset_exists=True)
         entry = self.settings("beta")["ExtensionSettings"]["desertfox@uhs-robert"]
         self.assertEqual(entry["install_url"], "https://github.com/uhs-robert/desertfox/releases/download/beta-channel/desertfox-beta.xpi")
+
+    def test_beta_falls_back_to_the_updates_json_url_while_the_asset_is_missing(self):
+        self.stub_curl(fixed_asset_exists=False)
+        result = self.dry_run("beta")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("does not exist yet", result.stderr)
+        entry = json.loads(result.stdout)["policies"]["ExtensionSettings"]["desertfox@uhs-robert"]
+        self.assertEqual(entry["install_url"], BETA_URL)
+
+    def test_explicit_url_skips_the_asset_check(self):
+        self.stub_curl(fixed_asset_exists=False)
+        entry = self.settings("beta", BETA_URL)["ExtensionSettings"]["desertfox@uhs-robert"]
+        self.assertEqual(entry["install_url"], BETA_URL)
 
     def test_workflow_uploads_a_file_named_like_the_default_url(self):
         workflow = os.path.join(HOST_DIR, "..", ".github", "workflows", "beta.yml")
