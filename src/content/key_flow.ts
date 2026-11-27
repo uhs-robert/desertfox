@@ -146,12 +146,14 @@ export function create_key_flow(deps: KeyFlowDeps) {
     held_keys.some((held) => held.token_ === "<Backspace>" || held.token_ === "<Escape>") ||
     active.binds_after_(mode, held_tokens(), token);
 
+  // A held key's repeat in a field before the keymap reply is dropped, so a page that focuses its field on load does not get a letter before the load blur runs. A real press or click sets user_input_seen_ first, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
+  const drops_repeat = (repeat: boolean | undefined): boolean => !!repeat && !matcher && !deps.user_input_seen_() && deps.in_editable_field_();
+
   const hold = (token: string, on_replay_pass_?: OnReplayPass, repeat?: boolean, physical?: string | null): KeyDecision => {
     const mode = deps.get_mode_();
     const typed_token = token;
     token = layout_token(token, physical);
-    // A held key's repeat in a field before the keymap reply is dropped, so a page that focuses its field on load does not get a letter before the load blur runs. A real press or click sets user_input_seen_ first, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
-    if (repeat && !matcher && !deps.user_input_seen_() && deps.in_editable_field_()) return "cancel";
+    if (drops_repeat(repeat)) return "cancel";
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
     if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
@@ -245,6 +247,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
       return decide(matcher, layout_token(token, physical), repeat, physical);
     },
     reset_sequence_,
+    // The caller leaves the press record of a dropped repeat alone: the queued press of the same key still owns it.
+    drops_repeat_: drops_repeat,
     // The window lost the focus to another frame or the browser.
     end_hold_: () => holding && reset_sequence_(),
     layout_token_: layout_token,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { is_editable_element, set_editable_rules, takes_typing } from "../src/content/editable.ts";
 import { args_for_count } from "../src/content/invocation_args.ts";
-import { create_cancelled_keys } from "../src/content/cancelled_keys.ts";
+import { create_cancelled_keys, type HeldPress } from "../src/content/cancelled_keys.ts";
 import { cancels_keypress, cancels_keyup, press_target, replay_key_to_page } from "../src/content/replay_key.ts";
 import { cancels_unbound_key, create_key_flow } from "../src/content/key_flow.ts";
 import { match_regex_source, matches_any_address, matches_pattern } from "../src/shared/match_pattern.ts";
@@ -33,11 +33,11 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }, input_seen = false) {
+function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }, input_seen = false, field: { on: boolean } | undefined = undefined) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
-    in_editable_field_: () => in_field,
+    in_editable_field_: () => field?.on ?? in_field,
     user_input_seen_: () => input_seen,
     escape_to_page_: () => escape_to_page,
     get_mode_: state.get_mode_,
@@ -853,8 +853,10 @@ test("layout fallback: a key held before the keymap arrives reaches a sink with 
 });
 
 test("before the keymap reply, a held key's repeat in a field is dropped unless the user has acted", () => {
-  const fresh = make_flow(true).flow;
+  const { flow: fresh, ran } = make_flow(true);
   assert.equal(fresh.handle_token_("J", true), "cancel", "a repeat in an autofocused field is cancelled");
+  fresh.set_matcher_(create_matcher(keymap));
+  assert.deepEqual(ran, [], "the dropped repeat is not held for replay");
   assert.equal(fresh.handle_token_("J", false), "pass", "a first press still reaches the field");
   assert.equal(make_flow(true, false, undefined, { on: false }, true).flow.handle_token_("j", true), "pass", "the user focused the field: repeats type");
   assert.equal(make_flow(false).flow.handle_token_("j", true), "cancel", "outside a field a repeat waits as before");
@@ -865,4 +867,21 @@ test("after the keymap reply, a repeat in a field passes", () => {
   flow.set_matcher_(create_matcher(keymap));
   state.focus_entered_editable_();
   assert.equal(flow.handle_token_("j", true), "pass");
+});
+
+test("a dropped repeat leaves the press record of the queued press of the same key", () => {
+  const field = { on: false };
+  const { flow } = make_flow(false, false, undefined, { on: false }, false, field);
+  const keys = create_cancelled_keys();
+  keys.saw_keydown_("KeyJ");
+  const queued: HeldPress = { keyup_seen_: false };
+  assert.equal(flow.handle_token_("J", true), "cancel");
+  keys.record_keydown_("KeyJ", "cancel", queued);
+  field.on = true;
+  const later: HeldPress = { keyup_seen_: false };
+  const dropped = flow.drops_repeat_(true);
+  assert.equal(dropped, true);
+  keys.record_keydown_("KeyJ", flow.handle_token_("J", true), dropped ? undefined : later);
+  assert.equal(keys.release_for_replay_("KeyJ", queued), false);
+  assert.equal(keys.take_keyup_("KeyJ"), false, "the queued press was released, so the real keyup passes");
 });
