@@ -269,6 +269,7 @@ const GROUP_TITLES: Record<string, string> = {
   scroll: "Scroll",
   session: "Sessions",
   settings: "Settings",
+  sidebar: "Browser sidebar",
   tab: "Tabs",
   tabgroup: "Tab groups",
   text: "Text fields",
