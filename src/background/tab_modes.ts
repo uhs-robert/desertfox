@@ -159,6 +159,12 @@ export function create_tab_modes(storage: ModeStorage) {
         if (load_started) await storage.set({ [key_of(tab_id)]: { awaiting_commit: true } satisfies TabModeRecord });
         else await storage.remove(key_of(tab_id));
       }),
+    // A discarded tab runs no content script until it restores, so its `live` mark must not make the browser module defer keys to it. The rest of the record stays: the restored page's own report replaces it.
+    forget_live: (tab_id: number): Promise<void> =>
+      in_turn(async () => {
+        const { live, ...rest } = await read(tab_id);
+        if (live) await storage.set({ [key_of(tab_id)]: rest });
+      }),
     // Tab ids are reused after a browser restart, so a new background run starts from nothing.
     forget_all: () =>
       in_turn(async () => {
