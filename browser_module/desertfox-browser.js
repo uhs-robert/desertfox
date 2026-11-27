@@ -30,8 +30,13 @@
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
+//   ime_in_field(win)          In the sandbox: whether the window's input state says a text field has the focus, which covers a field in a page of another process.
 //   type_key(win, key, still_holds)  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
+//   hold_keys(win, owner)      In the sandbox: claim every key of `win` for the feature named `owner`. A feature's key listener leaves a key alone while another owner holds its window.
+//                              Listener order cannot settle this, because Firefox calls the newest window watcher first.
+//   release_keys(win, owner)   In the sandbox: end `owner`'s hold on `win`. A release by another owner does nothing.
+//   keys_held_by(win)          In the sandbox: the owner holding the keys of `win`, or undefined.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -110,10 +115,17 @@
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
       "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: 4096 },
+      "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
+      "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
+      "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 },
       run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: 512 },
+      "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: 4096 },
+      "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: 256 },
+      "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
@@ -771,6 +783,7 @@
 
     // Turning off for the session also takes every window's listener away, and every feature's.
     const shut_down_steps = [];
+    const key_holders = new WeakMap();
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -858,10 +871,18 @@
       is_field,
       deep_active,
       focused_element,
+      ime_in_field,
       type_key,
       on_shut_down(fn) {
         shut_down_steps.push(fn);
       },
+      hold_keys(win, owner) {
+        key_holders.set(win, owner);
+      },
+      release_keys(win, owner) {
+        if (key_holders.get(win) === owner) key_holders.delete(win);
+      },
+      keys_held_by: (win) => key_holders.get(win),
       shut_down() {
         for (const step of shut_down_steps.splice(0)) {
           try {

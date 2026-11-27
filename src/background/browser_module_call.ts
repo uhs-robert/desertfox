@@ -73,6 +73,9 @@ export type ModuleCall = ReturnType<typeof create_module_call>;
 let channel_send: ModuleCallDeps["send"] = async () => ({ ok: false, problem: NEEDS_MODULE });
 let channel_withdraw: ModuleCallDeps["withdraw"] = async () => undefined;
 
+// A push gets no reply, so it skips the wait of `call`. Refused like a call when no channel is attached.
+export const browser_module_push = (kind: string, args: ModuleArgs): ReturnType<ModuleCallDeps["send"]> => channel_send(kind, args);
+
 export function attach_browser_module(channel: Pick<ModuleCallDeps, "send" | "withdraw">): void {
   channel_send = channel.send;
   channel_withdraw = channel.withdraw;
