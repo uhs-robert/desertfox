@@ -243,7 +243,8 @@
           return done();
         }
       }
-      const { toolbox } = docked_toolbox(tab);
+      const { toolbox, problem } = docked_toolbox(tab);
+      if (problem === NOT_SUPPORTED) return refuse(NOT_SUPPORTED);
       if (toolbox?.hostType === direction) return focus_toolbox(toolbox);
       const sidebar_side = sidebar_side_of(win);
       if (sidebar_side === undefined) return refuse(NOT_SUPPORTED);

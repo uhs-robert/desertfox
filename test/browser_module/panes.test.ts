@@ -483,3 +483,12 @@ test("pane.focus_direction refuses when nothing is on that side, and when the pa
   assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), refused(NOT_SUPPORTED));
   assert.deepEqual(world.calls, []);
 });
+
+test("pane.focus_direction refuses past the panes when Firefox lacks the DevTools shim, and still moves between panes", async () => {
+  const world = pane_world();
+  world.firefox.module_exports = {};
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), refused(NOT_SUPPORTED));
+  world.split_first_two();
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), OK);
+  assert.deepEqual(world.calls, ["select b", "focus page b"]);
+});
