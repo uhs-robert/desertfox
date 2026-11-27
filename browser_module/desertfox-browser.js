@@ -23,7 +23,7 @@
 //   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
 //   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
-//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), reset(win?), pending(win), take_held(win, end)? }.
+//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), reset(win?), pending(win), take_held(win, end)?, ignores(browser)? }. ignores says the tab passes every key to the page, so Escape is left alone there.
 //                              key gets every key the module may take on a page, after the guards: context = { window, browser, tab, event, tree, row_runs }, `tree` the state's raw tree or undefined,
 //                              `row_runs` whether a single-key row would run the key. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
 //                              reset(win) drops what the taker holds half typed in `win`, or in every window with no `win`: the core calls it for a key a guard refused and when the module or the toolbar switch goes off.
@@ -433,6 +433,7 @@
       const state = state_for(win);
       // A key the module may not take here ends a half-typed sequence, as a key DesertFox does not see ends it in a page.
       if (!state) return void key_taker?.reset(win);
+      if (escape_blurs_field(win, page, state, event)) return;
       const row = state.keys.get(token_of(event));
       const command = row && commands.get(row.id);
       const args = command && checked_args(command, row.args);
@@ -447,6 +448,27 @@
       command.run({ window: win, browser: page.browser, tab, args, repeat: event.repeat });
       event.preventDefault();
       event.stopPropagation();
+    }
+
+    // Escape leaves a field on a page the module handles, as it does on a web page. The blur is the module's own: the page's Escape does not run, so a search box keeps its text.
+    // A feature holding the window's keys or an ignored tab keeps Escape for itself. Returns whether the key was used.
+    function escape_blurs_field(win, page, state, event) {
+      if (event.key !== "Escape" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+      if (key_holders.has(win) || key_taker?.ignores?.(page.browser) === true) return false;
+      const tab = win.gBrowser.getTabForBrowser(page.browser);
+      if (!left_to_module(state, page.browser, tab)) return false;
+      if (page.document) {
+        const focused = deep_active(page.document);
+        if (!is_field(focused)) return false;
+        focused.blur();
+      } else {
+        if (!in_field(win, page, event)) return false;
+        page.browser.messageManager.sendAsyncMessage(BLUR_MESSAGE, { inner: page.browser.innerWindowID, escape: true });
+      }
+      key_taker?.reset(win);
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
     }
 
     // The taker sees a key only where a row could run: not in a field, and on a tab left to the module. `row_runs` says a single-key row would run the key.
@@ -617,7 +639,7 @@
       addMessageListener("desertfox-browser-module:blur", ({ data }) => {
         try {
           const win = content;
-          if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || !page_focus(win)) return;
+          if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner || (data.escape !== true && !page_focus(win))) return;
           const focused = deep_active(win.document);
           if (is_field(focused)) focused.blur();
         } catch (_) {

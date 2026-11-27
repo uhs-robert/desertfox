@@ -68,6 +68,15 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
+  await run_case("the bar shows INSERT while a locked page's field has the focus, NORMAL after Escape, and NORMAL on a DesertFox page", async () => {
+    await open_tab("about:preferences");
+    await poll_until("INSERT in the bar with the search box focused", left_is("INSERT"), { timeout_ms: 8000 });
+    await press_keys("-k", "Escape");
+    await poll_until("NORMAL after Escape", left_is("NORMAL"));
+    await close_selected_tab();
+    await poll_until("NORMAL on the DesertFox page", left_is("NORMAL"));
+  });
+
   await run_case("turning the setting off removes the bar and brings the corner badge back", async () => {
     await run_line(":set browser_bar false");
     await poll_until("the bar to hide", async () => (await bar_now()) === null);

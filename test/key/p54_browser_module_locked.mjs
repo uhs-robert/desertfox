@@ -110,6 +110,44 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
+  const field_has_focus = () => chrome(`(async () => Services.wm.getMostRecentWindow("navigator:browser").windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`);
+
+  await run_case("Escape in the about:preferences search box blurs it and stops the page's own Escape, then J switches one tab", async () => {
+    await home("bm_prefs_escape");
+    await open_tab("about:preferences");
+    await poll_until("the search box to hold the focus", field_has_focus);
+    await press_keys("x");
+    await press_keys("-k", "Escape");
+    await poll_until("the search box to lose the focus", async () => !(await field_has_focus()));
+    const typed = await in_selected_page(`(win) => { const box = win.document.getElementById("searchInput"); return box?.value ?? null; }`);
+    expect(typed === "x", `the search box holds ${JSON.stringify(typed)}, so the page's Escape ran`);
+    await switches_one("J after Escape on about:preferences");
+    await close_selected_tab();
+  });
+
+  await run_case("Escape in a field in a content process blurs it, and Escape in an ignored tab reaches the page", async () => {
+    await home("bm_remote_escape");
+    await open_tab(`data:text/html,${encodeURIComponent('<!doctype html><input id="f"><script>window.escapes = 0; document.addEventListener("keydown", (e) => e.key === "Escape" && window.escapes++, true)</script>')}`);
+    await focus_page();
+    const focus_field = () => in_selected_page(`(win) => { win.document.getElementById("f").focus(); return true; }`);
+    await focus_field();
+    await poll_until("the field to hold the focus", field_has_focus);
+    await press_keys("-k", "Escape");
+    await poll_until("the field to lose the focus", async () => !(await field_has_focus()));
+    expect((await in_selected_page(`(win) => win.wrappedJSObject.escapes`)) === 0, "the page saw the Escape that blurred its field");
+    await switches_one("J after Escape in a content process page");
+    await switches_one("K back to the page", ["K"]);
+    // Ignore the tab with Shift+Escape: its keys, Escape too, go to the page. The toggle is read only outside a field, so ignore the tab before the field takes the focus.
+    await focus_page();
+    await press_keys("-M", "shift", "-k", "Escape", "-m", "shift");
+    await sleep(100);
+    await focus_field();
+    await press_keys("-k", "Escape");
+    await poll_until("the page to see Escape in an ignored tab", async () => (await in_selected_page(`(win) => win.wrappedJSObject.escapes`)) >= 1);
+    expect(await field_has_focus(), "Escape blurred the field in an ignored tab");
+    await close_selected_tab();
+  });
+
   await run_case("h and l scroll a wide page sideways", async () => {
     await home("bm_wide");
     await open_tab(`data:text/html,${encodeURIComponent('<!doctype html><div style="width:5000px;height:4000px"></div>')}`);
