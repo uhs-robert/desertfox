@@ -7,12 +7,39 @@
   var BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY = "desertfox_browser_module_snapshot_theme";
   var BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY = "desertfox_browser_module_snapshot_which_key";
 
+  // src/shared/firefox_pages.ts
+  var FIREFOX_PAGE_ADDRESSES = {
+    settings: "about:preferences",
+    "settings-general": "about:preferences#general",
+    "settings-home": "about:preferences#home",
+    "settings-search": "about:preferences#search",
+    "settings-privacy": "about:preferences#privacy",
+    "settings-sync": "about:preferences#sync",
+    addons: "about:addons",
+    downloads: "about:downloads",
+    config: "about:config",
+    profiles: "about:profiles",
+    support: "about:support",
+    debugging: "about:debugging#/runtime/this-firefox",
+    logins: "about:logins",
+    processes: "about:processes",
+    memory: "about:memory",
+    policies: "about:policies",
+    crashes: "about:crashes",
+    protections: "about:protections"
+  };
+  var MODULE_ONLY_FIREFOX_PAGES = ["addons-shortcuts"];
+  var FIREFOX_PAGES = [...Object.keys(FIREFOX_PAGE_ADDRESSES), ...MODULE_ONLY_FIREFOX_PAGES];
+  var HOST_ONLY_FIREFOX_PAGES = ["logins"];
+  var MODULE_FIREFOX_PAGES = FIREFOX_PAGES.filter((page) => !HOST_ONLY_FIREFOX_PAGES.includes(page));
+
   // src/shared/browser_module_protocol.ts
   var MAX_KEY_CHARS = 24;
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
   var PANE_DIRECTIONS = ["left", "right"];
   var PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
+  var FIREFOX_PAGE_WHERE = ["tab", "here"];
   var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
   var MAX_DEVTOOLS_KEY_ROWS = 8;
   var DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
@@ -60,6 +87,8 @@
     if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? void 0 : `must be one of ${PANE_REGIONS.join(", ")}`;
     if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
     if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
+    if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
+    if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
     if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;

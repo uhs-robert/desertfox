@@ -130,9 +130,9 @@ class PageTableTest(FirefoxPageCase):
                 self.assertEqual(self.stub_record()["argv"], [self.exe, "--profile", self.profile, url])
 
     def test_the_table_holds_only_about_pages(self):
-        self.assertEqual(len(host.FIREFOX_PAGES), 13)
+        self.assertEqual(len(host.FIREFOX_PAGES), 18)
         for url in host.FIREFOX_PAGES.values():
-            self.assertRegex(url, r"^about:[a-z]+(#/[a-z/-]+)?$")
+            self.assertRegex(url, r"^about:[a-z]+(#/[a-z/-]+|#[a-z]+)?$")
 
     def test_an_unknown_page_is_refused_and_nothing_runs(self):
         for page in ("about:config", "--profile", "settings ", "", None, 3, ["settings"]):

@@ -7,7 +7,10 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { grant_hash, GRANTABLE_PERMISSIONS } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
-import { FIREFOX_PAGES, make_open_firefox_page_handler } from "./firefox_page.ts";
+import { browser_module_call } from "../background/browser_module_call.ts";
+import { BROWSER_MODULE_HELLO_STORAGE_KEY, FIREFOX_PAGE_WHERE, validate_module_hello } from "../shared/browser_module_protocol.ts";
+import { FIREFOX_PAGES, MODULE_FIREFOX_PAGES } from "../shared/firefox_pages.ts";
+import { FIREFOX_PAGE_OPEN_KIND, make_open_firefox_page_handler } from "./firefox_page.ts";
 import { open_help_url } from "./help_tab.ts";
 
 async function open_grant_panel(ctx: Parameters<typeof open_help_url>[0], permission: GrantablePermission): Promise<void> {
@@ -55,7 +58,12 @@ define("permissions.grant", {
   run: (ctx, args) => open_grant_panel(ctx, args.permission),
 });
 
-const open_firefox_page = make_open_firefox_page_handler({
+export const open_firefox_page = make_open_firefox_page_handler({
+  module_opens_pages: async () => {
+    const hello = validate_module_hello((await browser.storage.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]);
+    return hello.ok && hello.value.firefox_pages === true;
+  },
+  module_open: (args) => browser_module_call.call(FIREFOX_PAGE_OPEN_KIND, args),
   open_page: (page) => native_host.open_firefox_page(page),
   write_clipboard: (text) => navigator.clipboard.writeText(text),
   notice_shown: async () => (await browser.storage.local.get(FIREFOX_PAGE_NOTICE_STORAGE_KEY))[FIREFOX_PAGE_NOTICE_STORAGE_KEY] === true,
@@ -66,10 +74,14 @@ const open_firefox_page = make_open_firefox_page_handler({
 define("browser.open_firefox_page", {
   name: "firefox",
   label: "Open a Firefox page",
-  intent: "Open a Firefox page that extensions cannot open. Settings, add-ons, about:config and more open in a new tab. The native host asks Firefox to open it. Without the host, the address goes to the clipboard to paste into the address bar. Add-on shortcuts and the update check have no address: open add-ons, then the gear menu.",
-  params: [{ name: "page", type: "string", main: true, values: FIREFOX_PAGES, strict: true, description: "Name the Firefox page to open." }],
+  intent: "Open a Firefox page that extensions cannot open. Settings and its sections, add-ons, about:config and more open in a tab of this window, or in this tab. The browser module opens it and switches to a tab that already shows it. Without the module the native host asks Firefox to open it in a new tab. Without either, the address goes to the clipboard to paste into the address bar. Add-on shortcuts have no address, so only the module opens them. Passwords open through the host or the clipboard only.",
+  params: [
+    { name: "page", type: "string", main: true, values: FIREFOX_PAGES, strict: true, description: "Name the Firefox page to open." },
+    // Only the module can replace a tab, and it never opens the passwords page.
+    { name: "where", type: "enum", values: FIREFOX_PAGE_WHERE, default: "tab", value_when: { here: { page: MODULE_FIREFOX_PAGES } }, value_labels: { here: "here" }, description: { here: "Replace this tab with the page." } },
+  ],
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  run: (ctx, args) => open_firefox_page(ctx, { page: args.page }),
+  run: (ctx, args) => open_firefox_page(ctx, { page: args.page, where: args.where }),
 });

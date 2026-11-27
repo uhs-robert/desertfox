@@ -102,7 +102,7 @@ test("open -w with no url opens the new tab page in a new window", async () => {
 test("open.url refuses an address off the allow-list before Firefox sees it, and does not search", async () => {
   const opened: Opened[] = [];
   install_browser(opened);
-  await assert.rejects(run("open.url", { url: "about:config", where: "here" }), /DesertFox does not open about: addresses/);
+  await assert.rejects(run("open.url", { url: "about:telemetry", where: "here" }), /DesertFox does not open about: addresses/);
   await assert.rejects(run("open.url", { url: "blob:https://a.example/1234", where: "tab" }), /DesertFox does not open blob: addresses/);
   assert.deepEqual(opened, []);
 });

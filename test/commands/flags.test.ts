@@ -3,11 +3,13 @@ import { test } from "node:test";
 import "../../src/background/command_modules.ts";
 import { parse_command_line, print_command } from "../../src/shared/registry/index.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
+import { WHERE_SHORT } from "../../src/commands/open_target.ts";
 
 test("-t -b -w mean where and -c means container on every command that has the param", () => {
   for (const command of registry.list()) {
     for (const param of command.params ?? []) {
-      if (param.name === "where") assert.deepEqual(param.short, { tab: "t", background: "b", window: "w" }, command.id);
+      // A where param with fewer values keeps the letters of the values it has, except its default, which takes no flag.
+      if (param.name === "where") assert.deepEqual(param.short ?? {}, Object.fromEntries(Object.entries(WHERE_SHORT).filter(([value]) => (param.values as readonly string[]).includes(value) && value !== param.default)), command.id);
       if (param.name === "container" && !param.main) assert.equal(param.short, "c", command.id);
     }
   }

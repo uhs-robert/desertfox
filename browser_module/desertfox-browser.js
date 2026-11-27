@@ -128,6 +128,8 @@
     const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
     const MAX_DEVTOOLS_VISUAL_ROWS = 16;
     const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
+    const MODULE_FIREFOX_PAGES = ["settings", "settings-general", "settings-home", "settings-search", "settings-privacy", "settings-sync", "addons", "downloads", "config", "profiles", "support", "debugging", "processes", "memory", "policies", "crashes", "protections", "addons-shortcuts"];
+    const FIREFOX_PAGE_WHERE = ["tab", "here"];
     const EXTENSION_TO_MODULE_KINDS = {
       page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
@@ -152,6 +154,7 @@
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
+      "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -293,7 +296,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -753,6 +756,7 @@
       }
       return true;
     };
+    // An arg kind with no branch here falls through to the number check, so a new kind needs its own line.
     const arg_fits = (kind, value) => {
       if (kind === "devtools_keys") return devtools_table_fits(value, MAX_DEVTOOLS_KEY_ROWS, "action", DEVTOOLS_ACTIONS);
       if (kind === "devtools_visual_keys") return devtools_table_fits(value, MAX_DEVTOOLS_VISUAL_ROWS, "op", DEVTOOLS_VISUAL_OPS);
@@ -761,6 +765,8 @@
       if (kind === "region") return PANE_REGIONS.includes(value);
       if (kind === "direction") return value === "left" || value === "right";
       if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.includes(value);
+      if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.includes(value);
+      if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.includes(value);
       if (kind === "optional_int" && value === undefined) return true;
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
       return typeof value === "number" && Number.isFinite(value) && (kind === "number" || Number.isInteger(value));

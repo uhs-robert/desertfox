@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
   ABSENT_TAB,
@@ -9,6 +10,7 @@ import {
   DEVTOOLS_VISUAL_KEY,
   DEVTOOLS_VISUAL_KEYS,
   MAX_DEVTOOLS_VISUAL_ROWS,
+  wrong_shape_refusal,
   MAX_DEVTOOLS_KEY_ROWS,
   check_module_args,
   EXTENSION_TO_MODULE_KINDS,
@@ -132,7 +134,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -408,4 +410,24 @@ test("hints on Firefox's own pages: the want carries the token and the matched k
   }
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", page_hints: true }), { ok: true, value: { v: V, module_version: "1", page_hints: true } });
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", page_hints: 1 }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+test("firefox_page.open takes a page name from the module's list, an optional where and tab id, and never an address", () => {
+  const open = (args: Record<string, unknown>) => validate_message({ v: V, id: "f1", kind: "firefox_page.open", args }, EXTENSION_TO_MODULE_KINDS);
+  for (const page of MODULE_FIREFOX_PAGES) assert.deepEqual(open({ page }), { ok: true, value: { v: V, id: "f1", kind: "firefox_page.open", args: { page } } }, page);
+  assert.deepEqual(open({ page: "config", where: "here", tab_id: 4 }), { ok: true, value: { v: V, id: "f1", kind: "firefox_page.open", args: { page: "config", where: "here", tab_id: 4 } } });
+  // A field the row does not list is dropped, so an address cannot ride along.
+  assert.deepEqual(open({ page: "config", address: "https://example.com/" }), { ok: true, value: { v: V, id: "f1", kind: "firefox_page.open", args: { page: "config" } } });
+  for (const page of ["logins", "about:config", "about:preferences#privacy", "Settings", "", undefined, 1]) assert.equal(open({ page }).ok, false, String(page));
+  for (const where of ["window", "background", "", 1]) assert.equal(open({ page: "config", where }).ok, false, String(where));
+  assert.equal(open({ page: "config", tab_id: "4" }).ok, false);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["firefox_page.open"]!.args), ["page", "where", "tab_id"]);
+  assert.equal(EXTENSION_TO_MODULE_KINDS["firefox_page.open"]!.reply, true);
+  assert.equal(wrong_shape_refusal("firefox_page.open", "page"), "firefox_page.open page has the wrong shape");
+});
+
+test("the hello says firefox_pages only when it is true, and an older hello has none", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", firefox_pages: true }), { ok: true, value: { v: V, module_version: "1", firefox_pages: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", firefox_pages: flag }), { ok: true, value: { v: V, module_version: "1" } }, String(flag));
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1" }), { ok: true, value: { v: V, module_version: "1" } });
 });

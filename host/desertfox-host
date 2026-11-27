@@ -1490,6 +1490,11 @@ def editor_collect(request, wait_s=COLLECT_WAIT_S):
 # The request names a key, never a URL, so the host opens only these pages.
 FIREFOX_PAGES = {
     "settings": "about:preferences",
+    "settings-general": "about:preferences#general",
+    "settings-home": "about:preferences#home",
+    "settings-search": "about:preferences#search",
+    "settings-privacy": "about:preferences#privacy",
+    "settings-sync": "about:preferences#sync",
     "addons": "about:addons",
     "downloads": "about:downloads",
     "config": "about:config",
