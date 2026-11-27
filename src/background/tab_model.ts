@@ -63,6 +63,8 @@ export type TabModelDeps = {
   is_extension_page: (port: TabModelPort) => boolean;
   // A web page can frame a web-accessible page (`cmdline.html`), and the frame is still an extension page, so such a port must be the line that redeemed its tab's ticket.
   is_web_accessible_page: (port: TabModelPort) => boolean;
+  // Who the port's page is: a frame of a tab, or the command line panel over a locked page (`cmdline_panel.ts`), which has no tab and takes its privacy from the tab it was opened over.
+  asker_of: (sender: NonNullable<TabModelPort["sender"]>) => Promise<{ tab_id: number; frame_id: number; incognito: boolean } | undefined>;
   is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
   set_timer: (callback: () => void, delay_ms: number) => unknown;
   clear_timer: (handle: unknown) => void;
@@ -566,10 +568,13 @@ export function create_tab_model(deps: TabModelDeps) {
     // A web page can frame only a web-accessible page, so only that page needs the ticket. Any other extension page is extension code.
     // The opener mark clears when the tab navigates, and that also ends the frame and its port, so one check at connect is enough.
     if (!deps.is_web_accessible_page(port)) return admit();
-    const tab_id = sender_tab?.id;
-    const frame_id = port.sender?.frameId;
-    const opener_check = tab_id === undefined || frame_id === undefined ? Promise.resolve(false) : refused_as(deps.is_opener(tab_id, frame_id), false);
-    void opener_check.then((opener) => {
+    const opener_check = async (): Promise<boolean> => {
+      const asker = port.sender ? await deps.asker_of(port.sender) : undefined;
+      if (!asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return false;
+      state.incognito = asker.incognito;
+      return true;
+    };
+    void refused_as(opener_check(), false).then((opener) => {
       if (disconnected) return;
       if (opener) return admit();
       try {
@@ -599,7 +604,7 @@ export function create_tab_model(deps: TabModelDeps) {
   };
 }
 
-export function browser_tab_model_deps(from_services: Pick<TabModelDeps, "previous_of" | "is_opener">): TabModelDeps {
+export function browser_tab_model_deps(from_services: Pick<TabModelDeps, "previous_of" | "asker_of" | "is_opener">): TabModelDeps {
   const extension_root = browser.runtime.getURL("");
   // Manifest V2 lists plain file names. A Manifest V3 entry is an object and needs reading here after a move.
   const web_accessible_urls = new Set((browser.runtime.getManifest().web_accessible_resources ?? []).flatMap((resource) => (typeof resource === "string" ? [browser.runtime.getURL(resource)] : [])));

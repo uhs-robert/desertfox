@@ -1,11 +1,11 @@
-// The browser module's commands feature (browser_module/desertfox-commands.js) on the pages it exists for: key sequences, counts and the address bar on about:preferences, about:addons, the PDF viewer and Reader View.
+// The browser module's commands feature (browser_module/desertfox-commands.js) on the pages it exists for: key sequences, counts and the command line panel on about:preferences, about:addons, the PDF viewer and Reader View.
 // Also what it must leave alone: f and / on about:addons, typed text, the toolbar switch, a DesertFox page. And that a remapped key follows and the ignore toggle gives j back to pdf.js.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { make_article, make_pdf, module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
+import { make_article, make_pdf, module_steps, NO_EFFECT_MS, panel_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["tabs", "scroll", "keys", "cmdline"];
 
@@ -17,6 +17,7 @@ const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, on_teardown, config_copy, config_dir, load_config_dir } = context;
   const steps = module_steps(context);
+  const panel = panel_steps(context, steps);
   const { chrome, session_value, open_tab, wait_loaded, focus_page, switches_one, switches_none, selected_spec, in_selected_page, close_selected_tab, home } = steps;
   const files_dir = mkdtempSync(join(tmpdir(), "desertfox-module-commands-"));
   writeFileSync(join(files_dir, "long.pdf"), make_pdf(6), "latin1");
@@ -111,7 +112,7 @@ export async function run_cases(context) {
       await close_others();
     });
 
-    await run_case(`on ${page}: zi zooms, wn opens a window, and : opens the address bar with df`, async () => {
+    await run_case(`on ${page}: zi zooms, wn opens a window, and : opens the command line panel`, async () => {
       await two_tabs("bar");
       const zoom_before = await zoom();
       on_teardown(() => chrome(`(async () => { for (const w of Services.wm.getEnumerator("navigator:browser")) for (const tab of w.gBrowser.tabs) w.FullZoom.reset(tab.linkedBrowser); })()`));
@@ -137,15 +138,12 @@ export async function run_cases(context) {
       await focus_page();
 
       await press_keys(":");
-      await poll_until(`: on ${page} to open the address bar with df`, async () => {
-        const bar = await bar_state();
-        return bar.focused && bar.value === "df ";
-      });
+      await panel.wait_open(`: on ${page}`);
       await steps.watch_switches();
       await press_keys("tab.next");
-      await poll_until("the address bar to hold the command", async () => (await bar_state()).value === "df tab.next");
+      await panel.line_holds("tab.next");
       await press_keys("-k", "Return");
-      await poll_until(`df tab.next from ${page} to switch the tab`, async () => (await steps.switch_count()) === 1, { timeout_ms: 5000 });
+      await poll_until(`tab.next in the panel over ${page} to switch the tab and close the panel`, async () => (await steps.switch_count()) === 1 && (await panel.state()).state === "none", { timeout_ms: 5000 });
 
       await close_others();
     });
@@ -176,7 +174,7 @@ export async function run_cases(context) {
     await switches_none("keys typed in the search box", ["xxgt5Jzi:"]);
     const typed = await in_selected_page(`(win) => { let node = win.document.activeElement; while (node?.shadowRoot?.activeElement) node = node.shadowRoot.activeElement; return node?.value ?? null; }`);
     expect(typed === "xxgt5Jzi:", `the search box holds ${JSON.stringify(typed)}`);
-    expect((await tab_count()) === tabs && !(await bar_state()).focused, "a key typed in the search box ran a command");
+    expect((await tab_count()) === tabs && !(await bar_state()).focused && (await panel.state()).state === "none", "a key typed in the search box ran a command");
     await close_selected_tab();
   });
 
@@ -192,7 +190,7 @@ export async function run_cases(context) {
     const tabs = await tab_count();
     await press_keys("xx:");
     await sleep(NO_EFFECT_MS);
-    expect((await tab_count()) === tabs && !(await bar_state()).focused, "a key ran with DesertFox off");
+    expect((await tab_count()) === tabs && !(await bar_state()).focused && (await panel.state()).state === "none", "a key ran with DesertFox off");
     await press_keys(...TOGGLE);
     await poll_until("the state to say on", async () => (await session_value(STATE_KEY))?.tree !== undefined);
     await close_selected_tab();

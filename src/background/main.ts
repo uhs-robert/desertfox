@@ -69,6 +69,7 @@ import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_browser_module_rpc, pages_setting_on } from "./browser_module_rpc.ts";
 import { create_module_run } from "./browser_module_run.ts";
+import { create_cmdline_panel } from "./cmdline_panel.ts";
 import { locked_page_command_ids } from "../shared/browser_module_scope.ts";
 import { list_keys } from "./list_keys.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -136,7 +137,22 @@ const media_discovery = create_media_discovery({
   close_panel: (tab_id) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: "whichkey", args: {}, bundle: "whichkey" }] }, 0)),
   open_panel: (tab_id) => best_effort(send_to_tab(tab_id, { type: "run_in_content", invocations: [{ id: MEDIA_PANEL_HANDLER, args: {}, bundle: "whichkey" }] }, 0)),
 });
-const router_deps = { ...make_router_deps(get_config, repeat_memory), record_step };
+// Before the router, which opens it. Its line comes from `cmdline`, built further down and read only when a panel opens.
+const cmdline_panel = create_cmdline_panel({
+  session: browser.storage.session,
+  extension_id: browser.runtime.id,
+  page_url: browser.runtime.getURL("cmdline.html"),
+  get_tab: async (tab_id) => {
+    const tab = await ignore_refusal(browser.tabs.get(tab_id));
+    return tab?.id === undefined || tab.windowId === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId, incognito: tab.incognito, url: tab.url, index: tab.index };
+  },
+  call: (kind, args) => browser_module_call.call(kind, args),
+  open_line: async (tab, frame_id, mode) => {
+    await get_config();
+    return cmdline.open(await cmdline.issue_ticket(tab.tab_id), tab.tab_id, frame_id, tab.window_id, tab, tab.incognito, mode);
+  },
+});
+const router_deps = { ...make_router_deps(get_config, repeat_memory, cmdline_panel.open), record_step };
 const router = create_router(router_deps);
 const watch_tab = (tab_id: number) =>
   watch_page_ready({ get_tab: (id) => ignore_refusal(browser.tabs.get(id)), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id);
@@ -335,7 +351,10 @@ const browser_module = create_browser_module({
     return checked?.ok ? checked.args : undefined;
   },
   locked_commands,
-  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal }) },
+  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async () => {
+    const tab = await router_deps.active_tab();
+    if (tab) await router_deps.open_cmdline(tab.tab_id, 0, "");
+  } }) },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);
@@ -470,7 +489,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
 const handlers = {
   ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
-  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab, cmdline_panel }),
 } satisfies Handlers<keyof ToBackground>;
 browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
 // A locked page is never an extension page, whatever its message says.
@@ -518,6 +537,7 @@ wire_private_cleanup([browser_register_store, browser_mark_store, browser_jump_s
 const rank_service = start_rank_service(
   browser_rank_service_deps({
     inputs: complete_items.rank_inputs,
+    asker_of: cmdline_panel.asker_of,
     is_opener: cmdline.is_opener,
     fallback: fallback_history,
     listed: (url) => listed_by_search((text) => browser.history.search({ text, startTime: 0, maxResults: 20 }), url),
@@ -539,6 +559,7 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
   void previous_tabs.removed(tab_id, windowId, isWindowClosing);
   void last_used_tabs.removed(tab_id);
   void cmdline.forget_opener(tab_id);
+  void cmdline_panel.forget(tab_id).catch(warn_and_go("cmdline_panel.forget"));
   void inspect_relay.forget(tab_id);
   void hint_frames.forget(tab_id).catch(warn_and_go("hint_frames.forget"));
   tab_steps.reset(tab_id);
@@ -550,4 +571,4 @@ browser.tabs.onRemoved.addListener((tab_id, { windowId, isWindowClosing }) => {
 
 void get_config().then(() => repair_tabs_after_reload(reinject_deps));
 
-void create_tab_model(browser_tab_model_deps({ previous_of: previous_tabs.previous_of, is_opener: cmdline.is_opener })).start();
+void create_tab_model(browser_tab_model_deps({ previous_of: previous_tabs.previous_of, asker_of: cmdline_panel.asker_of, is_opener: cmdline.is_opener })).start();

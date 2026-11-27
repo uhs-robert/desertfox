@@ -114,6 +114,49 @@ export function module_steps({ rdp, poll_until, run_line, press_keys, sleep, on_
   return { chrome, session_value, set_session_value, module_status, set_pref, turn_on_module, open_tab, wait_loaded, selected_spec, in_selected_page, focus_page, page_scroll, watch_switches, switch_count, switches_one, switches_none, scrolls, close_selected_tab, home };
 }
 
+// The command line panel (browser_module/desertfox-cmdline-panel.js) of the most recent window, read from chrome, and its page read in its own process.
+export function panel_steps({ rdp, poll_until }, { chrome }) {
+  const PANEL = `${W}.document.getElementById("desertfox-cmdline-panel")`;
+  const state = () =>
+    chrome(`(async () => {
+      const panel = ${PANEL};
+      const browser = panel?.querySelector("browser");
+      const principal = browser?.browsingContext?.currentWindowGlobal?.documentPrincipal;
+      return {
+        state: panel ? panel.state : "none",
+        url: browser?.currentURI?.spec ?? null,
+        remote_type: browser?.remoteType ?? null,
+        system: principal ? principal.isSystemPrincipal : null,
+        addon: principal?.addonId ?? null,
+        private_id: browser?.browsingContext?.originAttributes?.privateBrowsingId ?? null,
+        focused: Services.focus.focusedElement === browser,
+        height: browser ? Math.round(browser.getBoundingClientRect().height) : 0,
+      };
+    })()`);
+  async function in_panel(code) {
+    const where = await chrome(`(async () => { const context = ${PANEL}?.querySelector("browser")?.browsingContext; return context?.currentWindowGlobal ? { context_id: context.id, pid: context.currentWindowGlobal.domProcess.osPid } : null; })()`);
+    return where ? evaluate_in_browsing_context(rdp, where, code) : null;
+  }
+  const line_text = () => in_panel(`(win) => win.document.querySelector("#line")?.value ?? null`);
+  // Open, on DesertFox's own page with its principal, and the line's input holds the focus.
+  async function wait_open(what) {
+    await poll_until(`${what} to open the command line panel`, async () => {
+      const shown = await state();
+      return shown.state === "open" && shown.url?.endsWith("/cmdline.html") && shown.focused && (await in_panel(`(win) => win.document.hasFocus() && win.document.activeElement?.id === "line"`)) === true;
+    }, { timeout_ms: 8000 });
+    return state();
+  }
+  // Waits for the line to hold `text`, and names what it holds when it never does.
+  async function line_holds(text) {
+    try {
+      await poll_until(`the panel line to hold ${text}`, async () => (await line_text()) === text);
+    } catch (error) {
+      throw new Error(`${error.message}: it holds ${JSON.stringify(await line_text())}`, { cause: error });
+    }
+  }
+  return { state, in_panel, line_text, line_holds, wait_open };
+}
+
 // A PDF of `pages` pages of text lines, so the viewer's page box scrolls.
 export function make_pdf(pages = 6) {
   const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];

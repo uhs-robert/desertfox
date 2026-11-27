@@ -268,6 +268,7 @@ const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
+const PANEL_CALL_BYTES = 256;
 // A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 // A page call and a push each get their answer as the reply's `value` (a `PageAnswer`).
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {
@@ -290,6 +291,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "pane.equalize": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
   "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
+  // The command line on a locked page: the module opens DesertFox's own `cmdline.html` in a panel over the tab, at a fixed address with the extension's principal. It refuses when `tab_id` is no longer the selected tab of its window, so a late request never opens over another page.
+  "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: PANEL_CALL_BYTES },
 };
 
 // The byte cap of a whole list of a direction: room for two of its largest messages and the envelopes beside them, so a full-size message survives the next write.
@@ -386,6 +389,7 @@ export const LOCKED_PAGE_ROUTES = {
   relay: "background",
   frame_cue: "background",
   open_cmdline: "background",
+  open_panel_cmdline: "refused",
   record_cmdline: "refused",
   complete_items: "refused",
   tab_rows_action: "refused",

@@ -2,7 +2,7 @@
 // A run request is foreign input from chrome code. Its keys are matched again against the stored keymap, and only a leaf of the locked-page set runs, in the active tab.
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
-import { counted_steps, resolve_run } from "../shared/browser_module_scope.ts";
+import { counted_steps, opens_line_leaf, resolve_run } from "../shared/browser_module_scope.ts";
 import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
@@ -14,6 +14,8 @@ export type ModuleRunDeps = {
   run: (request: RouteRequest) => Promise<RunResponse>;
   // With no tab, a refusal shows as a desktop notification.
   show_refusal: (tab_id: undefined, refusal: Refusal) => Promise<unknown>;
+  // The command line over the active tab, for the bare `:`: the panel, else the address bar.
+  open_line: () => Promise<unknown>;
 };
 
 const REFUSAL_ID = "browser_module.run";
@@ -30,16 +32,22 @@ export function create_module_run(deps: ModuleRunDeps) {
     const { keys, count } = args as { keys: string; count: number };
     const resolved = resolve_run(await deps.read_keymap(), keys, count, deps.locked_commands);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
+    if (opens_line_leaf(resolved.leaf)) {
+      await deps.open_line();
+      return;
+    }
     // No sender tab: the router runs the binding in the active tab, so a module cannot aim it at another one. The router shows its own refusals, a count over a step's `repeat_limit` among them.
     const response = await deps.run({ invocations: counted_steps(resolved.leaf.steps, resolved.count), mode: "normal", may_prompt: true });
     if (!response.ok) throw new Error(response.refusal.message);
   };
 }
 
-// `open_cmdline` for the router: a tab with no content script opens the address bar through the module instead, with the printed command typed after `df `. A tab with a content script keeps the send's own failure.
+// `open_cmdline` for the router: a tab with no content script opens the command line through the module instead, with the printed command typed in.
+// DesertFox's own line in a panel over the tab comes first. When the module refuses it or has no panel, the address bar takes it, after `df `. A tab with a content script keeps the send's own failure.
 export const with_address_bar = (
   open_in_page: (tab_id: number, frame_id: number, text: string) => Promise<unknown>,
   has_content_script: (tab_id: number) => Promise<boolean>,
+  open_panel: (tab_id: number, text: string) => Promise<boolean>,
   call: (kind: string, args: ModuleArgs) => Promise<CallResult>,
 ) =>
   async (tab_id: number, frame_id: number, text: string): Promise<unknown> => {
@@ -47,9 +55,11 @@ export const with_address_bar = (
       return await open_in_page(tab_id, frame_id, text);
     } catch (error) {
       if (await has_content_script(tab_id)) throw error;
-      const opened = await call("address_bar.open", { text });
-      if (!opened.ok) throw error;
-      // The bar runs the command itself on Enter and never answers here, so the binding ends as a line the user left does: its later steps must not run while the user still edits the bar.
+      if (!(await open_panel(tab_id, text))) {
+        const opened = await call("address_bar.open", { text });
+        if (!opened.ok) throw error;
+      }
+      // The panel and the bar run the command themselves on Enter and never answer here, so the binding ends as a line the user left does: its later steps must not run while the user still edits.
       return HANDED_TO_ADDRESS_BAR;
     }
   };

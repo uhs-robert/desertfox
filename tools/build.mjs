@@ -45,7 +45,7 @@ const MAX_BYTES = {
   // Keyboard drag.
   "grab.js": 6.5 * 1024,
   // The command line page: completion for every setting, the registry validator, and the key-capture matcher. Opened by the first `:`.
-  "cmdline_page.js": 62 * 1024,
+  "cmdline_page.js": 62.5 * 1024,
   // The regex page search Worker.
   "find_worker.js": 2 * 1024,
   // The history rank Worker. Loads once per background start, never in a page.

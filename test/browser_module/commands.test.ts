@@ -219,10 +219,14 @@ test("a hold Space and a register do nothing on a locked page", () => {
 });
 
 test(": opens the address bar with df, unless the tree binds it", () => {
-  const { press, window } = started();
+  // An older extension's tree, from before the command line panel, has no `:`.
+  const { [":"]: _colon, ...older_children } = DEFAULT_TREE.children;
+  const { press, window } = started({ written: state({ tree: { children: older_children } }) });
   assert.equal(press(":", { shiftKey: true }).prevented, true);
   assert.deepEqual(window.address_bar, ["df "]);
-  const bound = started({ written: state({ tree: { children: { ":": "forward" } } }) });
+  // A current tree binds it, so the module forwards it and the background opens the panel.
+  assert.equal(DEFAULT_TREE.children[":"], "forward");
+  const bound = started();
   bound.press(":", { shiftKey: true });
   assert.deepEqual(bound.window.address_bar, []);
   assert.deepEqual(bound.runs(), [{ keys: ":", count: 0 }]);

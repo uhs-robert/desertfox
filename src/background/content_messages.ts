@@ -25,7 +25,7 @@ import { ext_of_request } from "./external_editor.ts";
 import { hand_back_parked_frame, is_cross_origin } from "./tab_modes.ts";
 import { accept_hint_timing } from "./timing_log.ts";
 import { browser_timing_log } from "./timing_browser.ts";
-import type { Asker } from "./complete_items.ts";
+import type { CmdlinePanel } from "./cmdline_panel.ts";
 import type { LoadSender } from "./bundle_loader.ts";
 import type { create_browser_module } from "./browser_module.ts";
 import type { create_tab_modes } from "./tab_modes.ts";
@@ -84,17 +84,15 @@ export type ContentDeps = {
   media_quality: ReturnType<typeof create_media_quality>;
   browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active">;
   is_locked_tab: (tab_id: number) => Promise<boolean>;
-};
-
-const asker_of = (sender: browser.runtime.MessageSender): Asker | undefined => {
-  const { id, windowId, incognito } = sender.tab ?? {};
-  return id === undefined || windowId === undefined || sender.frameId === undefined ? undefined : { tab_id: id, frame_id: sender.frameId, window_id: windowId, incognito: incognito === true };
+  cmdline_panel: Pick<CmdlinePanel, "opened" | "asker_of">;
 };
 
 // The messages content scripts, bundles and the command line page send, one entry per type. A handler that checks its own sender or request (`inspect_pick`, `find_scan`) is `any`: the other guards can only answer nothing.
 export const content_handlers = (deps: ContentDeps) => {
   const { get_config, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, external_editor, jump_step, jump_leave, cmdline, complete_items, inspect_relay, router, router_deps, repeat_memory } = deps;
   // The tab a sender names, in the shape the mark and jump stores read.
+  // A frame of a tab, or the command line panel over a locked page, for the tab it was opened over.
+  const asker_of = (sender: browser.runtime.MessageSender) => deps.cmdline_panel.asker_of(sender);
   const marked_tab = (sender: browser.runtime.MessageSender) => sender.tab && { incognito: sender.tab.incognito, id: sender.tab.id, window_id: sender.tab.windowId, url: sender.tab.url, frame_id: sender.frameId };
   return {
     run: {
@@ -102,14 +100,17 @@ export const content_handlers = (deps: ContentDeps) => {
       run: (request, sender) => {
         if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.key_ran"));
         return get_config().then(async (config) => {
-          await macro_replay.wait_unless_from(sender.tab?.id);
+          // The panel's line has no tab, and runs its command from the tab it was opened over.
+          const panel_tab_id = sender.tab === undefined && request.from_line === true ? (await asker_of(sender))?.tab_id : undefined;
+          const tab_id = sender.tab?.id ?? panel_tab_id;
+          await macro_replay.wait_unless_from(tab_id);
           // A line drawn in the top frame for a subframe's keys runs its command in that subframe, if that frame is still there.
-          const frame_id = (request.from_line === true ? await cmdline.target_of(sender.tab?.id) : undefined) ?? sender.frameId;
+          const frame_id = (request.from_line === true ? await cmdline.target_of(tab_id) : undefined) ?? sender.frameId;
           const page = sender.tab?.url ? { url: sender.tab.url, ...(sender.tab.title ? { title: sender.tab.title } : {}) } : undefined;
           const settled = with_site_engines(request.invocations, config.search_engines, page);
           if ("unfit_letter" in settled) {
             const refusal = { id: "open.search", message: `No ${settled.unfit_letter} search for this site` };
-            await router_deps.show_refusal(sender.tab?.id, refusal, sender.frameId);
+            await router_deps.show_refusal(tab_id, refusal, sender.frameId);
             return { ok: false as const, refusal };
           }
           return router.run({
@@ -117,7 +118,7 @@ export const content_handlers = (deps: ContentDeps) => {
             mode: request.mode,
             may_prompt: true,
             ...(request.from_hints === true && request.invocations.length === 1 && request.invocations[0]?.id === "open.url" ? { skip_repeat: true } : {}),
-            ...(sender.tab?.id === undefined ? {} : { sender_tab_id: sender.tab.id }),
+            ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }),
             ...(frame_id === undefined ? {} : { frame_id }),
             ...(!deps.is_own_page(sender) && { from_page: true }),
           });
@@ -192,10 +193,17 @@ export const content_handlers = (deps: ContentDeps) => {
         tab_modes.expect_entry(tab_id, frame_id === 0 ? undefined : frame_id).then(() => (request.toast ? deps.frame_cue(tab_id) : undefined)),
     },
     open_cmdline: { from: "any", run: (request, sender) => get_config().then(() => cmdline.open(request.ticket, sender.tab?.id, sender.frameId, sender.tab?.windowId, sender.tab, sender.tab?.incognito === true, request.mode)) },
-    record_cmdline: { from: "any", run: (request, sender) => cmdline.record(request.text, sender.tab?.incognito === true) },
-    complete_items: { from: "any", run: (request, sender) => complete_items.answer(request.kind, asker_of(sender)) },
-    tab_rows_action: { from: "any", run: (request, sender) => complete_items.tab_rows_action(request.action, request.tab_ids, asker_of(sender), request.cookie_store_id) },
-    open_help: { from: "any", run: (request, sender) => deps.open_help.open(request.command_id, sender.tab?.id, sender.frameId) },
+    open_panel_cmdline: { from: "any", run: (_request, sender) => get_config().then(() => deps.cmdline_panel.opened(sender)) },
+    record_cmdline: { from: "any", run: async (request, sender) => cmdline.record(request.text, (await asker_of(sender))?.incognito ?? sender.tab?.incognito === true) },
+    complete_items: { from: "any", run: async (request, sender) => complete_items.answer(request.kind, await asker_of(sender)) },
+    tab_rows_action: { from: "any", run: async (request, sender) => complete_items.tab_rows_action(request.action, request.tab_ids, await asker_of(sender), request.cookie_store_id) },
+    open_help: {
+      from: "any",
+      run: async (request, sender) => {
+        const asker = await asker_of(sender);
+        await deps.open_help.open(request.command_id, asker?.tab_id ?? sender.tab?.id, asker?.frame_id ?? sender.frameId);
+      },
+    },
     record_step: {
       from: "any",
       run: (request, sender) => {

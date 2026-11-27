@@ -32,13 +32,15 @@ function run_setup(answer: RunResponse = { ok: true }) {
   const runs: RouteRequest[] = [];
   const shown: Refusal[] = [];
   const state = { keymap: DEFAULT as CompiledKeymap | undefined };
+  const lines: number[] = [];
   const run = create_module_run({
     read_keymap: async () => state.keymap,
     locked_commands,
     run: async (request) => (runs.push(request), answer),
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
+    open_line: async () => void lines.push(1),
   });
-  return { run, runs, shown, state };
+  return { run, runs, shown, state, lines };
 }
 
 test("a run request runs its binding in the active tab, in normal mode, with the count", async () => {
@@ -85,7 +87,7 @@ test("a count over the limit reaches the router, which refuses it before the com
     show_refusal: async (tab_id: number | undefined, refusal: Refusal) => void shown.push({ tab_id, refusal }),
     repeat_memory: { save: async () => undefined },
   } as never);
-  const run = create_module_run({ read_keymap: async () => DEFAULT, locked_commands, run: router.run, show_refusal: async () => assert.fail("the handler showed its own refusal") });
+  const run = create_module_run({ read_keymap: async () => DEFAULT, locked_commands, run: router.run, show_refusal: async () => assert.fail("the handler showed its own refusal"), open_line: async () => assert.fail("no line opens") });
   await assert.rejects(run({ keys: "x x", count: 21 }), /over the limit of 20/);
   assert.deepEqual(ran, []);
   assert.equal(shown.length, 1);
@@ -204,21 +206,45 @@ test("the channel takes a run request of the real kinds and drops junk, oversize
   assert.deepEqual(replies.map((reply) => [reply.reply_to, reply.ok]).sort(), [["bad", false], ["big", false], ["good", true], ["late", false], ["nocount", false]]);
 });
 
-test("the address bar stands in for the command line only on a tab with no content script", async () => {
+test("the panel, then the address bar, stand in for the command line only on a tab with no content script", async () => {
   const calls: unknown[] = [];
   const fails = async () => {
     throw new Error("no receiver");
   };
   const call = async (kind: string, args: Record<string, unknown>) => (calls.push([kind, args]), { ok: true as const });
-  await with_address_bar(fails, async () => false, call)(4, 0, "open ");
+  const panels: unknown[] = [];
+  const panel = (opens: boolean) => async (tab_id: number, text: string) => (panels.push([tab_id, text]), opens);
+  assert.deepEqual(await with_address_bar(fails, async () => false, panel(true), call)(4, 0, "open "), { ok: true, cancelled: true });
+  assert.deepEqual(panels, [[4, "open "]]);
+  assert.deepEqual(calls, [], "the address bar opened beside the panel");
+  // The module refused the panel or has no handler for it.
+  await with_address_bar(fails, async () => false, panel(false), call)(4, 0, "open ");
   assert.deepEqual(calls, [["address_bar.open", { text: "open " }]]);
-  await assert.rejects(with_address_bar(fails, async () => true, call)(4, 0, "open "), /no receiver/);
-  await assert.rejects(with_address_bar(fails, async () => false, async () => ({ ok: false as const, error: "Needs the browser module" }))(4, 0, "open "), /no receiver/);
-  assert.equal(await with_address_bar(async () => "opened", async () => false, call)(4, 0, "open "), "opened");
+  await assert.rejects(with_address_bar(fails, async () => true, panel(true), call)(4, 0, "open "), /no receiver/);
+  await assert.rejects(with_address_bar(fails, async () => false, panel(false), async () => ({ ok: false as const, error: "Needs the browser module" }))(4, 0, "open "), /no receiver/);
+  assert.equal(await with_address_bar(async () => "opened", async () => false, panel(true), call)(4, 0, "open "), "opened");
   assert.equal(calls.length, 1);
+  assert.equal(panels.length, 3);
   // The kind takes text, within its cap.
   assert.ok(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "open " } }, EXTENSION_TO_MODULE_KINDS).ok);
   assert.equal(validate_message({ v: 1, id: "a", kind: "address_bar.open", args: { text: "x".repeat(5000) } }, EXTENSION_TO_MODULE_KINDS).ok, false);
+});
+
+test("the panel kind takes a whole tab id and nothing else", () => {
+  assert.deepEqual(EXTENSION_TO_MODULE_KINDS["cmdline_panel.open"], { args: { tab_id: "int" }, reply: true, max_bytes: 256 });
+  assert.ok(validate_message({ v: 1, id: "a", kind: "cmdline_panel.open", args: { tab_id: 7 } }, EXTENSION_TO_MODULE_KINDS).ok);
+  for (const tab_id of [1.5, "7", undefined, null]) assert.equal(validate_message({ v: 1, id: "a", kind: "cmdline_panel.open", args: { tab_id } }, EXTENSION_TO_MODULE_KINDS).ok, false, String(tab_id));
+  // An extra field such as an address is dropped, never passed on.
+  const checked = validate_message({ v: 1, id: "a", kind: "cmdline_panel.open", args: { tab_id: 7, url: "https://example.com" } }, EXTENSION_TO_MODULE_KINDS);
+  assert.ok(checked.ok && "kind" in checked.value && JSON.stringify(checked.value.args) === '{"tab_id":7}');
+});
+
+test("the bare command line key opens the line over the active tab and runs nothing through the router", async () => {
+  const { run, runs, shown, lines } = run_setup();
+  await run({ keys: ":", count: 0 });
+  assert.deepEqual(lines, [1]);
+  assert.deepEqual(runs, []);
+  assert.deepEqual(shown, []);
 });
 
 test("a prompt step handed to the address bar ends the binding, so its later steps do not run", async () => {
@@ -236,7 +262,7 @@ test("a prompt step handed to the address bar ends the binding, so its later ste
     get_tab: async () => undefined,
     has_content_script: async () => false,
     has_permission: async () => true,
-    open_cmdline: with_address_bar(async () => Promise.reject(new Error("no receiver")), async () => false, async (_kind, args) => (bar_texts.push(args.text), { ok: true as const })),
+    open_cmdline: with_address_bar(async () => Promise.reject(new Error("no receiver")), async () => false, async () => false, async (_kind, args) => (bar_texts.push(args["text"]), { ok: true as const })),
     show_refusal: async () => assert.fail("nothing is refused"),
     repeat_memory: { save: async () => undefined },
   } as never);

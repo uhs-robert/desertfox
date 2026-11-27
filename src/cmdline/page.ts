@@ -1,13 +1,14 @@
 // The command line page, shown in an iframe by the `cmdline` bundle. It has its own matcher over the stored keymap,
 // because the content script's keys cannot reach into the iframe. Enter parses the line with the shared grammar
 // and hands the invocation to the host script, which runs it from the page's own frame.
+// On a locked page the browser module shows it top-level in a panel instead (`panel_line`). It then has no host script, and stands in for one itself.
 
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { check_args_shape } from "../shared/registry/check_shape.ts";
 import { parse_command_line } from "../shared/registry/command_line.ts";
-import type { CmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages/index.ts";
+import type { CmdlineOpened, PanelCmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages/index.ts";
 import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { RANK_PORT_NAME } from "../shared/rank_port.ts";
 import type { RankPush } from "../shared/rank_port.ts";
@@ -38,8 +39,8 @@ follow_user_css();
 // The port from the host's `start`. Until it arrives there is nobody to tell.
 let host_port: MessagePort | undefined;
 
-// Only `ready` goes to the parent window, see `protocol.ts`.
-const tell_host = (message: PageToHost) => host_port?.postMessage(wrap(message));
+// Only `ready` goes to the parent window, see `protocol.ts`. The panel line replaces this with its own stand-in.
+let tell_host = (message: PageToHost) => host_port?.postMessage(wrap(message));
 const say_ready = () => window.parent.postMessage(wrap<PageToHost>({ kind: "ready" }), "*");
 
 const ask_background = <Answer>(message: ContentToBackground) => browser.runtime.sendMessage(message) as Promise<Answer>;
@@ -80,10 +81,6 @@ const HOLD_LIMIT_MS = 1000;
 // Page scripts can post a `start` too, to this frame or to a copy they embed. Only the background knows whether the
 // ticket is live, so every `start` is tried and the first one it accepts wins.
 async function open_line(start: Start, port: MessagePort): Promise<void> {
-  const input = document.querySelector<HTMLInputElement>("#line")!;
-  const note = document.querySelector<HTMLElement>("#note")!;
-  const panel = document.querySelector<HTMLElement>(".desertfox-cmdline")!;
-
   const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const [stored, opened] = await Promise.all([
     browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
@@ -91,13 +88,50 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   ]);
   if (!opened || host_port) return;
   host_port = port;
+  start_line(start, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
+    port.onmessage = (event: MessageEvent) => {
+      const message = unwrap<HostToPage>(event.data);
+      if (message) on_message(message);
+    };
+  });
+}
+
+// The panel over a locked page: no host and no page under the line, so this page plays the host's part. It ends the line by closing its window, which closes the panel.
+// The background answers only the panel it asked the browser module for, once. A command line only: a locked page has no text to search.
+async function panel_line(): Promise<void> {
+  const [stored, opened] = await Promise.all([
+    browser.storage.local.get(COMPILED_KEYMAP_STORAGE_KEY),
+    ask_background<PanelCmdlineOpened | undefined>({ type: "open_panel_cmdline" }),
+  ]);
+  if (!opened) return window.close();
+  // Firefox sizes the panel to the page's height, so the page takes only the height of its line and list.
+  for (const element of [document.documentElement, document.body]) element.style.height = "auto";
+  let to_line: ((message: HostToPage) => void) | undefined;
+  tell_host = (message) => {
+    // The keys go straight to this page, so the line takes them as soon as it opened.
+    if (message.kind === "opened") to_line?.({ kind: "focused" });
+    else if (message.kind === "close") window.close();
+    else if (message.kind === "submit") {
+      void ask_background({ type: "run", invocations: [message.invocation], mode: "normal", from_line: true });
+      window.close();
+    } else if (message.kind === "list_headings") to_line?.({ kind: "headings", items: [] });
+  };
+  start_line({ kind: "start", ticket: "", text: opened.text, tokens: [], mode: opened.mode }, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
+    to_line = on_message;
+  });
+}
+
+function start_line(start: Start, opened: CmdlineOpened, keymap: CompiledKeymap | undefined, listen: (on_message: (message: HostToPage) => void) => void): void {
+  const input = document.querySelector<HTMLInputElement>("#line")!;
+  const note = document.querySelector<HTMLElement>("#note")!;
+  const panel = document.querySelector<HTMLElement>(".desertfox-cmdline")!;
+  const opened_from = typeof start.mode === "string" ? start.mode : "normal";
   const lookup = create_word_lookup(opened.commands, opened.command_aliases);
   if (start.search) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, start.search === "forward" ? "/ " : "? ");
   else if (opened.prompt) show_prompt(document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!, opened.prompt);
   show_status(document.querySelector<HTMLElement>("#status")!, opened, start);
   const prompt = document.querySelector<HTMLElement>(".desertfox-cmdline-prompt")!;
   const line_prompt = prompt.textContent;
-  const keymap = stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined;
   const help_ids = new Set(opened.help_ids);
   const has_help = (id: string) => help_ids.has(id);
   const list = create_list(document.querySelector<HTMLElement>("#list")!, (id) => opened.keys[id] ?? "", has_help);
@@ -375,8 +409,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
     render();
   });
 
-  host_port.onmessage = (event: MessageEvent) => {
-    const message = unwrap<HostToPage>(event.data);
+  listen((message) => {
     if (message?.kind === "token") press_forwarded(message.token);
     else if (message?.kind === "check") tell_host({ kind: "here" });
     else if (message?.kind === "refocus") input.focus();
@@ -402,7 +435,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
       typed_before_focused = undefined;
       for (const token of waiting) press_forwarded(token);
     }
-  };
+  });
   session.open(start.text);
   render();
   input.focus();
@@ -410,11 +443,13 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
   tell_host({ kind: "opened" });
 }
 
-window.addEventListener("message", (event) => {
-  const message = unwrap<HostToPage>(event.data);
-  const port = event.ports[0];
-  if (!host_port && message?.kind === "start" && port) void open_line(message, port);
-});
-
-// No autofocus anywhere: the frame would take the keys before the host has handed over the ones it kept, and the start message would wipe them.
-say_ready();
+if (window.parent === window) void panel_line();
+else {
+  window.addEventListener("message", (event) => {
+    const message = unwrap<HostToPage>(event.data);
+    const port = event.ports[0];
+    if (!host_port && message?.kind === "start" && port) void open_line(message, port);
+  });
+  // No autofocus anywhere: the frame would take the keys before the host has handed over the ones it kept, and the start message would wipe them.
+  say_ready();
+}

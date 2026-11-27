@@ -29,6 +29,13 @@ const has_guard = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || 
 // Every step is a command of the set, so the router runs the whole leaf with no page. A step that prompts opens the address bar (`address_bar.open`), which needs no page either.
 export const forwards_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => !has_guard(leaf) && leaf.steps.length > 0 && leaf.steps.every((step) => step.leave !== true && step.runs_in === "background" && allowed.has(step.invocation.id));
 
+// The bare command line key (`:`): the background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`). A line with typed text is left out, because its commands mostly need a page.
+export const opens_line_leaf = (leaf: TreeLeaf): boolean => {
+  const step = leaf.steps.length === 1 ? leaf.steps[0] : undefined;
+  const text = step?.invocation.args?.["text"];
+  return !has_guard(leaf) && step?.invocation.id === "cmdline.open" && step.capture === undefined && step.register === undefined && (text === undefined || text === "");
+};
+
 // A leaf of one step that the module runs itself (the protocol's command list), with its args filled and checked by the registry.
 export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): NativeLeaf | undefined {
   if (has_guard(leaf) || leaf.steps.length !== 1) return undefined;
@@ -41,7 +48,7 @@ export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): Nativ
 }
 
 function prune_node(node: TreeNode, depth: number, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): ScopeNode | undefined {
-  if (node.kind === "leaf") return native_leaf(node, check_args) ?? (forwards_leaf(node, allowed) ? "forward" : undefined);
+  if (node.kind === "leaf") return native_leaf(node, check_args) ?? (forwards_leaf(node, allowed) || opens_line_leaf(node) ? "forward" : undefined);
   if (depth >= MAX_SEQUENCE_KEYS) return undefined;
   const children = prune_children(node, depth + 1, allowed, check_args);
   return Object.keys(children).length > 0 ? { children } : undefined;
@@ -54,7 +61,7 @@ function prune_children(branch: TreeBranch, depth: number, allowed: ReadonlySet<
   }));
 }
 
-// The normal tree with only the leaves a locked page can run. A key that leads only to other leaves is left out, so the page or Firefox keeps it. Site rules do not apply: a locked page matches none.
+// The normal tree with only the leaves a locked page can run. A key that leads only to other leaves is left out, so the page or Firefox keeps it. The bare command line key stays, as a forward leaf. Site rules do not apply: a locked page matches none.
 export function scope_tree_of(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): ScopeTree {
   // A tree of an older format has another shape, so it gives no keys until the background recompiles.
   const root = current_keymap(keymap)?.modes.normal;
@@ -92,7 +99,7 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
     const last = index === keys.length - 1;
     if (result.kind_ === "pending" && !last && result.count === undefined && result.register_keys_ === undefined && result.held_ === undefined) continue;
     if (result.kind_ !== "match" || !last || result.count !== undefined || result.held_ !== undefined || result.keys?.length !== keys.length) return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
-    if (!forwards_leaf(result.leaf, allowed)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true };
+    if (!forwards_leaf(result.leaf, allowed) && !opens_line_leaf(result.leaf)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true };
     return { ok: true, leaf: result.leaf, count: count === 0 ? undefined : count };
   }
   return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };

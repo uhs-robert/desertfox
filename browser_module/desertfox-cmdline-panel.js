@@ -1,0 +1,164 @@
+// DesertFox browser module, the command line panel: DesertFox's own command line page in a panel over a locked page (about: pages, the PDF viewer, Reader View). See docs/design/browser_module.md, "The command line panel".
+// It answers `cmdline_panel.open { tab_id }`. The panel holds a remote <browser> that loads the fixed page `cmdline.html` of DesertFox, built as Firefox builds an extension's toolbar popup (ExtensionPopups.sys.mjs),
+// so the page runs in DesertFox's own process with DesertFox's principal, never the system principal. The extension names only the tab. The address is a constant here.
+// The page does the rest through the extension's own messages: the background admits it by its address and the panel it recorded before this request.
+// In a window it asks the core to load it into the core sandbox, where it starts once per process.
+
+(function desertfox_browser_module_cmdline_panel(scope) {
+  "use strict";
+  const core = Services.desertfox_browser_module;
+  if (typeof core !== "object" || core === null) return;
+  if (typeof scope.gBrowser === "object" && scope.gBrowser !== null) {
+    try {
+      core.adopt(Components.stack.filename.split(" -> ").pop());
+    } catch (error) {
+      Components.utils.reportError(`DesertFox browser module: the command line panel failed to load: ${error}`);
+    }
+    return;
+  }
+  // A failed start must not reach the core's `adopt`, which would turn the whole module off. The panel stays off instead, and the extension falls back to the address bar.
+  try {
+    start(core);
+  } catch (error) {
+    core.log_once(`the command line panel is off for this session: ${error}`);
+  }
+
+  function start(core) {
+    const EXTENSION_ID = "desertfox@uhs-robert";
+    const PAGE = "cmdline.html";
+    const PANEL_ID = "desertfox-cmdline-panel";
+    // The line alone, until the page says how tall it is.
+    const FIRST_HEIGHT_PX = 40;
+    const BROWSER_CONTENT_SCRIPT = "chrome://extensions/content/ext-browser-content.js";
+    const RESIZED_MESSAGE = "Extension:BrowserResized";
+    const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
+
+    // Each window's open panel, by its close function.
+    const open_panels = new Map();
+
+    const tab_id_of = (tab) => ExtensionParent.apiManager.global.tabTracker.getId(tab);
+
+    // The browser window whose selected tab is `tab_id`, or undefined. A tab the user has left since the request gets no panel.
+    function window_selecting(tab_id) {
+      for (const win of Services.wm.getEnumerator("navigator:browser")) {
+        if (win.closed || !win.gBrowser?.selectedTab) continue;
+        if (tab_id_of(win.gBrowser.selectedTab) === tab_id) return win;
+      }
+      return undefined;
+    }
+
+    function open(win, extension) {
+      const doc = win.document;
+      const popup_set = doc.getElementById("mainPopupSet");
+      if (!popup_set) return { ok: false, error: "This Firefox has no place for the panel" };
+      if (open_panels.has(win) || doc.getElementById(PANEL_ID)) return { ok: false, error: "The command line is already open" };
+      const opener = win.gBrowser.selectedBrowser;
+      const opener_tab = win.gBrowser.selectedTab;
+      const panel = doc.createXULElement("panel");
+      panel.id = PANEL_ID;
+      panel.setAttribute("class", "panel-no-padding");
+      panel.setAttribute("noautofocus", "true");
+      panel.setAttribute("consumeoutsideclicks", "false");
+      const browser = doc.createXULElement("browser");
+      browser.setAttribute("type", "content");
+      browser.setAttribute("disableglobalhistory", "true");
+      browser.setAttribute("messagemanagergroup", "webext-browsers");
+      browser.setAttribute("webextension-view-type", "popup");
+      browser.setAttribute("initialBrowsingContextGroupId", extension.policy.browsingContextGroupId);
+      if (extension.remote) {
+        browser.setAttribute("remote", "true");
+        browser.setAttribute("remoteType", extension.remoteType);
+        browser.setAttribute("maychangeremoteness", "true");
+      }
+      const page_box = () => opener.getBoundingClientRect();
+      let height = FIRST_HEIGHT_PX;
+      browser.style.width = `${page_box().width}px`;
+      browser.style.height = `${height}px`;
+      popup_set.appendChild(panel);
+
+      // The line sits at the bottom of the page, as on a web page, and grows upward with the list.
+      const place = () => {
+        const box = page_box();
+        height = Math.min(height, box.height);
+        browser.style.height = `${height}px`;
+        if (panel.state === "open" || panel.state === "showing") panel.moveToAnchor(opener, "overlap", 0, box.height - height);
+      };
+      // Firefox's own popup content script measures the page and sends this, as for a toolbar popup. The page is DesertFox's, but the number is read as foreign input.
+      const on_resized = ({ data }) => {
+        const asked = data?.height;
+        if (typeof asked !== "number" || !Number.isFinite(asked) || asked <= 0) return;
+        height = Math.ceil(asked);
+        place();
+      };
+      const close = () => {
+        if (panel.state !== "closed") panel.hidePopup();
+      };
+      const on_tab_select = () => close();
+      const on_window_close = (event) => {
+        // The page's `window.close()`: Enter and Escape end the line this way.
+        event.preventDefault();
+        close();
+      };
+      win.gBrowser.tabContainer.addEventListener("TabSelect", on_tab_select);
+      browser.addEventListener("DOMWindowClose", on_window_close, true);
+      open_panels.set(win, close);
+      panel.addEventListener(
+        "popuphidden",
+        () => {
+          open_panels.delete(win);
+          win.gBrowser.tabContainer.removeEventListener("TabSelect", on_tab_select);
+          browser.removeEventListener("DOMWindowClose", on_window_close, true);
+          browser.messageManager?.removeMessageListener(RESIZED_MESSAGE, on_resized);
+          panel.remove();
+          // The focus goes back to the page the line opened over, if it is still the one shown.
+          if (win.gBrowser.selectedBrowser === opener && !opener_tab.closing) opener.focus();
+        },
+        { once: true },
+      );
+      const load = () => {
+        // The steps of ExtensionPopups' createBrowser for a popup with an address.
+        ExtensionParent.apiManager.emit("extension-browser-inserted", browser);
+        browser.messageManager.addMessageListener(RESIZED_MESSAGE, on_resized);
+        browser.messageManager.loadFrameScript(BROWSER_CONTENT_SCRIPT, false, true);
+        browser.messageManager.sendAsyncMessage("Extension:InitBrowser", { allowScriptsToClose: true, fixedWidth: true, maxWidth: 10000, maxHeight: 10000, stylesheets: [] });
+        browser.fixupAndLoadURIString(extension.baseURI.resolve(PAGE), { triggeringPrincipal: extension.principal });
+      };
+      const load_or_close = () => {
+        try {
+          load();
+        } catch (error) {
+          core.log_once(`the command line page did not load: ${error}`);
+          close();
+        }
+      };
+      // The frame loader exists only after this event, and its message manager one microtask later.
+      if (extension.remote) browser.addEventListener("XULFrameLoaderCreated", () => void Promise.resolve().then(load_or_close), { once: true });
+      panel.addEventListener(
+        "popupshown",
+        () => {
+          // Appended only now: a remote browser appended before `openPopup` crashed the parent process.
+          panel.appendChild(browser);
+          if (!extension.remote) load_or_close();
+          // The page's input takes the focus from the browser, which must have it first.
+          browser.focus();
+        },
+        { once: true },
+      );
+      panel.openPopup(opener, { position: "overlap", x: 0, y: page_box().height - height });
+      return { ok: true };
+    }
+
+    core.register_kind("cmdline_panel.open", ({ tab_id }) => {
+      const win = window_selecting(tab_id);
+      if (!win) return { ok: false, error: "The tab is no longer the selected one" };
+      // The pref, DesertFox running, private window access and the toolbar switch, as for a key.
+      if (!core.may_act(win)) return { ok: false, error: "The browser module may not act in this window" };
+      const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
+      if (!extension) return { ok: false, error: "DesertFox is not running" };
+      return open(win, extension);
+    });
+    core.on_shut_down(() => {
+      for (const close of [...open_panels.values()]) close();
+    });
+  }
+})(this);

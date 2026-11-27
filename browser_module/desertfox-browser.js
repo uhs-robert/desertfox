@@ -101,6 +101,7 @@
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
       "address_bar.open": { args: { text: "text" }, reply: true, max_bytes: 4096 },
+      "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 },
