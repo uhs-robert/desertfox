@@ -5,7 +5,7 @@ The command line: press `:` and a bar opens at the bottom. Type a command, press
 - `host.ts`: the `cmdline` bundle (`cmdline.js`): mounts the page in an iframe, holds the keys typed before it is ready and sends the parsed command to the background.
 - `style.ts`: the page's sheet (`CMDLINE_STYLE`). Pure text with no imports, so DesertBird can vendor it.
 - `cmdline.html`: the page in the iframe. `tools/build.mjs` puts `CMDLINE_STYLE` in at the `<!--cmdline-style-->` marker.
-- `page.ts`: the page in the iframe (`cmdline_page.js`): its own matcher over the stored keymap, and Enter parses the line with `parse_command_line`.
+- `page.ts`: the page (`cmdline_page.js`), in the iframe or top-level in the browser module's panel: its own matcher over the stored keymap, and Enter parses the line with `parse_command_line`.
 - `session.ts`: the text, the inline message, the completion list and the history walk, apart from the DOM. Pure.
 - Completion: what the list offers is in `src/shared/completion/` (see its README), because the omnibox in the background builds the same rows.
 - `list.ts`: draws the list rows as a window that follows the selection.

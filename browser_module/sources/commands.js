@@ -2,6 +2,7 @@
 // tools/build_browser_module.ts bundles this file with the extension's own matcher, token and tree check into browser_module/desertfox-commands.js, so a key event and the keymap meet in one form on both sides.
 // A forward leaf goes to the extension as a `run` request with the matched keys and the count. A native leaf runs here, through the command a feature file defined.
 // It also holds the per-tab ignore toggle, defines page.stop, and answers address_bar.open, the command line's stand-in on a page with no DesertFox page code.
+// After a forward leaf that opens the command line (the tree's `line_keys`) it holds the window's keys until the line has the focus, so a key typed meanwhile never runs on the page.
 
 import { validate_scope_tree } from "../../src/shared/browser_module_protocol.ts";
 import { matcher_keymap_of } from "../../src/shared/browser_module_scope.ts";
@@ -33,6 +34,10 @@ function define(core) {
   const OMNIBOX_PREFIX = "df ";
   // A count repeats a native command at most this often, so a typed 999999 cannot hold the window.
   const MAX_NATIVE_REPEAT = 100;
+  // The line takes the focus in a few hundred milliseconds. A hold that outlives this gives the keys back to the page.
+  const LINE_HOLD_MS = 1500;
+  // Keys typed while the line opens: a reply to the extension carries them, so they stay well inside its cap.
+  const MAX_HELD_CHARS = 32;
 
   // The matcher of each window and what it was fed on. A key on another tab or document, or a new tree, starts a fresh one, so a half-typed sequence never finishes elsewhere.
   let walks = new WeakMap();
@@ -41,7 +46,51 @@ function define(core) {
   // Per tab browser, the document the ignore toggle was turned on in. A load makes a new document, which ends it.
   const ignored = new WeakMap();
 
+  // Per window, the hold after a key that opens the command line: the tab browser it was typed on and the printable text typed since.
+  const holds = new Map();
+
   const is_ignored = (browser) => ignored.get(browser) === browser.innerWindowID;
+
+  function end_hold(win) {
+    holds.get(win)?.stop();
+    holds.delete(win);
+  }
+
+  // It ends when the line takes the text (`take_held`), when the user leaves the tab or the window, on Escape, and after LINE_HOLD_MS.
+  function start_hold(win, browser) {
+    end_hold(win);
+    const end = () => end_hold(win);
+    const timer = win.setTimeout(end, LINE_HOLD_MS);
+    win.gBrowser.tabContainer.addEventListener("TabSelect", end);
+    win.addEventListener("deactivate", end);
+    holds.set(win, {
+      browser,
+      typed: "",
+      collecting: true,
+      stop: () => {
+        win.clearTimeout(timer);
+        win.gBrowser.tabContainer.removeEventListener("TabSelect", end);
+        win.removeEventListener("deactivate", end);
+      },
+    });
+  }
+
+  // Every key goes nowhere. Printable text is kept for the line until it is taken.
+  function hold_key(hold, event) {
+    if (!hold.collecting || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === "Backspace") hold.typed = [...hold.typed].slice(0, -1).join("");
+    else if ([...event.key].length === 1 && [...hold.typed].length < MAX_HELD_CHARS) hold.typed += event.key.replace(/[\p{Cc}\p{Cf}]/gu, "");
+  }
+
+  // The text typed since the hold began, once: later keys are still held but not kept. With `end` the hold ends too.
+  function take_held(win, end) {
+    const hold = holds.get(win);
+    if (!hold) return "";
+    const typed = hold.collecting ? hold.typed : "";
+    hold.collecting = false;
+    if (end) end_hold(win);
+    return typed;
+  }
 
   function tree_text(tree) {
     let text = tree_texts.get(tree);
@@ -57,7 +106,9 @@ function define(core) {
   function walk_for(win, browser, text) {
     const walk = walks.get(win);
     if (walk?.text === text && walk.browser === browser && walk.inner === browser.innerWindowID) return walk;
-    const fresh = { text, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(JSON.parse(text))), pending: undefined };
+    const tree = JSON.parse(text);
+    const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
+    const fresh = { text, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: undefined };
     walks.set(win, fresh);
     return fresh;
   }
@@ -76,9 +127,11 @@ function define(core) {
     return true;
   }
 
-  function forward(result) {
-    const sent = core.send("run", { keys: path_of(result).join(" "), count: result.count ?? 0 });
+  function forward(result, walk, win) {
+    const keys = path_of(result).join(" ");
+    const sent = core.send("run", { keys, count: result.count ?? 0 });
     if (!sent.ok) core.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
+    else if (walk.line_keys.has(keys)) start_hold(win, walk.browser);
     return sent.ok;
   }
 
@@ -86,6 +139,15 @@ function define(core) {
     const { window: win, browser, event, tree } = context;
     const token = event_to_token(event);
     if (token === null) return undefined;
+    const hold = holds.get(win);
+    if (hold?.browser === browser && event.key !== "Escape") {
+      hold_key(hold, event);
+      return true;
+    }
+    if (hold) {
+      end_hold(win);
+      if (event.key === "Escape") return true;
+    }
     if (is_ignored(browser)) {
       if (token !== IGNORE_TOGGLE_KEY) return false;
       ignored.delete(browser);
@@ -119,7 +181,7 @@ function define(core) {
     const leaf = result.leaf.scope;
     // A register means nothing to the commands a locked page runs, so the keys do nothing.
     if (result.register_keys_ !== undefined) return true;
-    if (leaf === "forward") return forward(result);
+    if (leaf === "forward") return forward(result, walk, win);
     return run_native(leaf, result, context);
   }
 
@@ -137,7 +199,7 @@ function define(core) {
     const bar = win?.gURLBar;
     if (!bar || typeof bar.focus !== "function") return { ok: false, error: "This Firefox has no address bar to open" };
     bar.focus();
-    bar.value = text.replace(/[\p{Cc}\p{Cf}]/gu, "");
+    bar.value = (text + take_held(win, true)).replace(/[\p{Cc}\p{Cf}]/gu, "");
     return { ok: true };
   }
 
@@ -163,7 +225,9 @@ function define(core) {
     reset: (win) => {
       if (win) walks.delete(win);
       else walks = new WeakMap();
+      for (const held_win of win ? [win] : [...holds.keys()]) end_hold(held_win);
     },
     pending: pending_in,
+    take_held,
   });
 }

@@ -33,6 +33,8 @@ export type RankServiceDeps = {
   listed: (url: string) => Promise<boolean>;
   fallback: () => Promise<HistoryNode[]>;
   inputs: (source: RankSource, asker: Asker) => Promise<RankInputs>;
+  // Who the port's page is: a frame of a tab, or the command line panel over a locked page (`cmdline_panel.ts`).
+  asker_of: (sender: NonNullable<RankPort["sender"]>) => Promise<Asker | undefined>;
   // Whether the frame of the tab redeemed a line's ticket. Only that frame's page may rank, because a web page can frame the line's page.
   is_opener: (tab_id: number, frame_id: number) => Promise<boolean>;
   // Whether the port comes from the line's own page, not a content script or another extension page.
@@ -222,15 +224,19 @@ export function create_rank_service(deps: RankServiceDeps) {
     // A line's port. The opener check runs once, at connect: the marker clears when the tab navigates, which also ends the frame and its port.
     connect: (port: RankPort) => {
       if (port.name !== RANK_PORT_NAME) return;
-      const tab = port.sender?.tab;
-      const frame_id = port.sender?.frameId;
-      const asker = tab?.id !== undefined && tab.windowId !== undefined && frame_id !== undefined && deps.is_line_page(port) ? { tab_id: tab.id, frame_id, window_id: tab.windowId, incognito: tab.incognito === true } : undefined;
-      const admitted = asker ? refused_as(deps.is_opener(asker.tab_id, asker.frame_id), false) : Promise.resolve(false);
-      const line: Line = { id: ++next_line, port, asker, admitted, inputs: new Map(), posted: new Set(), closed: false };
+      const line: Line = { id: ++next_line, port, asker: undefined, admitted: Promise.resolve(false), inputs: new Map(), posted: new Set(), closed: false };
+      // The asker is set before `admitted` settles, and every request waits for that.
+      const admit = async (): Promise<boolean> => {
+        const asker = port.sender && deps.is_line_page(port) ? await deps.asker_of(port.sender) : undefined;
+        if (!asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return false;
+        line.asker = asker;
+        return true;
+      };
+      line.admitted = refused_as(admit(), false);
       lines.set(line.id, line);
       port.onDisconnect.addListener(() => close(line));
       port.onMessage.addListener((message) => void on_request(line, message));
-      void admitted.then((opener) => {
+      void line.admitted.then((opener) => {
         if (opener || line.closed) return;
         close(line);
         try {
@@ -257,7 +263,7 @@ export function start_rank_service(deps: RankServiceDeps): RankService {
 export const rank_usage_for = async (urls: readonly string[]): Promise<[string, number][] | undefined> => running?.usage_for(urls);
 export const rank_pick_history = async (text: string): Promise<PickedHistory | undefined> => running?.pick_history(text);
 
-export function browser_rank_service_deps(from_services: Pick<RankServiceDeps, "inputs" | "is_opener" | "fallback" | "listed">): RankServiceDeps {
+export function browser_rank_service_deps(from_services: Pick<RankServiceDeps, "inputs" | "asker_of" | "is_opener" | "fallback" | "listed">): RankServiceDeps {
   const worker_url = browser.runtime.getURL("rank_worker.js");
   const line_page_url = browser.runtime.getURL("cmdline.html");
   return {

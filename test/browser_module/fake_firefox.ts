@@ -172,7 +172,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     get stack() {
       return { filename: running_file };
     },
-    interfaces: { nsIWebProgress: { NOTIFY_LOCATION: 1, NOTIFY_SECURITY: 4 }, nsIDOMWindowUtils: { IME_STATUS_DISABLED: IME_DISABLED, IME_STATUS_ENABLED: IME_ENABLED, IME_STATUS_PASSWORD: IME_PASSWORD } } as Record<string, unknown>,
+    interfaces: { nsIWebProgress: { NOTIFY_LOCATION: 1, NOTIFY_SECURITY: 4 }, nsIWebProgressListener: { LOCATION_CHANGE_SAME_DOCUMENT: 1 }, nsIDOMWindowUtils: { IME_STATUS_DISABLED: IME_DISABLED, IME_STATUS_ENABLED: IME_ENABLED, IME_STATUS_PASSWORD: IME_PASSWORD } } as Record<string, unknown>,
     // XPCOM classes by contract id. A test adds the ones its feature file creates.
     classes: {} as Record<string, unknown>,
     utils: {
@@ -264,12 +264,18 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     const tabs = new Map<unknown, { browser: unknown }>();
     const tab_moves: number[] = [];
     const address_bar: string[] = [];
+    // Timers run only when a test says so.
+    const timers = new Map<number, () => void>();
+    let next_timer = 0;
+    const tab_select_listeners = new Set<Listener>();
     const document = { localName: "document", documentElement: { getAttribute: (name: string) => (name === "windowtype" ? "navigator:browser" : null) } };
     let selected: { browser: unknown } | undefined;
     const win = {
       private_window,
       document,
       windowUtils: { IMEStatus: IME_DISABLED },
+      setTimeout: (run: () => void) => (timers.set(++next_timer, run), next_timer),
+      clearTimeout: (timer: number) => void timers.delete(timer),
       closed: false,
       gURLBar: {
         focus() {},
@@ -288,6 +294,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         },
         getTabForBrowser: (browser: unknown) => [...tabs.values()].find((tab) => tab.browser === browser) ?? null,
         tabContainer: {
+          addEventListener: (type: string, listener: Listener) => void (type === "TabSelect" && tab_select_listeners.add(listener)),
+          removeEventListener: (type: string, listener: Listener) => void tab_select_listeners.delete(listener),
           advanceSelectedTab: (step: number) => {
             if (firefox.fail_tab_moves) throw new Error("advanceSelectedTab changed");
             tab_moves.push(step);
@@ -329,7 +337,11 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       for (const listener of [...(listeners.get("unload") ?? [])]) listener(key_event("unload"));
     };
     const select = (tab: { browser: unknown }) => void (selected = tab);
-    return { win, load, add_tab, select, press, close, tab_moves, address_bar, listener_count: (type: string) => listeners.get(type)?.size ?? 0 };
+    // A window event with no data, as `deactivate` when the window loses the focus.
+    const fire = (type: string) => [...(listeners.get(type) ?? [])].forEach((listener) => listener(key_event(type)));
+    const fire_tab_select = () => [...tab_select_listeners].forEach((listener) => listener(key_event("TabSelect")));
+    const run_timers = () => [...timers.keys()].forEach((timer) => (timers.get(timer)?.(), timers.delete(timer)));
+    return { win, load, add_tab, select, press, close, fire, fire_tab_select, run_timers, timer_count: () => timers.size, tab_moves, address_bar, listener_count: (type: string) => listeners.get(type)?.size ?? 0 };
   };
 
   // A frame script's `sendAsyncMessage` as the parent hears it.

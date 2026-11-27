@@ -91,6 +91,9 @@ export const CMDLINE_LATEST_TICKET_STORAGE_PREFIX = "desertfox_cmdline_latest_ti
 // Prefix of one `storage.session` key per tab whose command line redeemed a ticket. The value is the frame id of the line that redeemed it, and only that frame is an opener. Removed when the tab closes or navigates.
 export const CMDLINE_OPENER_STORAGE_PREFIX = "desertfox_cmdline_opener_";
 
+// A `storage.session` key: the command line panel the background last asked the browser module to open over a locked page (`background/cmdline_panel.ts`). Replaced by the next one, removed when its tab closes.
+export const CMDLINE_PANEL_STORAGE_KEY = "desertfox_cmdline_panel";
+
 // Prefix of one `storage.session` key per window, holding the id of the tab the user was on before the current one. The `#` of a tab row. Removed when that tab or the window closes.
 export const PREVIOUS_TAB_STORAGE_PREFIX = "desertfox_previous_tab_";
 

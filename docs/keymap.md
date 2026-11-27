@@ -298,7 +298,7 @@ bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `;M` | `hint --enter-media --media` | Start media mode at a video |  |
 | `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |  |
 | `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
-| `:` | `cmdline.open` | Command line |  |
+| `:` | `cmdline.open` | Command line | yes |
 | `/` | `find` | Find forward |  |
 | `?` | `find --backward` | Find backward |  |
 | `*` | `find --word` | Find word forward |  |

@@ -61,8 +61,22 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   // A page swaps the record key for macro.stop while a macro records, which the stored tree cannot follow, so `q` stays with the page.
   assert.equal(node_at(DEFAULT_TREE, ["q"]), undefined);
   // Hints, find, the command line, marks, insert mode and the copy keys need DesertFox's page code.
-  for (const keys of [["f"], ["/"], [":"], ["i"], ["m"], ["y", "y"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  for (const keys of [["f"], ["/"], ["i"], ["m"], ["y", "y"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  // The bare command line key stays, so the background opens the line as a panel. A line with typed text (`A`, `tM`) does not.
+  assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
+  for (const keys of [["A"], ["t", "M"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
+});
+
+test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
+  // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
+  for (const keys of [":", "o", "T", "w w"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of ["u", "x x", "g t"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
+  assert.equal(DEFAULT_TREE.line_keys?.some((keys) => keys.split(" ").includes("")), false, "a path through the capture key");
+  for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, line_keys: [junk] }).ok, false, JSON.stringify(junk));
+  assert.equal(validate_scope_tree({ children: {}, line_keys: ":" }).ok, false);
+  // A module that predates the field reads the tree by `children` alone.
+  assert.equal(validate_scope_tree({ children: {} }).ok, true);
 });
 
 test("the default tree is about 4 KB and a large keymap's stays under the cap", () => {
@@ -156,7 +170,7 @@ test("a forged, stale or page key, a typed count or register and junk are refuse
   // Not bound, a prefix only, a sequence broken and retried as a first key, past the leaf.
   for (const keys of ["Q Q Q", "g", "g J", "x x x", "<C-S-F12>"]) assert.equal(refused(keys)?.shown, true, keys);
   // Bound, but to page code: hints, find, the command line, a mark.
-  for (const keys of ["f", "/", ":", "m a"]) assert.match(refused(keys)!.problem, /needs a page/, keys);
+  for (const keys of ["f", "/", "A", "m a"]) assert.match(refused(keys)!.problem, /needs a page/, keys);
   // A count, a register or a hold belong in `count`, never in the keys.
   for (const keys of ["5 x x", "\" a x x", "t <Space> n"]) refused(keys);
   // Junk keys text is no sequence and is not shown.

@@ -82,7 +82,8 @@ export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: R
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
 export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
-export type ScopeTree = { children: Record<string, ScopeNode> };
+// `line_keys`, on the root only: the key paths (tokens joined by one space) of the forward leaves that open the command line. After one of them the module holds the keys that follow until the line has the focus, so they never run on the page. An older module ignores the field.
+export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[] };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
@@ -156,11 +157,17 @@ function tree_problem(node: unknown, depth: number): string | undefined {
   return undefined;
 }
 
+function line_keys_problem(line_keys: unknown): string | undefined {
+  if (line_keys === undefined) return undefined;
+  const fits = (path: unknown) => typeof path === "string" && path.split(" ").length <= MAX_SEQUENCE_KEYS && path.split(" ").every(is_key_token);
+  return Array.isArray(line_keys) && line_keys.every(fits) ? undefined : "the line keys are not key paths";
+}
+
 export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   const size = json_bytes(value);
   if (size === undefined) return bad("the tree is not plain data");
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
-  const problem = tree_problem(value, 0);
+  const problem = tree_problem(value, 0) ?? line_keys_problem((value as { line_keys?: unknown }).line_keys);
   return problem === undefined ? { ok: true, value: value as ScopeTree } : bad(problem);
 }
 
@@ -295,6 +302,7 @@ const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
+const PANEL_CALL_BYTES = 256;
 // The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
 export const CHROME_HINT_PART_BYTES = 4096;
 // The most parts a session's targets or one draw may come in. The module keeps the same number.
@@ -330,6 +338,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
   // `tab_id` names the tab that asked. The module refuses when that tab is no longer the selected tab of the focused window, so the text never lands in a window the user switched to. An older extension leaves it out.
   "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },
+  // The command line on a locked page: the module opens DesertFox's own `cmdline.html` in a panel over the tab, at a fixed address with the extension's principal. It refuses when `tab_id` is no longer the selected tab of its window, so a late request never opens over another page.
+  "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: PANEL_CALL_BYTES },
   // Starts a session in the window, which must be in front. `colors` is JSON text of the theme's dark and light hex colors, or "". The reply refuses when there is nothing to hint.
   "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
   // One part of the labels to show: `labels` is a list of [id, label]. Only a draw whose parts all came shows, and it replaces the one before.
@@ -434,6 +444,8 @@ export const LOCKED_PAGE_ROUTES = {
   relay: "background",
   frame_cue: "background",
   open_cmdline: "background",
+  open_panel_cmdline: "refused",
+  close_panel_cmdline: "refused",
   record_cmdline: "refused",
   complete_items: "refused",
   tab_rows_action: "refused",

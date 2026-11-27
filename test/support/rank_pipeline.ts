@@ -3,6 +3,7 @@
 // Each hop copies its message when it is posted, as the browser does, so a sender that changes the object afterwards changes nothing on the way.
 import { create_rank_index } from "../../src/background/rank_index.ts";
 import type { FromWorker, ToWorker } from "../../src/background/rank_index.ts";
+import { frame_asker_of } from "../../src/background/cmdline_panel.ts";
 import { create_rank_service } from "../../src/background/rank_service.ts";
 import type { RankPort, RankServiceDeps, RankWorker } from "../../src/background/rank_service.ts";
 import type { HistoryNode, RankInputs } from "../../src/background/completion_rank.ts";
@@ -93,6 +94,7 @@ export function rank_pipeline(options: PipelineOptions) {
     inputs: options.inputs,
     is_opener: options.is_opener ?? (async () => true),
     is_line_page: () => true,
+    asker_of: async (sender) => frame_asker_of(sender),
     set_timer: (callback, delay_ms) => {
       timer_delays.push(delay_ms);
       return setTimeout(callback, delay_ms * scale);

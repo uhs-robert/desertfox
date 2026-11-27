@@ -40,6 +40,57 @@ const CHECKS = [
     used_for: "type_in_address_bar types into the address bar and reads it back",
     code: `typeof Services.wm.getMostRecentWindow("navigator:browser").gURLBar.value === "string"`,
   },
+  {
+    name: "ExtensionParent.apiManager.emit and the extension's policy.browsingContextGroupId, remoteType, principal and baseURI",
+    used_for: "the browser module's command line panel builds its browser from them, as Firefox builds a toolbar popup",
+    code: `(() => {
+      const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
+      const extension = ExtensionParent.GlobalManager.getExtension(EXTENSION_ID);
+      return typeof ExtensionParent.apiManager.emit === "function" && Number.isInteger(extension.policy.browsingContextGroupId) && typeof extension.remoteType === "string" && Boolean(extension.principal) && typeof extension.baseURI.resolve("cmdline.html") === "string";
+    })()`,
+  },
+  {
+    name: "chrome://extensions/content/ext-browser-content.js",
+    used_for: "the browser module's command line panel loads Firefox's popup content script, which sends Extension:BrowserResized as its page grows",
+    code: `(() => {
+      const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
+      const stream = NetUtil.newChannel({ uri: "chrome://extensions/content/ext-browser-content.js", loadUsingSystemPrincipal: true }).open();
+      const text = NetUtil.readInputStreamToString(stream, stream.available());
+      return text.includes("Extension:BrowserResized") && text.includes("Extension:InitBrowser");
+    })()`,
+  },
+  {
+    name: "ExtensionParent.apiManager has a listener for extension-browser-inserted",
+    used_for: "the browser module's command line panel emits it so Firefox wires the panel's browser to the extension, as for a toolbar popup",
+    code: `ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.has("extension-browser-inserted")`,
+  },
+  {
+    name: "ExtensionPopups.sys.mjs waits for XULFrameLoaderCreated, closes on DOMWindowClose and emits extension-browser-inserted",
+    used_for: "the browser module's command line panel copies these steps of Firefox's toolbar popup: it loads its page after XULFrameLoaderCreated and closes on the page's window.close()",
+    code: `(() => {
+      const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
+      const stream = NetUtil.newChannel({ uri: "resource:///modules/ExtensionPopups.sys.mjs", loadUsingSystemPrincipal: true }).open();
+      const text = NetUtil.readInputStreamToString(stream, stream.available());
+      return ["XULFrameLoaderCreated", "DOMWindowClose", "extension-browser-inserted"].every((name) => text.includes(name));
+    })()`,
+  },
+  {
+    name: "gBrowser.addTabsProgressListener and removeTabsProgressListener, nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT and Services.uuid.generateUUID",
+    used_for: "the browser module's command line panel closes when its tab loads another page, and keys the page it loads",
+    code: `(() => {
+      const gBrowser = Services.wm.getMostRecentWindow("navigator:browser").gBrowser;
+      return typeof gBrowser.addTabsProgressListener === "function" && typeof gBrowser.removeTabsProgressListener === "function" && Number.isInteger(Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT) && /^\\{[0-9a-f-]{36}\\}$/.test(Services.uuid.generateUUID().toString());
+    })()`,
+  },
+  {
+    name: "window.document.getElementById(\"mainPopupSet\"), a panel's openPopup and moveToAnchor, and a browser's fixupAndLoadURIString",
+    used_for: "the browser module's command line panel and the key test's reads of it",
+    code: `(() => {
+      const doc = Services.wm.getMostRecentWindow("navigator:browser").document;
+      const panel = doc.createXULElement("panel");
+      return Boolean(doc.getElementById("mainPopupSet")) && typeof panel.openPopup === "function" && typeof panel.moveToAnchor === "function" && typeof doc.createXULElement("browser").fixupAndLoadURIString === "function";
+    })()`,
+  },
 ];
 
 export const firefox_label = ({ version, build_id }) => `Firefox ${version}${build_id ? `, build ${build_id}` : ""}`;

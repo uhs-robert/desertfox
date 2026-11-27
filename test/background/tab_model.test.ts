@@ -83,6 +83,7 @@ function make(initial: Tab[] = [], options: Options = {}) {
     on_connect: { addListener: (fn) => void (connect = fn) },
     is_extension_page: (port) => port.sender?.url?.startsWith("moz-extension://me/") === true,
     is_web_accessible_page: (port) => port.sender?.url === LINE_URL,
+    asker_of: async ({ tab, frameId }) => (tab?.id === undefined || frameId === undefined ? undefined : { tab_id: tab.id, frame_id: frameId, incognito: tab.incognito === true }),
     is_opener: (tab_id, frame_id) => {
       opener_asks.push(`${tab_id}:${frame_id}`);
       return options.is_opener ? options.is_opener(tab_id, frame_id) : Promise.resolve(true);
