@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../../src/background/command_modules.ts";
-import { create_browser_module, key_rows_of, module_setting_on, read_bar_config, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
+import { create_browser_module, key_rows_of, module_setting_on, read_bar_config, stored_setting_on, tab_id_of_key, tab_state_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { create_module_call } from "../../src/background/browser_module_call.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
 import { MESSAGE_MIN_GAP_MS } from "../../src/shared/browser_module_protocol.ts";
-import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, DEFAULT_MAX_AGE_MS, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf, TreeNode } from "../../src/shared/prefix_tree.ts";
@@ -60,7 +60,7 @@ const TEST_KINDS: { from_module: KindTable; from_extension: KindTable } = {
 
 const BAR_CONFIG = { left: ["mode", "pending"] as ("mode" | "pending")[], right: ["tabs"] as "tabs"[], border: "auto" as const };
 
-function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord>; bar_setting?: boolean; theme?: unknown } = {}) {
+function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord>; bar_setting?: boolean; theme?: unknown; blur_on_load?: boolean } = {}) {
   const data = new Map<string, unknown>();
   const bar_changes = { count: 0 };
   const config = { bar_setting: options.bar_setting ?? true, theme: options.theme as unknown, on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000, gets: [] as string[] };
@@ -80,6 +80,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     session: session as never,
     is_on: async () => config.on,
     read_disabled: async () => config.disabled,
+    ...(options.blur_on_load === undefined ? {} : { read_blur_on_load: async () => options.blur_on_load! }),
     read_keymap: async () => keymap({ J: leaf("tab.next") }),
     read_tab_records: async () => config.records,
     check_args: real_check,
@@ -151,6 +152,18 @@ test("the setting turning on writes the state and turning off clears it, read fr
   assert.equal(await module_setting_on({ get: async () => ({}) }), false, "no status yet means off");
   assert.equal(await module_setting_on({ get: async (key: string) => ({ [key]: { settings: { browser_module: "yes" } } }) }), false);
 });
+
+test("the state carries blur_on_load only while the setting is on, read from the stored config status", async () => {
+  for (const [blur_on_load, expected] of [[true, true], [false, undefined], [undefined, undefined]] as const) {
+    const { data, module } = setup(blur_on_load === undefined ? {} : { blur_on_load });
+    await module.sync();
+    assert.equal((data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as { blur_on_load?: boolean }).blur_on_load, expected, String(blur_on_load));
+  }
+  const status = (settings: Record<string, unknown>) => ({ get: async (key: string) => ({ [key]: { settings } }) });
+  assert.equal(await stored_setting_on(status({ blur_on_load: true }), "blur_on_load"), true);
+  assert.equal(await stored_setting_on(status({ blur_on_load: "yes", browser_module: true }), "blur_on_load"), false);
+});
+
 
 test("the toolbar switch off writes enabled false and no keys", async () => {
   const { data, module } = setup({ disabled: true });
@@ -671,6 +684,23 @@ test("a report that arrives while a load runs stays out of the state and shows w
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true }, "hidden while the load runs");
   await module.tab_changed("3", { top_mode: "normal", live: true });
   assert.deepEqual(state_of(data).tabs["3"], { mode: "normal", live: true, pending: ["g"] }, "the kept report returns");
+});
+
+test("the extension stamps sent_at on its requests, and a module request older than its kind allows never runs", async () => {
+  const { data, config, module, flush, calls } = setup();
+  const sent = await module.send("note");
+  assert.ok(sent.ok);
+  assert.equal(outbox_of(data)[0]!.sent_at, config.now);
+  from_module(data, [
+    { v: 1, id: "old", kind: "ask", args: { axis: "x" }, sent_at: config.now - DEFAULT_MAX_AGE_MS - 1 },
+    { v: 1, id: "stale_push", kind: "push", args: { n: 1 }, sent_at: 0 },
+    { v: 1, id: "fresh", kind: "push", args: { n: 2 }, sent_at: config.now - 10 },
+    { v: 1, id: "older_writer", kind: "push", args: { n: 3 } },
+  ]);
+  module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  await flush();
+  assert.deepEqual(calls, [["push", { n: 2 }], ["push", { n: 3 }]]);
+  assert.deepEqual(outbox_of(data).filter((message) => "reply_to" in message), [{ v: 1, reply_to: "old", ok: false, error: "the request is too old" }]);
 });
 
 test("each status the module writes and its removal reach on_status", async () => {

@@ -69,11 +69,12 @@ export const tab_state_of = (record: TabModeRecord): TabState => ({ mode: mode_o
 // The tab id of a tab mode key, or undefined for the manual insert hold key that shares the prefix.
 export const tab_id_of_key = (key: string): string | undefined => (key.startsWith(TAB_MODE_STORAGE_PREFIX) && /^\d{1,10}$/.test(key.slice(TAB_MODE_STORAGE_PREFIX.length)) ? key.slice(TAB_MODE_STORAGE_PREFIX.length) : undefined);
 
-// Whether the setting is on in the stored config status, which holds the settings in force. The status is written in the same `set` as the change event that asks, while `get_config` updates after it.
-export async function module_setting_on(storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> {
-  const status = (await storage.get(CONFIG_STATUS_STORAGE_KEY))[CONFIG_STATUS_STORAGE_KEY] as { settings?: { browser_module?: unknown } } | undefined;
-  return status?.settings?.browser_module === true;
+// Whether a boolean setting is on in the stored config status, which holds the settings in force. The status is written in the same `set` as the change event that asks, while `get_config` updates after it.
+export async function stored_setting_on(storage: Pick<typeof browser.storage.local, "get">, name: "browser_module" | "blur_on_load"): Promise<boolean> {
+  const status = (await storage.get(CONFIG_STATUS_STORAGE_KEY))[CONFIG_STATUS_STORAGE_KEY] as { settings?: Record<string, unknown> } | undefined;
+  return status?.settings?.[name] === true;
 }
+export const module_setting_on = (storage: Pick<typeof browser.storage.local, "get">): Promise<boolean> => stored_setting_on(storage, "browser_module");
 
 // The bar settings in the stored config status, or undefined while `browser_bar` is off. A value the status lacks or the protocol refuses reads as the default.
 export async function read_bar_config(storage: Pick<typeof browser.storage.local, "get">): Promise<BarConfig | undefined> {
@@ -88,6 +89,8 @@ export type BrowserModuleDeps = {
   // Whether the setting is on (`module_setting_on`).
   is_on: () => Promise<boolean>;
   read_disabled: () => Promise<boolean>;
+  // The global `blur_on_load`. Locked pages match no site rule, so the global value is the one in force there.
+  read_blur_on_load?: () => Promise<boolean>;
   read_keymap: () => Promise<CompiledKeymap | undefined>;
   read_tab_records: () => Promise<Record<string, TabModeRecord>>;
   check_args: CheckCommandArgs;
@@ -222,7 +225,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   // Handles each message of the module list that is new. Refusals go out in one rewrite of the extension's list, and each handler's reply when it settles.
   const answer_module_messages = async (): Promise<void> => {
-    const checked = validate_message_list((await deps.session.get(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY))[BROWSER_MODULE_FROM_MODULE_STORAGE_KEY], kinds.from_module);
+    const checked = validate_message_list((await deps.session.get(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY))[BROWSER_MODULE_FROM_MODULE_STORAGE_KEY], kinds.from_module, deps.now());
     if (!checked.ok) return;
     const outbox = await read_outbox();
     const answered = new Set(outbox.flatMap((message) => ("reply_to" in message ? [message.reply_to] : [])));
@@ -288,7 +291,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_of_record(id, record);
     }
     const bar_theme = bar_theme_of(await deps.read_theme?.());
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }) });
+    const blur_on_load = (await deps.read_blur_on_load?.()) === true;
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: disabled ? [] : key_rows_of(await deps.read_keymap(), deps.check_args), tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}) });
     request_hello_read();
     request_messages_read();
   };
@@ -334,7 +338,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // `on_id` hears the id before the request is written, so a caller can wait for its reply before the module can answer.
   const send_now = async (kind: string, args: ModuleArgs, on_id?: (id: string) => void): Promise<{ ok: true; id: string } | { ok: false; problem: string }> => {
     if (!(await deps.is_on())) return { ok: false, problem: "the browser module setting is off" };
-    const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args };
+    const request = { v: BROWSER_MODULE_PROTOCOL_VERSION, id: `x${deps.now().toString(36)}-${sent++}`, kind, args, sent_at: deps.now() };
     const checked = validate_message(request, kinds.from_extension);
     if (!checked.ok) return checked;
     on_id?.(request.id);

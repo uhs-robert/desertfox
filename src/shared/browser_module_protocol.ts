@@ -65,7 +65,8 @@ export type BarTheme = { dark: BarColors; light: BarColors };
 // What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig };
+// `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean };
 // `bar` says the module built its status bar.
 export type ModuleHello = { v: number; module_version: string; bar?: true };
 
@@ -154,6 +155,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
   if (typeof value.enabled !== "boolean") return bad("enabled must be true or false");
+  if (value.blur_on_load !== undefined && typeof value.blur_on_load !== "boolean") return bad("blur_on_load must be true or false");
   if (!Array.isArray(value.keys) || value.keys.length > MAX_KEY_ROWS) return bad(`keys must be a list of at most ${MAX_KEY_ROWS} rows`);
   const keys: KeyRow[] = [];
   const seen = new Set<string>();
@@ -179,7 +181,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);
   const bar = bar_config_of(value.bar);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }) } };
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -212,7 +214,8 @@ export function status_of_hello(hello: unknown): ModuleStatus {
 // A message is a request `{ v, id, kind, args }` or a reply `{ v, reply_to, ok, error? }`. A `kind` comes from a fixed allow list per direction, with the shape of its args. A request carries typed commands only, never code, selectors or URLs for the module to run. The page kinds carry message text that the module hands on between the background and DesertFox's own code in a locked page, and never reads. Later pieces add kinds and nothing else.
 // A kind row gives the shape of its args and whether the sender expects a reply. A push has `reply: false`: the receiver runs it and says nothing.
 // `max_bytes` is the size limit of one message of the kind, as JSON. A kind without it keeps the size of a whole default list. No kind goes past MAX_KIND_BYTES: bulk data goes in a snapshot (below), and a chunked message is refused.
-export type KindRow = { args: Record<string, ArgKind>; reply: boolean; max_bytes?: number };
+// `max_age_ms` bounds how old a request of the kind may be when it is read (DEFAULT_MAX_AGE_MS when absent), so a key the user pressed long ago never runs late.
+export type KindRow = { args: Record<string, ArgKind>; reply: boolean; max_bytes?: number; max_age_ms?: number };
 export type KindTable = Record<string, KindRow>;
 export const MAX_KIND_BYTES = 64 * 1024;
 // Room for the envelopes of the other messages beside the largest one.
@@ -255,7 +258,10 @@ export function json_bytes(value: unknown): number | undefined {
   }
 }
 
-export type ModuleRequest = { v: number; id: string; kind: string; args: ModuleArgs };
+export const DEFAULT_MAX_AGE_MS = 2000;
+
+// `sent_at` is ms since the epoch. A request from an older writer has none and is never too old.
+export type ModuleRequest = { v: number; id: string; kind: string; args: ModuleArgs; sent_at?: number };
 // `value` is optional JSON text. An older reader ignores it.
 export type ModuleReply = { v: number; reply_to: string; ok: boolean; error?: string; value?: string };
 export type ModuleMessage = ModuleRequest | ModuleReply;
@@ -275,6 +281,7 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
   if (!is_message_id(value.id)) return bad("a request needs an id of 1 to 32 letters, digits, - or _");
   if (typeof value.kind !== "string" || !Object.hasOwn(kinds, value.kind)) return bad("the kind is not on the allow list");
   if ((json_bytes(value) ?? Number.POSITIVE_INFINITY) > kind_bytes(kinds[value.kind]!)) return bad(`a ${value.kind} message is over its size limit`);
+  if (value.sent_at !== undefined && (typeof value.sent_at !== "number" || !Number.isSafeInteger(value.sent_at) || value.sent_at < 0)) return bad("sent_at must be whole ms since the epoch");
   const given = value.args ?? {};
   if (!is_record(given)) return bad("args must be a table");
   const args: ModuleArgs = {};
@@ -283,14 +290,19 @@ export function validate_message(value: unknown, kinds: KindTable): Checked<Modu
     if (problem !== undefined) return bad(`${value.kind} ${name} ${problem}`);
     args[name] = given[name] as number | string;
   }
-  return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args } };
+  return { ok: true, value: { v: value.v, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
 }
+
+// A request older than its kind allows at `now`. A clock that went back counts as fresh.
+export const is_too_old = (request: ModuleRequest, kinds: KindTable, now: number): boolean =>
+  request.sent_at !== undefined && now - request.sent_at > (kinds[request.kind]?.max_age_ms ?? DEFAULT_MAX_AGE_MS);
 
 // `refused` names each request that failed its check, still had a usable id and either names no listed kind or expects a reply, so its reader can answer with an error. A push that fails its check is dropped. A message with no usable id, or of another version, is dropped without a word.
 export type MessageList = { messages: ModuleMessage[]; refused: { id: string; error: string }[] };
 
 // A whole list from foreign or own storage: a size cap, a count cap, then message by message. The list fails only when it is not a list or is too big. A bad message is skipped and never takes a good one down.
-export function validate_message_list(value: unknown, kinds: KindTable): Checked<MessageList> {
+// With `now`, a request that is too old is dropped as well, and refused when it expects a reply. The writer's own read of its list passes no `now`.
+export function validate_message_list(value: unknown, kinds: KindTable, now?: number): Checked<MessageList> {
   if (!Array.isArray(value)) return bad("a message list must be a list");
   if (value.length > MAX_MESSAGES) return bad("a message list holds too many messages");
   const size = json_bytes(value);
@@ -299,7 +311,9 @@ export function validate_message_list(value: unknown, kinds: KindTable): Checked
   const list: MessageList = { messages: [], refused: [] };
   for (const item of value) {
     const checked = validate_message(item, kinds);
-    if (checked.ok) list.messages.push(checked.value);
+    if (checked.ok && now !== undefined && !is_reply(checked.value) && is_too_old(checked.value, kinds, now)) {
+      if (kinds[checked.value.kind]!.reply) list.refused.push({ id: checked.value.id, error: "the request is too old" });
+    } else if (checked.ok) list.messages.push(checked.value);
     else if (is_record(item) && item.v === BROWSER_MODULE_PROTOCOL_VERSION && item.reply_to === undefined && is_message_id(item.id) && (typeof item.kind !== "string" || !Object.hasOwn(kinds, item.kind) || kinds[item.kind]!.reply)) list.refused.push({ id: item.id, error: checked.problem.slice(0, MAX_ERROR_CHARS) });
   }
   return { ok: true, value: list };

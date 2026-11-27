@@ -47,10 +47,12 @@ const directory_names = (top: string) =>
         !NOT_FOLDER_NAMES.has(entry.name),
     )
     .map((entry) => entry.name);
+// browser_module/ sits at the repo root, outside src/, because the xpi must never hold it.
 const folder_names = new Set([
   ...directory_names("src"),
   ...directory_names("tools"),
   "tools",
+  "browser_module",
 ]);
 // Harness folders that hold test files but are not source folders, so they never prefix a root name.
 const SUBFOLDER_ONLY = new Set(["key", "support"]);
@@ -131,4 +133,5 @@ test("the rule accepts and rejects each name shape", () => {
   assert.equal(check("key/x.test.ts"), undefined);
   assert.equal(check("support/x.test.ts"), undefined);
   assert.ok(check("fixtures/x.test.ts"));
+  assert.equal(naming_problem("browser_module/core.test.ts"), undefined);
 });
