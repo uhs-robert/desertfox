@@ -69,6 +69,12 @@ test("a page that sent an unlisted about: address keeps the refusal and the :fir
   assert.deepEqual(requests, []);
 });
 
+test("about:logins is refused for a request from a page in every placement, and not for a typed one", async () => {
+  for (const where of ["here", "tab", "background", "window"]) await assert.rejects(open_url({ url: "about:logins", where }, true), /A page cannot open the passwords page/);
+  assert.deepEqual(requests, []);
+  await assert.rejects(open_url({ url: "about:logins", where: "here" }), (error: unknown) => error instanceof Error && error.name === "RuntimeRefusal" && !/A page cannot/.test(error.message));
+});
+
 test("a mapped address refuses a container, a background tab, a window, and the passwords page here", async () => {
   await assert.rejects(open_url({ url: "about:config", where: "tab", container: "Work" }), /no container/);
   await assert.rejects(open_url({ url: "about:config", where: "background" }), /here or in a tab/);
