@@ -430,16 +430,20 @@
       if (tell) send("chrome_hints.end", { session: ended.tag });
     }
 
-    function push_key(key) {
+    function push_key(key, repeat = false) {
       session.seq++;
-      if (session.page) note_typed(session, key);
+      if (session.page) note_typed(session, key, repeat);
       send("chrome_hints.key", { session: session.tag, seq: session.seq, key });
     }
 
     // A page session keeps the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
     // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing.
-    function note_typed(owner, key) {
-      if (time_now(owner.win) < owner.counts_at) return;
+    // A key the user holds, or one typed before the labels showed a while, pushes that while on, so a key counts only after a pause with labels shown.
+    function note_typed(owner, key, repeat) {
+      if (repeat || time_now(owner.win) < owner.counts_at) {
+        owner.counts_at = time_now(owner.win) + LABELS_SEEN_MS;
+        return;
+      }
       owner.typed_at = time_now(owner.win);
       if (key === "Backspace") {
         owner.typed = owner.typed.slice(0, -1);
@@ -478,7 +482,7 @@
       if (key === undefined) return;
       if (session.drawn_gen === 0) {
         if (session.early_keys.length < MAX_EARLY_KEYS) session.early_keys.push(key);
-      } else push_key(key);
+      } else push_key(key, event.repeat);
     }
 
     // ---- A start from chrome focus.
