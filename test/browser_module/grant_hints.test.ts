@@ -128,8 +128,9 @@ async function labelled(run: Run, session: number) {
   };
 }
 
-// The extension's own start, as gB typed in the page sends it.
-async function collect(run: Run, session: number) {
+// The extension's own start, as gB typed in the page sends it. The module hears gB on its way to the page. `typed: false` is a start no key of the user's asked for.
+async function collect(run: Run, session: number, { typed = true } = {}) {
+  if (typed) run.type_binding();
   const id = run.send("chrome_hints.collect", { session, window_id: run.chrome.id, colors: "" });
   await settle();
   return run.reply(id);
@@ -228,6 +229,78 @@ test("with the pref at 0 or below the mark still shows 500 ms before an Enter co
     assert.equal(chrome.allow.clicks, 0, `pref ${delay}: an Enter right after the mark granted`);
     assert.equal(marked(chrome), false, `pref ${delay}`);
   }
+});
+
+// ---- A start no key of the user's asked for.
+
+// A doorhanger with the focus in the page, and a plain collect after `before` ran, as the extension sends one.
+async function doorhanger_collect(before: (chrome: ReturnType<typeof browser_with_doorhanger>, run: Run) => void) {
+  const run = started((firefox) => browser_with_doorhanger(firefox));
+  const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+  before(chrome, run);
+  const reply = await collect(run, 5, { typed: false });
+  return { run, chrome, reply };
+}
+
+function expect_refused({ run, chrome, reply }: Awaited<ReturnType<typeof doorhanger_collect>>, what: string) {
+  assert.equal(reply?.ok, false, `${what} labelled the doorhanger`);
+  assert.equal(reply?.error, "Type the hint key to label the prompt", what);
+  assert.equal(run.pushes("chrome_hints.targets").length, 0, `${what} sent targets`);
+  assert.equal(chrome.layers().length + all_layers(chrome.prompt).length, 0, `${what} added a layer`);
+  assert.equal(held(run), undefined, `${what} kept the window's keys`);
+}
+
+test("a collect with no key from the user labels no doorhanger, so a compromised extension cannot mark Allow alone", async () => {
+  expect_refused(await doorhanger_collect(() => undefined), "a collect with no key");
+});
+
+test("a synthetic gB does not count as the user's key", async () => {
+  expect_refused(await doorhanger_collect((chrome) => [chrome.press("g", { isTrusted: false }), chrome.press("B", { isTrusted: false })]), "a synthetic gB");
+});
+
+test("a held-down B does not count, nor a key of no binding", async () => {
+  expect_refused(await doorhanger_collect((chrome) => [chrome.press("g"), chrome.press("B", { repeat: true })]), "a held-down B");
+  expect_refused(await doorhanger_collect((chrome) => [chrome.press("g"), chrome.press("b")]), "a key of no binding");
+});
+
+test("a gB more than a second old does not count, and one just before does", async () => {
+  const stale = await doorhanger_collect((chrome, run) => {
+    run.type_binding();
+    chrome.clock.now += 1001;
+  });
+  expect_refused(stale, "a gB more than a second old");
+  const fresh = await doorhanger_collect((chrome, run) => {
+    run.type_binding();
+    chrome.clock.now += 900;
+  });
+  assert.equal(fresh.reply?.ok, true, "a gB just before did not start");
+});
+
+test("one gB starts one session on a doorhanger: a second collect needs another key", async () => {
+  const { run, chrome, reply } = await doorhanger_collect((_chrome, run) => run.type_binding());
+  assert.equal(reply?.ok, true);
+  run.send("chrome_hints.clear", { session: 5 });
+  await settle();
+  assert.equal((await collect(run, 6, { typed: false }))?.error, "Type the hint key to label the prompt");
+  assert.equal(chrome.layers().length + all_layers(chrome.prompt).length, 0);
+  assert.equal((await collect(run, 7))?.ok, true, "a second gB did not start");
+});
+
+test("a collect with no key during a confirm labels nothing and leaves the mark", async () => {
+  const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
+  assert.equal((await collect(run, 6, { typed: false }))?.ok, false);
+  assert.ok(marked(chrome), "the refused collect ended the confirm");
+  chrome.press("Enter");
+  assert.equal(chrome.allow.clicks, 1);
+});
+
+test("a collect with no key still labels the window's own buttons, which grant nothing", async () => {
+  const run = started((firefox) => {
+    const nav_bar = new Node("toolbar", { id: "nav-bar", box: box(0, 0, 1200, 40) });
+    nav_bar.append(button("reload-button", 10));
+    return chrome_window(firefox, "navigator:browser", (root) => root.append(nav_bar));
+  });
+  assert.equal((await collect(run, 5, { typed: false }))?.ok, true);
 });
 
 test("Enter does nothing once another feature holds the window's keys", async () => {
@@ -371,7 +444,7 @@ test("on a doorhanger the table does not know, the second button waits for Enter
 });
 
 test("every end takes the mark, the hold, the listeners and the observer away: the prompt closing, a click, the timer, a resize, a tab switch, the pref off and shut-down", async () => {
-  for (const end of ["popuphidden", "mousedown", "timer", "resize", "TabSelect", "unload", "pref", "shut_down", "new session"]) {
+  for (const end of ["popuphidden", "mousedown", "timer", "resize", "TabSelect", "unload", "pref", "shut_down"]) {
     const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
     const listeners = chrome.win.listener_total();
     assert.ok(listeners > 2, "the confirm added no listener");
@@ -379,13 +452,12 @@ test("every end takes the mark, the hold, the listeners and the observer away: t
     else if (end === "timer") chrome.fire_timers();
     else if (end === "pref") run.firefox.set_pref(false);
     else if (end === "shut_down") (run.firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
-    else if (end === "new session") await collect(run, 6);
     else chrome.win.fire(end);
     assert.equal(chrome.root.descendants().concat(chrome.prompt.descendants()).filter((node) => node.className === "desertfox-confirm").length, 0, end);
     assert.equal(marked(chrome), false, end);
-    if (end !== "new session") assert.equal(held(run), undefined, end);
+    assert.equal(held(run), undefined, end);
     assert.equal(chrome.live_observers(), 0, `${end}: the observer still watches`);
-    assert.equal(chrome.panel.listener_total(), end === "new session" ? chrome.panel.listener_total() : 0, `${end}: a listener stayed on the panel`);
+    assert.equal(chrome.panel.listener_total(), 0, `${end}: a listener stayed on the panel`);
     chrome.press("Enter");
     assert.equal(chrome.allow.clicks, 0, `${end}: Enter granted after the end`);
   }
