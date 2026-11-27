@@ -139,6 +139,7 @@ const BASE_SECTIONS: KeymapConfig = {
     // The command line opens with the flag typed, and Enter confirms: this one logs you out of every site.
     rC: { id: "page.reload", args: { clear: "all" }, prompt: { param: "clear" }, label: "Clear all data, reload" },
     xp: { id: "page.stop" },
+    gr: { id: "page.reader" },
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },
     "]]": { id: "page.follow", args: { direction: "next" }, label: "Next page" },

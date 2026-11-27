@@ -109,6 +109,7 @@ function unopenable_reason(url: string, own_pages: OwnPages): string | undefined
   const scheme = parsed.protocol;
   if (OPENABLE_SCHEMES.has(scheme)) return undefined;
   if (scheme === "about:" && parsed.pathname.toLowerCase() === "blank") return undefined;
+  if (scheme === "about:" && parsed.pathname.toLowerCase() === "reader") return "DesertFox does not open about:reader addresses. Press gr on the page to show it in Reader View";
   if (scheme === "view-source:") {
     const inner = parsed.href.slice(scheme.length);
     return URL.canParse(inner) && WEB_SCHEMES.has(new URL(inner).protocol) ? undefined : "DesertFox opens view-source: only for http and https addresses";

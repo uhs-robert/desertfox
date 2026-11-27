@@ -38,7 +38,7 @@ test("the locked-page set: background commands that need no page, minus the deny
     "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
     "help.issue", "help.key", "help.open", "hint.browser", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
-    "page.back", "page.forward", "page.home", "page.print", "page.reload", "page.save_pdf",
+    "page.back", "page.forward", "page.home", "page.print", "page.reader", "page.reload", "page.save_pdf",
     "pane.close_both", "pane.equalize", "pane.focus", "pane.focus_side", "pane.resize", "pane.split", "pane.unsplit", "permissions.grant",
     "quickmark.add", "quickmark.delete", "quickmark.list", "quickmark.open", "register.list",
     "session.delete", "session.open", "session.rename", "session.save", "settings.set", "settings.toggle", "settings.unset",
