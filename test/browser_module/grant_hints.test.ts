@@ -213,6 +213,23 @@ test("the mark shows as long as Firefox's security.notification_enable_delay say
   assert.equal(marked(chrome), false);
 });
 
+test("with the pref at 0 or below the mark still shows 500 ms before an Enter counts", async () => {
+  for (const delay of [0, -1]) {
+    const run = started((firefox) => {
+      firefox.set_named_pref("security.notification_enable_delay", delay);
+      return browser_with_doorhanger(firefox);
+    });
+    const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+    run.firefox.chrome_now = 5000;
+    await collect(run, 5);
+    await (await labelled(run, 5))(chrome.allow);
+    const shown_at = chrome.clock.now - DWELL_MS;
+    chrome.press("Enter", { timeStamp: shown_at + 10 });
+    assert.equal(chrome.allow.clicks, 0, `pref ${delay}: an Enter right after the mark granted`);
+    assert.equal(marked(chrome), false, `pref ${delay}`);
+  }
+});
+
 test("Enter does nothing once another feature holds the window's keys", async () => {
   const { run, chrome } = await doorhanger_pick((chrome) => chrome.allow);
   // The core refuses a hold over another owner's, so the confirm's own hold ends first.
