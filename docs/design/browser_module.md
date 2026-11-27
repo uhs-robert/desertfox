@@ -129,7 +129,7 @@ Any other key or a click ends the confirm without a grant. So do the window leav
 - The feature passes a key with Ctrl, Alt or Meta, a key with no row, a key whose target is editable (an input, a textarea, a select, editable text, a code editor) and a key whose target is a frame element. So the console input and the markup view's inline editors type, and so does a field in an extension's DevTools panel, which runs in another process and shows only as its frame. Escape stays DevTools' (it opens the split console).
 - A taken key becomes an untrusted arrow keydown, dispatched on the key's own target, and the real key stops in the parent. No DevTools tree checks `isTrusted`. The core's listener skips the untrusted arrow when it passes.
 - No DesertFox page code runs in a DevTools document: they all have the system principal. The feature reads no DevTools internals and the extension sends it no selector.
-- An open DevTools context menu takes the letters ahead of the tree. Docked, it opens in the browser window, and in a DevTools window in that window. The DevTools feature types the arrow key for it, since the core's `type_key` refuses in DevTools.
+- An open DevTools context menu takes the letters ahead of the tree. Docked, it opens in the browser window, and in a DevTools window in that window. The DevTools feature moves those menus.
 - In the markup view `h` collapses, so DevTools' own `h` (hide the node) needs the context menu there.
 
 ## Liveness
