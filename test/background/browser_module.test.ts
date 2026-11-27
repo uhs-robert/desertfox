@@ -851,3 +851,32 @@ test("the v row and the mode's keys go only to a module whose hello says devtool
   assert.deepEqual(keys!.args, { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY, DEVTOOLS_VISUAL_KEY] });
   for (const message of [visual, keys]) assert.ok(validate_message(message, EXTENSION_TO_MODULE_KINDS).ok);
 });
+
+test("a hello that changes while the DevTools table is on its way still gets its own table", async () => {
+  const { data, config, module, flush, timers } = setup({ kinds: { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS } });
+  const visual_pushes = () => outbox_of(data).filter((message) => message.kind === "devtools.visual_keys");
+  const newer = { v: 1, module_version: "1", devtools_hints: true, devtools_visual: true };
+  // The module rewrites its hello, adding a feature, while the write of the older hello's table is in flight.
+  const write = data.set.bind(data);
+  let overtaken = false;
+  data.set = (key, value) => {
+    if (key === BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY && !overtaken) {
+      overtaken = true;
+      write(BROWSER_MODULE_HELLO_STORAGE_KEY, newer);
+      module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: newer } }, "session");
+    }
+    return write(key, value);
+  };
+  await module.sync();
+  data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", devtools_hints: true });
+  config.now += HELLO_MIN_INTERVAL_MS + 1;
+  module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: {} } }, "session");
+  for (let turn = 0; turn < 3; turn++) {
+    await flush();
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    timers.splice(0).forEach((run) => run());
+  }
+  await flush();
+  assert.ok(overtaken);
+  assert.equal(visual_pushes().length, 1);
+});
