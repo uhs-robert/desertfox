@@ -47,6 +47,14 @@ class InstallPolicyCase(unittest.TestCase):
         entry = self.settings("beta")["ExtensionSettings"]["desertfox@uhs-robert"]
         self.assertEqual(entry["install_url"], "https://github.com/uhs-robert/desertfox/releases/download/beta-channel/desertfox-beta.xpi")
 
+    def test_workflow_uploads_a_file_named_like_the_default_url(self):
+        workflow = os.path.join(HOST_DIR, "..", ".github", "workflows", "beta.yml")
+        with open(workflow) as handle:
+            text = handle.read()
+        self.assertIn("fixed-asset/desertfox-beta.xpi", text)
+        self.assertIn('cp "$(ls web-ext-artifacts/*.xpi)" fixed-asset/desertfox-beta.xpi', text)
+        self.assertNotIn("xpi)#", text)
+
     def test_beta_needs_no_local_xpi(self):
         self.assertEqual(self.dry_run("beta", BETA_URL).returncode, 0)
 

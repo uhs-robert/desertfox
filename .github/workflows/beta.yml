@@ -299,6 +299,10 @@ jobs:
               exit 0
             fi
           fi
+          # A fixed name that always holds the newest beta xpi, so tools/install_policy.sh beta can pin a URL that the prune never deletes. gh deletes the old asset before it uploads, and the upload keeps the file name, so the xpi is copied to the fixed name first. This runs before updates.json moves: a failure here leaves updates.json behind, so the next run builds again and uploads it.
+          mkdir fixed-asset
+          cp "$(ls web-ext-artifacts/*.xpi)" fixed-asset/desertfox-beta.xpi
+          gh release upload "$UPDATES_TAG" fixed-asset/desertfox-beta.xpi --repo "$REPOSITORY" --clobber
           # A temporary asset left by an earlier failed run would block the rename.
           for leftover in $(jq -r '.assets[] | select(.name | test("^updates-new-.*\\.json$")) | .name' <<<"$release_json"); do
             gh release delete-asset "$UPDATES_TAG" "$leftover" --repo "$REPOSITORY" --yes
@@ -318,8 +322,6 @@ jobs:
             gh release delete-asset "$UPDATES_TAG" "$temp_name" --repo "$REPOSITORY" --yes || true
             exit 1
           fi
-          # A fixed name that always holds the newest beta xpi, so tools/install_policy.sh beta can pin a URL that the prune never deletes. A failed upload fails the step, and the next run repairs it.
-          gh release upload "$UPDATES_TAG" "$(ls web-ext-artifacts/*.xpi)#desertfox-beta.xpi" --repo "$REPOSITORY" --clobber
       # Keeps the 20 highest versions, by version and not by date, and never the one updates.json names. A failed read of updates.json stops the prune.
       - name: Prune old beta prereleases
         continue-on-error: true
