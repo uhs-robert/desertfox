@@ -18,6 +18,13 @@
 //   log_once(text)             One line in the browser console per distinct text.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
+//   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
+//   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
+//   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
+//   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
+//   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
+//   type_key(win, key, still_holds)  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
+//                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -75,6 +82,7 @@
     const FROM_EXTENSION_STORAGE_KEY = "desertfox_browser_module_from_extension";
     const FROM_MODULE_STORAGE_KEY = "desertfox_browser_module_from_module";
     const MAX_KEY_ROWS = 32;
+    const MAX_SIDEBAR_KEY_TOKENS = 2;
     const MAX_STATE_TABS = 1024;
     const MAX_MESSAGES = 16;
     const MAX_MESSAGE_LIST_BYTES = 4096;
@@ -184,7 +192,22 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, sidebar_keys: read_sidebar_keys(value.sidebar_keys) };
+    }
+
+    // sidebar_keys_of: a bad table leaves the sidebar without keys and the rest of the state alone. Each row's key prefix maps to { prefix: true }.
+    function read_sidebar_keys(value) {
+      const rows = new Map();
+      if (!Array.isArray(value) || value.length > MAX_KEY_ROWS) return rows;
+      for (const row of value) {
+        const keys = is_record(row) && Array.isArray(row.keys) ? row.keys : [];
+        if (typeof row?.id !== "string" || keys.length === 0 || keys.length > MAX_SIDEBAR_KEY_TOKENS || !keys.every((key) => typeof key === "string" && KEY_TOKEN.test(key))) return new Map();
+        const joined = keys.join(" ");
+        if (rows.has(joined) || (keys.length > 1 && rows.get(keys[0])?.id)) return new Map();
+        if (keys.length > 1) rows.set(keys[0], { prefix: true });
+        rows.set(joined, { id: row.id });
+      }
+      return rows;
     }
 
     // The read is synchronous. The bucket keeps the holder the extension wrote until the next write, so the same holder means the same state.
@@ -271,6 +294,10 @@
       if (page.document) return is_field(event.originalTarget) || is_field(deep_active(page.document)) || page.document.designMode === "on";
       const report = reports.get(page.browser);
       if (report?.inner === page.browser.innerWindowID && report.field) return true;
+      return ime_in_field(win);
+    }
+
+    function ime_in_field(win) {
       const ime = win.windowUtils.IMEStatus;
       return ime === Ci.nsIDOMWindowUtils.IME_STATUS_ENABLED || ime === Ci.nsIDOMWindowUtils.IME_STATUS_PASSWORD;
     }
@@ -333,6 +360,56 @@
       const tab = win.gBrowser.getTabForBrowser(browser);
       const state = state_for(win);
       if (state?.blur_on_load && left_to_module(state, browser, tab)) browser.messageManager.sendAsyncMessage(BLUR_MESSAGE, { inner });
+    }
+
+    // ---- Keys the module types into the browser window's own parts.
+
+    const TYPED_KEY_CODES = { ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Home: 36, End: 35, Enter: 13 };
+
+    // The element with the focus, followed into frames of this process (the sidebar panel, a docked DevTools toolbox).
+    function focused_element(win) {
+      let element = win.document.commandDispatcher?.focusedElement ?? deep_active(win.document);
+      while ((element?.localName === "browser" || element?.localName === "iframe") && !element.isRemoteBrowser && element.contentDocument) {
+        const inner = deep_active(element.contentDocument);
+        if (!inner) break;
+        element = inner;
+      }
+      return element;
+    }
+
+    // DevTools documents are chrome:// or about:devtools pages. A frame inside one (a panel of the toolbox) counts through its embedders.
+    function in_devtools(element) {
+      for (let doc = element?.ownerDocument; doc; doc = doc.defaultView?.browsingContext?.embedderElement?.ownerDocument) {
+        const url = String(doc.documentURI ?? "");
+        if (url.startsWith("chrome://devtools/") || url.startsWith("about:devtools")) return true;
+      }
+      return false;
+    }
+
+    // A text input processor refuses to start inside a key's dispatch, so the key goes out after the current event. The focus can move before then, so the guards run again.
+    function type_key(win, key, still_holds) {
+      if (!Object.hasOwn(TYPED_KEY_CODES, key)) return false;
+      const refused = () => {
+        const focused = focused_element(win);
+        return is_field(focused) || ime_in_field(win) || in_devtools(focused);
+      };
+      if (refused()) return false;
+      win.setTimeout(() => {
+        try {
+          if (shut || win.closed || refused() || !still_holds()) return;
+          const processor = Components.classes["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
+          if (!processor.beginInputTransaction(win, () => true)) {
+            log_once(`Firefox refused to type ${key}`);
+            return;
+          }
+          const event = new win.KeyboardEvent("", { key, code: key, keyCode: TYPED_KEY_CODES[key] });
+          processor.keydown(event);
+          processor.keyup(event);
+        } catch (error) {
+          log_once(`a typed ${key} was dropped after an error: ${error}`);
+        }
+      }, 0);
+      return true;
     }
 
     // ---- The frame script: per document, whether DesertFox's content script listens and whether the focus is in a field.
@@ -707,6 +784,12 @@
       },
       log_once,
       may_act: (win) => state_for(win) !== undefined,
+      sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),
+      token_of,
+      is_field,
+      deep_active,
+      focused_element,
+      type_key,
       on_shut_down(fn) {
         shut_down_steps.push(fn);
       },
