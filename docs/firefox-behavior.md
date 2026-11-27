@@ -454,6 +454,25 @@ Measured in Firefox 160 in the key test, with probe pieces that opened a split t
 - Firefox places a new split's two tabs at the end of the strip. Not measured: private windows, a split inside a collapsed group, and Firefox 153 to 159.
 - Session restore (`sessions.restore`, the tab sessions in `session_store.ts`) is not measured. The stored fields (address, title, pinned, active) carry no split id, and the extension cannot create a split, so a restore loses it.
 
+### The pane calls in the browser module (panes)
+
+Measured in Firefox 161.0 in the key test (`p55_panes`), through the pane keys, the extension's request and `browser_module/desertfox-panes.js`. The chrome source read is the 161.0 build. Firefox 153 to 160 were not run.
+
+| Call | Firefox internal |
+| --- | --- |
+| The window | `Services.focus.activeWindow`, with `windowtype` `navigator:browser`. From the core's sandbox its `gBrowser`, `BrowserCommands` and `SidebarController` are reachable as from the window itself. |
+| Split with a new tab | `BrowserCommands.addTabSplitView()`: a new `about:opentabs` tab split beside the selected tab, then selected. It returns silently for a tab that is pinned, hidden or already split, so the module checks those first. |
+| Split with the next tab | `gBrowser.addTabSplitView([tab, next], { insertBefore: tab })` over `gBrowser.visibleTabs`. It returns the `<tab-split-view-wrapper>`, or null when no tab could join. |
+| Unsplit, close both | `tab.splitview.unsplitTabs()` and `tab.splitview.close()`. Unsplit also closes an `about:opentabs` tab of the pair. |
+| Resize | The splitter between the panes sizes the first panel only: its `width` attribute and inline width. The first panel is `document.getElementById(gBrowser.tabpanels.splitViewPanels[0])`, the area is `gBrowser.tabpanels.clientWidth`, and Firefox's own limit is the panel's computed `min-width` on either side. Then `splitview.resetRightPanelWidth()` and `tabpanels.updateSplitterAriaAttributes()`, as a drag does. |
+| Focus the page, the other pane | `gBrowser.selectedBrowser.focus()`. Selecting the partner tab keeps the split and moves the focus to its page. |
+| Focus the sidebar | `SidebarController.isOpen`, `toggle()` (opens the panel shown last) and `SidebarController.browser.focus()`. |
+| Focus DevTools | `DevToolsShim` from `chrome://devtools-startup/content/DevToolsShim.sys.mjs`: `isInitialized()` says whether DevTools loaded, so the call never loads it, then `getToolboxForTab(tab)`. `toolbox.hostType` is `bottom`, `left` or `right` when docked and `window` when detached. `toolbox.focusTool(toolbox.currentToolId)` focuses the current tool's frame. |
+
+- One `E>` widened the first panel by 5 percent of the panel area, within 2 px, and `E<` narrowed it back. A widen of 20 steps stopped the first panel at the area minus its `min-width`.
+- After `Ej` with the console docked at the bottom, the window's focused window was the toolbox's.
+- Not measured: the sidebar focus, DevTools docked left or right, and a split in a private window.
+
 ## The Navigation API in a content script (jump-list)
 
 Measured in Firefox 160 in the key test, with a throwaway piece that listened from the content script world (`executeScript`) on same-origin test pages.
