@@ -7,7 +7,8 @@ export const NEEDS_MODULE = "Needs the browser module";
 export const MODULE_ANSWER_MS = 2000;
 
 // `value` is the module's text answer, foreign input for the caller to check.
-export type CallResult = { ok: true; value?: string } | { ok: false; error: string };
+// `unanswered` marks a request that was written but got no reply: the answer time ran out or the module went away. Whether the module ran it is unknown, so a caller must not redo it some other way.
+export type CallResult = { ok: true; value?: string } | { ok: false; error: string; unanswered?: true };
 
 export type ModuleCallDeps = {
   send: (kind: string, args: ModuleArgs, on_id?: (id: string) => void) => Promise<{ ok: true; id: string } | { ok: false; problem: string }>;
@@ -37,7 +38,7 @@ export function create_module_call(deps: ModuleCallDeps) {
     },
     // The module is gone or off: every call still waiting ends with NEEDS_MODULE.
     clear(): void {
-      for (const id of [...waiting.keys()]) settle(id, { ok: false, error: NEEDS_MODULE }, true);
+      for (const id of [...waiting.keys()]) settle(id, { ok: false, error: NEEDS_MODULE, unanswered: true }, true);
     },
     // Hears each change of the status key. Anything but a matched module ends the waiting calls.
     status_changed(status: ModuleStatus | undefined): void {
@@ -51,7 +52,7 @@ export function create_module_call(deps: ModuleCallDeps) {
         // The wait is registered before the request is written, so a reply that comes at once finds it.
         const on_id = (made: string): void => {
           id = made;
-          const cancel = deps.later(() => settle(made, { ok: false, error: NEEDS_MODULE }, true), MODULE_ANSWER_MS);
+          const cancel = deps.later(() => settle(made, { ok: false, error: NEEDS_MODULE, unanswered: true }, true), MODULE_ANSWER_MS);
           waiting.set(made, (result) => {
             cancel();
             resolve(result);

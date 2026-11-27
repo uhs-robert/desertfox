@@ -6,7 +6,7 @@ import { create_module_call, NEEDS_MODULE } from "../../src/background/browser_m
 import type { CallResult } from "../../src/background/browser_module_call.ts";
 import { NativeHostError } from "../../src/background/native_client.ts";
 import type { NativeFailure } from "../../src/background/native_client.ts";
-import { HOST_PAGE_NOTICE, make_open_firefox_page_handler } from "../../src/commands/firefox_page.ts";
+import { HOST_PAGE_NOTICE, make_open_firefox_page_handler, MODULE_UNANSWERED } from "../../src/commands/firefox_page.ts";
 import type { FirefoxPageArgs, FirefoxPageDeps } from "../../src/commands/firefox_page.ts";
 import { FIREFOX_PAGE_ADDRESSES, FIREFOX_PAGES, firefox_page_at, MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
@@ -210,20 +210,21 @@ test("the passwords page skips the module even when it opens pages", async () =>
   assert.deepEqual(log.opened, ["logins"]);
 });
 
-// The real call machinery: the request is written, then the module goes away before it answers, or never answers.
-function call_world() {
+// The real call machinery: the request is written, then the module goes away before it answers, or never answers. `matched: false` is a module that is gone before the call, `send_ok: false` a request that was never written.
+function call_world({ matched = true, send_ok = true } = {}) {
   const written: string[] = [];
   const withdrawn: string[] = [];
   const timers: (() => void)[] = [];
   const calls = create_module_call({
     send: async (_kind, _args, on_id) => {
+      if (!send_ok) return { ok: false, problem: "the browser module setting is off" };
       const id = `r${written.length}`;
       written.push(id);
       on_id?.(id);
       return { ok: true, id };
     },
     withdraw: async (id) => void withdrawn.push(id),
-    read_status: async () => ({ result: "matched", module_version: "1", module_v: 1 }),
+    read_status: async () => (matched ? { result: "matched", module_version: "1", module_v: 1 } : { result: "waiting" }),
     later: (run) => {
       timers.push(run);
       return () => undefined;
@@ -235,28 +236,36 @@ function call_world() {
 const until_written = async (written: string[]) => {
   while (written.length === 0) await new Promise((resolve) => setImmediate(resolve));
 };
+const unanswered = (thrown: unknown) => thrown instanceof RuntimeRefusal && thrown.message === MODULE_UNANSWERED;
 
-test("a module that turns off mid-request ends the call with NEEDS_MODULE, takes the request back, and the host opens the page once", async () => {
+test("a module that turns off after it got the request ends the call, takes the request back, and the host is not asked, because the module can have opened the page", async () => {
   const { run, log, calls, written, withdrawn } = call_world();
   const done = run(CTX, TAB);
   await until_written(written);
   calls.status_changed({ result: "waiting" });
-  await done;
+  await assert.rejects(done, unanswered);
   assert.deepEqual(withdrawn, written);
-  assert.deepEqual(log.opened, ["settings"]);
-  // A reply that comes after the fallback finds no call and opens nothing more.
-  calls.hear({ v: 1, reply_to: written[0]!, ok: true });
-  assert.deepEqual(log.opened, ["settings"]);
+  assert.deepEqual(log.opened, []);
+  assert.deepEqual(log.clipboard, []);
 });
 
-test("a module that never answers times out to the host, and the request is taken back so it never runs late", async () => {
+test("a module that never answers times out with a report, its request is taken back, and the host is not asked", async () => {
   const { run, log, written, withdrawn, timers } = call_world();
   const done = run(CTX, TAB);
   await until_written(written);
   timers.forEach((fire) => fire());
-  await done;
+  await assert.rejects(done, unanswered);
   assert.deepEqual(withdrawn, written);
-  assert.deepEqual(log.opened, ["settings"]);
+  assert.deepEqual(log.opened, []);
+});
+
+test("a module that is gone before the call, or a request that was never written, goes to the host", async () => {
+  for (const options of [{ matched: false }, { send_ok: false }]) {
+    const { run, log, written } = call_world(options);
+    await run(CTX, TAB);
+    assert.deepEqual(written, [], JSON.stringify(options));
+    assert.deepEqual(log.opened, ["settings"], JSON.stringify(options));
+  }
 });
 
 test("the settings panes reach the host and the clipboard as their own addresses", async () => {
