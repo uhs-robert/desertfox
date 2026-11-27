@@ -19,7 +19,8 @@ export type RouterDeps = {
   get_command: (command_id: string) => CommandDef | undefined;
   // With a command, only the sources its params read need to be filled. Without one, every source.
   get_enum_sources: (command?: CommandDef) => Promise<EnumSources>;
-  active_tab: () => Promise<ActiveTab | undefined>;
+  // The active tab of the focused window, or of the given window.
+  active_tab: (window_id?: number) => Promise<ActiveTab | undefined>;
   // Undefined when the tab is gone.
   get_tab: (tab_id: number) => Promise<ActiveTab | undefined>;
   has_content_script: (tab_id: number) => Promise<boolean>;
@@ -59,6 +60,8 @@ export type RouteRequest = {
   // A held key's repeat. Focus moves to a new tab only after the async switch, so repeats still sent from the old tab would all
   // resolve against it. A repeat runs in the active tab instead.
   repeat?: true;
+  // Set by the repeat queue: the window the repeat was queued in. Focus may have moved to another window by the time it runs.
+  window_id?: number;
   frame_id?: number;
   // Set for a request from a page's content script, and carried to every step's context (`CommandContext.from_page`).
   from_page?: true;
@@ -123,7 +126,7 @@ export function create_router(deps: RouterDeps): Router {
   // the active tab can change between the key press and this read. A sender that is gone falls back to the active tab, and so does a repeat.
   async function read_now(request: RouteRequest, pin_to_sender: boolean): Promise<Now> {
     const sender = pin_to_sender && request.repeat !== true && request.sender_tab_id !== undefined ? await ignore_refusal(deps.get_tab(request.sender_tab_id)) : undefined;
-    const active = sender ?? (await deps.active_tab());
+    const active = sender ?? (await deps.active_tab(request.window_id));
     const tab_id = active?.tab_id ?? request.sender_tab_id;
     // The sender frame exists only in the sender tab. Another tab gets its top frame.
     const same_tab = tab_id !== undefined && tab_id === request.sender_tab_id;
@@ -349,7 +352,7 @@ export function create_router(deps: RouterDeps): Router {
     if (chain.pending >= MAX_PENDING_REPEATS) return { ok: true };
     repeat_chains.set(window_id, chain);
     chain.pending++;
-    const result = chain.tail.then(() => run_now(request));
+    const result = chain.tail.then(() => run_now({ ...request, ...(window_id !== undefined && { window_id }) }));
     chain.tail = keep_chain(result).then(() => {
       if (--chain.pending === 0) repeat_chains.delete(window_id);
     });

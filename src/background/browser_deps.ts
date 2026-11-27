@@ -141,8 +141,8 @@ export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat
   return {
     get_command: (command_id) => registry.get(command_id),
     get_enum_sources: create_enum_sources(async () => Object.keys((await get_config()).search_engines), container_names),
-    active_tab: async () => {
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    active_tab: async (window_id) => {
+      const [tab] = await browser.tabs.query(window_id === undefined ? { active: true, currentWindow: true } : { active: true, windowId: window_id });
       return tab?.id === undefined ? undefined : { tab_id: tab.id, window_id: tab.windowId ?? -1, url: tab.url, incognito: tab.incognito };
     },
     get_tab: async (tab_id) => {
