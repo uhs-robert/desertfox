@@ -295,6 +295,16 @@ test("gB typed in a text field does not count, and gB typed outside one does", a
     }),
     "g in a field, then B outside it",
   );
+  expect_refused(
+    await doorhanger_collect((chrome) => {
+      chrome.press("g");
+      // B typed in a field, then the focus back in the page before the collect.
+      chrome.win.windowUtils.IMEStatus = IME_ENABLED;
+      chrome.press("B");
+      chrome.win.windowUtils.IMEStatus = 0;
+    }),
+    "g, then B in a field",
+  );
   const outside = await doorhanger_collect((_chrome, run) => run.type_binding());
   assert.equal(outside.reply?.ok, true, "gB outside a field did not start");
 });
