@@ -33,11 +33,12 @@ const keymap: CompiledKeymap = {
   },
 };
 
-function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }) {
+function make_flow(in_field = false, escape_to_page = false, sink: Sink | undefined = undefined, loading = { on: false }, input_seen = false) {
   const state = create_mode_state();
   const ran: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => in_field,
+    user_input_seen_: () => input_seen,
     escape_to_page_: () => escape_to_page,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
@@ -740,6 +741,7 @@ function make_passing_flow() {
   const replayed_to_page: string[] = [];
   const flow = create_key_flow({
     in_editable_field_: () => false,
+    user_input_seen_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,
     take_pass_next_: state.take_pass_next_,
@@ -848,4 +850,19 @@ test("layout fallback: a key held before the keymap arrives reaches a sink with 
   flow.handle_token_("о", false, undefined, "j");
   flow.set_matcher_(create_matcher(keymap));
   assert.deepEqual(got, [["о", "j"]]);
+});
+
+test("before the keymap reply, a held key's repeat in a field is dropped unless the user has acted", () => {
+  const fresh = make_flow(true).flow;
+  assert.equal(fresh.handle_token_("J", true), "cancel", "a repeat in an autofocused field is cancelled");
+  assert.equal(fresh.handle_token_("J", false), "pass", "a first press still reaches the field");
+  assert.equal(make_flow(true, false, undefined, { on: false }, true).flow.handle_token_("j", true), "pass", "the user focused the field: repeats type");
+  assert.equal(make_flow(false).flow.handle_token_("j", true), "cancel", "outside a field a repeat waits as before");
+});
+
+test("after the keymap reply, a repeat in a field passes", () => {
+  const { flow, state } = make_flow(true);
+  flow.set_matcher_(create_matcher(keymap));
+  state.focus_entered_editable_();
+  assert.equal(flow.handle_token_("j", true), "pass");
 });

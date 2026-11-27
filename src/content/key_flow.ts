@@ -42,6 +42,8 @@ export type KeyFlowDeps = {
   run_leaf_: (leaf: TreeLeaf, count: number | undefined, repeat: boolean) => boolean | void;
   leave_insert_: () => void;
   in_editable_field_: () => boolean;
+  // True once a click or a first key of the user's own reached this window.
+  user_input_seen_: () => boolean;
   // True when the site row lets the page keep Escape while a field is focused.
   escape_to_page_: () => boolean;
   // A bundle is loading or the command line is handing focus back, and the mode the keys replay in is not known yet.
@@ -148,6 +150,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const mode = deps.get_mode_();
     const typed_token = token;
     token = layout_token(token, physical);
+    // A held key's repeat in a field before the keymap reply is dropped, so a page that focuses its field on load does not get a letter before the load blur runs. A real press or click sets user_input_seen_ first, so a field the user chose keeps its repeats. Cancelling also stops the typed letter.
+    if (repeat && !matcher && !deps.user_input_seen_() && deps.in_editable_field_()) return "cancel";
     // Keys in a field never wait. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
     if (deps.in_editable_field_() || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
