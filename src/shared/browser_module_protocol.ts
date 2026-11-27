@@ -8,7 +8,7 @@ import type { Mode } from "./command.ts";
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
 
-// The three keys sit in `config/storage_keys.ts` with the others: the state (the extension writes it while the setting is on, the module reads it), the hello (the module writes it, the extension reads it, the only thing the module sends) and the status (what became of the last hello, for the settings page).
+// The three keys sit in `config/storage_keys.ts` with the others: the state (the extension writes it while the setting is on, the module reads it), the hello (the module writes it, the extension reads it) and the status (what became of the last hello, for the settings page). The module also writes the from-module message list, below. These two are all that the module sends.
 export { BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY } from "./config/storage_keys.ts";
 
 export const MAX_KEY_ROWS = 32;
@@ -20,8 +20,10 @@ export const MAX_MESSAGE_LIST_BYTES = 4096;
 export const MAX_MESSAGE_ID_CHARS = 32;
 export const MAX_ERROR_CHARS = 120;
 export const MAX_MODULE_VERSION_CHARS = 32;
-// The extension reads the hello and the request at most this often, together.
+// The extension reads the hello at most this often.
 export const HELLO_MIN_INTERVAL_MS = 1000;
+// The extension reads the module's message list at most this often. It is short because a call the module starts, such as a key on a locked page, must not wait a second. The list is capped, so a read is cheap.
+export const MESSAGE_MIN_GAP_MS = 50;
 
 type ArgKind = "int" | "number" | "axis";
 
@@ -145,6 +147,7 @@ export function status_of_hello(hello: unknown): ModuleStatus {
 // A kind row gives the shape of its args and whether the sender expects a reply. A push has `reply: false`: the receiver runs it and says nothing.
 export type KindRow = { args: Record<string, ArgKind>; reply: boolean };
 export type KindTable = Record<string, KindRow>;
+// A push (`reply: false`) may run twice, because a push leaves no trace once the extension restarts and the module rewrites its list. A push handler gives the same result when run twice. A kind that cannot meet that uses `reply: true`, which the extension answers once.
 export const MODULE_TO_EXTENSION_KINDS: KindTable = {};
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {};
 
