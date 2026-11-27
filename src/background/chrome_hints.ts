@@ -125,7 +125,11 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
     if (!result.ok) await deps.notify(session.window_id, result.error);
   }
 
+  // Counts every start, so a start that waits before `begin` can tell that a newer one came meanwhile.
+  let starts = 0;
+
   async function begin(fields: { window_id?: number; surface?: "devtools" }, collect: (session: number, colors: string) => Promise<{ ok: true } | { ok: false; error: string }>): Promise<{ ok: true } | { ok: false; error: string }> {
+    starts++;
     const session: ChromeHintSession = { session: deps.new_session(), ...fields, targets: {}, typed: "", seq: 0, gen: 0 };
     const previous = await in_turn(async () => {
       const replaced = await read();
@@ -205,7 +209,10 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
     "page_hints.want": async (args: ModuleArgs): Promise<void> => {
       if (!is_whole(args.start) || typeof args.keys !== "string") return;
       const start = args.start;
+      const asked_at = ++starts;
       const chosen = await deps.page_action(args.keys);
+      // A newer start began while the action loaded, and this one would replace its session. The throw ends this start in the module.
+      if (starts !== asked_at) throw new Error(STALE_START);
       if (!chosen.ok) {
         await deps.notify(undefined, chosen.problem);
         throw new Error(chosen.problem);
