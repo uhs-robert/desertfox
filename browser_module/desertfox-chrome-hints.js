@@ -708,11 +708,13 @@
     }
 
     // How long Firefox ignores a new doorhanger's buttons. A grant's mark is a new prompt too, so an Enter counts only once it has shown that long.
+    // Never under MIN_DWELL_MS: with the pref at 0 an Enter the user meant for the page would still grant.
+    const MIN_DWELL_MS = 500;
     function security_delay_ms() {
       try {
-        return Services.prefs.getIntPref(SECURITY_DELAY_PREF, 500);
+        return Math.max(MIN_DWELL_MS, Services.prefs.getIntPref(SECURITY_DELAY_PREF, MIN_DWELL_MS));
       } catch (_) {
-        return 500;
+        return MIN_DWELL_MS;
       }
     }
 
