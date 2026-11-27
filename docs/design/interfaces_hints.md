@@ -71,6 +71,10 @@ Source: `src/content/hints`, `src/content/grab`, `src/content/site_actions`, `sr
 - Text mode (`/`) ranks the hints of every frame: each frame sends the text of its candidates with its count, the background holds them in memory during the wait and returns them with the labels, and the typed relay carries the matching labels and the active one so the other frames hide the rest. With `--all-frames` the texts are a snapshot taken when the hints start, so a later page change does not show in text mode.
 - A frame that ends the session before the start answer arrives is noticed by session id, so the run ends and does not enter hint mode. Known limits: keys typed during the round trip of a pick in another frame (a few milliseconds, and the same gap before a cross-frame `prompt` opens its line) run in the keyboard frame as normal keys. `copylinks` (`yL`) does not follow the flag.
 
+#### Hint browser buttons (gB)
+
+`gB` (`hint.browser`, "Hint browser buttons") labels the controls of Firefox itself: the toolbar buttons, the tabs, the bookmarks toolbar, the sidebar buttons, the menu bar, the rows of an open app menu, permission prompts, the downloads panel, a tab's prompts, settings sub-dialogs, the Library and Page Info. It needs the optional browser module and the setting `browser_module`, and it uses the same labels, the `hint_letters` setting and the typing rules as `f`. In a dialog, the Library or Page Info the same keys start it, since no page is there to hear them. Escape ends it. A pick that would grant something (Allow, unblock a download, open a download, send a login) marks the control, and the user then presses Enter to confirm. See [Hints over Firefox's own UI](browser_module.md#hints-over-firefoxs-own-ui).
+
 ### Background files for hints
 
 Behavior of the `src/background` files for this area, moved here from `src/background/README.md`.

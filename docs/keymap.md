@@ -16,6 +16,8 @@ The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse u
 
 The Locked pages column of the normal table marks the keys that also work on pages DesertFox cannot reach, such as about:addons, when the browser module is installed. A key that prompts there opens the address bar with `df ` and the command typed in. The column comes from the same derivation as the module's key tree (`src/shared/browser_module_scope.ts`). It covers pages with no page code. With `browser_module_pages` on, the PDF viewer and Reader View run DesertFox's own page code, so the keys of the tables work there, not only the marked ones, except the routes `LOCKED_PAGE_ROUTES` refuses (see [Page code on locked pages](design/browser_module.md#page-code-on-locked-pages)).
 
+With the browser module installed, `gB` labels the controls of Firefox itself (toolbars, tabs, menus, permission prompts, the downloads panel, dialogs, the Library and Page Info), and `j`, `k`, `h` and `l` walk open menus and panels as the arrow keys do. Only `gB` has a row below, because the walk letters are fixed. A hint pick that grants something, such as Allow on a permission prompt or opening a download, marks the control and waits for you to press Enter. A script cannot press it for you. See [the browser module design](design/browser_module.md#popup-walk).
+
 A note "(prompts)" means the binding sets a `prompt` for a param, so the command line asks for it.
 
 <!-- BEGIN generated -->
