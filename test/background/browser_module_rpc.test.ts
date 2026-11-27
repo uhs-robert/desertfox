@@ -85,6 +85,8 @@ function setup(options: { on?: boolean; tabs?: browser.tabs.Tab[]; parts?: Parti
 }
 
 let ids = 0;
+// Chrome's word that the page code of a document ended.
+const gone = (tab_id: number, document_id: number) => ({ v: V, id: `g${++ids}`, kind: "page_gone", args: { tab_id, document_id }, sent_at: Date.now() });
 const call = (message: unknown, patch: Record<string, unknown> = {}) => ({ v: V, id: `c${++ids}`, kind: "page_call", args: { tab_id: 7, document_id: 1, message: typeof message === "string" ? message : JSON.stringify(message), ...patch } });
 
 test("a page call reaches the message table with a sender built from the browser's facts, and its answer comes back in the reply", async () => {
@@ -296,7 +298,7 @@ test("a push to a subframe, a push too large and a push to a page that left are 
   await assert.rejects(rpc.send_to_locked_tab(7, { type: "refusal", pad: "p".repeat(MAX_KIND_BYTES) }), /over its size limit/);
   const left = assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
   await new Promise((resolve) => setImmediate(resolve));
-  await rpc.tab_loading(7);
+  rpc.tab_url_changed(7, "https://example.com/elsewhere");
   await left;
   await from_module([call({ type: "run", invocations: [], mode: "normal" }, { document_id: 2 })]);
   const closed = assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /closed/);
@@ -306,18 +308,36 @@ test("a push to a subframe, a push too large and a push to a page that left are 
   assert.equal(await rpc.is_locked_tab(7), false);
 });
 
-test("a reload of the same address unmarks the tab, and it counts as locked again only after the new document's first call", async () => {
-  const { rpc, from_module, data } = setup();
+test("a load event for the same address keeps the tab locked and its push waiting, as a PDF reports two", async () => {
+  const { rpc, from_module, pushes, answer_push } = setup();
+  await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
+  const waiting = rpc.send_to_locked_tab(7, { type: "ping" });
+  await new Promise((resolve) => setImmediate(resolve));
+  rpc.tab_url_changed(7, PDF);
+  rpc.tab_url_changed(7, `${PDF}#page=2`);
+  assert.equal(await rpc.is_locked_tab(7), true);
+  await answer_push(pushes().at(-1)!.id, { value: JSON.stringify({ value: "still here" }) });
+  assert.equal(await waiting, "still here");
+});
+
+test("page_gone moves the document onto the left list and ends the lock, so a call from it is refused, and the next document locks the tab again", async () => {
+  const { rpc, from_module, data, seen, base_replies } = setup();
   await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
   assert.equal(await rpc.is_locked_tab(7), true);
-  const waiting = assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
-  await new Promise((resolve) => setImmediate(resolve));
-  // The same address: only the status says the page reloads.
-  await rpc.tab_loading(7);
-  await waiting;
-  assert.equal(await rpc.is_locked_tab(7), false, "not ready before the new document calls");
-  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "7": { left: [1] } }, "the load keeps the document it left");
+  await from_module([gone(7, 1)]);
+  assert.equal(await rpc.is_locked_tab(7), false, "not locked before the new document calls");
+  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "7": { left: [1] } });
+  // A push may come twice.
+  await from_module([gone(7, 1)]);
+  assert.deepEqual(data.get(BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY), { "7": { left: [1] } });
+  const stale = call({ type: "mode_changed", mode: "normal" }, { document_id: 1 });
+  await from_module([stale]);
+  assert.equal(base_replies().find((reply) => reply.reply_to === stale.id)?.ok, false, "a call from the gone document is refused");
+  assert.equal(seen.length, 1);
   await from_module([call({ type: "mode_changed", mode: "normal" }, { document_id: 2 })]);
+  assert.equal(await rpc.is_locked_tab(7), true);
+  // A late page_gone of the old document leaves the new one locked.
+  await from_module([gone(7, 0)]);
   assert.equal(await rpc.is_locked_tab(7), true);
 });
 
@@ -375,7 +395,7 @@ test("a load or a setting off while a push is being sent rejects it, leaves no w
   let cut_id = "";
   config.before_send = (id) => {
     cut_id = id;
-    void rpc.tab_loading(7);
+    rpc.tab_url_changed(7, "https://example.com/elsewhere");
   };
   await assert.rejects(rpc.send_to_locked_tab(7, { type: "ping" }), /went away/);
   config.before_send = undefined;
@@ -393,7 +413,7 @@ test("a load or a setting off while a push is being sent rejects it, leaves no w
 test("a call the old document sent before a reload of the same address cannot mark the tab again", async () => {
   const { rpc, from_module, seen, base_replies } = setup();
   await from_module([call({ type: "mode_changed", mode: "normal" }, { document_id: 41 })]);
-  await rpc.tab_loading(7);
+  await from_module([gone(7, 41)]);
   const stale = call({ type: "mode_changed", mode: "normal" }, { document_id: 41 });
   await from_module([stale]);
   assert.equal(await rpc.is_locked_tab(7), false, "the old document's call leaves the tab unmarked");
@@ -417,11 +437,11 @@ test("an answer that settles after the setting went off carries no page text", a
   assert.equal(reply?.value, undefined);
 });
 
-test("a first call whose document was left by a load while its tab was read is refused and marks nothing", async () => {
+test("a first call whose document chrome called gone while its tab was read is refused and marks nothing", async () => {
   const { rpc, from_module, config, seen, base_replies } = setup();
   config.before_get_tab = async () => {
     config.before_get_tab = undefined;
-    await rpc.tab_loading(7);
+    await rpc.handlers.page_gone({ tab_id: 7, document_id: 1 });
   };
   const first = call({ type: "mode_changed", mode: "normal" }, { document_id: 1 });
   await from_module([first]);

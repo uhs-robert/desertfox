@@ -314,10 +314,10 @@ const browser_module_rpc = create_browser_module_rpc({
 });
 reach_locked_tabs(browser_module_rpc);
 browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.storage_changed(changes, area));
-// A reload of the same address reports only the status, so the status counts as a load too.
+// A locked tab's lock ends on the module's `page_gone`, not on a load event: Firefox reports a second load for a PDF that stays.
 browser.tabs.onUpdated.addListener((tab_id, change) => {
-  if (change.status === "loading" || change.url !== undefined) void browser_module_rpc.tab_loading(tab_id).catch(warn_and_go("browser_module_rpc.tab_loading"));
-}, { properties: ["status", "url"] });
+  if (change.url !== undefined) browser_module_rpc.tab_url_changed(tab_id, change.url);
+}, { properties: ["url"] });
 browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const browser_module = create_browser_module({

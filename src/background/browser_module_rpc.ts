@@ -87,7 +87,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     return typeof stored === "object" && stored !== null && !Array.isArray(stored) ? (stored as Record<string, LockedTab>) : {};
   };
 
-  // A tab is locked from its document's first call until its next top-level load. The next document marks it again with its own first call. A call from a document that a load left is refused, so a call the old document sent before a reload of the same address cannot mark the tab again. False when the call may not run.
+  // A tab is locked from its document's first call until the module says the document is gone (`page_gone`). The next document marks it again with its own first call. A call from a gone document is refused, so a call the old document sent before a reload of the same address cannot mark the tab again. False when the call may not run.
   const mark_locked = (tab_id: number, url: string, document_id: number): Promise<boolean> =>
     in_turn(async () => {
       if (!(await deps.is_on())) return false;
@@ -97,8 +97,13 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       if (entry.url === url && entry.document_id === document_id) return true;
       if (!(tab_id in locked) && Object.keys(locked).length >= MAX_STATE_TABS) return false;
       await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: { ...entry, url, document_id } } });
+      locked_urls.set(tab_id, url);
       return true;
     });
+
+  // The address of each locked tab as its page code last called from it, so a change of the tab's address can be told from Firefox's repeated load events for the same page (a PDF reports two). A copy of the stored address, for the pushes that wait in memory.
+  const locked_urls = new Map<number, string>();
+  const without_fragment = (url: string): string => url.replace(/#.*$/s, "");
 
   // Counts the loads of each tab, and every setting off in `epoch`, so a push whose send spans one knows its page went away.
   const loads = new Map<number, number>();
@@ -113,18 +118,31 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
     }
   };
 
-  // The page went away: its pushes reject, as a `tabs.sendMessage` to it would, and the tab is no longer locked. A load keeps the id of the document it left. A closed tab keeps nothing.
-  const unmark = (tab_id: number, why: string, closed: boolean): Promise<void> => {
-    drop_waiting(tab_id, why);
+  // The tab closed: its pushes reject, as a `tabs.sendMessage` to it would, and it keeps nothing.
+  const forget_tab = (tab_id: number): Promise<void> => {
+    drop_waiting(tab_id, "the tab closed");
+    locked_urls.delete(tab_id);
     return in_turn(async () => {
       const locked = await read_locked();
-      const entry = locked[tab_id];
-      if (entry === undefined) return;
-      if (closed) delete locked[tab_id];
-      else locked[tab_id] = { left: [...(entry.left ?? []), ...(entry.document_id === undefined ? [] : [entry.document_id])].slice(-LEFT_DOCUMENTS_KEPT) };
+      if (!(tab_id in locked)) return;
+      delete locked[tab_id];
       await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: locked });
     });
   };
+
+  // Chrome's word that a document's page code ended (pagehide, or its window went away). Only chrome sees documents, so only this ends a lock: the tab's load events also fire for a page that stays. The id goes on the tab's left list, and a lock it held ends. A push of the module may come twice, and the second changes nothing.
+  const page_gone = (args: ModuleArgs): Promise<void> =>
+    in_turn(async () => {
+      const { tab_id, document_id } = args as { tab_id: number; document_id: number };
+      if (!(await deps.is_on())) return;
+      const locked = await read_locked();
+      const entry = locked[tab_id];
+      if (entry === undefined && Object.keys(locked).length >= MAX_STATE_TABS) return;
+      const left = entry?.left?.includes(document_id) ? entry.left : [...(entry?.left ?? []), document_id].slice(-LEFT_DOCUMENTS_KEPT);
+      const newer_document = entry?.document_id !== undefined && entry.document_id !== document_id;
+      if (!newer_document) locked_urls.delete(tab_id);
+      await deps.session.set({ [BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]: { ...locked, [tab_id]: newer_document ? { ...entry, left } : { left } } });
+    });
 
   // The base runs this outside its queue, so the dispatch may send to the same tab. The text it returns is the reply's value.
   const page_call = async (args: ModuleArgs): Promise<string> => {
@@ -169,7 +187,8 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const is_locked_tab = async (tab_id: number): Promise<boolean> => {
     if (!(await deps.is_on())) return false;
     const url = (await read_locked())[tab_id]?.url;
-    return url !== undefined && (await deps.get_tab(tab_id))?.url === url;
+    const tab_url = (await deps.get_tab(tab_id))?.url;
+    return url !== undefined && tab_url !== undefined && without_fragment(tab_url) === without_fragment(url);
   };
 
   // In place of `tabs.sendMessage`: the module hands the message to the page, and the page's answer comes back in the reply. A locked page has one frame.
@@ -196,6 +215,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const write_parts = async (parts: readonly SnapshotPart[]): Promise<void> => {
     if (!(await deps.is_on())) {
       drop_waiting(undefined, "the browser_module_pages setting is off");
+      locked_urls.clear();
       await deps.session.remove([...SNAPSHOT_PART_NAMES.map((part) => SNAPSHOT_PARTS[part].key), BROWSER_MODULE_LOCKED_TABS_STORAGE_KEY]);
       return;
     }
@@ -209,7 +229,7 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
   const sync_parts = (parts: readonly SnapshotPart[]): Promise<void> => in_turn(() => write_parts(parts));
 
   return {
-    handlers: { page_call },
+    handlers: { page_call, page_gone },
     // The base channel's `on_reply`.
     push_answered,
     is_locked_tab,
@@ -223,8 +243,13 @@ export function create_browser_module_rpc(deps: BrowserModuleRpcDeps) {
       else if (COMPILED_KEYMAP_STORAGE_KEY in changes) void sync_parts(["keymap", "which_key"]);
       if (THEME_STORAGE_KEY in changes) void sync_parts(["theme"]);
     },
-    // Every top-level load of the tab, a reload of the same address included.
-    tab_loading: (tab_id: number): Promise<void> => unmark(tab_id, "the page went away", false),
-    tab_removed: (tab_id: number): Promise<void> => unmark(tab_id, "the tab closed", true),
+    // A new address for the tab. Only a real change rejects the pushes on their way: the module answers a gone page's own pushes, and the lock ends on `page_gone`.
+    tab_url_changed(tab_id: number, url: string): void {
+      const locked_url = locked_urls.get(tab_id);
+      if (locked_url === undefined || without_fragment(locked_url) === without_fragment(url)) return;
+      locked_urls.delete(tab_id);
+      drop_waiting(tab_id, "the page went away");
+    },
+    tab_removed: forget_tab,
   };
 }

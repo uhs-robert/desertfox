@@ -131,6 +131,7 @@ function locked({ config = ON_CONFIG as unknown, keymap = KEYMAP as unknown, pag
   return { firefox, extension, tab, browser, frame, set_page, from_module, extension_sends, load };
 }
 
+const gone_of = (list: Record<string, unknown>[]) => list.filter((message) => message.kind === "page_gone").map((message) => message.args);
 const push_request = (id: string, tab_id: number, message: string) => ({ v: V, id, kind: "page_push", args: { tab_id, message }, sent_at: Date.now() });
 
 test("the feature's copies of the snapshot keys, the version and the bundle names equal src/shared, and its two halves name the same messages", () => {
@@ -271,6 +272,7 @@ test("pagehide answers every open push with an error and cuts the sandbox off, a
   await open_call;
   assert.equal(frame.nuked.length, 1);
   assert.equal(frame.observers.size, 0, "no observer outlives the page");
+  assert.deepEqual(gone_of(from_module()), [{ tab_id: 1, document_id: 1 }], "chrome tells the extension the document is gone");
   // The call's late reply finds no page.
   extension_sends([{ v: V, reply_to: from_module().find((message) => message.kind === "page_call")!.id as string, ok: true, value: "{}" }]);
   set_page({ principal: PDF_PRINCIPAL, uri: "file:///tmp/b.pdf", inner: 6 });
@@ -291,6 +293,7 @@ test("a page that Back restores from the cache keeps its sandbox and calls under
   assert.equal(from_module().find((message) => message.reply_to === "x1")?.ok, false, "the cached page answers its open push");
   assert.equal(frame.nuked.length, 0);
   assert.equal(frame.transport()!.alive(), false, "a cached page sends nothing");
+  assert.deepEqual(gone_of(from_module()), [{ tab_id: 1, document_id: 1 }], "a cached document's attach is gone too");
   extension_sends([push_request("x1", 1, "{}"), push_request("x2", 1, "{}")]);
   await settle();
   assert.equal(from_module().find((message) => message.reply_to === "x2")?.ok, false, "nor takes a push");
@@ -300,6 +303,15 @@ test("a page that Back restores from the cache keeps its sandbox and calls under
   assert.equal(frame.transport()!.alive(), true);
   void frame.transport()!.call("{}");
   assert.equal((from_module().at(-1)!.args as { document_id: number }).document_id, 2);
+});
+
+test("a new attach in the same tab with no pagehide before it tells the extension the old document is gone", async () => {
+  const { frame, load, from_module, set_page } = locked();
+  await load();
+  set_page({ principal: PDF_PRINCIPAL, uri: "file:///tmp/b.pdf", inner: 6 });
+  await load();
+  assert.equal(frame.sandboxes.length, 2);
+  assert.deepEqual(gone_of(from_module()), [{ tab_id: 1, document_id: 1 }]);
 });
 
 test("bundles load by their fixed names only, once each", async () => {

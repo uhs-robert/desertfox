@@ -120,6 +120,15 @@
       end_pushes(browser);
     }
 
+    // The extension ends the tab's lock only on this word, because a tab's load events also fire for a document that stays (a PDF reports two).
+    function end_attach(browser) {
+      const attach = attached.get(browser);
+      if (!attach) return;
+      forget(browser);
+      const tab_id = tab_id_of(browser);
+      if (attach.extension === desertfox() && Number.isSafeInteger(tab_id) && tab_id >= 0) core.send("page_gone", { tab_id, document_id: attach.attach_id });
+    }
+
     // The setting or the pref went off, or DesertFox changed: every page drops its code.
     function detach_all() {
       for (const browser of [...attached.keys()]) {
@@ -145,14 +154,14 @@
       const tab_id = tab_id_of(browser);
       if (!Number.isSafeInteger(tab_id) || tab_id < 0) return;
       if (PrivateBrowsingUtils.isBrowserPrivate(browser) && !extension.privateBrowsingAllowed) return;
-      forget(browser);
+      end_attach(browser);
       const attach_id = ++last_attach_id;
       attached.set(browser, { attach_id, inner, extension });
       send_to(browser, MESSAGE.attached, { inner, attach_id, base_url: extension.baseURI.spec, snapshots: snapshots_of(extension) });
     });
 
     on(MESSAGE.gone, (browser, { attach_id }) => {
-      if (attached.get(browser)?.attach_id === attach_id) forget(browser);
+      if (attached.get(browser)?.attach_id === attach_id) end_attach(browser);
     });
 
     // A page call: its text goes out as it came, with the tab and the attach that chrome knows.

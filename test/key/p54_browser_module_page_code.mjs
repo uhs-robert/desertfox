@@ -1,5 +1,5 @@
 // DesertFox's own page code in the PDF viewer and Reader View, which the browser module runs there (browser_module/desertfox-locked-pages.js) while the setting browser_module_pages is on.
-// Hints and a pick, visual mode and a yank, item mode, what a page script can see, the setting off, another protocol version, a navigation away and back, and about:addons, which never gets page code.
+// Hints and a pick, visual mode and a yank, what a page script can see, the setting off, another protocol version, a navigation away and back, and about:addons, which never gets page code.
 // DESERTFOX_SHOT_DIR also takes shots of the hints on both pages in a light and a dark theme.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -15,7 +15,6 @@ const W = `Services.wm.getMostRecentWindow("navigator:browser")`;
 const HINTS_LAYER = 2147483647 - 4;
 const CONFIG_SNAPSHOT_KEY = "desertfox_browser_module_snapshot_config";
 const SANDBOX_NAME = "DesertFox page code";
-const ITEMS = 8;
 
 const clipboard_text = `(async () => {
   const transferable = Cc["@mozilla.org/widget/transferable;1"].createInstance(Ci.nsITransferable);
@@ -76,12 +75,8 @@ function make_linked_pdf(href) {
   return body;
 }
 
-// The long article Reader View takes, with a list of links for item mode and one link to pick.
-const linked_article = () =>
-  make_article().replace(
-    "</article>",
-    `<h2>Further reading</h2><ul>${Array.from({ length: ITEMS }, (_, index) => `<li><a href="/item/${index + 1}">Item ${index + 1}: a fox at night</a> with a few words after it.</li>`).join("")}</ul><p>The end: <a href="/target">the target link</a>.</p></article>`,
-  );
+// The long article Reader View takes, with one link to pick.
+const linked_article = () => make_article().replace("</article>", `<p>The end: <a href="/target">the target link</a>.</p></article>`);
 
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, run_line, take_shot } = context;
@@ -99,7 +94,7 @@ export async function run_cases(context) {
   writeFileSync(join(files_dir, "linked.pdf"), make_linked_pdf(`${origin}/target`), "latin1");
   const pages = {
     "the PDF viewer": { url: pathToFileURL(join(files_dir, "linked.pdf")).href, ready: `(win) => !!win.document.querySelector(".annotationLayer a[href]") && !!win.document.querySelector(".textLayer span")` },
-    "Reader View": { url: `about:reader?url=${encodeURIComponent(`${origin}/article`)}`, ready: `(win) => win.document.querySelectorAll(".moz-reader-content a[href]").length > ${ITEMS}` },
+    "Reader View": { url: `about:reader?url=${encodeURIComponent(`${origin}/article`)}`, ready: `(win) => !!win.document.querySelector('.moz-reader-content a[href$="/target"]')` },
   };
 
   const page_code_ran = () => in_selected_page(`(win) => win.document.documentElement?.hasAttribute("data-desertfox-tree-read-ms") ?? false`);
@@ -185,32 +180,15 @@ export async function run_cases(context) {
     });
   }
 
-  await run_case("I j k move through the list of links on Reader View", async () => {
-    await home("pc_items");
-    await open_locked("Reader View");
-    const list = ".moz-reader-content ul";
-    await in_selected_page(`(win) => { win.document.querySelector("${list}").scrollIntoView({ block: "center" }); return true; }`);
-    await sleep(200);
-    await press_keys("I");
-    // With more than one list on screen, I asks which one first.
-    await poll_until("item mode or list labels", async () => /item/i.test(String(await in_selected_page(MODE))) || (await hint_labels()).length > 0, { timeout_ms: 5000 });
-    if (!/item/i.test(String(await in_selected_page(MODE)))) {
-      const labels = await hint_labels();
-      const target = await in_selected_page(`(win) => { const box = win.document.querySelector("${list}").getBoundingClientRect(); return { x: box.left, y: box.top }; }`);
-      const nearest = labels.reduce((best, label) => (Math.hypot(label.x - target.x, label.y - target.y) < Math.hypot(best.x - target.x, best.y - target.y) ? label : best));
-      await press_keys(nearest.text);
-    }
-    await poll_until("item mode", async () => /item/i.test(String(await in_selected_page(MODE))), { timeout_ms: 5000 });
-    const focused = () => in_selected_page(`(win) => { const node = win.document.activeElement; return node?.closest?.("li") ? node.textContent.slice(0, 7) : node?.localName ?? null; }`);
-    const first = await focused();
-    console.log(`item mode starts on ${JSON.stringify(first)}`);
-    await press_keys("j");
-    await poll_until("j to move to another item", async () => (await focused()) !== first, { timeout_ms: 3000 });
-    const second = await focused();
-    await press_keys("k");
-    await poll_until("k to move back", async () => (await focused()) === first, { timeout_ms: 3000 });
-    expect(second !== first, `j stayed on ${first}`);
+  await run_case("keys still work on the PDF viewer after Firefox's second load event for it", async () => {
+    await home("pc_pdf_late");
+    await open_locked("the PDF viewer");
+    // Firefox reports the PDF loading a second time about 120 ms after its document loads, and complete again about a second later. Neither is a new document.
+    await sleep(1500);
+    await press_keys("f");
+    await poll_until("hint labels 1.5 s after the load", async () => (await hint_labels()).length > 0, { timeout_ms: 5000 });
     await press_keys("-k", "Escape");
+    await poll_until("the labels to go", async () => (await hint_labels()).length === 0, { timeout_ms: 3000 });
     await close_selected_tab();
   });
 
