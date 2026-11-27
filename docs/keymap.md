@@ -18,7 +18,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 519 (normal 276, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 522 (normal 279, media 26, item 26, item_visual 18, grab 11, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -91,6 +91,9 @@ bound: 519 (normal 276, media 26, item 26, item_visual 18, grab 11, hint 8, cmdl
 | `Ex` | `pane.close_both` | Close both panes |
 | `E<` | `pane.resize --narrow` | Resize pane |
 | `E>` | `pane.resize` | Resize pane |
+| `E=` | `pane.equalize` | Equal panes |
+| `Eh` | `pane.focus_side left` | Focus left or right |
+| `El` | `pane.focus_side right` | Focus left or right |
 | `Ej` | `pane.focus devtools` | Focus region |
 | `Ek` | `pane.focus page` | Focus region |
 | `ES` | `pane.focus sidebar` | Focus region |

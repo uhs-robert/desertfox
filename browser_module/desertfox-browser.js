@@ -90,6 +90,8 @@
       "pane.close_both": { args: {}, reply: true, max_bytes: 256 },
       "pane.resize": { args: { steps: "step" }, reply: true, max_bytes: 256 },
       "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: 256 },
+      "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
+      "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = { page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536 } };
     const MODULE_VERSION = "1.0.0";
@@ -461,6 +463,7 @@
       if (kind === "axis") return value === "x" || value === "y";
       if (kind === "text") return typeof value === "string";
       if (kind === "region") return PANE_REGIONS.includes(value);
+      if (kind === "direction") return value === "left" || value === "right";
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
       return typeof value === "number" && Number.isFinite(value) && (kind !== "int" || Number.isInteger(value));
     };
