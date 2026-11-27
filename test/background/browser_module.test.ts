@@ -6,7 +6,7 @@ import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { create_module_call } from "../../src/background/browser_module_call.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
-import { MESSAGE_MIN_GAP_MS } from "../../src/shared/browser_module_protocol.ts";
+import { DEVTOOLS_TREE_KEYS, EXTENSION_TO_MODULE_KINDS, MESSAGE_MIN_GAP_MS, MODULE_TO_EXTENSION_KINDS } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, DEFAULT_MAX_AGE_MS, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -60,7 +60,7 @@ const TEST_KINDS: { from_module: KindTable; from_extension: KindTable } = {
 
 const BAR_CONFIG = { left: ["mode", "pending"] as ("mode" | "pending")[], right: ["tabs"] as "tabs"[], border: "auto" as const };
 
-function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord>; bar_setting?: boolean; theme?: unknown; blur_on_load?: boolean } = {}) {
+function setup(options: { on?: boolean; disabled?: boolean; records?: Record<string, TabModeRecord>; bar_setting?: boolean; theme?: unknown; blur_on_load?: boolean; kinds?: typeof TEST_KINDS } = {}) {
   const data = new Map<string, unknown>();
   const bar_changes = { count: 0 };
   const config = { bar_setting: options.bar_setting ?? true, theme: options.theme as unknown, on: options.on ?? true, disabled: options.disabled ?? false, records: options.records ?? {}, now: 10_000, gets: [] as string[] };
@@ -87,7 +87,7 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
     read_bar_config: async () => (config.bar_setting ? BAR_CONFIG : undefined),
     read_theme: async () => config.theme,
     on_bar_change: () => void bar_changes.count++,
-    kinds: TEST_KINDS,
+    kinds: options.kinds ?? TEST_KINDS,
     handlers: {
       push: async (args) => void calls.push(["push", args]),
       ask: async (args) => {
@@ -771,4 +771,41 @@ test("a call that timed out or lost its module leaves nothing in the list the mo
   await dropped;
   await flush();
   assert.deepEqual(outbox_of(data).map((message) => message.id), [third]);
+});
+
+test("each new matched hello gets the DevTools key table once, and a mismatched hello gets none", async () => {
+  const { data, config, module, flush, timers } = setup({ kinds: { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS } });
+  const pushes = () => outbox_of(data).filter((message) => message.kind === "devtools.keys");
+  const settle_reads = async () => {
+    await flush();
+    timers.splice(0).forEach((run) => run());
+    await flush();
+  };
+  const hello = async (value: unknown) => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, value);
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: value } }, "session");
+    await settle_reads();
+  };
+  await module.sync();
+  await settle_reads();
+  assert.deepEqual(pushes(), [], "no hello yet");
+  await hello({ v: 2, module_version: "9" });
+  assert.deepEqual(pushes(), [], "a mismatched module gets nothing");
+  await hello({ v: 1, module_version: "1" });
+  assert.equal(pushes().length, 1);
+  assert.deepEqual(pushes()[0]!.args, { keys: DEVTOOLS_TREE_KEYS });
+  config.now += HELLO_MIN_INTERVAL_MS + 1;
+  await module.sync();
+  await settle_reads();
+  assert.equal(pushes().length, 1, "a sync with the same hello pushes nothing more");
+  await hello({ v: 1, module_version: "1" });
+  assert.equal(pushes().length, 2, "a hello said again, as after the pref went off and on, gets the table again");
+  config.on = false;
+  await module.sync();
+  config.on = true;
+  config.now += HELLO_MIN_INTERVAL_MS + 1;
+  await module.sync();
+  await settle_reads();
+  assert.equal(pushes().length, 1, "the setting turned on again sends it to the module that is still there");
 });

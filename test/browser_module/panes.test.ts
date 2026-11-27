@@ -166,7 +166,7 @@ test("an older core with no register_kind leaves the module on and logs one line
   firefox.make_window().load();
   const core = (firefox.Services as Record<string, unknown>).desertfox_browser_module as { status(): { active: boolean; errors: string[] } };
   assert.equal(core.status().active, true);
-  assert.deepEqual(plain(core.status().errors), ["the core has no register_kind, so the pane feature stays off"]);
+  assert.deepEqual(plain(core.status().errors.filter((line) => line.includes("pane feature"))), ["the core has no register_kind, so the pane feature stays off"]);
 });
 
 test("pane.split_new_tab runs Firefox's own flow: a picker tab split beside the tab and selected", async () => {

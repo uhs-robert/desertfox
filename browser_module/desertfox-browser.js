@@ -16,6 +16,10 @@
 //                              fn(args) gets checked args and returns { ok, error?, value? } or a promise of it. `value` is text, copied into the reply. A throw or a rejection replies with a fixed error.
 //   send(kind, args, on_reply) In the sandbox: start a call to the extension, a kind on the copy of MODULE_TO_EXTENSION_KINDS. Returns { ok: true, id } or { ok: false, problem }.
 //                              on_reply(reply), optional, hears the extension's checked reply { reply_to, ok, error?, value? } once. A reply that never comes is forgotten after MAX_AWAITED_REPLIES newer calls.
+//   claim_devtools_keys(fn)    In the sandbox: the one feature that may take keys while the focus is in DevTools, docked or in its own window. Every other key there stays DevTools'.
+//                              fn({ window, event, token }) runs only where the module may act (the pref, DesertFox, private access, the toolbar switch) and returns true when it took the key.
+//                              From then on the core also attaches every DevTools toolbox window.
+//   on_hello(fn)               In the sandbox: run `fn` each time the module says a new hello to a DesertFox (not a rewrite for a flag), before that DesertFox can push anything, so a feature drops what an earlier DesertFox pushed.
 //   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
 //   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
@@ -110,6 +114,8 @@
     const MESSAGE_ENVELOPE_BYTES = 512;
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
+    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand"];
+    const MAX_DEVTOOLS_KEY_ROWS = 8;
     const EXTENSION_TO_MODULE_KINDS = {
       page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
@@ -127,6 +133,7 @@
       "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
+      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -143,6 +150,7 @@
     const REPORT_MESSAGE = "desertfox-browser-module:report";
     const REPORT_NOW_MESSAGE = "desertfox-browser-module:report-now";
     const BLUR_MESSAGE = "desertfox-browser-module:blur";
+    const DEVTOOLS_WINDOW_TYPE = "devtools:toolbox";
 
     const Ci = Components.interfaces;
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -163,6 +171,7 @@
     let shut = false;
     let cached = { extension: undefined, holder: undefined, state: undefined };
     let hello_for = new WeakSet();
+    const hello_listeners = [];
 
     const log_once = (text) => {
       if (logged.has(text)) return;
@@ -272,6 +281,8 @@
       if (!active || !extension || (hello_for.has(extension) && !again) || !enabled_by_pref()) return;
       hello_for.add(extension);
       const flags = Object.fromEntries([...hello_flags].map((name) => [name, true]));
+      // A rewrite for a flag is no new hello: the extension sends the DevTools table once per matched hello, so a feature must keep what it has.
+      if (!again) for (const fn of hello_listeners) fn();
       write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION, ...flags });
     }
 
@@ -376,11 +387,38 @@
       return (tab_state === undefined || tab_state.mode === "normal") && !desertfox_live(browser, tab_state);
     }
 
+    // The focus is in DevTools: a window of its own, or a document under the toolbox frame that DevTools docks in a tab.
+    function key_in_devtools(win, target) {
+      if (win.document.documentElement?.getAttribute("windowtype") === DEVTOOLS_WINDOW_TYPE) return true;
+      let doc = target?.ownerDocument;
+      for (let depth = 0; doc && doc !== win.document && depth < 8; depth++) {
+        // frameElement is null across the <browser> that holds a docked toolbox, so its embedder names that frame.
+        const frame = doc.defaultView?.frameElement ?? doc.defaultView?.browsingContext?.embedderElement;
+        if (!frame) return false;
+        if (frame.classList?.contains("devtools-toolbox-iframe")) return true;
+        doc = frame.ownerDocument;
+      }
+      return false;
+    }
+
+    // The DevTools guard. No key row is ever taken there. Only the feature that claimed DevTools keys sees the key.
+    function on_devtools_key(win, event) {
+      if (!devtools_claim || !key_in_devtools(win, event.originalTarget ?? event.target) || !state_for(win)) return;
+      if (devtools_claim({ window: win, event, token: token_of(event) }) !== true) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     function on_key(win, event) {
       if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (MODIFIER_KEYS.has(event.key)) return;
-      const page = page_of(win, event.target);
-      const state = page && state_for(win);
+      // A DevTools window has no tab browser, so no key there is for a page.
+      const page = win.gBrowser ? page_of(win, event.target) : null;
+      if (!page) {
+        key_taker?.reset(win);
+        return on_devtools_key(win, event);
+      }
+      const state = state_for(win);
       // A key the module may not take here ends a half-typed sequence, as a key DesertFox does not see ends it in a page.
       if (!state) return void key_taker?.reset(win);
       const row = state.keys.get(token_of(event));
@@ -417,8 +455,8 @@
     // `blur_on_load`, as DesertFox does on web pages: a field the page focused as it loaded, before any key or click, loses the focus, so the keys work at once.
     // The frame script marks such a report, and the blur goes back to it only when the module would take a key on that page.
     function blur_load_focus(browser, inner) {
-      // The windows the core attached, not `browser.ownerGlobal`: the window as the sandbox sees it through that path hides `gBrowser`.
-      const win = [...windows.keys()].find((each) => each.gBrowser.getTabForBrowser(browser));
+      // The windows the core attached, not `browser.ownerGlobal`: the window as the sandbox sees it through that path hides `gBrowser`. A DevTools window among them has none.
+      const win = [...windows.keys()].find((each) => each.gBrowser?.getTabForBrowser(browser));
       if (!win) return;
       const tab = win.gBrowser.getTabForBrowser(browser);
       const state = state_for(win);
@@ -599,6 +637,7 @@
     const HANDLER_FAILED = "the request failed";
     const kind_handlers = new Map();
     let key_taker;
+    let devtools_claim = null;
     // The one storage listener: DesertFox's bucket and its listeners belong to one extension object, so a reloaded DesertFox needs it again.
     let listening = { extension: undefined, stop: () => undefined };
     // Per extension object: the ids already handled, and the module's own list as last written. An extension reload empties both lists.
@@ -612,7 +651,17 @@
 
     // As the extension's reader does, an error loses control and bidi characters before anyone shows it.
     const printable = (text) => text.replace(/[\p{Cc}\p{Cf}]/gu, "");
+    const devtools_keys_fit = (value) => {
+      if (!Array.isArray(value) || value.length === 0 || value.length > MAX_DEVTOOLS_KEY_ROWS) return false;
+      const seen = new Set();
+      for (const row of value) {
+        if (!is_record(row) || typeof row.key !== "string" || [...row.key].length !== 1 || /[\s\p{Cc}\p{Cf}]/u.test(row.key) || !DEVTOOLS_ACTIONS.includes(row.action) || seen.has(row.key)) return false;
+        seen.add(row.key);
+      }
+      return true;
+    };
     const arg_fits = (kind, value) => {
+      if (kind === "devtools_keys") return devtools_keys_fit(value);
       if (kind === "axis") return value === "x" || value === "y";
       if (kind === "text") return typeof value === "string";
       if (kind === "region") return PANE_REGIONS.includes(value);
@@ -655,7 +704,8 @@
       const args = {};
       for (const [name, kind] of Object.entries(kinds[value.kind].args)) {
         if (!arg_fits(kind, given[name])) return { problem: `${value.kind} ${name} has the wrong shape` };
-        if (given[name] !== undefined) args[name] = given[name];
+        // A table's rows keep only the fields the module reads, as fresh objects of this sandbox.
+        if (given[name] !== undefined) args[name] = kind === "devtools_keys" ? given[name].map(({ key, action }) => ({ key, action })) : given[name];
       }
       return { message: { v: PROTOCOL_VERSION, id: value.id, kind: value.kind, args, ...(value.sent_at === undefined ? {} : { sent_at: value.sent_at }) } };
     }
@@ -879,6 +929,14 @@
         else if (kind_handlers.has(kind)) log_once(`two feature files answer ${kind}, the first one does`);
         else kind_handlers.set(kind, handler);
       },
+      on_hello(fn) {
+        hello_listeners.push(fn);
+      },
+      claim_devtools_keys(fn) {
+        if (devtools_claim) return log_once("two feature files claim DevTools keys, the first one has them");
+        devtools_claim = fn;
+        watch_devtools_windows();
+      },
       send(kind, args = {}, on_reply = undefined) {
         const now = Date.now();
         const { message, problem } = checked_message({ v: PROTOCOL_VERSION, id: `m${now.toString(36)}-${sent++}`, kind, args, sent_at: now }, MODULE_TO_EXTENSION_KINDS);
@@ -979,6 +1037,30 @@
       // For the key test and the browser console: what the module did, never page data.
       status: () => ({ active, windows: windows.size, commands: [...commands.keys()], features: [...adopted].map((url) => url.slice(own_dir_url.length)), errors: [...logged] }),
     };
+
+    // A DevTools window gets the key listener once its document has loaded: a window's type is known only then, and a window just opened shows a finished about:blank first. The loader runs the module in browser windows only.
+    function watch_devtools_windows() {
+      const attach_if_devtools = (win) => {
+        if (win.document.documentElement?.getAttribute("windowtype") === DEVTOOLS_WINDOW_TYPE) core.attach(win);
+      };
+      const attach_when_loaded = (win) => {
+        if (win.document?.readyState === "complete" && win.location?.href !== "about:blank") return attach_if_devtools(win);
+        win.addEventListener("load", () => attach_if_devtools(win), { once: true });
+      };
+      const attach_guarded = (win) => {
+        try {
+          attach_when_loaded(win);
+        } catch (error) {
+          log_once(`a DevTools window was left without keys after an error: ${error}`);
+        }
+      };
+      const on_window = (subject, topic) => {
+        if (topic === "domwindowopened") attach_guarded(subject);
+      };
+      Services.obs.addObserver(on_window, "domwindowopened");
+      undo.push(() => Services.obs.removeObserver(on_window, "domwindowopened"));
+      for (const win of Services.wm.getEnumerator(null)) attach_guarded(win);
+    }
 
     function detach(win) {
       windows.get(win)?.();
