@@ -68,7 +68,7 @@ The module runs the command first, then prevents and stops the key in the parent
 
 ## Hints over Firefox's own UI
 
-`desertfox-chrome-hints.js` and the command `hint.browser` (`gB`) label the controls of Firefox itself, in the style of the page hints. The user types the label to pick the control. The surfaces are the nav bar buttons, the tab strip, the bookmarks toolbar, the sidebar buttons, the menu bar, the rows of an open app menu, permission prompts (doorhangers), the downloads panel, the controls of a tab's prompt, the settings sub-dialogs, the Library and Page Info. A pick clicks the button, runs its command, selects the tab or opens the menu or folder.
+`desertfox-chrome-hints.js` and the command `hint.browser` (`gB`) label the controls of Firefox itself, in the style of the page hints. The user types the label to pick the control. The surfaces are the nav bar buttons, the tab strip (in the vertical strip too, with `sidebar.verticalTabs` on) and the label of each tab group, the bookmarks toolbar, the sidebar buttons, the menu bar, the rows of an open app menu, permission prompts (doorhangers), the downloads panel, the controls of a tab's prompt, the settings sub-dialogs, the Library and Page Info. A pick clicks the button, runs its command, selects the tab, opens the menu or folder, or folds or unfolds the tab group of a group label. `gB` starts from a page or the toolbar, not from the focus in the vertical strip.
 
 The work splits by the thin-executor rule:
 

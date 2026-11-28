@@ -12,9 +12,9 @@ const SESSION_KEY = "desertfox_chrome_hints";
 const LABELS = `(async () => {
   const w = ${W};
   const doc = w.document;
-  const candidates = [...doc.querySelectorAll("toolbarbutton, tab.tabbrowser-tab, menubar > menu, richlistitem, button, moz-button")];
+  const candidates = [...doc.querySelectorAll("toolbarbutton, tab.tabbrowser-tab, menubar > menu, richlistitem, button, moz-button, .tab-group-label")];
   for (const host of doc.querySelectorAll("sidebar-main")) if (host.shadowRoot) candidates.push(...host.shadowRoot.querySelectorAll("moz-button, button"));
-  const describe = (el) => el.id || (el.localName === "tab" ? "tab:" + [...w.gBrowser.tabs].indexOf(el) : el.localName + ":" + (el.getAttribute("label") ?? el.textContent.trim().slice(0, 20)));
+  const describe = (el) => el.id || (el.classList.contains("tab-group-label") ? "group-label" : "") || (el.localName === "tab" ? "tab:" + [...w.gBrowser.tabs].indexOf(el) : el.localName + ":" + (el.getAttribute("label") ?? el.textContent.trim().slice(0, 20)));
   const out = [];
   for (const host of doc.querySelectorAll(".desertfox-chrome-hints")) {
     const root = host.openOrClosedShadowRoot;
@@ -41,6 +41,16 @@ export async function run_cases(context) {
   const labels_now = () => chrome(LABELS);
   const layers = () => chrome(LAYER_COUNT);
   const label_of = (labels, target) => labels.find((label) => label.target === target)?.text;
+
+  // A group around the last tab, which a test folds through its label. Any earlier group is dissolved first, and the teardown dissolves this one.
+  async function make_group() {
+    const ungroup_all = () => chrome(`(async () => { for (const group of [...${W}.gBrowser.tabGroups]) group.ungroupTabs(); })()`);
+    on_teardown(ungroup_all);
+    await ungroup_all();
+    await chrome(`(async () => { const w = ${W}; w.gBrowser.addTabGroup([w.gBrowser.tabs.at(-1)], { label: "desertfox group" }); })()`);
+    await poll_until("the group label to show", () => chrome(`(async () => [...${W}.document.querySelectorAll(".tab-group-label")].some((e) => e.checkVisibility()))()`), { timeout_ms: 5000 });
+  }
+  const group_collapsed = () => chrome(`(async () => ${W}.gBrowser.tabGroups[0]?.collapsed === true)()`);
 
   async function start_hints(what) {
     // A case that fails with labels up would leave the keys with the session.
@@ -136,6 +146,41 @@ export async function run_cases(context) {
     await press_keys("-k", "Escape");
     await press_keys("-k", "Escape");
     await poll_until("the File menu to close", async () => !(await chrome(`(async () => ${W}.document.getElementById("file-menu").open)()`)));
+  });
+
+  await run_case("gB labels a tab group's label in the horizontal strip, and a pick folds the group", async () => {
+    await home("ch_group_h");
+    await make_group();
+    const labels = await start_hints("a tab group label");
+    await press_keys(...label_of(labels, "group-label").split(""));
+    await poll_until("the group label pick to fold the group", group_collapsed, { timeout_ms: 5000 });
+    await expect_no_layer("a group label pick");
+  });
+
+  await run_case("with vertical tabs gB labels each tab and the tab group's label, a tab label selects the tab and the group label folds the group", async () => {
+    await home("ch_vertical");
+    await chrome(`(async () => { Services.prefs.setBoolPref("sidebar.verticalTabs", true); })()`);
+    on_teardown(() => chrome(`(async () => Services.prefs.clearUserPref("sidebar.verticalTabs"))()`));
+    await poll_until("the strip to turn vertical", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === true)()`));
+    await context.open_page("page", "ch_vertical_two", { new_tab: true });
+    await make_group();
+    let labels = await start_hints("vertical tabs");
+    const tab_count = await chrome(`(async () => ${W}.gBrowser.tabs.length)()`);
+    for (let index = 0; index < tab_count; index++) expect(labels.some((label) => label.target === "tab:" + index), `no label on tab ${index}: ${labels.map((label) => label.target).join(", ")}`);
+    expect(labels.some((label) => label.target === "group-label"), "no label on the tab group label");
+    expect(labels.every((label) => label.styled), "a label lacks the hint sheet's style");
+    await take_shot("/tmp/desertfox-chrome-hints-vertical.png");
+    await press_keys(...label_of(labels, "group-label").split(""));
+    await poll_until("the group label pick to fold the group", group_collapsed, { timeout_ms: 5000 });
+    await expect_no_layer("the group label pick");
+    // The folded group keeps only the selected tab showing, so the last tab is selected and the first one is picked.
+    await chrome(`(async () => { ${W}.gBrowser.selectedTab = ${W}.gBrowser.tabs.at(-1); })()`);
+    labels = await start_hints("vertical tabs, second start");
+    await press_keys(...label_of(labels, "tab:0").split(""));
+    await poll_until("the tab pick to select the first tab", () => chrome(`(async () => ${W}.gBrowser.tabContainer.selectedIndex === 0)()`));
+    // Later cases expect the horizontal strip.
+    await chrome(`(async () => Services.prefs.clearUserPref("sidebar.verticalTabs"))()`);
+    await poll_until("the strip to turn horizontal", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === false)()`));
   });
 
   await run_case("with the app menu open, gB labels its rows inside the panel, and a pick runs the row", async () => {

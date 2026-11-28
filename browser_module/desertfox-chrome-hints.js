@@ -92,9 +92,13 @@
     const prompt_kind = (doc) => doc.getElementById("commonDialog")?.getAttribute("windowtype") ?? "";
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
+    // A tab group's label is a button: a click folds or unfolds the group.
+    const TAB_STRIP_TAKE = "tab.tabbrowser-tab, toolbarbutton, .tab-group-label";
     const WINDOW_GROUPS = [
       { root: "#nav-bar", take: "toolbarbutton" },
-      { root: "#TabsToolbar", take: "tab.tabbrowser-tab, toolbarbutton" },
+      { root: "#TabsToolbar", take: TAB_STRIP_TAKE },
+      // With `sidebar.verticalTabs` on, the strip sits here and #TabsToolbar holds no tab.
+      { root: "#vertical-tabs", take: TAB_STRIP_TAKE },
       { root: "#PersonalToolbar", take: "toolbarbutton" },
       { root: "#toolbar-menubar", take: "menubar > menu" },
       { root: "#sidebar-button", take: "" },
