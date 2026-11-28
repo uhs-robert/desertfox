@@ -1,6 +1,7 @@
 // The command line panel (browser_module/desertfox-cmdline-panel.js): DesertFox's own command line page in a panel over a locked page.
 // On about:preferences `:` opens it with DesertFox's principal, Enter runs the line and closes it, Escape and a tab switch close it, and the module's keys stay out of it.
 // A prompt key opens it with the command typed in, the address bar takes over when the module refuses the panel, and a private window gets a private line.
+import { createServer as create_http_server } from "node:http";
 import { module_steps, NO_EFFECT_MS, panel_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["cmdline", "tabs", "keys"];
@@ -12,7 +13,7 @@ export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, on_teardown } = context;
   const steps = module_steps(context);
   const panel = panel_steps(context, steps);
-  const { chrome, open_tab, focus_page, home, close_selected_tab } = steps;
+  const { chrome, open_tab, focus_page, home, close_selected_tab, in_selected_page } = steps;
   const tab_count = () => chrome(`(async () => ${W}.gBrowser.tabs.length)()`);
   const close_others = () => chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); })()`);
   const bar_state = () => chrome(`(async () => { const bar = ${W}.gURLBar; return { focused: bar.focused, value: bar.value }; })()`);
@@ -154,6 +155,40 @@ export async function run_cases(context) {
     await panel.line_holds("search");
     await press_keys("-k", "Return");
     await poll_until("the search to open a tab whose address holds the selected text", async () => (await search_tab_address(encodeURIComponent(word))) > 0, { timeout_ms: 10000 });
+    await close_others();
+  });
+
+  // A page in a content process: about:neterror runs in the web process, and no content script runs there, so the frame script of desertfox-selection.js answers.
+  await run_case("a bare :search typed in the panel searches the text selected on an error page in a content process", async () => {
+    await close_panel();
+    await home("bmp_home");
+    const probe = create_http_server();
+    const closed_port = await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(probe.address().port)));
+    await new Promise((resolve) => probe.close(resolve));
+    await open_tab(`http://127.0.0.1:${closed_port}/`, { loaded: (spec) => spec.includes(String(closed_port)) });
+    await poll_until("the error page", () => in_selected_page(`(win) => win.document.documentURI.startsWith("about:neterror")`));
+    const picked = await in_selected_page(`(win) => {
+      const doc = win.document;
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const word = /[A-Za-z]{5,}/.exec(node.textContent)?.[0];
+        if (!word || !node.parentElement?.checkVisibility?.()) continue;
+        const range = doc.createRange();
+        range.selectNodeContents(node);
+        win.getSelection().removeAllRanges();
+        win.getSelection().addRange(range);
+        return { word };
+      }
+      return { problem: "no text on the page" };
+    }`);
+    expect(picked.word?.length > 0, `nothing was selected on the error page: ${picked.problem}`);
+    await focus_page();
+    await press_keys(":");
+    await panel.wait_open(":");
+    await press_keys("search");
+    await panel.line_holds("search");
+    await press_keys("-k", "Return");
+    await poll_until("the search to open a tab whose address holds the selected text", async () => (await search_tab_address(encodeURIComponent(picked.word))) > 0, { timeout_ms: 10000 });
     await close_others();
   });
 
