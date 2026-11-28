@@ -79,7 +79,10 @@ export async function run_cases(context) {
     await in_selected_page(`(win) => { const panel = win.document.querySelector(".jsonPanelBox .panelContent"); panel.scrollTop = panel.scrollHeight; return true; }`);
     await poll_until("Bot in the bar after the JSON panel scrolled", async () => (await bar_now())?.right.includes("Bot"), { timeout_ms: 8000 });
     await in_selected_page(`(win) => { const sandbox = Components.utils.Sandbox(win.document.nodePrincipal, { sandboxPrototype: win, wantXrays: false }); Components.utils.evalInSandbox('[...document.querySelectorAll(".tabs-menu a, .tabs a")].find((link) => /raw data/i.test(link.textContent)).click()', sandbox); return true; }`);
-    await poll_until("the bar to leave Bot after the viewer tab switched", async () => !(await bar_now())?.right.includes("Bot"), { timeout_ms: 8000 });
+    await poll_until("the Raw Data panel's place (All or Top, not Bot) in the bar", async () => {
+      const right = (await bar_now())?.right ?? [];
+      return right.includes("All") || right.includes("Top");
+    }, { timeout_ms: 8000 });
     await close_selected_tab();
   });
 
