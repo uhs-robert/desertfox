@@ -18,7 +18,7 @@ const HELPERS = `
 const ONCE_IDLE_MS = 3000;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep, open_page, on_teardown, events, wait_event, scroll_of } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, open_page, on_teardown, events, wait_event, scroll_of, in_background, clear_notices } = context;
   const steps = module_steps(context);
   const { chrome, session_value, module_status } = steps;
 
@@ -31,7 +31,7 @@ export async function run_cases(context) {
     })()`);
   const held = () => chrome(`(async () => Services.desertfox_browser_module.keys_held_by(${W}) ?? null)()`);
   const selected_index = () => chrome(`(async () => { const w = ${W}; return w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab); })()`);
-  const menu_bar = () => chrome(`(async () => { const bar = ${W}.document.getElementById("toolbar-menubar"); return { inactive: bar?.getAttribute("inactive") ?? null, open: [...${W}.document.querySelectorAll("menupopup")].filter((p) => p.state === "open").length }; })()`);
+  const menu_bar = () => chrome(`(async () => { const bar = ${W}.document.getElementById("toolbar-menubar"); return { window_active: Services.focus.activeWindow === ${W}, inactive: bar?.getAttribute("inactive") ?? null, open: [...${W}.document.querySelectorAll("menupopup")].filter((p) => p.state === "open").length }; })()`);
   const debug = async () => JSON.stringify({ focus: await focus(), held: await held(), menu_bar: await menu_bar() });
   const explain = async (wait) => {
     try {
@@ -137,9 +137,16 @@ export async function run_cases(context) {
     await explain(poll_until("Escape to end the hold", async () => (await held()) === null));
     expect((await focus()).panel === row, "Escape after Alt+O left the list");
     await arm();
-    // f starts hints, which need page code, so the tree has no f.
+    // f starts hints, which need page code, so the tree has no f. The extension says why in a desktop notification, which can take the focus from the window.
+    await clear_notices();
+    on_teardown(clear_notices);
     await press_keys("f");
     await explain(poll_until("f to end the hold", async () => (await held()) === null));
+    const notices = async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).length;
+    await explain(poll_until("f after Alt+O to show why it does not run", async () => (await notices()) > 0, { timeout_ms: 5000 }));
+    await clear_notices();
+    await chrome(`(async () => { ${W}.focus(); })()`);
+    await explain(poll_until("the window to have the focus again", () => chrome(`(async () => Services.focus.activeWindow === ${W})()`)));
     expect((await focus()).panel === row, "f after Alt+O moved the focus");
     await arm();
     await sleep(ONCE_IDLE_MS + 500);
