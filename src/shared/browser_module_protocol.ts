@@ -181,8 +181,8 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `sidebar_once` says it answers `sidebar.normal_once`.
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; sidebar_once?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -419,7 +419,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.sidebar_once === true && { sidebar_once: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -480,6 +480,7 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   // The user typed a hint key on one of Firefox's own pages that the module labels. `start` is a token the module made for that key, as for `chrome_hints.want`. `keys` holds the tokens of the hint leaf's path, joined by one space, and `count` the typed count or 0, which a page session ignores. The extension matches the keys against its own tree and names the action, or refuses. The session's targets, keys and end come on the chrome_hints rows.
   "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
 };
+export const SIDEBAR_ONCE_KIND = "sidebar.normal_once";
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
   page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
@@ -526,6 +527,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The text selected on a parent-process about: page, where no content script runs, as the reply value. The module caps and cleans it too, and the extension checks it again. An older module refuses the kind and the extension reads no selection there.
   "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
+  // `<A-o>` (`mode.normal_once`) with the focus in Firefox's own sidebar, sent only to a module whose hello says `sidebar_once`. The module checks that the focus of the window in front is in the sidebar, then holds that window's next key sequence and runs it from the tree. It refuses anywhere else, where the page's own arm acts. No arg: the module reads the focus itself.
+  "sidebar.normal_once": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
 };
 
 // The module core's fixed refusal of a request whose arg has the wrong shape (`checked_message` in browser_module/desertfox-browser.js). An older module that knows the kind but not a newer value of an arg answers with it.

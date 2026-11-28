@@ -7,7 +7,7 @@ import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree
 import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleHello, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -32,6 +32,7 @@ import {
   MAX_CHROME_HINT_KEY_TOKENS,
   MAX_SIDEBAR_KEY_TOKENS,
   sidebar_keys_of,
+  SIDEBAR_ONCE_KIND,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
   status_of_hello,
@@ -537,4 +538,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       }
     },
   };
+}
+
+// `<A-o>` with the focus in Firefox's own sidebar, where no page hears it. Runs beside the page's own arm, which acts only in a page with the focus, so the two never both hold the keys. The reply only says whether the module armed.
+export async function arm_sidebar_once(deps: { read_hello: () => Promise<ModuleHello | undefined>; call: (kind: string, args: ModuleArgs) => Promise<{ ok: boolean }> }): Promise<boolean> {
+  if ((await deps.read_hello())?.sidebar_once !== true) return false;
+  return (await deps.call(SIDEBAR_ONCE_KIND, {})).ok;
 }

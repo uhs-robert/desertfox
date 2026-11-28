@@ -1,6 +1,7 @@
 // DesertFox browser module, the sidebar feature: keys in Firefox's own sidebar, the vertical tab strip and the history, bookmarks and open tabs panels. See docs/design/browser_module.md.
 // The keys come from the sidebar table in the extension's state (the core's sidebar_row). They act only with the focus in one of those places, never in an add-on's sidebar and never in a text field, except the key that leaves.
 // In a panel the moves type arrow keys, so Firefox keeps its own selection and scrolling. In the strip they move the strip's own keyboard focus.
+// `<A-o>` (`mode.normal_once`) there holds the window's keys for one key sequence of the locked-page tree, which runs as on a locked page. The extension asks for it with `sidebar.normal_once`.
 // In a window it asks the core to load it into the core sandbox, where it starts once per process and attaches to every browser window, open or opened later.
 
 (function desertfox_browser_module_sidebar(scope) {
@@ -28,6 +29,10 @@
       core.log_once(`the core has no ${missing}, so the sidebar keys stay off`);
       return;
     }
+
+    // An older core lacks the calls of the one-shot prefix: the sidebar keys stay, and the prefix stays off.
+    const once_missing = ["register_kind", "set_hello_flag", "on_hello", "hold_keys", "release_keys", "scope_tree", "send", "run_command", "ime_in_field"].find((name) => typeof core[name] !== "function");
+    if (once_missing) core.log_once(`the core has no ${once_missing}, so <A-o> stays off in the sidebar`);
 
     const BROWSER = "navigator:browser";
     // The panel pages the keys act in, by the panel each belongs to. The revamped and the older pages both count. An add-on's sidebar loads webext-panels.xhtml, which is not here.
@@ -258,6 +263,112 @@
       return true;
     }
 
+    // ---- The one-shot normal prefix. The tree is the extension's, read here as data: a child counts only as an own key, a leaf only as "forward" or a native command, which the core checks again.
+
+    const ONCE_OWNER = "sidebar_once";
+    const ONCE_KEY = "<A-o>";
+    // The hold eats every key of the window, so it must end on its own: this long after the prefix and after each key of the sequence.
+    const ONCE_IDLE_MS = 3000;
+    // MAX_SEQUENCE_KEYS of the protocol, and the count digits of the extension's matcher, which keep a count within MAX_COUNT.
+    const MAX_ONCE_KEYS = 8;
+    const MAX_COUNT_DIGITS = 6;
+    // A count repeats a native command at most this often, as on a locked page.
+    const MAX_NATIVE_REPEAT = 100;
+    const is_record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+    const child_of = (node, token) => (is_record(node?.children) && Object.hasOwn(node.children, token) ? node.children[token] : undefined);
+    const is_native = (leaf) => is_record(leaf) && typeof leaf.native === "string" && is_record(leaf.args);
+
+    // Per window: { tree, node, keys, digits, element, timer }, the walk of the one sequence and the element that had the focus.
+    const onces = new Map();
+    // The panel document, or "strip", or null outside the sidebar.
+    const place_key = (win, element) => {
+      const place = place_of(win, element);
+      return place ? (place.doc ?? place.kind) : null;
+    };
+
+    // A digit starts a count only before the first key, and 0 only after another digit, unless the tree binds it, as in the extension's matcher.
+    // { pending } for a key that goes on, else { leaf, keys, count } or {} for a key that binds nothing.
+    function once_step(once, token) {
+      if (once.keys.length === 0 && /^[0-9]$/.test(token) && once.digits.length < MAX_COUNT_DIGITS && (once.digits !== "" || (token !== "0" && child_of(once.tree, token) === undefined))) {
+        once.digits += token;
+        return { pending: true };
+      }
+      const next = child_of(once.node, token);
+      once.keys.push(token);
+      if (is_record(next) && "children" in next && once.keys.length < MAX_ONCE_KEYS) {
+        once.node = next;
+        return { pending: true };
+      }
+      if (next === "forward" || is_native(next)) return { leaf: next, keys: once.keys, count: once.digits === "" ? undefined : Number(once.digits) };
+      return {};
+    }
+
+    const once_timer = (win, once) => {
+      win.clearTimeout?.(once.timer);
+      once.timer = win.setTimeout(() => onces.get(win) === once && end_once(win), ONCE_IDLE_MS);
+    };
+
+    function end_once(win) {
+      const once = onces.get(win);
+      if (!once) return;
+      onces.delete(win);
+      win.clearTimeout?.(once.timer);
+      core.release_keys(win, ONCE_OWNER);
+    }
+
+    function arm_once() {
+      const win = Services.focus?.activeWindow;
+      if (!win || win.closed || !attached.has(win) || !core.may_act(win)) return { ok: false, error: "No Firefox window has the focus" };
+      const element = core.focused_element(win);
+      if (!place_of(win, element)) return { ok: false, error: "The focus is not in the sidebar" };
+      const tree = core.scope_tree(win);
+      if (!is_record(tree) || !is_record(tree.children)) return { ok: false, error: "DesertFox sent no keys for here" };
+      if (popup_owns_keys(win) || !core.hold_keys(win, ONCE_OWNER)) return { ok: false, error: "Another feature holds the keys" };
+      const once = { tree, node: tree, keys: [], digits: "", element };
+      onces.set(win, once);
+      once_timer(win, once);
+      return { ok: true };
+    }
+
+    // Every key goes nowhere but the sequence. A key that binds nothing ends it, as in a page, so it never types into a search box.
+    function once_key(win, once, event) {
+      // A guard the arm passed can fail later: the module or the toolbar switch went off, DesertFox went away, a menu opened. The key then goes on.
+      if (!core.may_act(win) || core.keys_held_by(win) !== ONCE_OWNER || popup_owns_keys(win)) return end_once(win);
+      const token = core.token_of(event);
+      if (!token) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (token === ESCAPE || token === ONCE_KEY) return end_once(win);
+      const step = once_step(once, token);
+      if (step.pending) return once_timer(win, once);
+      end_once(win);
+      if (step.leaf) run_once(win, once, step, event.repeat === true);
+    }
+
+    function run_once(win, once, { leaf, keys, count }, repeat) {
+      const path = keys.join(" ");
+      if (leaf === "forward") {
+        const opens_line = Array.isArray(once.tree.line_keys) && once.tree.line_keys.includes(path);
+        const sent = core.send("run", { keys: path, count: count ?? 0 }, () => opens_line || win.setTimeout(() => focus_back(win, once.element), 0));
+        if (!sent.ok) core.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
+        return;
+      }
+      const { native, args, count_rule } = leaf;
+      const counted = count !== undefined && is_record(count_rule) && typeof count_rule.param === "string" ? { ...args, [count_rule.param]: count } : args;
+      const times = count !== undefined && count_rule === "repeat" ? Math.min(count, MAX_NATIVE_REPEAT) : 1;
+      const context = { window: win, browser: win.gBrowser.selectedBrowser, tab: win.gBrowser.selectedTab, repeat };
+      for (let time = 0; time < times && core.run_command(native, counted, context); time++);
+      win.setTimeout(() => focus_back(win, once.element), 0);
+    }
+
+    // After the command the focus goes back to the sidebar element that had it, unless the command put it in a text field (the command line, the address bar) or the user left the window.
+    function focus_back(win, element) {
+      if (!element?.isConnected || win.closed || Services.focus?.activeWindow !== win || !core.may_act(win)) return;
+      const now = core.focused_element(win);
+      if (now === element || core.is_field(now) || core.ime_in_field(win) || !has_function(element, "focus")) return;
+      element.focus();
+    }
+
     // ---- Windows.
 
     const attached = new Map();
@@ -266,6 +377,8 @@
 
     function on_key(win, record, event) {
       if (typing || !event.isTrusted || event.defaultPrevented || event.isComposing) return;
+      const once = onces.get(win);
+      if (once) return once_key(win, once, event);
       const place = place_of(win, event.originalTarget ?? event.target);
       if (!place) {
         record.pending = undefined;
@@ -298,10 +411,17 @@
       const keydown = guarded((event) => on_key(win, record, event));
       const focus = guarded((event) => {
         record.pending = undefined;
+        // The focus left the place the prefix was typed in: the sequence ends there.
+        const once = onces.get(win);
+        const here = once && place_key(win, core.focused_element(win));
+        if (once && (here === null || here !== place_key(win, once.element))) end_once(win);
         const region = page_region_of(win, event.originalTarget ?? event.target);
         if (region) last_page_focus.set(win, new WeakRef(region));
       });
-      const blur = () => (record.pending = undefined);
+      const blur = () => {
+        record.pending = undefined;
+        end_once(win);
+      };
       const unload = () => detach(win);
       const root = win.windowRoot;
       root.addEventListener("keydown", keydown, true);
@@ -317,6 +437,7 @@
     }
 
     function detach(win) {
+      end_once(win);
       attached.get(win)?.();
       attached.delete(win);
     }
@@ -368,6 +489,12 @@
 
     try {
       core.on_shut_down(stop_all);
+      if (!once_missing) {
+        core.register_kind("sidebar.normal_once", arm_once);
+        // A new DesertFox knows nothing of a sequence typed for the one before.
+        core.on_hello(() => [...onces.keys()].forEach(end_once));
+        core.set_hello_flag("sidebar_once", true);
+      }
       Services.ww.registerNotification(window_watcher);
       for (const win of Services.wm.getEnumerator(BROWSER)) attach_when_loaded(win);
     } catch (error) {

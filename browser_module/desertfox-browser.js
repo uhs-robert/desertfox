@@ -35,6 +35,7 @@
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
 //   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
+//   scope_tree(win)            In the sandbox: the state's raw tree of the keys a locked page runs, or undefined, and undefined whenever may_act(win) is false. A feature reads it as data, never trusting its shape.
 //   chrome_hint_keys(win)      In the sandbox: the key token lists of the `hint.browser` bindings, or [] whenever may_act(win) is false.
 //   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
@@ -161,6 +162,7 @@
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
       "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: 8192 },
+      "sidebar.normal_once": { args: {}, reply: true, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -302,7 +304,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "sidebar_once"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -1126,6 +1128,7 @@
       },
       may_act: (win) => state_for(win) !== undefined,
       sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),
+      scope_tree: (win) => state_for(win)?.tree,
       chrome_hint_keys: (win) => state_for(win)?.chrome_hint_keys ?? [],
       token_of,
       is_field,

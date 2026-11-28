@@ -15,7 +15,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
 - `desertfox-whichkey.js`: generated from `sources/whichkey.js`, never edited. The which-key panel on locked pages, drawn from the state's table. It runs in each window and never loads into the core's sandbox.
 - `sources/whichkey.js`: the source of `desertfox-whichkey.js`. It imports the page panel's sheet, layout, element tree and timer from `src/content/whichkey`. Rebuild with `just browser-module`.
-- `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
+- `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It reads the one sequence after `<A-o>` there. It attaches to browser windows itself.
 - `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
 - `desertfox-chrome-hints.js`: hints over Firefox's UI, panels, prompts, dialogs, the Library, Page Info and the allowlisted about: pages: collect, draw, pick, a grant's Enter, `hint.browser`, and the drawing DevTools hints share.
 - `desertfox-content-hints.js`: hints on the hosts of Firefox's restricted list, in a content process: the page rule, the frame script that collects and picks there, and its transport.

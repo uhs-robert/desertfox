@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_browser_module, sidebar_rows_of } from "../../src/background/browser_module.ts";
+import { arm_sidebar_once, create_browser_module, sidebar_rows_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { BROWSER_MODULE_STATE_STORAGE_KEY, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -56,4 +56,15 @@ test("the state carries the sidebar table, and none while the switch is off", as
     const written = bucket[BROWSER_MODULE_STATE_STORAGE_KEY] as { sidebar_keys?: unknown };
     assert.deepEqual(written.sidebar_keys, disabled ? undefined : [{ keys: ["j"], id: "sidebar.down" }]);
   }
+});
+
+test("<A-o> asks the module to hold the sidebar's keys only when its hello says sidebar_once", async () => {
+  const calls: string[] = [];
+  const call = async (kind: string) => (calls.push(kind), { ok: true });
+  assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1" }), call }), false);
+  assert.equal(await arm_sidebar_once({ read_hello: async () => undefined, call }), false);
+  assert.deepEqual(calls, []);
+  assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1", sidebar_once: true }), call }), true);
+  assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1", sidebar_once: true }), call: async () => ({ ok: false }) }), false);
+  assert.deepEqual(calls, ["sidebar.normal_once"]);
 });
