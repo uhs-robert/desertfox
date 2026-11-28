@@ -163,6 +163,19 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         if (typeof value !== "number") throw new Error("NS_ERROR_UNEXPECTED");
         return value;
       },
+      // Setters change the value and tell the observers, as Firefox does.
+      setBoolPref(name: string, value: boolean) {
+        prefs.set(name, value);
+        pref_observers.forEach((observer) => observer());
+      },
+      setStringPref(name: string, value: string) {
+        prefs.set(name, value);
+      },
+      prefHasUserValue: (name: string) => prefs.has(name),
+      clearUserPref(name: string) {
+        prefs.delete(name);
+        pref_observers.forEach((observer) => observer());
+      },
       addObserver(_name: string, observer: () => void) {
         pref_observers.add(observer);
       },
@@ -494,6 +507,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
     timer_delays: () => [...timer_delays.values()],
     emit_message,
     set_named_pref,
+    read_pref: (name: string) => prefs.get(name),
     set_pref,
     start_extension,
     write_state,

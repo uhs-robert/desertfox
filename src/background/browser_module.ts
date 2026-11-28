@@ -4,7 +4,7 @@
 
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
-import type { CommandMeta } from "../shared/command.ts";
+import type { CommandMeta, Mode } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
@@ -59,7 +59,7 @@ import {
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS, DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
 import type { ToastKind } from "../shared/messages/tab.ts";
-import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
+import { MODE_COMMAND_ID, native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { is_reply } from "../shared/browser_module_protocol.ts";
@@ -270,10 +270,14 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // The message each tab shows in the bar, in memory only like `bars`. The module hides it at `until`, and a tab entry drops it once `until` has passed.
   const toasts = new Map<string, BarToast>();
   let toast_count = 0;
+  // The caret or visual mode the module reports for each tab, in memory only like `bars`: a tab with no DesertFox page code has no record to keep it in, and the module reports `normal` when the mode ends.
+  const visual_modes = new Map<string, Mode>();
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
   let hello_bar = false;
   // Whether the last hello said the module shows the root list. An older module refuses a whole tree that holds the `help.whichkey` leaf, so the leaf goes only to one that says so.
   let hello_root_list = false;
+  // Whether the last hello said the module runs caret and visual mode. An older module refuses a whole tree that holds a native command it does not know, so the mode leaves go only to one that says so.
+  let hello_visual = false;
   // Whether that hello says the bar draws toasts. An older module builds a bar that ignores the field, so its refusals stay desktop notices.
   let hello_message = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
@@ -293,6 +297,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const bar_built = (stored_hello: unknown): boolean => {
     const hello = validate_module_hello(stored_hello);
     return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.bar === true;
+  };
+  const visual_built = (stored_hello: unknown): boolean => {
+    const hello = validate_module_hello(stored_hello);
+    return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.visual_mode === true;
   };
   const root_list_built = (stored_hello: unknown): boolean => {
     const hello = validate_module_hello(stored_hello);
@@ -322,7 +330,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   // A load hides the page's own fields but not the toast, which the page never reported.
   const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
     const toast = live_toast(id);
-    const base = { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(toast && { toast }) };
+    const held = visual_modes.get(id);
+    // A page with DesertFox's own script shows the mode it reports. A tab with none and a caret or visual mode in its entry holds the module's mode from an earlier write, which `held` replaces or ends.
+    const written = tab?.mode ?? "normal";
+    const mode = tab?.live !== true && (written === "normal" || written === "caret" || written === "visual" || written === "visual_line") ? (held ?? "normal") : written;
+    const base = { mode, live: tab?.live ?? false, ...(toast && { toast }) };
     if (loading.has(id)) return base;
     const { pending: _, count: __, ...top } = bars.get(id) ?? {};
     return { ...base, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
@@ -353,11 +365,27 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (validate_message_list(kept, kinds.from_extension).ok) await deps.session.set({ [BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY]: kept });
   };
 
+  // The module says a tab entered or left caret or visual mode. Only the badge reads it, so a stale or forged claim shows a wrong label at worst. It counts only while the module said it runs the modes, and never past the state's tab cap.
+  const report_visual_mode = async (args: ModuleArgs): Promise<void> => {
+    const id = String(args.tab_id);
+    const mode = args.mode;
+    if (!hello_visual || !Number.isInteger(args.tab_id) || (mode !== "normal" && mode !== "caret" && mode !== "visual" && mode !== "visual_line")) return;
+    if (mode === "normal") visual_modes.delete(id);
+    else if (visual_modes.has(id) || visual_modes.size < MAX_STATE_TABS) visual_modes.set(id, mode);
+    else return;
+    await enqueue(async () => {
+      const state = await read_state();
+      if (state === undefined || !(await deps.is_on())) return;
+      if (!(id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return;
+      await write_state({ ...state, tabs: { ...state.tabs, [id]: tab_with_bar(id, state.tabs[id]) } });
+    });
+  };
+
   const run_request = async (request: ModuleRequest): Promise<ModuleReply | undefined> => {
     const row = kinds.from_module[request.kind]!;
     const reply = (ok: boolean, error?: string, value?: string): ModuleReply | undefined =>
       row.reply ? { v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: request.id, ok, ...(error === undefined ? {} : { error }), ...(typeof value === "string" ? { value } : {}) } : undefined;
-    const handler = deps.handlers[request.kind];
+    const handler = request.kind === "visual.report" ? report_visual_mode : deps.handlers[request.kind];
     if (handler === undefined) return reply(false, "no handler for this kind");
     try {
       const answered = reply(true, undefined, (await handler(request.args)) ?? undefined);
@@ -416,7 +444,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     hello_message = hello_bar && checked_hello.ok && checked_hello.value.bar_message === true;
     const root_list_changed = hello_root_list !== root_list_built(hello);
     hello_root_list = root_list_built(hello);
-    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar) || root_list_changed) await sync_now();
+    const visual_changed = hello_visual !== visual_built(hello);
+    hello_visual = visual_built(hello);
+    // A module that went away takes its modes with it.
+    if (!hello_visual) visual_modes.clear();
+    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar) || root_list_changed || visual_changed) await sync_now();
   };
 
   const read_messages = async (): Promise<void> => {
@@ -430,6 +462,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (!(await deps.is_on())) {
       hello_bar = false;
       hello_root_list = false;
+      hello_visual = false;
+      visual_modes.clear();
       hello_message = false;
       devtools_keys_sent = false;
       hello_generation++;
@@ -449,6 +483,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     }
     // A locked page has no record, so its live toast would vanish from the rewrite.
     for (const id of [...toasts.keys()]) if (!(id in tabs) && live_toast(id) && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_with_bar(id, undefined);
+    for (const id of visual_modes.keys()) if (!(id in tabs) && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_with_bar(id, undefined);
     const bar_theme = bar_theme_of(await deps.read_theme?.());
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
     const keymap = disabled ? undefined : await deps.read_keymap();
@@ -459,8 +494,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       const fits = scope && validate_scope_tree(scope).ok ? scope : undefined;
       return { fits, which_key: fits && deps.find_command ? which_key_table_of_keymap(keymap, fits, deps.find_command) : undefined, check_args };
     };
-    const without_root_list: CheckCommandArgs = (id, args) => (id === ROOT_LIST_COMMAND_ID ? undefined : deps.check_args(id, args));
-    let locked = locked_keys(hello_root_list ? deps.check_args : without_root_list);
+    const with_visual: CheckCommandArgs = hello_visual ? deps.check_args : (id, args) => (id === MODE_COMMAND_ID ? undefined : deps.check_args(id, args));
+    const without_root_list: CheckCommandArgs = (id, args) => (id === ROOT_LIST_COMMAND_ID ? undefined : with_visual(id, args));
+    let locked = locked_keys(hello_root_list ? with_visual : without_root_list);
     if (hello_root_list && !locked.which_key?.root) locked = locked_keys(without_root_list);
     const { fits, which_key } = locked;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
@@ -476,10 +512,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // No state yet: a full sync is on its way or the setting just turned off.
     if (state === undefined) return;
     // A tab with no entry has nothing to clear, so a close need not rewrite the whole state.
-    if (record === undefined && !(tab_id in state.tabs)) return void (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
+    if (record === undefined && !(tab_id in state.tabs)) return void (bars.delete(tab_id), toasts.delete(tab_id), visual_modes.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
-    if (record === undefined) (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
+    if (record === undefined) (bars.delete(tab_id), toasts.delete(tab_id), visual_modes.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
     else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });

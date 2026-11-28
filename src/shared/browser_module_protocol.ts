@@ -39,7 +39,7 @@ export const MESSAGE_MIN_GAP_MS = 50;
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
 // `firefox_page` is a name from MODULE_FIREFOX_PAGES. `optional_open_where` is absent, "tab" or "here".
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction";
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction" | "visual_mode";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
@@ -51,6 +51,9 @@ export const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"] as cons
 export type PageHintAction = (typeof PAGE_HINT_ACTIONS)[number];
 // Where the module opens a Firefox page: a tab after the one that asked, or that tab itself.
 export const FIREFOX_PAGE_WHERE = ["tab", "here"] as const;
+// The modes the module reports for a locked tab, for the status bar's badge. `normal` ends the report.
+export const VISUAL_REPORT_MODES = ["normal", "caret", "visual", "visual_line"] as const;
+export type VisualReportMode = (typeof VISUAL_REPORT_MODES)[number];
 
 // The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each tree action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
 // `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`). `visual.start` starts visual mode in the focused DevTools text area.
@@ -124,6 +127,9 @@ export const MODULE_COMMAND_ARGS = {
   "page.stop": {},
   // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
   [ROOT_LIST_COMMAND_ID]: {},
+  // Caret and visual mode on a parent-process about: page, shown in the bar through `visual.report`. `line` is 1 for line visual mode. A leaf of these goes only to a module whose hello says `visual_mode`.
+  "mode.caret": {},
+  "mode.visual": { line: "optional_int" },
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
 // The commands of Firefox's own sidebar. The module runs them only with the focus in the vertical tab strip or in the history, bookmarks or open tabs panel. None takes args.
@@ -191,8 +197,8 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list.
-export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list. `visual_mode` says it runs caret and visual mode on about: pages and reports the mode (`visual.report`).
+export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true; visual_mode?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -217,6 +223,7 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
   if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? undefined : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
   if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? undefined : "must be a page from the list";
+  if (kind === "visual_mode") return VISUAL_REPORT_MODES.some((mode) => mode === value) ? undefined : `must be one of ${VISUAL_REPORT_MODES.join(", ")}`;
   if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.some((where) => where === value) ? undefined : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
   if (kind === "optional_int" && value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
@@ -454,7 +461,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }), ...(value.visual_mode === true && { visual_mode: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -514,6 +521,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The user typed a hint key on one of Firefox's own pages that the module labels. `start` is a token the module made for that key, as for `chrome_hints.want`. `keys` holds the tokens of the hint leaf's path, joined by one space, and `count` the typed count or 0, which a page session ignores. The extension matches the keys against its own tree and names the action, or refuses. The session's targets, keys and end come on the chrome_hints rows.
   "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
+  // The module's caret or visual mode of a tab changed (`normal` when it ended). The extension shows it in the bar's badge for a tab with no DesertFox page code, and forgets it when the tab closes.
+  "visual.report": { args: { tab_id: "int", mode: "visual_mode" }, reply: false, max_bytes: PANE_CALL_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.

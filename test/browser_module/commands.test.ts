@@ -31,8 +31,8 @@ const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 type Core = { share_locked_page_rule(rule: { hint_notice(browser: unknown): string | undefined }): void; take_held_keys(win: unknown, end?: boolean): string; module_pending(win: unknown): unknown; set_hello_flag(name: unknown, on: unknown): boolean; status(): { commands: string[] } };
 
 // One window with two tabs, the core, the tab and scroll feature and the commands feature loaded, and the state written.
-function started({ written = state() as unknown, private_window = false, private_access = false } = {}) {
-  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE) } });
+function started({ written = state() as unknown, private_window = false, private_access = false, with_visual = false } = {}) {
+  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE), ...(with_visual && { "desertfox-visual.js": source_of("desertfox-visual.js") }) } });
   firefox.start_extension({ private_access });
   const window = firefox.make_window({ private_window });
   window.load();
@@ -53,7 +53,7 @@ function started({ written = state() as unknown, private_window = false, private
 }
 
 test("the committed bundle runs: it defines page.stop and takes keys, and the feature files define every command of the protocol", () => {
-  const { core, firefox } = started();
+  const { core, firefox } = started({ with_visual: true });
   assert.deepEqual(plain(core.status().commands).sort(), Object.keys(MODULE_COMMAND_ARGS).sort());
   assert.deepEqual(firefox.errors, []);
 });

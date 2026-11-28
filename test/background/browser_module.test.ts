@@ -963,3 +963,72 @@ test("a toast on a tab with no record survives a full sync and is cleared when t
   await flush();
   assert.equal("9" in state_of(data).tabs, false, "the map entry went with the tab");
 });
+
+const VISUAL_KINDS = { from_module: { "visual.report": MODULE_TO_EXTENSION_KINDS["visual.report"]! }, from_extension: TEST_KINDS.from_extension };
+const visual_report = (id: string, tab_id: number, mode: string) => ({ v: 1, id, kind: "visual.report", args: { tab_id, mode } });
+
+// The module's list as it stands now, read after the gap the limiter keeps.
+async function deliver(world: ReturnType<typeof setup>, list: unknown[]) {
+  from_module(world.data, list);
+  world.config.now += MESSAGE_MIN_GAP_MS + 1;
+  world.module.storage_changed({ [BROWSER_MODULE_FROM_MODULE_STORAGE_KEY]: {} }, "session");
+  world.timers.splice(0).forEach((run) => run());
+  await settle(world);
+}
+
+// The module says it runs the modes, and the extension has read the hello.
+const settle = async (world: ReturnType<typeof setup>) => { for (let turn = 0; turn < 4; turn++) await world.flush(); };
+async function raise_visual(world: ReturnType<typeof setup>, hello: Record<string, unknown> = {}) {
+  world.data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true, visual_mode: true, ...hello });
+  world.config.now += HELLO_MIN_INTERVAL_MS + 1;
+  world.module.read_hello();
+  world.timers.splice(0).forEach((run) => run());
+  await settle(world);
+}
+
+test("a visual report shows the mode in the tab's entry, and normal takes it out again", async () => {
+  const world = setup({ kinds: VISUAL_KINDS });
+  await world.module.sync();
+  await raise_visual(world);
+  await deliver(world, [visual_report("v1", 7, "caret")]);
+  assert.deepEqual(state_of(world.data).tabs["7"], { mode: "caret", live: false });
+  await world.module.sync();
+  await settle(world);
+  assert.equal(state_of(world.data).tabs["7"]!.mode, "caret", "a full sync keeps it, as the tab has no record");
+  await deliver(world, [visual_report("v1", 7, "caret"), visual_report("v2", 7, "visual_line")]);
+  assert.equal(state_of(world.data).tabs["7"]!.mode, "visual_line");
+  await deliver(world, [visual_report("v3", 7, "normal")]);
+  assert.equal(state_of(world.data).tabs["7"]!.mode, "normal");
+});
+
+test("a visual report is ignored without the hello flag, for a bad mode, and for a tab with DesertFox's own page code", async () => {
+  const none = setup({ kinds: VISUAL_KINDS });
+  await none.module.sync();
+  await raise_visual(none, { visual_mode: undefined });
+  await deliver(none, [visual_report("v1", 7, "caret")]);
+  assert.equal("7" in state_of(none.data).tabs, false, "an older module that sends none, or a stray one, shows nothing");
+  const bad = setup({ kinds: VISUAL_KINDS });
+  await bad.module.sync();
+  await raise_visual(bad);
+  await deliver(bad, [visual_report("v1", 7, "insert")]);
+  assert.equal("7" in state_of(bad.data).tabs, false);
+  const live = setup({ kinds: VISUAL_KINDS, records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "insert", live: true } } });
+  await live.module.sync();
+  await raise_visual(live);
+  await deliver(live, [visual_report("v1", 3, "caret")]);
+  assert.equal(state_of(live.data).tabs["3"]!.mode, "insert", "the page's own mode wins");
+});
+
+test("a tab's visual mode goes when the tab closes, and when the module's hello stops saying it runs the modes", async () => {
+  const world = setup({ kinds: VISUAL_KINDS });
+  await world.module.sync();
+  await raise_visual(world);
+  await deliver(world, [visual_report("v1", 7, "visual")]);
+  await world.module.tab_changed("7", undefined);
+  assert.equal("7" in state_of(world.data).tabs, false);
+  await deliver(world, [visual_report("v2", 8, "visual")]);
+  assert.equal(state_of(world.data).tabs["8"]!.mode, "visual");
+  await raise_visual(world, { visual_mode: undefined });
+  await world.module.sync();
+  assert.equal("8" in state_of(world.data).tabs, false, "a module that restarted without the feature shows no stale mode");
+});

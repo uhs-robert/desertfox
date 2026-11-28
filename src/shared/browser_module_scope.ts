@@ -45,11 +45,26 @@ export const opens_line_leaf = (leaf: TreeLeaf): boolean => {
   return !has_guard(leaf) && step?.invocation.id === "cmdline.open" && step.capture === undefined && step.register === undefined && (text === undefined || text === "");
 };
 
+// The mode command and the modes the module enters itself, as native commands. Item and insert mode stay out: they need DesertFox's page code.
+export const MODE_COMMAND_ID = "mode.set";
+const MODE_ENTRIES: Readonly<Record<string, Pick<NativeLeaf, "native" | "args">>> = {
+  caret: { native: "mode.caret", args: {} },
+  visual: { native: "mode.visual", args: { line: 0 } },
+  visual_line: { native: "mode.visual", args: { line: 1 } },
+};
+
 // A leaf of one step that the module runs itself (the protocol's command list), with its args filled and checked by the registry.
+// A `mode.set` leaf for caret, visual or line visual mode becomes the module's own mode command. The caller turns that off by refusing `mode.set` in `check_args`, for a module that does not say `visual_mode`.
 export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): NativeLeaf | undefined {
   if (has_guard(leaf) || leaf.steps.length !== 1) return undefined;
   const { invocation, capture, register, count_rule } = leaf.steps[0]!;
-  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !is_module_command_id(invocation.id)) return undefined;
+  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined) return undefined;
+  if (invocation.id === MODE_COMMAND_ID) {
+    const mode = check_args(MODE_COMMAND_ID, invocation.args)?.["mode"];
+    const entry = typeof mode === "string" && Object.hasOwn(MODE_ENTRIES, mode) ? MODE_ENTRIES[mode] : undefined;
+    return entry && { ...entry, args: { ...entry.args }, ...(count_rule !== "ignore" && { count_rule }) };
+  }
+  if (!is_module_command_id(invocation.id)) return undefined;
   const filled = check_args(invocation.id, invocation.args);
   const args = filled && check_module_args(invocation.id, filled);
   if (!args?.ok) return undefined;

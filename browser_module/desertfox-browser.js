@@ -8,7 +8,7 @@
 //
 // The surface for feature files, on `Services.desertfox_browser_module` (a feature file sorts after this one in name order, so the core exists when it loads):
 //   adopt(file_url)            In a window: load the feature file into the core sandbox, once per process. Only a file beside this one is taken.
-//   define_command(id, spec)   In the sandbox: run command `id` when a key row names it. spec = { args: { name: { type: "int" | "number" | "enum", values? } }, run(context) }.
+//   define_command(id, spec)   In the sandbox: run command `id` when a key row names it. spec = { args: { name: { type: "int" | "optional_int" | "number" | "enum", values? } }, run(context) }.
 //                              The core checks every arg against `args` before `run`, and a row whose args fail is not taken.
 //                              context = { window, browser, tab, args, repeat }.
 //   add_frame_script(fn)       In the sandbox: load `fn` as a frame script into every tab, once, when the module turns on. The script stays loaded for the session, so it checks the pref itself.
@@ -20,7 +20,7 @@
 //                              fn({ window, event, token }) runs only where the module may act (the pref, DesertFox, private access, the toolbar switch) and returns true when it took the key.
 //                              From then on the core also attaches every DevTools toolbox window.
 //   on_hello(fn)               In the sandbox: run `fn` each time the module says a new hello to a DesertFox (not a rewrite for a flag), before that DesertFox can push anything, so a feature drops what an earlier DesertFox pushed.
-//   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
+//   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. Any number of features may watch the same key. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
 //   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
 //   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), reset(win?), pending(win), take_held(win, end)?, ignores(browser)? }. ignores says the tab passes every key to the page, so Escape is left alone there.
@@ -137,6 +137,7 @@
     const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
     const MODULE_FIREFOX_PAGES = ["settings", "settings-general", "settings-home", "settings-search", "settings-privacy", "settings-sync", "addons", "downloads", "config", "profiles", "support", "debugging", "processes", "memory", "policies", "crashes", "protections", "addons-shortcuts"];
     const FIREFOX_PAGE_WHERE = ["tab", "here"];
+    const VISUAL_REPORT_MODES = ["normal", "caret", "visual", "visual_line"];
     const EXTENSION_TO_MODULE_KINDS = {
       page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
       "pane.split_new_tab": { args: {}, reply: true, max_bytes: 256 },
@@ -175,6 +176,7 @@
       "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: 256 },
       "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: 512 },
+      "visual.report": { args: { tab_id: "int", mode: "visual_mode" }, reply: false, max_bytes: 256 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.
@@ -233,8 +235,9 @@
       const out = {};
       for (const [name, rule] of Object.entries(spec.args ?? {})) {
         const value = Object.hasOwn(args, name) ? args[name] : undefined;
+        if (rule.type === "optional_int" && value === undefined) continue;
         const fits =
-          rule.type === "enum" ? rule.values.includes(value) : typeof value === "number" && Number.isFinite(value) && (rule.type !== "int" || Number.isInteger(value));
+          rule.type === "enum" ? rule.values.includes(value) : typeof value === "number" && Number.isFinite(value) && (rule.type !== "int" && rule.type !== "optional_int" || Number.isInteger(value));
         if (!fits) return undefined;
         out[name] = value;
       }
@@ -305,7 +308,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "which_key_root"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "visual_mode"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -802,6 +805,7 @@
       if (kind === "move_direction") return value === "left" || value === "right" || value === "down";
       if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.includes(value);
       if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.includes(value);
+      if (kind === "visual_mode") return VISUAL_REPORT_MODES.includes(value);
       if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.includes(value);
       if (kind === "optional_int" && value === undefined) return true;
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
@@ -926,7 +930,7 @@
           if (after?.enabled !== true || JSON.stringify(before?.tree) !== JSON.stringify(after.tree)) key_taker.reset();
         }
         if (!enabled_by_pref() || shut || desertfox() !== extension) return;
-        for (const [key, watcher] of session_watchers) if (Object.hasOwn(changes, key)) tell_watcher(watcher, key, changes[key].newValue);
+        for (const [key, watchers] of session_watchers) if (Object.hasOwn(changes, key)) for (const watcher of watchers) tell_watcher(watcher, key, changes[key].newValue);
         if (!Object.hasOwn(changes, FROM_EXTENSION_STORAGE_KEY)) return;
         const holder = changes[FROM_EXTENSION_STORAGE_KEY].newValue;
         if (holder === undefined) return;
@@ -1100,10 +1104,7 @@
         return { ok: true, id: message.id };
       },
       watch_session(keys, watcher) {
-        for (const key of keys) {
-          if (session_watchers.has(key)) log_once(`two feature files watch ${key}, the first one hears it`);
-          else session_watchers.set(key, watcher);
-        }
+        for (const key of keys) session_watchers.set(key, [...(session_watchers.get(key) ?? []), watcher]);
       },
       log_once,
       set_hello_flag(name, on) {

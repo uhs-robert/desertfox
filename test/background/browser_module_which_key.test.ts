@@ -115,7 +115,7 @@ test("a table over a limit is left out with one warning", (t) => {
 });
 
 // The state the background writes, with the default keymap and the locked-page commands.
-function setup({ which_key_delay_ms = DEFAULT_KEYMAP_COMPILED.which_key_delay_ms, on = true, disabled = false, with_lookup = true, hello = { v: 1, module_version: "1", which_key_root: true } as Record<string, unknown> | null } = {}) {
+function setup({ which_key_delay_ms = DEFAULT_KEYMAP_COMPILED.which_key_delay_ms, on = true, disabled = false, with_lookup = true, hello = { v: 1, module_version: "1", which_key_root: true, visual_mode: true } as Record<string, unknown> | null } = {}) {
   const data = new Map<string, unknown>();
   const timers: (() => void)[] = [];
   if (hello) data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, hello);

@@ -230,3 +230,24 @@ test("a hint key on one of Firefox's own pages maps to the page action of its bi
   assert.equal(page_hint_action_of(keymap, "a b".repeat(9)).ok, false);
   assert.equal(page_hint_action_of(undefined, "f").ok, false);
 });
+
+test("the mode keys of the keymap become the module's own commands: v and gV caret, V visual, never item mode or gv", () => {
+  const caret = { native: "mode.caret", args: {} };
+  assert.deepEqual(node_at(DEFAULT_TREE, ["v"]), caret);
+  assert.deepEqual(node_at(DEFAULT_TREE, ["g", "V"]), caret);
+  assert.deepEqual(node_at(DEFAULT_TREE, ["V"]), { native: "mode.visual", args: { line: 0 } });
+  assert.equal(node_at(DEFAULT_TREE, ["I"]), undefined, "I is item mode");
+  assert.equal(node_at(DEFAULT_TREE, ["g", "v"]), undefined, "gv belongs to the tab range mode");
+  const line = compiled({ normal: { W: { id: "mode.set", args: { mode: "visual_line" } }, E: { id: "mode.set", args: { mode: "item" } }, Q: { id: "mode.set", args: { mode: "insert" } } } } as KeymapConfig);
+  const tree = scope_tree_of(line, allowed, real_check);
+  assert.deepEqual(node_at(tree, ["W"]), { native: "mode.visual", args: { line: 1 } });
+  assert.equal(node_at(tree, ["E"]), undefined);
+  assert.equal(node_at(tree, ["Q"]), undefined);
+  assert.equal(validate_scope_tree(DEFAULT_TREE).ok, true);
+});
+
+test("a check that refuses mode.set leaves the mode keys out, so a module without the feature sees none", () => {
+  const without = scope_tree_of(compiled(), allowed, (id, args) => (id === "mode.set" ? undefined : real_check(id, args)));
+  for (const keys of [["v"], ["V"], ["g", "V"]]) assert.equal(node_at(without, keys), undefined);
+  assert.notEqual(node_at(without, ["J"]), undefined);
+});

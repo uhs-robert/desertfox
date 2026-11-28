@@ -58,16 +58,17 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.deepEqual(plain(vm.runInNewContext(/const PAGE_HINT_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PAGE_HINT_ACTIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const MODULE_FIREFOX_PAGES = (\[[^\]]*\]);/.exec(source)![1]!)), MODULE_FIREFOX_PAGES);
   assert.deepEqual(plain(vm.runInNewContext(/const FIREFOX_PAGE_WHERE = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.FIREFOX_PAGE_WHERE);
+  assert.deepEqual(plain(vm.runInNewContext(/const VISUAL_REPORT_MODES = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.VISUAL_REPORT_MODES);
   assert.deepEqual(table_in(source, "EXTENSION_TO_MODULE_KINDS"), protocol.EXTENSION_TO_MODULE_KINDS);
   assert.deepEqual(table_in(source, "MODULE_TO_EXTENSION_KINDS"), protocol.MODULE_TO_EXTENSION_KINDS);
 });
 
 test("the feature files define every command of the protocol with the protocol's arg shapes", () => {
-  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE) } });
+  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE), "desertfox-visual.js": source_of("desertfox-visual.js") } });
   firefox.make_window().load();
   const core = firefox.Services.desertfox_browser_module as { status(): { commands: string[] } };
   assert.deepEqual(plain(core.status().commands).sort(), Object.keys(MODULE_COMMAND_ARGS).sort());
-  const source = source_of(FEATURE_FILE);
+  const source = source_of(FEATURE_FILE) + source_of("desertfox-visual.js");
   for (const [id, args] of Object.entries(MODULE_COMMAND_ARGS)) {
     for (const name of Object.keys(args)) assert.match(source, new RegExp(`"${id.replace(".", "\\.")}", \\{[^}]*\\b${name}:`), `${id} ${name}`);
   }
