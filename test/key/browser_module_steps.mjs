@@ -15,13 +15,23 @@ export function module_steps({ rdp, poll_until, run_line, press_keys, sleep, on_
     if (value && typeof value === "object" && "error" in value && Object.keys(value).length === 1) throw new Error(`chrome code failed: ${value.error}`);
     return value;
   };
-  const session_value = (key) =>
-    chrome(`(async () => {
+  // The state with its which-key table is longer than the debugger sends whole, so the value comes back as JSON text in slices.
+  const SESSION_SLICE_CHARS = 8000;
+  let session_reads = 0;
+  const session_value = async (key) => {
+    const slot = `desertfox_key_test_session_text_${session_reads++}`;
+    const length = await chrome(`(async () => {
       const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
       const { extensionStorageSession } = ChromeUtils.importESModule("resource://gre/modules/ExtensionStorage.sys.mjs");
       const holder = extensionStorageSession.get(ExtensionParent.GlobalManager.getExtension("desertfox@uhs-robert"), [${JSON.stringify(key)}])[${JSON.stringify(key)}];
-      return holder?.deserialize ? holder.deserialize(globalThis, true) : holder ?? null;
+      Services[${JSON.stringify(slot)}] = JSON.stringify((holder?.deserialize ? holder.deserialize(globalThis, true) : holder) ?? null);
+      return Services[${JSON.stringify(slot)}].length;
     })()`);
+    let text = "";
+    while (text.length < length) text += await chrome(`(async () => Services[${JSON.stringify(slot)}].slice(${text.length}, ${text.length + SESSION_SLICE_CHARS}))()`);
+    await chrome(`(async () => { delete Services[${JSON.stringify(slot)}]; })()`);
+    return JSON.parse(text);
+  };
   const set_session_value = (key, value) =>
     chrome(`(async () => {
       const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");

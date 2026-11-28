@@ -8,6 +8,7 @@ import type { ContentRequests } from "./messages/map.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
 import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 import { MODULE_FIREFOX_PAGES } from "./firefox_pages.ts";
+import type { WhichKeyBorder } from "./config.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -139,7 +140,8 @@ export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
 export type TabState = { mode: Mode; live: boolean } & BarFields;
 // The roles the bar's mode badge takes from the theme, for the dark and the light scheme.
-export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"] as const;
+// The which-key panel takes `bg_core`, `fg_core`, `primary` and `secondary`. An older module reads only the roles it knows.
+export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "fg_core", "primary", "secondary"] as const;
 export type BarRole = (typeof BAR_ROLES)[number];
 export type BarColors = Record<BarRole, string>;
 export type BarTheme = { dark: BarColors; light: BarColors };
@@ -148,7 +150,8 @@ export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
 export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof BROWSER_BAR_BORDERS)[number] };
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
 // `page_hints` says the extension answers `page_hints.want`, so the module may start hints on Firefox's own pages. Without it the hint keys there keep the notice.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true };
+// `which_key` holds the which-key panels of the tree, drawn by the module where no DesertFox page code runs.
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable };
 // The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
@@ -160,6 +163,20 @@ export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: strin
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
+// The which-key panel of each branch of the tree, keyed by its path (tokens joined by one space), the root left out. Built from the same rows the page's panel shows (`panel_after_prefix`), so the module draws text and never learns a command. A row has no description: the page shows it on hover, and the module's panel takes no pointer.
+// `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns which-key off, and the field is left out.
+export type WhichKeyTableRow = { keys: string; command: string; more?: true };
+export type WhichKeyTablePanel = { title: string[]; rows: WhichKeyTableRow[] };
+export type WhichKeyTable = { delay_ms: number; skip?: string[]; border: WhichKeyBorder; panels: Record<string, WhichKeyTablePanel> };
+// The default table is about 6 KB (test/background/browser_module_which_key.test.ts measures it). A table over a limit is left out, and the module draws no panel.
+export const MAX_WHICH_KEY_BYTES = 49_152;
+export const MAX_WHICH_KEY_PANELS = 64;
+export const MAX_WHICH_KEY_ROWS = 80;
+export const MAX_WHICH_KEY_TITLE_PARTS = MAX_SEQUENCE_KEYS;
+export const MAX_WHICH_KEY_LABEL_CHARS = 60;
+export const MAX_WHICH_KEY_SKIP = 64;
+export const MAX_WHICH_KEY_DELAY_MS = 60_000;
+export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
 // `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`.
 export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true };
 
@@ -307,6 +324,44 @@ export function chrome_hint_keys_of(value: unknown): string[][] | undefined {
   return (value as string[][]).map((keys) => [...keys]);
 }
 
+// One line of text the panel shows: no control or format characters (bidi among them), within its limit.
+const is_shown_text = (text: unknown, max_chars: number): text is string => typeof text === "string" && text.length <= max_chars && !/[\p{Cc}\p{Cf}]/u.test(text);
+
+function which_key_panel_of(value: unknown): WhichKeyTablePanel | undefined {
+  if (!is_record(value) || !Array.isArray(value.title) || !Array.isArray(value.rows)) return undefined;
+  if (value.title.length > MAX_WHICH_KEY_TITLE_PARTS || !value.title.every((part) => is_shown_text(part, MAX_WHICH_KEY_LABEL_CHARS))) return undefined;
+  if (value.rows.length === 0 || value.rows.length > MAX_WHICH_KEY_ROWS) return undefined;
+  const rows: WhichKeyTableRow[] = [];
+  for (const row of value.rows) {
+    if (!is_record(row) || !is_shown_text(row.keys, MAX_KEY_CHARS) || row.keys === "" || !is_shown_text(row.command, MAX_WHICH_KEY_LABEL_CHARS)) return undefined;
+    if (row.more !== undefined && row.more !== true) return undefined;
+    rows.push({ keys: row.keys, command: row.command, ...(row.more && { more: true as const }) });
+  }
+  return { title: [...(value.title as string[])], rows };
+}
+
+// The table, or undefined when any part is bad: the panel then stays away on locked pages, and the keys stay. A path is a key path with no capture key, which the module could never match. Unknown fields are dropped.
+export function which_key_table_of(value: unknown): WhichKeyTable | undefined {
+  if (!is_record(value) || !is_record(value.panels)) return undefined;
+  if ((json_bytes(value) ?? Number.POSITIVE_INFINITY) > MAX_WHICH_KEY_BYTES) return undefined;
+  const { delay_ms, skip, border } = value;
+  if (typeof delay_ms !== "number" || !Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS) return undefined;
+  if (!(WHICH_KEY_BORDERS as readonly unknown[]).includes(border)) return undefined;
+  if (skip !== undefined && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return undefined;
+  const paths = Object.keys(value.panels);
+  if (paths.length > MAX_WHICH_KEY_PANELS) return undefined;
+  const panels: Record<string, WhichKeyTablePanel> = {};
+  for (const path of paths) {
+    const tokens = path.split(" ");
+    if (tokens.length > MAX_SEQUENCE_KEYS || !tokens.every(is_key_token)) return undefined;
+    const panel = which_key_panel_of(value.panels[path]);
+    if (!panel) return undefined;
+    // Defined, not assigned, so a `__proto__` path stays a key and sets no prototype.
+    Object.defineProperty(panels, path, { value: panel, enumerable: true, writable: true, configurable: true });
+  }
+  return { delay_ms, ...(skip !== undefined && skip.length > 0 && { skip: [...(skip as string[])] }), border: border as WhichKeyBorder, panels };
+}
+
 export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
@@ -342,7 +397,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (tree && !tree.ok) return tree;
   const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
   const chrome_hint_keys = chrome_hint_keys_of(value.chrome_hint_keys);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }) } };
+  const which_key = which_key_table_of(value.which_key);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.

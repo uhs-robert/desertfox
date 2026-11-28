@@ -356,6 +356,7 @@ const browser_module = create_browser_module({
     return checked?.ok ? checked.args : undefined;
   },
   locked_commands,
+  find_command: (id) => registry.get(id),
   handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async () => {
     const tab = await router_deps.active_tab();
     if (tab) await router_deps.open_cmdline(tab.tab_id, 0, "");

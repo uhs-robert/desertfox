@@ -2,10 +2,12 @@
 // the toolbar switch, the single-key bindings and the locked-page key tree the module may run, and per tab the mode and whether DesertFox is live there. It also reads the module's hello and records what became of it.
 // Everything here is a copy rebuilt from stored data (the keymap, the disabled flag, the tab mode records), so a background restart loses nothing. An extension reload empties `storage.session`, and the module then claims nothing until the start writes the state again.
 
-import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap, TreeNode } from "../shared/prefix_tree.ts";
+import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
+import type { CommandMeta } from "../shared/command.ts";
+import { panel_after_prefix } from "./list_keys.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, TabState } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -42,6 +44,15 @@ import {
   validate_message_list,
   validate_module_state,
   validate_scope_tree,
+  MAX_KEY_CHARS,
+  MAX_WHICH_KEY_BYTES,
+  MAX_WHICH_KEY_DELAY_MS,
+  MAX_WHICH_KEY_LABEL_CHARS,
+  MAX_WHICH_KEY_PANELS,
+  MAX_WHICH_KEY_ROWS,
+  MAX_WHICH_KEY_SKIP,
+  MAX_WHICH_KEY_TITLE_PARTS,
+  which_key_table_of,
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
 import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
@@ -107,6 +118,47 @@ export function chrome_hint_keys_of_keymap(keymap: CompiledKeymap | undefined): 
   return chrome_hint_keys_of(sorted) ?? [];
 }
 
+// The compiled branch cut to the keys of the scope tree, so the panels list only what the module runs on a locked page, with the labels and group names of the full tree.
+function branch_in_scope(branch: TreeBranch, scope: ScopeTree): TreeBranch {
+  const children: Record<string, TreeNode> = {};
+  for (const [token, child] of Object.entries(branch.children)) {
+    const kept = Object.hasOwn(scope.children, token) ? scope.children[token] : undefined;
+    if (kept === undefined) continue;
+    const scoped_branch = typeof kept === "object" && "children" in kept ? kept : undefined;
+    if (child.kind === "leaf" && !scoped_branch) children[token] = child;
+    else if (child.kind === "branch" && scoped_branch) children[token] = branch_in_scope(child, scoped_branch);
+  }
+  return { ...branch, children };
+}
+
+const shown_text = (text: string, max_chars: number): string => text.replace(/[\p{Cc}\p{Cf}]/gu, "").slice(0, max_chars);
+
+// The which-key table for the module (`WhichKeyTable`): one panel per branch path of the scope tree, from the rows the page's panel shows. Undefined when which-key is off or the table is over a limit.
+export function which_key_table_of_keymap(keymap: CompiledKeymap | undefined, tree: ScopeTree, find_command: (id: string) => CommandMeta | undefined): WhichKeyTable | undefined {
+  const normal = current_keymap(keymap)?.modes.normal;
+  const delay_ms = Math.min(Math.round(keymap?.which_key_delay_ms ?? 0), MAX_WHICH_KEY_DELAY_MS);
+  if (!normal || !(delay_ms > 0)) return undefined;
+  const border = keymap?.which_key_border ?? "square";
+  const shown = branch_in_scope(normal, tree);
+  const panels: Record<string, WhichKeyTablePanel> = {};
+  const add_panels = (branch: TreeBranch, path: string[]): void => {
+    for (const [token, child] of Object.entries(branch.children)) {
+      if (child.kind !== "branch" || token === "") continue;
+      const keys = [...path, token];
+      const panel = panel_after_prefix(shown, keys, find_command, border);
+      const rows = panel.rows.slice(0, MAX_WHICH_KEY_ROWS).map(({ keys: row_keys, command, more }) => ({ keys: shown_text(row_keys, MAX_KEY_CHARS), command: shown_text(command, MAX_WHICH_KEY_LABEL_CHARS), ...(more && { more: true as const }) }));
+      if (rows.length > 0) panels[keys.join(" ")] = { title: panel.title.slice(-MAX_WHICH_KEY_TITLE_PARTS).map((part) => shown_text(part, MAX_WHICH_KEY_LABEL_CHARS)), rows };
+      add_panels(child, keys);
+    }
+  };
+  add_panels(shown, []);
+  const skip = keymap?.which_key_skip?.slice(0, MAX_WHICH_KEY_SKIP);
+  const table = { delay_ms, ...(skip && skip.length > 0 && { skip }), border, panels };
+  const checked = which_key_table_of(table);
+  if (!checked) console.warn(`DesertFox: the which-key panels of locked pages were left out, because they are over the limit of ${MAX_WHICH_KEY_PANELS} panels or ${MAX_WHICH_KEY_BYTES} bytes`);
+  return checked;
+}
+
 export const tab_state_of = (record: TabModeRecord): TabState => ({ mode: mode_of_record(record), live: record.live === true });
 
 // The tab id of a tab mode key, or undefined for the manual insert hold key that shares the prefix.
@@ -139,6 +191,8 @@ export type BrowserModuleDeps = {
   check_args: CheckCommandArgs;
   // The commands a locked page runs (`locked_page_command_ids`). With them the state carries the scope tree, so the module takes key sequences and counts too.
   locked_commands?: ReadonlySet<string>;
+  // The registry's lookup, for the labels of the which-key table. Without it the state has no table.
+  find_command?: (id: string) => CommandMeta | undefined;
   // The status bar's inputs. Without them the bar counts as off.
   // The bar settings, or undefined while `browser_bar` is off.
   read_bar_config?: () => Promise<BarConfig | undefined>;
@@ -364,9 +418,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // A tree over its cap is left out, and the module falls back to the single keys, which stay.
     const tree = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, deps.check_args);
     const fits = tree && validate_scope_tree(tree).ok;
+    const which_key = fits && deps.find_command ? which_key_table_of_keymap(keymap, tree, deps.find_command) : undefined;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true });
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
     request_hello_read();
     request_messages_read();
   };

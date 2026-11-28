@@ -38,6 +38,10 @@ import {
   validate_message_list,
   validate_module_hello,
   validate_module_state,
+  which_key_table_of,
+  MAX_WHICH_KEY_BYTES,
+  MAX_WHICH_KEY_PANELS,
+  MAX_WHICH_KEY_ROWS,
 } from "../../src/shared/browser_module_protocol.ts";
 
 const state = (patch: Record<string, unknown> = {}) => ({ v: V, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: { "7": { mode: "normal", live: false } }, ...patch });
@@ -248,7 +252,7 @@ test("a reply may carry a value as text, which an older reader ignores, and junk
   assert.ok(reply_fits({ v: V, reply_to: "c1", ok: true, value: "x".repeat(100) }, row));
   assert.equal(reply_fits({ v: V, reply_to: "c1", ok: true, value: "x".repeat(200) }, row), false, "the writer checks the answered kind's own limit");
 });
-const COLORS = { bg_core: "#101010", mode_normal: "#89b4fa", mode_insert: "#a6e3a1", mode_ignore: "#f38ba8", mode_caret: "#cba6f7", mode_visual: "#f9e2af", mode_item: "#94e2d5", mode_media: "#fab387" };
+const COLORS = { bg_core: "#101010", mode_normal: "#89b4fa", mode_insert: "#a6e3a1", mode_ignore: "#f38ba8", mode_caret: "#cba6f7", mode_visual: "#f9e2af", mode_item: "#94e2d5", mode_media: "#fab387", fg_core: "#cdd6f4", primary: "#89b4fa", secondary: "#b4befe" };
 
 test("a tab keeps the bar fields it has and drops one of the wrong shape without failing the state", () => {
   const good = { mode: "normal", live: true, pending: ["g", "<Space>"], count: 3, pass: true, site: "GMAIL", recording: "a" };
@@ -430,4 +434,53 @@ test("the hello says firefox_pages only when it is true, and an older hello has 
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", firefox_pages: true }), { ok: true, value: { v: V, module_version: "1", firefox_pages: true } });
   for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", firefox_pages: flag }), { ok: true, value: { v: V, module_version: "1" } }, String(flag));
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1" }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+const WHICH_KEY = { delay_ms: 300, skip: ["g"], border: "round", panels: { g: { title: ["+Go"], rows: [{ keys: "g", command: "Scroll to top" }, { keys: "o", command: "+Open", more: true }] }, "g o": { title: ["+Go", "+Open"], rows: [{ keys: "<key>", command: "Open quickmark" }] } } };
+
+test("a which-key table of known fields is kept, its unknown fields dropped, and it rides in the state", () => {
+  const extra = { ...WHICH_KEY, extra: 1, panels: { ...WHICH_KEY.panels, g: { ...WHICH_KEY.panels.g, extra: 1, rows: [{ ...WHICH_KEY.panels.g.rows[0]!, description: "x", chain: {} }] } } };
+  assert.deepEqual(which_key_table_of(extra), { ...WHICH_KEY, panels: { ...WHICH_KEY.panels, g: { title: ["+Go"], rows: [{ keys: "g", command: "Scroll to top" }] } } });
+  const checked = validate_module_state(state({ which_key: WHICH_KEY }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.which_key, WHICH_KEY);
+});
+
+test("a bad which-key table is left out whole and never fails the state", () => {
+  const panel = WHICH_KEY.panels.g;
+  const row = panel.rows[0]!;
+  const bad_tables = [
+    "x",
+    { ...WHICH_KEY, delay_ms: 0 },
+    { ...WHICH_KEY, delay_ms: 1.5 },
+    { ...WHICH_KEY, delay_ms: 600_000 },
+    { ...WHICH_KEY, border: "dotted" },
+    { ...WHICH_KEY, skip: "g" },
+    { ...WHICH_KEY, panels: [] },
+    { ...WHICH_KEY, panels: { "": panel } },
+    { ...WHICH_KEY, panels: { "g  o": panel } },
+    { ...WHICH_KEY, panels: { "a b c d e f g h i": panel } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: [] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: [{ ...row, keys: "" }] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: [{ ...row, keys: 7 }] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: [{ ...row, command: "a\u202eb" }] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: [{ ...row, command: "<img src=x>".repeat(10) }] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: [{ ...row, more: "yes" }] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, title: ["+Go\n"] } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, title: "+Go" } } },
+    { ...WHICH_KEY, panels: { g: { ...panel, rows: Array.from({ length: MAX_WHICH_KEY_ROWS + 1 }, () => row) } } },
+    { ...WHICH_KEY, panels: Object.fromEntries(Array.from({ length: MAX_WHICH_KEY_PANELS + 1 }, (_, index) => [`<F${index}>`, panel])) },
+    { ...WHICH_KEY, padding: "x".repeat(MAX_WHICH_KEY_BYTES) },
+  ];
+  for (const which_key of bad_tables) {
+    const checked = validate_module_state(state({ which_key }));
+    assert.ok(checked.ok && checked.value.which_key === undefined, JSON.stringify(which_key).slice(0, 120));
+  }
+});
+
+test("a __proto__ panel path stays a plain key and sets no prototype", () => {
+  const table = which_key_table_of({ ...WHICH_KEY, panels: JSON.parse(`{"__proto__": ${JSON.stringify(WHICH_KEY.panels.g)}}`) });
+  assert.ok(table);
+  assert.equal(Object.getPrototypeOf(table.panels), Object.prototype);
+  assert.deepEqual(Object.keys(table.panels), ["__proto__"]);
 });

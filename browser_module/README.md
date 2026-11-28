@@ -12,6 +12,8 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-locked-pages.js`: DesertFox's own page code in the PDF viewer and Reader View. Open it for the attach rule, the sandbox, the transport or the rule that says where hints cannot run now.
 - `desertfox-commands.js`: generated from `sources/commands.js`, never edited. Key sequences and counts on locked pages, the hint key notice and page hint start, the ignore toggle, `page.stop` and the address bar opener.
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
+- `desertfox-whichkey.js`: generated from `sources/whichkey.js`, never edited. The which-key panel on locked pages, drawn from the state's table. It runs in each window and never loads into the core's sandbox.
+- `sources/whichkey.js`: the source of `desertfox-whichkey.js`. It imports the page panel's sheet, layout, element tree and timer from `src/content/whichkey`. Rebuild with `just browser-module`.
 - `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
 - `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
 - `desertfox-chrome-hints.js`: hints over Firefox's UI, panels, prompts, dialogs, the Library, Page Info and the allowlisted about: pages: collect, draw, pick, a grant's Enter, `hint.browser`, and the drawing DevTools hints share.
