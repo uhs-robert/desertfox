@@ -132,6 +132,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
   await run_case("a focus_on_load field the page focuses itself inside the window keeps the focus and enters insert mode", async () => {
     // The checkbox holds the focus at the install, so the window gives the target no focus of its own and the page's focus on it is the first.
     const installed_at = await open_without_keys("controls", "fol_boxfocus");
+    expect((await focused_id()) === "box", `the checkbox does not hold the focus, so the case tests nothing: ${await page_state("fol_boxfocus")}`);
     const held = await focus_field("last");
     expect_in_window(installed_at, "the page focus");
     expect(held === "last", `the page focus lost the focus_on_load field: ${await page_state("fol_boxfocus")}`);
