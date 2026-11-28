@@ -271,8 +271,8 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `gn` | `quickmark.open --tab` | Open quickmark | yes |
 | `f` | `hint` | Click element |  |
 | `F` | `hint --background` | Click element in background tab |  |
-| `v` | `mode caret` | Start caret mode |  |
-| `V` | `mode visual` | Start visual mode |  |
+| `v` | `mode caret` | Start caret mode | yes |
+| `V` | `mode visual` | Start visual mode | yes |
 | `;v` | `hint --caret --prose` | Start caret mode at text |  |
 | `;V` | `hint --visual --prose` | Start visual mode at text |  |
 | `;u` | `cmdline.open --text='hint --custom '` | Hint a CSS selector |  |
@@ -313,7 +313,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `n` | `find.next` | Next match |  |
 | `N` | `find.prev` | Previous match |  |
 | `g?` | `help` | Help | yes |
-| `gV` | `mode caret` | Set mode |  |
+| `gV` | `mode caret` | Set mode | yes |
 
 Which-key group names:
 
