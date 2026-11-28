@@ -59,10 +59,11 @@ export async function run_cases(context) {
       const url = await selected_spec();
       await clear_notices();
       await chrome(set_clipboard(SENTINEL));
+      const before = (await register_a()) ?? "";
       await press_keys('"', "_", "y", "y");
       await sleep(1000);
       expect((await chrome(clipboard_text)) === SENTINEL, '"_yy changed the clipboard');
-      expect(!((await register_a()) ?? "").includes(url), '"_yy wrote register a');
+      expect(((await register_a()) ?? "") === before, '"_yy wrote register a');
       await press_keys('"', "a", "y", "y");
       await poll_until("register a to hold the address", async () => ((await register_a()) ?? "").includes(url), { timeout_ms: 5000 });
       await poll_until("the clipboard to hold the address too", async () => (await chrome(clipboard_text)) === url, { timeout_ms: 5000 });
