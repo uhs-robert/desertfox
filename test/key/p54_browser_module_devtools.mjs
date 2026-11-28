@@ -238,7 +238,7 @@ export async function run_cases(context) {
     await open_tab(`about:devtools-toolbox?type=tab&id=${target_id}`, { wait_load: false });
     // The toolbox of a tab host is not the toolbox of a page tab, so it is found by its host.
     const TAB_TOOLBOX = `${DT} const tb = gDevTools.getToolboxes().find((one) => one.hostType === "page");`;
-    await poll_until("the toolbox in its own tab to show the Inspector", () => chrome(`(async () => { ${TAB_TOOLBOX} if (!tb) return false; if (tb.currentToolId !== "inspector") { tb.selectTool("inspector"); return false; } return !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 20000 });
+    await poll_until("the toolbox in its own tab to show the Inspector", () => chrome(`(async () => { ${TAB_TOOLBOX} if (!tb?.isReady) return false; if (tb.currentToolId !== "inspector") { tb.selectTool("inspector"); return false; } return !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 20000 });
     const tabs_before = await chrome(`(async () => { const w = ${W}; return [w.gBrowser.tabs.length, w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab)]; })()`);
     const tab_state = () => chrome(`(async () => { const w = ${W}; return [w.gBrowser.tabs.length, w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab)]; })()`);
     const tree_state = () => chrome(`(async () => { ${TAB_TOOLBOX} const inspector = tb.getPanel("inspector"); const node = inspector.selection.nodeFront; return [node?.displayName ?? null, inspector.markup.getContainer(node)?.expanded ?? null]; })()`);
