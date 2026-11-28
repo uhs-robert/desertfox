@@ -150,7 +150,7 @@ test("the list, unsettable and toggle sets stay the same", () => {
   assert.deepEqual(SETTING_NAMES.filter((name) => !SETTING_SPECS[name].settable), ["search_prefixes", "container_prefixes"]);
   // A toggle flips the value in force, so an absent one flips from its default.
   const toggles = Object.fromEntries(SETTING_NAMES.filter((name) => SETTING_SPECS[name].is_toggle).map((name) => [name, DEFAULT_SETTINGS[name]]));
-  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, layout_fallback: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, browser_bar: true, browser_module: false, browser_module_pages: false, completion_all_windows: false, item_hover: true, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, newtab_closed_tabs: false, newtab_top_sites: false, newtab_command_hint: true, newtab_weather: true, newtab_ip_info: false });
+  assert.deepEqual(toggles, { hint_key_line: true, which_key_repeat: true, blur_on_load: false, editable_remove_unsized: false, escape_to_page: false, strip_tracking: true, layout_fallback: true, bridge: false, bridge_share_tabs: false, host_auto_update: false, browser_bar: true, browser_module: false, browser_module_pages: true, completion_all_windows: false, item_hover: true, newtab_date: true, newtab_bookmarks: false, newtab_recent_tabs: false, newtab_closed_tabs: false, newtab_top_sites: false, newtab_command_hint: true, newtab_weather: true, newtab_ip_info: false });
 });
 
 const ACCEPTS: Record<string, unknown[]> = {
@@ -404,7 +404,7 @@ test("the defaults stay the same", () => {
     bridge_share_tabs: false,
     host_auto_update: false,
     browser_module: false,
-    browser_module_pages: false,
+    browser_module_pages: true,
     completion_all_windows: false,
     item_navigator: "shipped",
     item_hover: true,

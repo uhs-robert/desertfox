@@ -138,7 +138,7 @@ export const SETTINGS_TABLE = {
   // Consent to share the key table and the mode of each tab with the browser module, an optional script installed with root rights (`src/background/browser_module.ts`). Nothing runs until the module file is installed.
   browser_module: { kind: "boolean", default: false },
   // Consent to run DesertFox's own page code inside locked pages through the browser module, and to put the keymap, the config status and the theme in `storage.session` for it (`src/background/browser_module_rpc.ts`). Needs `browser_module`.
-  browser_module_pages: { kind: "boolean", default: false },
+  browser_module_pages: { kind: "boolean", default: true },
   completion_all_windows: { kind: "boolean", default: false },
   // Starts item mode on a page that has finished loading and holds a list or a grid that the finder (`src/content/item/finder.ts`) finds. The mode itself starts with `I` and ends with Escape, with the setting off or on.
   item_navigator: { kind: "enum", values: ["shipped", true, false], default: "shipped", per_site: true },
