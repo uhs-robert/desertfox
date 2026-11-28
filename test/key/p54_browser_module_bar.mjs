@@ -75,10 +75,10 @@ export async function run_cases(context) {
     on_teardown(() => new Promise((resolve) => server.close(resolve)));
     await open_tab(`http://127.0.0.1:${server.address().port}/data.json`);
     await poll_until("Top in the bar on the JSON viewer", async () => (await bar_now())?.right.includes("Top"), { timeout_ms: 8000 });
-    // The JSON panel to its end, then another viewer tab by a script click, which is untrusted like DesertFox's own hint click. The bar then shows the other panel's place.
+    // The JSON panel to its end, then another viewer tab by a click from a sandbox with the page's own principal, which is untrusted like DesertFox's own hint click. in_selected_page runs with the system principal, so a click from it would be trusted. The bar then shows the other panel's place.
     await in_selected_page(`(win) => { const panel = win.document.querySelector(".jsonPanelBox .panelContent"); panel.scrollTop = panel.scrollHeight; return true; }`);
     await poll_until("Bot in the bar after the JSON panel scrolled", async () => (await bar_now())?.right.includes("Bot"), { timeout_ms: 8000 });
-    await in_selected_page(`(win) => { [...win.document.querySelectorAll(".tabs-menu a, .tabs a")].find((link) => /raw data/i.test(link.textContent)).click(); return true; }`);
+    await in_selected_page(`(win) => { const sandbox = Components.utils.Sandbox(win.document.nodePrincipal, { sandboxPrototype: win, wantXrays: false }); Components.utils.evalInSandbox('[...document.querySelectorAll(".tabs-menu a, .tabs a")].find((link) => /raw data/i.test(link.textContent)).click()', sandbox); return true; }`);
     await poll_until("the bar to leave Bot after the viewer tab switched", async () => !(await bar_now())?.right.includes("Bot"), { timeout_ms: 8000 });
     await close_selected_tab();
   });
