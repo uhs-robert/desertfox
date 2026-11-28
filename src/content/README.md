@@ -42,4 +42,4 @@ Entries:
 - `user_left.ts`: `watch_user_left` marks the user as gone, read by load waits.
 - `player_box.ts`: the element that goes fullscreen for a media element. Pure.
 - `badge_hosts.ts`, `shadow.ts`: badge host marking for cleanup, closed shadow root access.
-- `item/`, `item_act/`, `tree/`, `whichkey/`: bundle folders with their own README.
+- `item/`, `item_act/`, `tab_visual/`, `tree/`, `whichkey/`: bundle folders with their own README.

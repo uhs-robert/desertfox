@@ -6,6 +6,8 @@ import "../commands/mode.ts";
 import "../commands/tab.ts";
 import "../commands/window.ts";
 import "../commands/tab_group.ts";
+import "../commands/tab_visual.ts";
+import "../commands/tab_act.ts";
 import "../commands/tab_split.ts";
 import "../commands/session.ts";
 import "../commands/register.ts";

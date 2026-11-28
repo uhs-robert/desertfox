@@ -14,8 +14,8 @@ export type WindowDeps = {
   windows: () => Promise<WindowLike[]>;
   // Window ids, the one focused last first.
   recent_window_ids: () => Promise<number[]>;
-  // Moves the tab to the end of its kind (pinned or not) in the window, then shows it there.
-  move_tab_to_window: (tab_id: number, window_id: number) => Promise<void>;
+  // Moves the tabs to the end of their kind (pinned or not) in the window, in the given order, then shows the first one there.
+  move_tabs_to_window: (tab_ids: number[], window_id: number) => Promise<void>;
 };
 
 const LEADING_NUMBER = /^(\d+)(?:\s|$)/;
@@ -38,6 +38,18 @@ function window_by_number(windows: readonly NumberedWindow[], text: string): Num
 }
 
 export function make_window_handlers(deps: WindowDeps) {
+  async function attach_target(ctx: CommandContext, window_text: string): Promise<NumberedWindow> {
+    if (ctx.window_id === undefined) throw new RuntimeRefusal("no active window");
+    const windows = numbered_windows(await deps.windows());
+    const current = windows.find((window) => window.id === ctx.window_id);
+    if (!current) throw new RuntimeRefusal("no active window");
+    const text = window_text.trim();
+    const target = text === "" ? last_used_other(windows, current, await deps.recent_window_ids()) : window_by_number(windows, text);
+    if (target.id === current.id) throw new RuntimeRefusal("The tab is already in that window");
+    if (target.incognito !== current.incognito) throw new RuntimeRefusal("Cannot move a tab between private and normal windows");
+    return target;
+  }
+
   return {
     create: (args: { url: string; private: boolean }) =>
       deps.create({ url: args.url === "" ? undefined : args.url, private_window: args.private }),
@@ -47,14 +59,11 @@ export function make_window_handlers(deps: WindowDeps) {
     },
     attach: async (ctx: CommandContext, args: { window: string }) => {
       if (ctx.window_id === undefined || ctx.tab_id === undefined) throw new RuntimeRefusal("no active tab");
-      const windows = numbered_windows(await deps.windows());
-      const current = windows.find((window) => window.id === ctx.window_id);
-      if (!current) throw new RuntimeRefusal("no active window");
-      const text = args.window.trim();
-      const target = text === "" ? last_used_other(windows, current, await deps.recent_window_ids()) : window_by_number(windows, text);
-      if (target.id === current.id) throw new RuntimeRefusal("The tab is already in that window");
-      if (target.incognito !== current.incognito) throw new RuntimeRefusal("Cannot move a tab between private and normal windows");
-      await deps.move_tab_to_window(ctx.tab_id, target.id);
+      await deps.move_tabs_to_window([ctx.tab_id], (await attach_target(ctx, args.window)).id);
+    },
+    // The selected tabs of the window go where a bare `attach` goes, the first of them shown.
+    attach_many: async (ctx: CommandContext, tab_ids: number[]) => {
+      await deps.move_tabs_to_window(tab_ids, (await attach_target(ctx, "")).id);
     },
     undo_close: async () => {
       if (!(await deps.restore_last_closed_window())) throw new RuntimeRefusal("no closed window to restore");
@@ -69,13 +78,15 @@ export const browser_window_deps: WindowDeps = {
   close: (window_id) => browser.windows.remove(window_id),
   windows: () => browser.windows.getAll({ populate: true }),
   recent_window_ids: () => read_recent_window_ids(browser.storage.session),
-  move_tab_to_window: async (tab_id, window_id) => {
-    // Firefox ignores a move of a pinned tab past the pinned area, so a pinned tab goes to the end of the pinned tabs instead.
-    const { pinned } = await browser.tabs.get(tab_id);
-    const index = pinned ? (await browser.tabs.query({ windowId: window_id, pinned: true })).length : -1;
-    await browser.tabs.move(tab_id, { windowId: window_id, index });
+  move_tabs_to_window: async (tab_ids, window_id) => {
+    // Firefox ignores a move of a pinned tab past the pinned area, so pinned tabs go to the end of the pinned tabs instead.
+    const tabs = await Promise.all(tab_ids.map((id) => browser.tabs.get(id)));
+    const ids_where = (pinned: boolean) => tabs.filter((tab) => tab.pinned === pinned).map((tab) => tab.id!);
+    const pinned_ids = ids_where(true);
+    if (pinned_ids.length > 0) await browser.tabs.move(pinned_ids, { windowId: window_id, index: (await browser.tabs.query({ windowId: window_id, pinned: true })).length });
+    if (pinned_ids.length < tabs.length) await browser.tabs.move(ids_where(false), { windowId: window_id, index: -1 });
     await browser.windows.update(window_id, { focused: true });
-    await browser.tabs.update(tab_id, { active: true });
+    await browser.tabs.update(tab_ids[0]!, { active: true });
   },
   restore_last_closed_window: async () => {
     const [closed] = (await browser.sessions.getRecentlyClosed()).filter((item) => item.window);
@@ -86,6 +97,7 @@ export const browser_window_deps: WindowDeps = {
 };
 
 const handlers = make_window_handlers(browser_window_deps);
+export const attach_many_tabs = handlers.attach_many;
 
 define("window.new", {
   label: "New window",

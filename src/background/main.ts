@@ -51,6 +51,7 @@ import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { tab_visual } from "../commands/tab_visual.ts";
 import { wire_before_own_load } from "../commands/open_target.ts";
 import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_rows } from "./quality_levels.ts";
@@ -289,7 +290,10 @@ browser.windows.onFocusChanged.addListener((window_id) => {
   // Firefox closes the panel when its window loses the focus.
   void cmdline_panel.focused(window_id).catch(warn_and_go("cmdline_panel.focused"));
 });
-browser.windows.onRemoved.addListener((window_id) => void last_used_tabs.window_removed(window_id));
+browser.windows.onRemoved.addListener((window_id) => {
+  void last_used_tabs.window_removed(window_id);
+  void tab_visual.forget_window(window_id).catch(warn_and_go("tab_visual.forget_window"));
+});
 
 const inspect_relay = create_inspect_relay(browser.storage.session, Date.now);
 // Only the extension's own devtools page may register, because a content script can open a port too.

@@ -59,6 +59,7 @@ export const area_rules = [
   { globs: ["src/background/browser_module_rpc.ts", "src/content/locked_shim.ts"], areas: ["keys", "tabs", "hints", "caret"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
+  { globs: ["src/content/tab_visual/**", "src/commands/{tab_visual,tab_act}.ts", "src/background/tab_visual.ts"], areas: ["tabs", "keys", "bundles", "ui"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
     globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,cmdline_panel,complete_items,history_cache,bookmark_title,completion_rank,rank_index,rank_service,rank_worker}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick,rank_port}.ts", "src/shared/completion/**"],

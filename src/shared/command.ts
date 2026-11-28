@@ -8,7 +8,7 @@ import type { Outcome } from "./messages/content.ts";
 export type ParamType = "int" | "float" | "string" | "bool" | "enum" | "key";
 
 // Runtime modes. `browser` is not here: it is a keymap section, see KeymapMode.
-export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line", "media", "grab", "item", "item_visual", "sidebar"] as const;
+export const MODES = ["normal", "insert", "ignore", "hint", "cmdline", "caret", "visual", "visual_line", "media", "grab", "item", "item_visual", "tab_visual", "sidebar"] as const;
 export type Mode = (typeof MODES)[number];
 
 // The modes `mode.set` can switch to.

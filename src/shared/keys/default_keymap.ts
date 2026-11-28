@@ -140,6 +140,7 @@ const BASE_SECTIONS: KeymapConfig = {
     rC: { id: "page.reload", args: { clear: "all" }, prompt: { param: "clear" }, label: "Clear all data, reload" },
     xp: { id: "page.stop" },
     gr: { id: "page.reader" },
+    gv: [{ id: "tab.visual", args: { action: "start" }, label: "Select a range of tabs" }, { id: "tab.visual_enter" }],
     gh: { id: "page.home" },
     gH: { id: "page.home", args: { where: "tab" } },
     "]]": { id: "page.follow", args: { direction: "next" }, label: "Next page" },
@@ -593,6 +594,33 @@ const ITEM_VISUAL_KEYS: ModeBindings = {
   "<A-?>": { id: "help.whichkey", label: "Show the keys" },
 };
 
+// The keys of tab range mode, which `gv` starts at the active tab. Motions move the far end of the range through the strip. An action key runs on the whole range and then ends it. `d` and `D` leave out the end step: closing the range hides the page, which ends the mode. Any other key of normal mode ends the range and then runs (`MODE_PARENTS`).
+const range_move = (action: "down" | "up" | "first" | "last", label: string) => ({ id: "tab.visual", args: { action }, label });
+const END_RANGE = { id: "mode.set", args: { mode: "normal" }, label: "End the range" };
+const range_act = (action: string, label: string, args: Record<string, unknown> = {}) => [{ id: "tab.act", args: { action, ...args }, label }, END_RANGE];
+const TAB_VISUAL_KEYS: ModeBindings = {
+  j: range_move("down", "Extend to the next tab"),
+  k: range_move("up", "Extend to the previous tab"),
+  gg: range_move("first", "Extend to the first tab"),
+  G: range_move("last", "Extend to the last tab"),
+  d: { id: "tab.act", args: { action: "close" }, label: "Close the tabs, at most 10" },
+  D: { id: "tab.act", args: { action: "close", force: true }, label: "Close the tabs, any number" },
+  ga: range_act("group", "Put the tabs in a new group"),
+  yy: range_act("copy", "Copy the tabs as Markdown"),
+  yu: range_act("copy", "Copy the tabs as plain addresses", { format: "plain" }),
+  yo: range_act("copy", "Copy the tabs as an Org list", { format: "org" }),
+  yt: range_act("copy", "Copy the tabs as titles", { format: "title" }),
+  p: range_act("pin", "Toggle the pin of the tabs"),
+  m: range_act("mute", "Toggle the mute of the tabs"),
+  r: range_act("reload", "Reload the tabs"),
+  w: range_act("attach", "Move the tabs to another window"),
+  b: range_act("bookmark", "Bookmark the tabs"),
+  "<Escape>": { id: "mode.escape" },
+  "<C-[>": { id: "mode.escape" },
+  "?": { id: "help.whichkey", label: "Show the keys" },
+  "<A-?>": { id: "help.whichkey", label: "Show the keys" },
+};
+
 // The keys of grab mode. Enter drops where the element is. Escape puts a range input or a draggable element back first and releases a pointer drag where it is. [ and ] halve and double the step.
 const GRAB_KEYS: ModeBindings = {
   h: { id: "grab.move", args: { direction: "left" }, label: "Move left" },
@@ -623,6 +651,6 @@ const SIDEBAR_KEYS: ModeBindings = {
 };
 
 // Each child mode takes the keys of its parent that it does not bind itself (`src/shared/keys/mode_parents.ts`).
-const MODE_PARENTS: KeymapConfig["mode_parents"] = { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true } };
+const MODE_PARENTS: KeymapConfig["mode_parents"] = { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true }, tab_visual: { parent: "normal", leave: true } };
 
-export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, sidebar: SIDEBAR_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS, mode_parents: MODE_PARENTS };
+export const DEFAULT_KEYMAP: KeymapConfig = { ...BASE_SECTIONS, media: MEDIA_KEYS, grab: GRAB_KEYS, sidebar: SIDEBAR_KEYS, item: ITEM_KEYS, item_visual: ITEM_VISUAL_KEYS, tab_visual: TAB_VISUAL_KEYS, mode_parents: MODE_PARENTS };

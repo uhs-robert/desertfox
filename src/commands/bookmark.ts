@@ -5,6 +5,7 @@ import type { BookmarkView, FolderNode } from "../background/complete_items.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import type { BookmarkItem, ToastKind } from "../shared/messages/index.ts";
 import { in_folder, pick_filter_folder, pick_folder, rows_in_folder } from "../shared/folder_pick.ts";
+import { is_web_address } from "../shared/copy/link_list.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { is_openable, open_in, open_many, pick_entry, WHERE_PARAM, WHERE_SHORT } from "./open_target.ts";
 import type { Where } from "./open_target.ts";
@@ -82,6 +83,18 @@ export function make_bookmark_handlers(deps: BookmarkDeps) {
       const title = (await deps.tab_title_for_url(ctx.tab_id, args.url)) || args.url;
       await deps.create({ url: args.url, title, ...parent });
     },
+    // The selected tabs, filed in the default folder. A tab that is not a web page or already has a bookmark is skipped and counted.
+    add_many: async (ctx: CommandContext, tabs: readonly { url: string; title: string }[]) => {
+      let added = 0;
+      for (const tab of tabs) {
+        if (!is_web_address(tab.url) || (await bookmarks_at(tab.url)).length > 0) continue;
+        await deps.create({ url: tab.url, title: tab.title || tab.url });
+        added++;
+      }
+      const skipped = tabs.length - added;
+      if (added === 0) throw new RuntimeRefusal(`Nothing to bookmark, ${skipped} skipped`);
+      await deps.toast(ctx, "success", `Bookmarked ${added}${skipped > 0 ? `, skipped ${skipped}` : ""}`);
+    },
     move: async (ctx: CommandContext, args: { folder: string; bookmark: string }) => {
       const folder = await writable_folder(args.folder);
       const matches = await editable_bookmarks(ctx, args.bookmark, "moved");
@@ -149,6 +162,7 @@ export const browser_bookmark_deps: BookmarkDeps = {
 };
 
 const handlers = make_bookmark_handlers(browser_bookmark_deps);
+export const add_many_bookmarks = handlers.add_many;
 
 define("bookmark.add", {
   label: "Add bookmark",
