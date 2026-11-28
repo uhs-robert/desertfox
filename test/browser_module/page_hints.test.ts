@@ -142,7 +142,7 @@ test("no start comes from a key a script made, from a page the module does not l
   const { build } = preferences();
   const synthetic = start_on("about:preferences", build);
   assert.equal(synthetic.hint_key("f", 0, key_event("f", { isTrusted: false })), false);
-  for (const [url, options] of [["about:support", {}], ["about:logins", {}], ["about:preferences", { remote: true }], ["about:preferences", { principal: { isSystemPrincipal: false } }]] as const) {
+  for (const [url, options] of [["about:support", {}], ["about:logins", {}], ["about:memory", {}], ["about:crashes", {}], ["about:profiling", {}], ["about:preferences", { remote: true }], ["about:preferences", { principal: { isSystemPrincipal: false } }]] as const) {
     const run = start_on(url, preferences().build, options);
     assert.equal(run.core.page_hints()!.handles(run.chrome.browser), false, `${url} ${JSON.stringify(options)}`);
     assert.equal(run.hint_key(), false, `${url} ${JSON.stringify(options)}`);
@@ -523,4 +523,110 @@ test("a link whose text sits in a slot of its host's shadow root is labelled, as
   assert.equal(run.hint_key(), true);
   assert.equal((await run.collect(5))?.ok, true);
   assert.equal(run.rows(5).length, 1, "the nav link got no label");
+});
+
+// A row of Firefox View: its link and its buttons sit in the open shadow root of the row, and a moz-button carries its class on the host.
+function view_row(top: number, href: string) {
+  const row = el("fxview-tab-row", 20, top);
+  const shadow = Object.assign(new Node("#shadow"), { host: row });
+  const main = link(href, 20, top);
+  const options = el("moz-button", 300, top, { className: "fxview-tab-row-button options-button" });
+  const dismiss = el("moz-button", 340, top, { className: "fxview-tab-row-button dismiss-button" });
+  shadow.append(main, options, dismiss);
+  row.openOrClosedShadowRoot = shadow;
+  return { row, main, options, dismiss };
+}
+
+test("the pages of the allowlist's later rows are labelled in the parent process and only there", () => {
+  for (const url of ["about:firefoxview", "about:firefoxview#history", "about:opentabs", "about:policies", "about:unloads", "about:telemetry"]) {
+    const run = start_on(url, () => {});
+    assert.equal(run.core.page_hints()!.handles(run.chrome.browser), true, url);
+    for (const options of [{ remote: true }, { principal: { isSystemPrincipal: false } }]) {
+      const other = start_on(url, () => {}, options);
+      assert.equal(other.core.page_hints()!.handles(other.chrome.browser), false, `${url} ${JSON.stringify(options)}`);
+    }
+  }
+});
+
+test("on about:firefoxview a row's link and options button click at once, its dismiss button waits for Enter, and F and the copy take only a web link", async () => {
+  const web = view_row(100, "https://a.test/x");
+  const internal = view_row(160, "about:preferences");
+  const build = (root: Node) => root.append(web.row, internal.row);
+  // A pick that clicks ends its session, so each target gets its own.
+  for (const target of [web.main, web.options]) {
+    const run = start_on("about:firefoxview", build);
+    const { pick } = await labelled_session(run, 5);
+    assert.equal(run.rows(5).length, 6, "a row's link or buttons got no label");
+    assert.equal((await pick(target))?.ok, true);
+    assert.equal(target.clicks, 1, `a pick of ${target.localName} waited`);
+  }
+  const run = start_on("about:firefoxview", build);
+  const { pick } = await labelled_session(run, 5);
+  assert.equal((await pick(web.dismiss))?.ok, true);
+  assert.equal(web.dismiss.clicks, 0, "a dismiss button clicked with no Enter");
+  assert.ok(run.marked(), "no mark on the dismiss button");
+  run.chrome.clock.now += DWELL_MS;
+  assert.ok(run.chrome.press("Enter").prevented);
+  assert.equal(web.dismiss.clicks, 1, "the user's Enter did not dismiss");
+
+  for (const action of ["background", "yank"]) {
+    const links = start_on("about:firefoxview", build);
+    links.hint_key();
+    assert.equal((await links.collect(6, action))?.ok, true);
+    assert.deepEqual(links.rows(6).map(([id]) => id), [links.id_of(6, web.main)], `${action} labelled a control or an about: link`);
+  }
+});
+
+test("on about:unloads the Unload button waits for Enter and the rest of the allowlist's new pages click at once", async () => {
+  const unload = el("button", 20, 20, { id: "button-unload" });
+  const run = start_on("about:unloads", (root) => root.append(unload));
+  const { pick } = await labelled_session(run, 5);
+  assert.equal((await pick(unload))?.ok, true);
+  assert.equal(unload.clicks, 0, "Unload ran with no Enter");
+  assert.ok(run.marked());
+  for (const url of ["about:opentabs", "about:policies", "about:telemetry"]) {
+    const row = view_row(100, "https://a.test/");
+    const target = row.main;
+    const plain_run = start_on(url, (root) => root.append(row.row));
+    const session = await labelled_session(plain_run, 6);
+    assert.equal((await session.pick(target))?.ok, true);
+    assert.equal(target.clicks, 1, `${url}: a pick waited`);
+  }
+});
+
+test("on about:firefoxview the sync button, a history or chat delete item and a send to device item wait for Enter, and another menu item clicks at once", async () => {
+  // A menu item holds its button in its own shadow root.
+  const item = (top: number, attributes: Record<string, string>) => {
+    const panel_item = el("panel-item", 20, top);
+    for (const [name, value] of Object.entries(attributes)) panel_item.setAttribute(name, value);
+    const inner = el("button", 20, top);
+    panel_item.openOrClosedShadowRoot = Object.assign(new Node("#shadow"), { host: panel_item });
+    panel_item.openOrClosedShadowRoot.append(inner);
+    return { panel_item, inner };
+  };
+  const sync = el("moz-button", 20, 20);
+  sync.setAttribute("data-action", "sync-tabs-disabled");
+  const sign_in = el("moz-button", 20, 60);
+  sign_in.setAttribute("data-action", "sign-in");
+  const delete_item = item(100, { "data-l10n-id": "firefoxview-history-context-delete" });
+  const device_item = item(140, { "device-id": "d1" });
+  const chat_item = item(220, { "data-l10n-id": "firefoxview-chat-context-delete" });
+  const other_item = item(180, { "data-l10n-id": "fxviewtabrow-open-in-new-window" });
+  const build = (root: Node) => root.append(sync, sign_in, delete_item.panel_item, device_item.panel_item, other_item.panel_item, chat_item.panel_item);
+  for (const target of [sync, delete_item.inner, device_item.inner, chat_item.inner]) {
+    const run = start_on("about:firefoxview", build);
+    const { pick } = await labelled_session(run, 5);
+    assert.equal((await pick(target))?.ok, true);
+    assert.equal(target.clicks, 0, `a pick of ${target.localName} acted with no Enter`);
+    assert.ok(run.marked(), `no mark on ${target.localName}`);
+    run.chrome.clock.now += DWELL_MS;
+    assert.ok(run.chrome.press("Enter").prevented);
+    assert.equal(target.clicks, 1, `the user's Enter did not click ${target.localName}`);
+  }
+  for (const target of [sign_in, other_item.inner]) {
+    const run = start_on("about:firefoxview", build);
+    const { pick } = await labelled_session(run, 6);
+    assert.equal((await pick(target))?.ok, true);
+    assert.equal(target.clicks, 1, `a pick of ${target.localName} waited`);
+  }
 });
