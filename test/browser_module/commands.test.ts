@@ -643,10 +643,11 @@ test("the longest pattern that covers the address wins, and a prefix covers the 
 });
 
 test("an off entry leaves every key to the page, the single-key rows too", () => {
-  const { first, type, runs, window } = started({ written: address_state([{ sites: ["about:config"], tree: { children: {} }, off: true }]) });
+  const { first, type, press, runs, window } = started({ written: address_state([{ sites: ["about:config"], tree: { children: {} }, off: true }]) });
   at_address(first, "about:config");
-  const events = type("J", "x", "x");
-  assert.ok(events.every((event) => !event.prevented));
+  const events = [...type("J", "x", "x", "i", "v"), press("v", { ctrlKey: true }), press("Escape", { shiftKey: true })];
+  assert.equal(events.length, 7);
+  assert.ok(events.every((event) => !event.prevented), "i, <C-v> and <S-Escape> go to the page too");
   assert.deepEqual(window.tab_moves, []);
   assert.deepEqual(runs(), []);
 });

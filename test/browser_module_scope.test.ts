@@ -243,6 +243,7 @@ test("a hint key on one of Firefox's own pages maps to the page action of its bi
 });
 
 const with_rules = (site_rules: unknown[]): CompiledKeymap => compile_config({ config: { ...empty_config(), settings: { site_rules } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: [], get_command: (id) => registry.get(id), enum_sources: {} }).compiled;
+const published = (keymap: CompiledKeymap) => address_trees_of_keymap(keymap, allowed, real_check);
 const address_trees = (site_rules: unknown[]) => address_trees_of_keymap(with_rules(site_rules), allowed, real_check);
 const tree_of_site = (site_rules: unknown[], site: string) => address_trees(site_rules).find((entry) => entry.sites.includes(site));
 
@@ -297,7 +298,7 @@ test("a web rule makes no entry, and a keymap with no about: rule gives none", (
 
 test("a run request on an about: page matches against the tree of its address, and a private tab or a web page keeps the full tree", () => {
   const keymap = with_rules([{ site: "about:config", bind: { Q: { id: "page.reload" } }, pass: "H" }, { site: "about:support", off: true }]);
-  const run = (keys: string, url: string, incognito = false) => resolve_run(keymap_for_page(keymap, { url, incognito }, allowed, real_check), keys, 0, allowed).ok;
+  const run = (keys: string, url: string, incognito = false) => resolve_run(keymap_for_page(keymap, { url, incognito }, published(keymap)), keys, 0, allowed).ok;
   assert.equal(run("Q", "about:config"), true);
   assert.equal(run("Q", "about:config#x"), true);
   assert.equal(run("H", "about:config"), false);
@@ -307,7 +308,7 @@ test("a run request on an about: page matches against the tree of its address, a
   assert.equal(run("H", "about:config", true), true);
   assert.equal(run("Q", "https://a.test/"), false);
   assert.equal(run("H", "about:addons"), true);
-  assert.equal(keymap_for_page(keymap, undefined, allowed, real_check), keymap);
+  assert.equal(keymap_for_page(keymap, undefined, published(keymap)), keymap);
 });
 
 test("the state keeps the address trees, drops a bad entry and the extra ones, and a state without them is unchanged", () => {
@@ -346,7 +347,7 @@ test("an exact rule and a prefix rule on one base get their own trees, and an ad
   const query = address_entry_of(entries, "about:reader?url=x")!;
   assert.equal(query.off, undefined);
   assert.equal(node_at(query.tree, ["Q"]), "forward");
-  const run = (url: string) => resolve_run(keymap_for_page(keymap, { url, incognito: false }, allowed, real_check), "Q", 0, allowed).ok;
+  const run = (url: string) => resolve_run(keymap_for_page(keymap, { url, incognito: false }, published(keymap)), "Q", 0, allowed).ok;
   assert.equal(run("about:reader?url=x"), true);
   assert.equal(run("about:reader"), false);
   // An exact rule that binds a key does not reach the address with a query.
@@ -361,8 +362,8 @@ test("past the cap the run check and the module both keep the global tree for th
   rules.push({ site: "about:late", bind: { Q: { id: "tab.close" } } } as never);
   const keymap = with_rules(rules);
   assert.equal(address_entry_of(address_trees_of_keymap(keymap, allowed, real_check), "about:late"), undefined);
-  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, allowed, real_check), "L", 0, allowed).ok, true);
-  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, allowed, real_check), "Q", 0, allowed).ok, false);
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, published(keymap)), "L", 0, allowed).ok, true);
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, published(keymap)), "Q", 0, allowed).ok, false);
 });
 
 test("two about: rules do not warn about each other's binds, and the Site Rules view lists the rules that cover an about: page", () => {
@@ -406,13 +407,20 @@ test("the list guard fallback and the copy.url variant reach an about: page's tr
 
 test("a mode key leaf reaches an about: page's tree only where the hello allows mode keys", () => {
   const keymap = with_rules([{ site: "about:config", pass: "H" }]);
-  const mode_leaf = (native_allowed: ReturnType<typeof native_allowed_by>) => {
-    const global = scope_tree_of(keymap, allowed, real_check, native_allowed);
-    const address = address_trees_of_keymap(keymap, allowed, real_check, native_allowed)[0]!.tree;
-    return [JSON.stringify(global.children).includes("mode."), JSON.stringify(address.children).includes("mode.")];
-  };
-  const without = mode_leaf(native_allowed_by(undefined));
-  const with_mode_keys = mode_leaf(native_allowed_by({ mode_keys: true }));
-  assert.deepEqual(without[0], without[1]);
-  assert.deepEqual(with_mode_keys[0], with_mode_keys[1]);
+  const has_mode_leaf = (tree: ScopeTree) => JSON.stringify(tree.children).includes('"native":"mode.');
+  for (const [hello, expected] of [[undefined, false], [{}, false], [{ mode_keys: true as const }, true]] as const) {
+    const gate = native_allowed_by(hello);
+    assert.equal(has_mode_leaf(scope_tree_of(keymap, allowed, real_check, gate)), expected, "global");
+    assert.equal(has_mode_leaf(address_trees_of_keymap(keymap, allowed, real_check, gate)[0]!.tree), expected, "about:config");
+  }
+});
+
+test("the run check follows the trees published to the module: eight mode-key rules and a ninth that binds Q still run Q", () => {
+  const gate = native_allowed_by({});
+  const rules = [...Array.from({ length: MAX_ADDRESS_TREES }, (_, index) => ({ site: `about:a${index}`, bind: { [`${"abcdefgh"[index]}`]: { id: "mode.pass_next" } } })), { site: "about:zz", bind: { Q: { id: "page.reload" } } }];
+  const keymap = with_rules(rules);
+  const published_gated = address_trees_of_keymap(keymap, allowed, real_check, gate);
+  assert.equal(address_entry_of(address_trees_of_keymap(keymap, allowed, real_check), "about:zz"), undefined, "an ungated list would cut about:zz at the cap");
+  assert.ok(address_entry_of(published_gated, "about:zz"), "the module has a tree for about:zz");
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:zz", incognito: false }, published_gated), "Q", 0, allowed).ok, true);
 });

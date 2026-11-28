@@ -9,7 +9,7 @@ import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 import type { RouteRequest } from "../../src/background/router.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, EXTENSION_TO_MODULE_KINDS, MAX_KEY_ROWS, validate_message } from "../../src/shared/browser_module_protocol.ts";
 import type { ModuleState } from "../../src/shared/browser_module_protocol.ts";
-import { locked_page_command_ids } from "../../src/shared/browser_module_scope.ts";
+import { address_trees_of_keymap, locked_page_command_ids } from "../../src/shared/browser_module_scope.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../../src/shared/keymap.ts";
 import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
@@ -41,7 +41,7 @@ function run_setup(answer: RunResponse = { ok: true }) {
     open_line: async (text) => void lines.push(text),
     active_url: async () => state.url,
     active_page: async () => ({ tab_id: state.tab_id, url: state.url, incognito: state.incognito }),
-    check_args: real_check,
+    published_address_trees: async () => address_trees_of_keymap(state.keymap, locked_commands, real_check),
     pages_on: async () => state.pages_on,
   });
   return { run, runs, shown, state, lines };

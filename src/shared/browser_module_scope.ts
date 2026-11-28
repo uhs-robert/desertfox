@@ -138,11 +138,11 @@ export function address_entry_of(entries: readonly AddressTree[], address: strin
   return best?.entry;
 }
 
-// The keymap a run request is matched against for the page the key came from. On an about: address in a normal tab whose rules the state published (the same cap as the module's), it holds the normal tree under that address's site rules. Any other page, and a page past the cap, get the keymap as it is, as the module takes the global tree there.
-export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): CompiledKeymap | undefined {
+// The keymap a run request is matched against for the page the key came from. `published` is the list of trees last written to the module's state, so the run check and the module cut the caps at the same pages. On an about: address in a normal tab that has a published entry, it holds the normal tree under that address's site rules. Any other page, and a page with no entry, get the keymap as it is, as the module takes the global tree there.
+export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined, published: readonly AddressTree[]): CompiledKeymap | undefined {
   const current = current_keymap(keymap);
   if (!current || !page?.url?.startsWith("about:") || page.incognito) return keymap;
-  if (!address_entry_of(address_trees_of_keymap(current, allowed, check_args, native_allowed), page.url)) return keymap;
+  if (!address_entry_of(published, page.url)) return keymap;
   const root = normal_tree_at(current, page.url);
   const normal = root === "off" ? { kind: "branch" as const, children: {} } : root;
   const { normal: _, ...others } = current.modes;
