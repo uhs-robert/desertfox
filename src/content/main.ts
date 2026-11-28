@@ -300,8 +300,6 @@ let blur_by_switch = false;
 // One is too few: a chat page focuses its prompt on the show and again on the window focus, two moves of one switch.
 const BLURS_PER_WINDOW = 5;
 let blurs_left = 0;
-// The focus_on_load element this window focused, whose own focusin is no page focus and spends no blur.
-let load_focus_given: Element | null = null;
 const end_blur = () => (blur_ends_ms = 0);
 // A key or click of the user's own, which no held key's repeat sets. Once set, no load window opens: input before the keymap reply must keep its field.
 let user_input_seen = false;
@@ -323,23 +321,20 @@ const load_focus_target = (): HTMLElement | null => {
 // True when it blurred or moved the focus. A switch only blurs: focus_on_load is for loads.
 const blur_load_focus = (target: EventTarget | null) => {
   if (Date.now() >= blur_ends_ms || (!blur_by_switch && window !== window.top && navigator.userActivation.isActive) || !(target === document.body || is_editable_element(target))) return false;
-  // The focus_on_load element's own focusin takes the usual path, so a field there enters insert mode.
-  if (target === load_focus_given) return false;
+  // The focus_on_load element takes the usual path, whether the page or this window focused it, so a field there enters insert mode and spends no blur.
+  const wanted = !blur_by_switch && load_focus_target();
+  if (wanted === target) return false;
   // A page that refocuses inside its blur handler fires this focusin before the blur's focusout, so the mode follows the focus once both have run.
   if (blurs_left < 1) return end_blur(), setTimeout(sync_mode_to_focus), false;
-  const wanted = !blur_by_switch && load_focus_target();
-  // The page focused the target itself: focus() would fire no focusin, so no blur is spent and the mode follows the focus as for any field.
-  if (wanted === target) return (load_focus_given = wanted as Element), false;
   // Counted before the blur: a page can refocus inside its own blur handler, and that focus must find the count already lowered.
   if (target !== document.body) blurs_left--;
-  wanted ? (load_focus_given = wanted).focus() : (target as HTMLElement).blur();
+  wanted ? wanted.focus() : (target as HTMLElement).blur();
   return true;
 };
 
 const open_blur = (by_switch: boolean) => {
   blur_by_switch = by_switch;
   blurs_left = BLURS_PER_WINDOW;
-  load_focus_given = null;
   blur_ends_ms = Date.now() + 1e3;
   blur_load_focus(deepest_focused_element());
 };
