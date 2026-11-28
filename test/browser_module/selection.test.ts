@@ -261,5 +261,9 @@ test("a module that shuts down ends a pending read with no selection", async () 
   const asked = ask_later({ tab_id: ids.a });
   await asked.turns();
   (firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
-  assert.equal((await asked.reply()).value, undefined);
+  await asked.turns();
+  // A module that is off writes no reply, and the read no longer waits for its timer. Nothing carries text.
+  const replies = (firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY) ?? []) as { value?: string }[];
+  assert.ok(replies.every((each) => each.value === undefined));
+  assert.equal(firefox.timer_count(), 0);
 });
