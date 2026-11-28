@@ -55,6 +55,8 @@ export async function run_cases(context) {
   const steps = module_steps(context);
   const { chrome, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page } = steps;
   const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left")?.children[0]?.textContent ?? null : null; })()`);
+  // With the bar up the refusal shows in its message slot and no notification goes out.
+  const bar_message = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-message")?.textContent ?? null : null; })()`);
   const notices = async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
   const tab_case = (name, body) =>
     run_case(name, async () => {
@@ -102,7 +104,23 @@ export async function run_cases(context) {
     }
     console.log(`page processes: ${JSON.stringify(where)}`);
     for (const url of ["about:preferences", "about:settings", "about:addons", "about:downloads", "about:config"]) expect(where[url].remote === false && where[url].labelled === true, `${url} is not a labelled parent-process page: ${JSON.stringify(where[url])}`);
-    for (const url of ["about:protections", "about:logins", "about:newtab", "about:support"]) expect(where[url].labelled === false, `${url} got page hints: ${JSON.stringify(where[url])}`);
+    for (const url of ["about:protections", "about:logins", "about:support"]) expect(where[url].labelled === false, `${url} got page hints: ${JSON.stringify(where[url])}`);
+    // The start pages run in a content process and the frame script labels them, so the parent route is not the one that does.
+    expect(where["about:newtab"].remote === true && where["about:newtab"].labelled === true, `about:newtab is not a labelled content-process page: ${JSON.stringify(where["about:newtab"])}`);
+  });
+
+  await run_case("the later pages of the allowlist run in the parent process, and about:memory, about:crashes and about:profiling stay unlabelled", async () => {
+    await home("ph_process_more");
+    const where = {};
+    for (const url of ["about:firefoxview", "about:policies", "about:unloads", "about:telemetry", "about:memory", "about:crashes", "about:profiling"]) {
+      await open_tab(url);
+      await sleep(300);
+      where[url] = await chrome(`(async () => { const b = ${W}.gBrowser.selectedBrowser; return { remote: b.isRemoteBrowser, labelled: Services.desertfox_browser_module.page_hints()?.handles(b) ?? false }; })()`);
+      await close_selected_tab();
+    }
+    console.log(`more page processes: ${JSON.stringify(where)}`);
+    for (const url of ["about:firefoxview", "about:policies", "about:unloads", "about:telemetry"]) expect(where[url].remote === false && where[url].labelled === true, `${url} is not a labelled parent-process page: ${JSON.stringify(where[url])}`);
+    for (const url of ["about:memory", "about:crashes", "about:profiling"]) expect(where[url].labelled === false, `${url} got page hints: ${JSON.stringify(where[url])}`);
   });
 
   await tab_case("on about:preferences f labels the page in the window's layer, the bar says HINT, a label picks a section and then a checkbox in it", async () => {
@@ -169,6 +187,43 @@ export async function run_cases(context) {
     expect((await chrome(`(async () => ${W}.gBrowser.selectedTab._tPos)()`)) === selected_before, "F took the focus to the new tab");
     await chrome(`(async () => { ${W}.gBrowser.removeTab(${new_tab}); delete Services.desertfox_key_test_tabs_before; })()`);
     await expect_ended("F on about:preferences");
+  });
+
+  await tab_case("on about:firefoxview a row's options button fires the row's secondary action, and its dismiss button waits for Enter and then closes the open tab", async () => {
+    await home("ph_fxview");
+    const target_url = "data:text/html,<title>df_fxview_target</title>df_fxview_target";
+    await chrome(`(async () => { ${W}.gBrowser.addTrustedTab(${JSON.stringify(target_url)}); })()`);
+    await open_page("about:firefoxview#opentabs", `(win) => win.document.readyState === "complete"`);
+    // The row of the data: tab: its link sits in the row's own shadow root, so the row's other buttons are that root's.
+    const row_of = (part) => `(doc, deep_find) => { const walk = (root) => { for (const a of root.querySelectorAll("a[href]")) if (a.href.includes("df_fxview_target")) return a; for (const el of root.querySelectorAll("*")) { const inner = el.openOrClosedShadowRoot && walk(el.openOrClosedShadowRoot); if (inner) return inner; } return null; }; const anchor = walk(doc); const found = anchor?.getRootNode(); return found ? (${part}) : null; }`;
+    const dismiss = row_of(`found.querySelector(".dismiss-button")`);
+    const options = row_of(`found.querySelector(".options-button")`);
+    const main = row_of(`found.querySelector("a[href]")`);
+    await poll_until("the open tab's row with its buttons", () => in_selected_page(`(win) => { ${DEEP_FIND} return !!(${dismiss})(win.document, deep_find)?.checkVisibility(); }`), { timeout_ms: 10000 });
+    await focus_page();
+    const tabs_before = await chrome(`(async () => ${W}.gBrowser.tabs.length)()`);
+    await in_selected_page(`(win) => (win.addEventListener("fxview-tab-list-secondary-action", () => { win.desertfox_secondary_seen = true; }, true), true)`);
+    await start_hints("f", "about:firefoxview");
+    expect((await chrome(label_on(dismiss))) !== null && (await chrome(label_on(options))) !== null && (await chrome(label_on(main))) !== null, "a row's link or buttons got no label");
+    const options_label = await chrome(label_on(options));
+    await press_keys(...options_label.split(""));
+    await expect_ended("a pick of the options button");
+    // The row's handler runs only for a click with `detail` 0 (a key) or a real click: a pick's element.click() is the first kind.
+    await poll_until("the options button's click to reach the row's secondary action", () => in_selected_page(`(win) => win.desertfox_secondary_seen === true`), { timeout_ms: 3000 });
+    await press_keys("-k", "Escape");
+    await sleep(300);
+    await focus_page();
+    await start_hints("f", "about:firefoxview");
+    const dismiss_label = await chrome(label_on(dismiss));
+    expect(dismiss_label !== null, "the dismiss button got no label");
+    await press_keys(...dismiss_label.split(""));
+    await poll_until("the Enter mark", () => chrome(confirm_shown), { timeout_ms: 3000 });
+    await take_shot("/tmp/desertfox-page-hints-firefoxview-confirm.png");
+    expect((await chrome(`(async () => ${W}.gBrowser.tabs.length)()`)) === tabs_before, "the pick closed the tab before Enter");
+    await sleep(700);
+    await press_keys("-k", "Return");
+    await poll_until("Enter to close the open tab (the dismiss button acts on a hint pick, as on a click)", async () => (await chrome(`(async () => ${W}.gBrowser.tabs.length)()`)) === tabs_before - 1, { timeout_ms: 5000 });
+    await expect_ended("the dismiss pick");
   });
 
   await tab_case("on about:addons a pick of the private window choice only marks it, a key other than Enter cancels, and the user's Enter picks it", async () => {
@@ -276,7 +331,8 @@ export async function run_cases(context) {
     await clear_notices();
     on_teardown(clear_notices);
     await press_keys(";", "v");
-    await poll_until("the refusal", async () => (await notices()).includes("This hint does not run on this page"), { timeout_ms: 5000 });
+    await poll_until("the refusal", async () => ((await bar_message()) ?? "").includes("This hint does not run on this page"), { timeout_ms: 5000 });
+    expect((await notices()).length === 0, "the refusal also went out as a desktop notice");
     await poll_until("the start to give the keys back", async () => (await chrome(held_by)) === null, { timeout_ms: 3000 });
     expect((await chrome(page_layers)) === 0, "a refused hint drew labels");
     await clear_notices();

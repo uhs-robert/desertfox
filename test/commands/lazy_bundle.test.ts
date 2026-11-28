@@ -132,7 +132,7 @@ test("the first key of a lazy command waits one bundle load, holds the keys type
   content_handlers["t.plain"] = { run: () => void events.push("plain x") };
   const flow = create_key_flow({
     get_mode_: state.get_mode_,
-    take_pass_next_: state.take_pass_next_,
+    take_pass_next_: state.take_pass_next_, take_once_: state.take_once_,
     in_editable_field_: () => false,
     user_input_seen_: () => false,
     blur_window_open_: () => false,
@@ -171,7 +171,7 @@ test("a bound chord typed during a bundle load waits and runs after it, and an u
   const keymap: CompiledKeymap = { format_version: COMPILED_KEYMAP_VERSION, mode_indicator: "always", which_key_delay_ms: 0, toast_ms: 3000, toast_error_ms: 6000, modes: { normal: { kind: "branch", children: { "<C-o>": jump } } } };
   const flow = create_key_flow({
     get_mode_: state.get_mode_,
-    take_pass_next_: state.take_pass_next_,
+    take_pass_next_: state.take_pass_next_, take_once_: state.take_once_,
     in_editable_field_: () => false,
     user_input_seen_: () => false,
     blur_window_open_: () => false,

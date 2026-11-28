@@ -2,6 +2,7 @@
 // Each binding's args go through the one validator here, so a bad entry is
 // skipped with a warning and the content script never sees it.
 
+import { MODES } from "../shared/command.ts";
 import type { CommandDef, Mode } from "../shared/command.ts";
 import type { MergedConfig, Settings } from "../shared/config.ts";
 import type { BindingTable } from "../shared/settings_table.ts";
@@ -323,8 +324,11 @@ function keep_node(node: TreeNode, path: string[], mode: string, input: CompileI
       return false;
     }
   }
+  if (mode === "browser" && node.steps.every((step) => runs_in_every_mode(input.get_command(step.invocation.id)))) node.any_mode = true;
   return true;
 }
+
+const runs_in_every_mode = (command: Pick<CommandDef, "modes"> | undefined): boolean => MODES.every((mode) => command?.modes?.includes(mode));
 
 // Firefox shortcuts fire in the tab's normal mode, so a `browser` binding needs a command that runs there.
 function mode_problem(keymap_mode: string, command: Pick<CommandDef, "id" | "modes">): string | undefined {
