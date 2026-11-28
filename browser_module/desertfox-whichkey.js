@@ -147,6 +147,7 @@
     const HTML_NS = "http://www.w3.org/1999/xhtml";
     const HOST_CLASS = "desertfox-whichkey-host";
     const FOOTER = [["ESC", "close"]];
+    const HELD_FOOTER = [["SPC", "leave"], ["ESC", "close"]];
     const Z_INDEX = 2147483646;
     const MODULE_CSS = `
 .desertfox-whichkey {
@@ -232,11 +233,11 @@
         else host.style.removeProperty(property);
       }
     }
-    function draw(panel, table, theme) {
+    function draw(panel, table, theme, held) {
       surface ??= make_surface();
       apply_theme(surface.host, theme);
       const page_height = win.gBrowser.selectedBrowser?.getBoundingClientRect?.().height || win.innerHeight;
-      const { parts, chip } = render_panel(doc, { rows: panel.rows, border: table.border }, FOOTER, page_height);
+      const { parts, chip } = render_panel(doc, { rows: panel.rows, border: table.border }, held ? HELD_FOOTER : FOOTER, page_height);
       surface.text.replaceChildren(...parts);
       if (surface.host.parentNode !== doc.documentElement) doc.documentElement.append(surface.host);
       fit_chip(chip, panel.title);
@@ -255,7 +256,7 @@
         const panel = sequence_table?.table.panels.get(prefix.typed_.join(" "));
         const pending = core2.module_pending(win);
         if (!panel || !is_current() || !pending || !same_keys(pending.keys, prefix.typed_)) return;
-        draw(panel, sequence_table.table, sequence_table.theme);
+        draw(panel, sequence_table.table, sequence_table.theme, prefix.held_ === true);
         drawn();
       },
       () => sequence_table?.table.skip
@@ -273,7 +274,7 @@
         sequence_table = void 0;
         return follow_prefix(void 0);
       }
-      follow_prefix({ mode: "normal", typed_: [...pending.keys] });
+      follow_prefix({ mode: "normal", typed_: [...pending.keys], ...pending.held && { held_: true } }, pending.held === true);
     };
     const end_sequence = () => {
       sequence_table = void 0;

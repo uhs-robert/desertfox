@@ -221,7 +221,8 @@ export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule
 export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
 // `line_keys`, on the root only: the key paths (tokens joined by one space) of the forward leaves that open the command line. After one of them the module holds the keys that follow until the line has the focus, so they never run on the page. An older module ignores the field.
 // `hint_keys`, on the root only: the key paths of the hint leaves, which need page code and so are not in the tree. Where hints cannot run now, the module claims them and sends the first one as a `run`, so the extension says why. An older module ignores the field.
-export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[] };
+// `register_keys`, on the root only: the extension accepts a register (`"a`) before the keys of a `run`. A module that sees no flag keeps a register typed on a locked page silent. An older module ignores the field.
+export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[]; register_keys?: true };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
@@ -358,7 +359,9 @@ export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
   const root = value as { line_keys?: unknown; hint_keys?: unknown };
   const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
-  return problem === undefined ? { ok: true, value: kept_tree(value as ScopeTree) } : bad(problem);
+  if (problem !== undefined) return bad(problem);
+  const { register_keys, ...rest } = kept_tree(value as ScopeTree);
+  return { ok: true, value: { ...rest, ...(register_keys === true && { register_keys }) } };
 }
 
 const is_color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);

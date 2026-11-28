@@ -169,6 +169,18 @@ test("a prefix shows its panel after the delay, drawn from the table with the pa
   assert.deepEqual(firefox.errors, []);
 });
 
+test("a hold shows its group's panel at once, with the leave footer, and keeps it after a key", () => {
+  const { type, press, shown, window } = started();
+  type("g");
+  press(" ");
+  // The hold needs no delay, only the zero-length timer of the page panel's timer.
+  window.run_timers();
+  assert.deepEqual(shown(), { title: "+Go", rows: rows_of("g"), footer: "SPCleaveESCclose", frame: "frame square" });
+  press("x");
+  window.run_timers();
+  assert.equal(shown()?.footer, "SPCleaveESCclose");
+});
+
 test("the panel takes the theme's colors as checked hex values, by the color scheme, and leaves a bad one to the sheet's default", () => {
   const dark = started({ written: state({ bar_theme: { dark: { ...COLORS, primary: "red; background: url(x)" }, light: COLORS } }) });
   dark.type("g");
