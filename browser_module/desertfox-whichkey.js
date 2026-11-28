@@ -110,7 +110,7 @@
   var scope = globalThis;
   var core = Services.desertfox_browser_module;
   if (typeof scope.gBrowser === "object" && scope.gBrowser !== null && typeof core === "object" && core !== null) {
-    if (typeof core.watch_pending !== "function" || typeof core.module_pending !== "function" || typeof core.may_act !== "function") {
+    if (typeof core.watch_pending !== "function" || typeof core.module_pending !== "function" || typeof core.watch_root_list !== "function" || typeof core.may_act !== "function") {
       core.log_once?.("the core cannot tell a feature the half-typed keys, so the which-key panel stays off");
     } else {
       const undo = [];
@@ -180,7 +180,7 @@
     function read_table(value) {
       if (!is_record(value) || !is_record(value.panels) || byte_size(value) > MAX_WHICH_KEY_BYTES) return void 0;
       const { delay_ms, skip, border } = value;
-      if (!Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return void 0;
+      if (!Number.isInteger(delay_ms) || delay_ms < 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return void 0;
       if (skip !== void 0 && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return void 0;
       const paths = Object.keys(value.panels);
       if (paths.length > MAX_WHICH_KEY_PANELS) return void 0;
@@ -191,7 +191,9 @@
         if (!panel) return void 0;
         panels.set(path, panel);
       }
-      return { delay_ms, skip: skip === void 0 ? [] : [...skip], border, panels };
+      const root = value.root === void 0 ? void 0 : read_panel(value.root);
+      if (value.root !== void 0 && !root) return void 0;
+      return { delay_ms, skip: skip === void 0 ? [] : [...skip], border, panels, root };
     }
     let cached = { holder: void 0, table: void 0, theme: void 0 };
     function table_and_theme() {
@@ -239,7 +241,11 @@
       if (surface.host.parentNode !== doc.documentElement) doc.documentElement.append(surface.host);
       fit_chip(chip, panel.title);
     }
-    const hide = () => surface?.host.remove();
+    let root_shown = false;
+    const hide = () => {
+      root_shown = false;
+      surface?.host.remove();
+    };
     let sequence_table;
     const same_keys = (left, right) => left.length === right.length && left.every((key, index) => key === right[index]);
     const follow_prefix = create_which_key_timer(
@@ -254,7 +260,9 @@
       },
       () => sequence_table?.table.skip
     );
+    let opening_root = false;
     const follow_keys = () => {
+      if (opening_root) return;
       const pending = core2.module_pending(win);
       if (!pending || pending.keys.length === 0) {
         sequence_table = void 0;
@@ -271,6 +279,36 @@
       sequence_table = void 0;
       follow_prefix(void 0);
     };
+    let stop_root_close;
+    const close_root = () => {
+      stop_root_close?.();
+      stop_root_close = void 0;
+    };
+    const show_root = (target, shown_now) => {
+      if (target !== win) return;
+      if (!shown_now) {
+        if (!root_shown) return;
+        close_root();
+        return end_sequence();
+      }
+      const shown = table_and_theme();
+      if (!shown?.table?.root) return;
+      end_sequence();
+      close_root();
+      draw(shown.table.root, shown.table, shown.theme);
+      root_shown = true;
+      opening_root = true;
+      void Promise.resolve().then(() => {
+        opening_root = false;
+        if (!surface?.host.parentNode) return;
+        close_root();
+        const close_on_key = () => (close_root(), hide());
+        win.addEventListener("keydown", close_on_key, true);
+        stop_root_close = () => win.removeEventListener("keydown", close_on_key, true);
+      });
+    };
+    undo.push(core2.watch_root_list(show_root));
+    undo.push(close_root);
     const stop_watching = core2.watch_pending((changed) => {
       if (changed === void 0 || changed === win) follow_keys();
     });
@@ -299,5 +337,6 @@
         }
       }
     }, { once: true });
+    core2.set_hello_flag("which_key_root", true);
   }
 })();
