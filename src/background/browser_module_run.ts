@@ -2,7 +2,7 @@
 // A run request is foreign input from chrome code. Its keys are matched again against the stored keymap, and only a leaf of the locked-page set runs, in the active tab.
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
-import { counted_steps, opens_line_leaf, resolve_run } from "../shared/browser_module_scope.ts";
+import { counted_steps, keymap_for_page, opens_line_leaf, resolve_run } from "../shared/browser_module_scope.ts";
 import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
@@ -21,6 +21,8 @@ export type ModuleRunDeps = {
   // The active tab's address and whether `browser_module_pages` is on, for the reason a hint key gives.
   active_url: () => Promise<string | undefined>;
   pages_on: () => Promise<boolean>;
+  // The active tab's address and privacy, for the site rules of an about: page. Without it no site rule applies.
+  active_page?: () => Promise<{ url: string | undefined; incognito: boolean } | undefined>;
 };
 
 // Firefox's start pages get hints from the module, so a refusal there means this module cannot label the page.
@@ -44,7 +46,7 @@ export function create_module_run(deps: ModuleRunDeps) {
   return async (args: ModuleArgs): Promise<void> => {
     // The kind row checked the shapes: `keys` is text and `count` a whole number.
     const { keys, count } = args as { keys: string; count: number };
-    const resolved = resolve_run(await deps.read_keymap(), keys, count, deps.locked_commands);
+    const resolved = resolve_run(keymap_for_page(await deps.read_keymap(), await deps.active_page?.()), keys, count, deps.locked_commands);
     if (!resolved.ok && resolved.hint) return refuse(hint_refusal_text(await deps.active_url(), await deps.pages_on()), true);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
     if (opens_line_leaf(resolved.leaf)) {

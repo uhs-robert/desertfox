@@ -9,6 +9,15 @@ export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 // The page's columns of the site table, for the page's key handling and for which-key alike.
 export const site_columns_for = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): PageSiteColumns => resolve_site_columns(site_rules_matching(keymap, addresses));
 
+// The columns of the site table for an about: page the browser module serves, where no page code runs. Only the key columns apply: `off`, `pass`, `only` and the normal binds. A bind with a focus or element guard has nothing to ask there, so it is dropped, and so are the other keymap modes and the site modes, which need a page to hold them.
+export function unguarded_columns_for(keymap: CompiledKeymap | undefined, address: string): PageSiteColumns {
+  const unguarded = (rule: SiteRule): SiteRule => {
+    const { keymap: _, modes: __, ...rest } = rule;
+    return { ...rest, ...(rule.bind && { bind: Object.fromEntries(Object.entries(rule.bind).filter(([, { leaf }]) => !has_page_guard(leaf))) }) };
+  };
+  return resolve_site_columns(site_rules_matching(keymap, [address]).map(unguarded));
+}
+
 // The rows that fit the page, in table order.
 export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));
 
@@ -17,6 +26,7 @@ export const hiding_bind = (all: readonly SiteBind[], { tokens }: SiteBind): Sit
 
 // A guarded bind keeps the leaf it replaces at the end of its chain of choices, so the key falls through to it when every guard fails. A choice with no guard ends the chain. A bind with `otherwise = "page"` keeps nothing: a failed guard leaves no leaf, and the content script hands the real key to the page. A replaced branch is not kept: falling through to it means waiting for more keys after the key already ran.
 const is_guarded = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || leaf.when_present !== undefined;
+const has_page_guard = (leaf: TreeLeaf): boolean => is_guarded(leaf) || leaf.otherwise !== undefined || leaf.otherwise_page !== undefined;
 const with_otherwise = (leaf: TreeLeaf, replaced: TreeNode | undefined): TreeLeaf =>
   !is_guarded(leaf) || replaced?.kind !== "leaf" || leaf.otherwise_page ? leaf : { ...leaf, otherwise: leaf.otherwise ? with_otherwise(leaf.otherwise, replaced) : replaced };
 

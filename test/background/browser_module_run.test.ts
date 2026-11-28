@@ -31,7 +31,7 @@ const DEFAULT = compiled();
 function run_setup(answer: RunResponse = { ok: true }) {
   const runs: RouteRequest[] = [];
   const shown: Refusal[] = [];
-  const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false };
+  const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false, incognito: false };
   const lines: number[] = [];
   const run = create_module_run({
     read_keymap: async () => state.keymap,
@@ -40,6 +40,7 @@ function run_setup(answer: RunResponse = { ok: true }) {
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
     open_line: async () => void lines.push(1),
     active_url: async () => state.url,
+    active_page: async () => ({ url: state.url, incognito: state.incognito }),
     pages_on: async () => state.pages_on,
   });
   return { run, runs, shown, state, lines };
@@ -298,4 +299,32 @@ test("a prompt step handed to the address bar ends the binding, so its later ste
   assert.deepEqual(answer, { ok: true, cancelled: true });
   assert.equal(bar_texts.length, 1);
   assert.deepEqual(ran, [], "tab.close ran while the bar was still open");
+});
+
+const with_rules = (site_rules: unknown[]): CompiledKeymap => compile_config({ config: { ...empty_config(), settings: { site_rules } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: [], get_command: (id) => registry.get(id), enum_sources: {} }).compiled;
+
+test("a run request on an about: page follows its site rules, and a private tab and a web page do not", async () => {
+  const { run, runs, state } = run_setup();
+  state.keymap = with_rules([{ site: "about:config*", bind: { Q: { id: "page.reload" } }, pass: "H" }]);
+  state.url = "about:config#x";
+  await run({ keys: "Q", count: 0 });
+  assert.deepEqual(runs.map((request) => request.invocations[0]!.id), ["page.reload"]);
+  await assert.rejects(run({ keys: "H", count: 0 }));
+  state.incognito = true;
+  await assert.rejects(run({ keys: "Q", count: 0 }));
+  await run({ keys: "H", count: 0 });
+  state.incognito = false;
+  state.url = "https://a.test/";
+  await assert.rejects(run({ keys: "Q", count: 0 }));
+});
+
+test("the state carries the address trees beside the tree, and a keymap with no about: rule has none", async () => {
+  const { module, state, config } = channel_setup();
+  await module.sync();
+  assert.equal(state()!.address_trees, undefined);
+  config.keymap = with_rules([{ site: "about:config", pass: "H" }, { site: "about:support", off: true }]);
+  await module.sync();
+  assert.deepEqual(state()!.address_trees?.map(({ sites, off }) => [sites, off]), [[["about:config"], undefined], [["about:support"], true]]);
+  assert.equal(state()!.address_trees![0]!.tree.children["H"], undefined);
+  assert.ok(state()!.tree!.children["H"], "the global tree keeps H");
 });

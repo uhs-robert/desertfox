@@ -484,6 +484,25 @@ only = "G"            # keep only these keys on
 
 A rule can set `pass` or `only`, not both. A rule with nothing but `site` turns the keys off. For each field, the first rule that matches the page and sets that field decides. Rules add up across files: the rows of `settings.toml` come first, then each file of `settings.d` in name order, then the shipped rows. The earlier row wins, which is the reverse of a plain setting, where the later file wins. Put a row that must win in `settings.toml` or in an earlier-named file. Edit the file, then run `config.reload`, or edit the same text in Settings under Advanced. The Your site rules section of Settings lists what each rule does. The Override a row section below covers `bind` and the rest.
 
+## Rules for Firefox's own pages
+
+With the browser module on, a rule can name one of Firefox's own pages. Write `site = "about:config"` for that page (a `#section` after it still matches), or `site = "about:preferences*"` for every address that starts so. A rule never takes `about:*`, so no rule reaches every page of Firefox.
+
+```toml
+[[site_rules]]
+site = "about:support"
+pass = "x x"          # give this key to the page
+bind = { Q = "tab.duplicate" }
+```
+
+On these pages `off`, `pass`, `only` and `bind` apply, and the first matching rule decides each key as on a web page. These do not apply:
+
+- A bind with a focus or element guard (`when_focus`, `when_present`), because the module cannot ask the page.
+- A bind in another keymap mode (`keymap`), and every site mode (`modes`), which need DesertFox's page code.
+- Any rule in a private tab, where the keys stay as the global keymap has them.
+
+Where several patterns cover one address, the module uses the keys of the longest pattern. The module takes at most eight different key sets for these pages, and a page past them keeps the global keys. The which-key panel stays the global one. An older browser module ignores these rules and keeps the global keys.
+
 ## Turn a row off
 
 The `default_site_rows_off` setting holds the whole list, so `:set` replaces it. List every row to turn off. For example, `:set default_site_rows_off drive maps` turns off Drive and Maps, and turns every other row back on. The setting turns off every row of that name, so `sheets` covers both Sheets address forms. The names are the headings above.

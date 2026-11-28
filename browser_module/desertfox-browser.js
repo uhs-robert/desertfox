@@ -119,6 +119,8 @@
     const MAX_CHROME_HINT_BINDINGS = 4;
     const MAX_CHROME_HINT_KEY_TOKENS = 4;
     const MAX_STATE_TABS = 1024;
+    const MAX_ADDRESS_TREES = 8;
+    const MAX_ADDRESS_TREE_SITES = 32;
     const MAX_MESSAGES = 16;
     const MAX_MESSAGE_LIST_BYTES = 4096;
     const MAX_ERROR_CHARS = 120;
@@ -261,7 +263,34 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, address_trees: read_address_trees(value.address_trees), sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true };
+    }
+
+    // address_trees_of: an entry that fails is left out and its pages keep `tree`, as with an extension that sends none. The taker checks each tree itself.
+    const ABOUT_SITE = /^about:[a-z0-9][a-z0-9._-]*\*?$/;
+    function read_address_trees(value) {
+      if (!Array.isArray(value)) return [];
+      return value.slice(0, MAX_ADDRESS_TREES).flatMap((entry) => {
+        const fits = is_record(entry) && is_record(entry.tree) && Array.isArray(entry.sites) && entry.sites.length > 0 && entry.sites.length <= MAX_ADDRESS_TREE_SITES;
+        return fits && entry.sites.every((site) => typeof site === "string" && ABOUT_SITE.test(site)) ? [{ sites: entry.sites, tree: entry.tree, off: entry.off === true }] : [];
+      });
+    }
+
+    // The entry of the site rules for the address a tab shows: the longest pattern that covers it, `about:name` with a fragment allowed or `about:name*` as a prefix, as `matches_about_pattern` does. None in a private window, where no rule applies.
+    function address_entry(state, win, browser) {
+      const address = browser.currentURI?.spec;
+      if (state.address_trees.length === 0 || typeof address !== "string" || PrivateBrowsingUtils.isWindowPrivate(win)) return undefined;
+      let best;
+      let best_length = -1;
+      for (const entry of state.address_trees) {
+        for (const site of entry.sites) {
+          const prefix = site.endsWith("*");
+          const base = prefix ? site.slice(0, -1) : site;
+          const covers = prefix ? address.startsWith(base) : address === base || address.startsWith(`${base}#`);
+          if (covers && base.length > best_length) [best, best_length] = [entry, base.length];
+        }
+      }
+      return best;
     }
 
     // chrome_hint_keys_of: a bad list leaves chrome focus without the hint start and the rest of the state alone.
@@ -454,11 +483,14 @@
       // A key the module may not take here ends a half-typed sequence, as a key DesertFox does not see ends it in a page.
       if (!state) return void key_taker?.reset(win);
       if (escape_blurs_field(win, page, state, event)) return;
+      const address = address_entry(state, win, page.browser);
+      // Site rules turned DesertFox off on this about: page: no key of the module runs there.
+      if (address?.off) return void key_taker?.reset(win);
       const row = state.keys.get(token_of(event));
       const command = row && commands.get(row.id);
       const args = command && checked_args(command, row.args);
       if (key_taker) {
-        const taken = offer_key(win, page, state, event, args !== undefined);
+        const taken = offer_key(win, page, state, event, args !== undefined, address?.tree ?? state.tree);
         if (taken !== undefined) return;
       }
       if (!args || in_field(win, page, event)) return;
@@ -496,13 +528,13 @@
     }
 
     // The taker sees a key only where a row could run: not in a field, and on a tab left to the module. `row_runs` says a single-key row would run the key.
-    function offer_key(win, page, state, event, row_runs) {
+    function offer_key(win, page, state, event, row_runs, tree) {
       const tab = win.gBrowser.getTabForBrowser(page.browser);
       if (in_field(win, page, event) || !left_to_module(state, page.browser, tab)) {
         key_taker.reset(win);
         return false;
       }
-      const taken = key_taker.key({ window: win, browser: page.browser, tab, event, tree: state.tree, row_runs });
+      const taken = key_taker.key({ window: win, browser: page.browser, tab, event, tree, row_runs });
       if (taken === true) {
         event.preventDefault();
         event.stopPropagation();
@@ -906,7 +938,7 @@
         if (Object.hasOwn(changes, STATE_STORAGE_KEY) && key_taker) {
           const before = read_state_value(deserialized(changes[STATE_STORAGE_KEY].oldValue));
           const after = read_state_value(deserialized(changes[STATE_STORAGE_KEY].newValue));
-          if (after?.enabled !== true || JSON.stringify(before?.tree) !== JSON.stringify(after.tree)) key_taker.reset();
+          if (after?.enabled !== true || JSON.stringify([before?.tree, before?.address_trees]) !== JSON.stringify([after.tree, after.address_trees])) key_taker.reset();
         }
         if (!enabled_by_pref() || shut || desertfox() !== extension) return;
         for (const [key, watcher] of session_watchers) if (Object.hasOwn(changes, key)) tell_watcher(watcher, key, changes[key].newValue);

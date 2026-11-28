@@ -55,7 +55,7 @@ import {
   which_key_table_of,
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
-import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
+import { address_trees_of_keymap, native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { is_reply } from "../shared/browser_module_protocol.ts";
@@ -418,10 +418,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // A tree over its cap is left out, and the module falls back to the single keys, which stay.
     const tree = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, deps.check_args);
     const fits = tree && validate_scope_tree(tree).ok;
+    const address_trees = fits && deps.locked_commands ? address_trees_of_keymap(keymap, deps.locked_commands, deps.check_args) : [];
     const which_key = fits && deps.find_command ? which_key_table_of_keymap(keymap, tree, deps.find_command) : undefined;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), ...(address_trees.length > 0 && { address_trees }), page_hints: true, ...(which_key && { which_key }) });
     request_hello_read();
     request_messages_read();
   };

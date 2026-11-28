@@ -614,3 +614,65 @@ test("Escape on a remote design mode page, or after an older frame script's repo
     assert.deepEqual(firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")), [], what);
   }
 });
+
+const at_address = (tab: { browser: unknown }, spec: string) => void ((tab.browser as { currentURI?: { spec: string } }).currentURI = { spec });
+const PAGE_TREE: ScopeTree = { children: { Q: "forward" } };
+const address_state = (entries: unknown[]) => state({ address_trees: entries });
+
+test("on an about: page the module walks the tree of its address and not the global one", () => {
+  const { first, type, runs } = started({ written: address_state([{ sites: ["about:config"], tree: PAGE_TREE }]) });
+  at_address(first, "about:config#x");
+  const [q, x] = [type("Q")[0]!, type("x")[0]!];
+  assert.ok(q.prevented && q.stopped);
+  assert.equal(x.prevented, false, "a key the rule freed or never bound is left to the page");
+  assert.deepEqual(runs(), [{ keys: "Q", count: 0 }]);
+  at_address(first, "about:support");
+  type("x", "x");
+  assert.deepEqual(runs().at(-1), { keys: "x x", count: 0 });
+});
+
+test("the longest pattern that covers the address wins, and a prefix covers the longer address", () => {
+  const short: ScopeTree = { children: { a: "forward" } };
+  const long: ScopeTree = { children: { b: "forward" } };
+  const { first, type, runs } = started({ written: address_state([{ sites: ["about:conf*"], tree: short }, { sites: ["about:config*"], tree: long }]) });
+  at_address(first, "about:config?x");
+  type("a", "b");
+  at_address(first, "about:conf");
+  type("a", "b");
+  assert.deepEqual(runs(), [{ keys: "b", count: 0 }, { keys: "a", count: 0 }]);
+});
+
+test("an off entry leaves every key to the page, the single-key rows too", () => {
+  const { first, type, runs, window } = started({ written: address_state([{ sites: ["about:config"], tree: { children: {} }, off: true }]) });
+  at_address(first, "about:config");
+  const events = type("J", "x", "x");
+  assert.ok(events.every((event) => !event.prevented));
+  assert.deepEqual(window.tab_moves, []);
+  assert.deepEqual(runs(), []);
+});
+
+test("a private window keeps the global tree and an older state with no entries is unchanged", () => {
+  const entry = { sites: ["about:config"], tree: { children: {} }, off: true };
+  const { first, type, runs } = started({ written: address_state([entry]), private_window: true, private_access: true });
+  at_address(first, "about:config");
+  type("x", "x");
+  assert.deepEqual(runs(), [{ keys: "x x", count: 0 }]);
+  const plain_state = started();
+  at_address(plain_state.first, "about:config");
+  plain_state.type("x", "x");
+  assert.deepEqual(plain_state.runs(), [{ keys: "x x", count: 0 }]);
+});
+
+test("a bad entry is left out and the others stay, and a half-typed sequence ends when the entries change", () => {
+  const bad = [{ sites: ["about:*"], tree: PAGE_TREE }, { sites: ["about:config"] }, "junk", { sites: ["https://a.test/*"], tree: PAGE_TREE }];
+  const { first, firefox, type, runs } = started({ written: address_state(bad) });
+  at_address(first, "about:config");
+  type("Q", "x", "x");
+  assert.deepEqual(runs(), [{ keys: "x x", count: 0 }]);
+  const gt: ScopeTree = { children: { g: { children: { t: "forward" } } } };
+  firefox.write_state(address_state([{ sites: ["about:config"], tree: gt }]));
+  type("g");
+  firefox.write_state(address_state([{ sites: ["about:config"], tree: { children: { g: { children: { u: "forward" } } } } }]));
+  type("t");
+  assert.equal(runs().length, 1);
+});

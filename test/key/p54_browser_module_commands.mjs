@@ -1,7 +1,7 @@
 // The browser module's commands feature (browser_module/desertfox-commands.js) on the pages it exists for: key sequences, counts and the command line panel on about:preferences, about:addons, the PDF viewer and Reader View.
 // Also what it must leave alone: / on about:addons, typed text, the toolbar switch, a DesertFox page. And that a remapped key follows and the ignore toggle gives j back to pdf.js.
 import { createServer } from "node:http";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -314,6 +314,38 @@ export async function run_cases(context) {
       await close_selected_tab();
     }
     await run_line(":set browser_module_pages false");
+  });
+
+  await run_case("a site rule for about:support binds Q and frees xx there, and about:robots keeps the global keys", async () => {
+    await home("bmc_site_rule");
+    const dir = config_copy();
+    appendFileSync(join(dir, "settings.toml"), '\n[[site_rules]]\nsite = "about:support"\npass = "xx"\nbind = { Q = "tab.duplicate" }\n');
+    on_teardown(() => load_config_dir(config_dir));
+    await load_config_dir(dir);
+    await poll_until("the state to hold a tree for about:support with Q and without xx", async () => {
+      const entry = (await session_value(STATE_KEY))?.address_trees?.find((each) => each.sites.includes("about:support"));
+      return entry?.tree?.children?.Q === "forward" && entry.tree.children.x?.children?.x === undefined;
+    });
+    expect((await session_value(STATE_KEY)).tree.children.x?.children?.x === "forward", "the global tree lost xx");
+    await open_tab("about:support");
+    await focus_page();
+    const tabs = await tab_count();
+    await press_keys("Q");
+    await poll_until("Q to duplicate the about:support tab", async () => (await tab_count()) === tabs + 1);
+    await focus_page();
+    await press_keys("xx");
+    await sleep(NO_EFFECT_MS);
+    expect((await tab_count()) === tabs + 1, "xx closed a tab on about:support, which the rule freed");
+    await open_tab("about:robots");
+    await focus_page();
+    const before = await tab_count();
+    await press_keys("Q");
+    await sleep(NO_EFFECT_MS);
+    expect((await tab_count()) === before, "Q duplicated the tab on about:robots, which no rule names");
+    await press_keys("xx");
+    await poll_until("xx to close the about:robots tab", async () => (await tab_count()) === before - 1);
+    await chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); })()`);
+    await load_config_dir(config_dir);
   });
 
   await run_case("last, as the config stays remapped to the end of the piece: a key remapped in the config follows on about:support, and the key it freed leaves the tree", async () => {
