@@ -92,10 +92,13 @@ export function key_rows_of(keymap: CompiledKeymap | undefined, check_args: Chec
 const sends_plain_escape = (args: Record<string, unknown>): boolean =>
   args["key"] === "Escape" && args["key_code"] === 27 && (args["target"] === undefined || args["target"] === "") && args["times"] === 1 && ["ctrl", "shift", "alt", "meta", "keypress", "focus"].every((name) => args[name] === false);
 
-// The keymap's insert mode, as the keys the module takes in a text field: one-token keys whose leaf runs one command of the protocol's fixed list. Other rows (register paste, the external editor) stay with the page code. Undefined when the keymap has no insert mode, so the module keeps its plain Escape.
+// The keymap's insert mode, as the keys the module takes in a text field: one-token keys whose leaf runs one command of the protocol's fixed list. Other rows (register paste, the external editor) stay with the page code. Undefined when there is no current keymap, so the module keeps its plain Escape.
 export function insert_rows_of(keymap: CompiledKeymap | undefined, check_args: CheckCommandArgs): InsertKeyRow[] | undefined {
-  const insert_tree = (current_keymap(keymap)?.modes as Record<string, TreeNode | undefined> | undefined)?.["insert"];
-  if (insert_tree?.kind !== "branch") return undefined;
+  const current = current_keymap(keymap);
+  if (current === undefined) return undefined;
+  // The compiler drops an insert mode whose keys were all unbound. The empty table says so, and the module then blurs no field and ends no insert mode on its own Escape.
+  const insert_tree = (current.modes as Record<string, TreeNode | undefined>)["insert"];
+  if (insert_tree?.kind !== "branch") return [];
   const rows: InsertKeyRow[] = [];
   for (const [key, node] of Object.entries(insert_tree.children)) {
     if (node.kind !== "leaf" || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) continue;

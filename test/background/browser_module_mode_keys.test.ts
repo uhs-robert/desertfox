@@ -98,10 +98,14 @@ test("a page.send_key row sends the table only as a plain Escape: another key, a
   assert.deepEqual(rows, [{ key: "a", id: "page.send_key" }]);
 });
 
-test("with no insert mode in the keymap there is no table, so the module keeps its plain Escape", () => {
-  const base = compiled();
-  const { insert: _insert, ...modes } = base.modes as Record<string, unknown>;
-  assert.equal(insert_rows_of({ ...base, modes } as unknown as CompiledKeymap, real_check), undefined);
+test("a keymap that unbinds every insert key gives an empty table, so the module keeps no Escape of its own", () => {
+  const unbound = Object.fromEntries(["<A-?>", "<Escape>", "<C-r>", "<C-o>", "<A-Escape>"].map((key) => [key, ""]));
+  const keymap = compiled({ ...empty_config(), keymap: { insert: unbound } as never });
+  assert.equal((keymap.modes as Record<string, unknown>)["insert"], undefined, "the compiler drops the empty insert mode");
+  assert.deepEqual(insert_rows_of(keymap, real_check), []);
+});
+
+test("with no usable keymap there is no table, so the module keeps its plain Escape", () => {
   assert.equal(insert_rows_of(undefined, real_check), undefined);
 });
 
