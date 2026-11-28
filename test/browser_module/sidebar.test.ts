@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BROWSER_MODULE_PROTOCOL_VERSION, sidebar_keys_of } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION, SIDEBAR_ONCE_KIND, sidebar_keys_of, validate_scope_tree } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { create_firefox, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
 
@@ -524,4 +525,380 @@ test("the core's sidebar table takes what sidebar_keys_of takes and nothing it r
   assert.deepEqual(JSON.parse(JSON.stringify(core.sidebar_row(win, ["g"]))), { prefix: true });
   assert.deepEqual(JSON.parse(JSON.stringify(core.sidebar_row(win, ["g", "g"]))), { id: "sidebar.first" });
   assert.equal(core.sidebar_row(win, ["x"]), undefined);
+});
+
+// ---- The one-shot normal prefix, `<A-o>`.
+
+const ONCE_TREE = {
+  children: {
+    j: { native: "scroll.lines", args: { count: 10 }, count_rule: "repeat" },
+    "0": { native: "scroll.to", args: { percent: 0, axis: "x" } },
+    g: { children: { g: { native: "scroll.to", args: { percent: 0, axis: "y" } }, t: "forward" } },
+    ":": "forward",
+  },
+  line_keys: [":"],
+};
+const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+function once_setup(options: Parameters<typeof setup>[0] = {}) {
+  const env = setup({ written: state({ tree: ONCE_TREE }), ...options });
+  (env.firefox.Services.focus as { activeWindow: unknown }).activeWindow = env.win;
+  const core = env.firefox.Services.desertfox_browser_module as { keys_held_by(win: unknown): unknown; hold_keys(win: unknown, owner: string): boolean; shut_down(): void };
+  let sent = 0;
+  const from_module = () => plain(env.firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY) ?? []) as { id?: string; kind?: string; args?: Record<string, unknown>; reply_to?: string; ok?: boolean; error?: string }[];
+  const write = (message: Record<string, unknown>) => {
+    const list = (plain(env.firefox.read_holder(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY) ?? []) as unknown[]).slice(-10);
+    env.firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [...list, { v: 1, sent_at: Date.now(), ...message }]);
+  };
+  // What the background sends on `<A-o>`, and the module's reply.
+  const arm = async () => {
+    const id = `r${sent++}`;
+    write({ id, kind: SIDEBAR_ONCE_KIND, args: {} });
+    await settle();
+    return from_module().find((message) => message.reply_to === id);
+  };
+  const runs = () => from_module().filter((message) => message.kind === "run").map((message) => message.args);
+  const answer_runs = () => from_module().filter((message) => message.kind === "run").forEach((message) => write({ reply_to: message.id, ok: true }));
+  const scrolls = () => env.firefox.sent_to_frames.map(({ data }) => plain(data) as { id: string; args: Record<string, unknown> });
+  const held = () => core.keys_held_by(env.win);
+  return { ...env, core, arm, runs, answer_runs, scrolls, held, write };
+}
+
+test("<A-o> arms only with the focus in the sidebar, and the hello names no flag for it", async () => {
+  const { firefox, page, panel_doc, focus, arm, held } = once_setup();
+  assert.equal(Object.hasOwn(firefox.hello() as object, "sidebar_once"), false);
+  focus(page);
+  assert.deepEqual(await arm(), { v: 1, reply_to: "r0", ok: false, error: "The focus is not in the sidebar" });
+  assert.equal(held(), undefined);
+  focus(panel_row(panel_doc));
+  assert.equal((await arm())?.ok, true);
+  assert.equal(held(), "sidebar_once");
+});
+
+test("the arm refuses with no tree, another feature's hold, the window behind or the switch off", async () => {
+  const no_tree = once_setup({ written: state() });
+  no_tree.focus(panel_row(no_tree.panel_doc));
+  assert.equal((await no_tree.arm())?.ok, false);
+  const other = once_setup();
+  other.focus(panel_row(other.panel_doc));
+  other.core.hold_keys(other.win, "chrome_hints");
+  assert.equal((await other.arm())?.ok, false);
+  assert.equal(other.held(), "chrome_hints");
+  const behind = once_setup();
+  behind.focus(panel_row(behind.panel_doc));
+  (behind.firefox.Services.focus as { activeWindow: unknown }).activeWindow = null;
+  assert.equal((await behind.arm())?.ok, false);
+  const off = once_setup({ written: state({ tree: ONCE_TREE, enabled: false }) });
+  off.focus(panel_row(off.panel_doc));
+  assert.equal((await off.arm())?.ok, false);
+  assert.equal(off.held(), undefined);
+});
+
+test("after <A-o> a native leaf runs on the selected page, with its count, and the sidebar keys come back", async () => {
+  const { page, panel_doc, focus, press, arm, scrolls, held, typed, run_timers } = once_setup();
+  focus(panel_row(panel_doc));
+  await arm();
+  assert.ok(press("j").prevented);
+  assert.equal(held(), undefined, "the hold outlived the leaf");
+  await arm();
+  for (const key of ["3", "j"]) assert.ok(press(key).prevented);
+  await arm();
+  press("g");
+  press("g");
+  await arm();
+  // 0 is bound, so it is no count.
+  press("0");
+  assert.deepEqual(scrolls().map(({ id }) => id), ["scroll.lines", "scroll.lines", "scroll.lines", "scroll.lines", "scroll.to", "scroll.to"]);
+  assert.deepEqual(scrolls().at(-2)?.args, { percent: 0, axis: "y" });
+  assert.equal(page.focused, 0);
+  press("j");
+  run_timers();
+  assert.deepEqual(typed, ["ArrowDown"], "j after the leaf did not move the sidebar");
+});
+
+test("a forward leaf goes out as a run with its keys and count, and the focus comes back to the sidebar element", async () => {
+  const { page, panel_doc, focus, press, arm, runs, answer_runs, run_timers } = once_setup();
+  const row = panel_row(panel_doc);
+  focus(row);
+  await arm();
+  for (const key of ["2", "g", "t"]) assert.ok(press(key).prevented);
+  assert.deepEqual(runs(), [{ keys: "g t", count: 2 }]);
+  // The command moved the focus to the page.
+  focus(page);
+  answer_runs();
+  await settle();
+  run_timers();
+  assert.equal(row.focused, 1);
+});
+
+test("a key that opens the command line leaves the focus where the line put it", async () => {
+  const { main_doc, panel_doc, focus, press, arm, runs, answer_runs, run_timers } = once_setup();
+  const row = panel_row(panel_doc);
+  focus(row);
+  await arm();
+  press(":");
+  assert.deepEqual(runs(), [{ keys: ":", count: 0 }]);
+  focus(make_node(main_doc, "toolbarbutton"));
+  answer_runs();
+  await settle();
+  run_timers();
+  assert.equal(row.focused, 0);
+});
+
+test("Escape and <A-o> again end the hold and run nothing, and a key the tree lacks goes out as a run, so the extension says why", async () => {
+  const { panel_doc, focus, press, arm, runs, scrolls, held, typed, run_timers } = once_setup();
+  focus(panel_row(panel_doc));
+  for (const keys of [["f"], ["g", "x"], ["2", "y"]]) {
+    await arm();
+    for (const key of keys) assert.ok(press(key).prevented, key);
+    assert.equal(held(), undefined, keys.join(""));
+  }
+  assert.deepEqual(runs(), [{ keys: "f", count: 0 }, { keys: "g x", count: 0 }, { keys: "y", count: 0 }]);
+  // The chord last: a request this soon after it only confirms.
+  for (const [key, patch] of [["Escape"], ["o", { altKey: true }]] as [string, Partial<FakeEvent>?][]) {
+    await arm();
+    assert.ok(press(key, patch).prevented, key);
+    assert.equal(held(), undefined, key);
+  }
+  run_timers();
+  assert.deepEqual([runs().length, scrolls(), typed], [3, [], []]);
+});
+
+test("the hold ends after the idle time, on a focus move out of the place, a window blur, the window closing and the module shutting down", async () => {
+  const idle = once_setup();
+  idle.focus(panel_row(idle.panel_doc));
+  await idle.arm();
+  idle.press("g");
+  idle.run_timers();
+  assert.equal(idle.held(), undefined, "the idle time did not end it");
+  assert.equal(idle.press("j").prevented, true, "j after the idle end was not the sidebar's");
+
+  const moved = once_setup();
+  moved.focus(panel_row(moved.panel_doc));
+  await moved.arm();
+  moved.focus(moved.page);
+  assert.equal(moved.held(), undefined, "a focus move did not end it");
+  assert.equal(moved.press("j").prevented, false);
+
+  const blurred = once_setup();
+  blurred.focus(panel_row(blurred.panel_doc));
+  await blurred.arm();
+  blurred.own.fire("blur", key_event("blur"));
+  assert.equal(blurred.held(), undefined, "a window blur did not end it");
+
+  const closed = once_setup();
+  closed.focus(panel_row(closed.panel_doc));
+  await closed.arm();
+  closed.own.fire("unload", key_event("unload"));
+  assert.equal(closed.held(), undefined, "the window closing did not end it");
+
+  const shut = once_setup();
+  shut.focus(panel_row(shut.panel_doc));
+  await shut.arm();
+  shut.core.shut_down();
+  assert.equal(shut.held(), undefined, "the shut down did not end it");
+});
+
+test("the hold lets a key go and ends when DesertFox went away, the switch went off or a menu opened", async () => {
+  const gone = once_setup();
+  gone.focus(panel_row(gone.panel_doc));
+  await gone.arm();
+  gone.firefox.extension = undefined;
+  assert.equal(gone.press("j").prevented, false);
+  assert.equal(gone.held(), undefined);
+
+  const off = once_setup();
+  off.focus(panel_row(off.panel_doc));
+  await off.arm();
+  off.firefox.write_state(state({ tree: ONCE_TREE, enabled: false }));
+  assert.equal(off.press("j").prevented, false);
+  assert.equal(off.held(), undefined);
+
+  const menu = once_setup();
+  menu.focus(panel_row(menu.panel_doc));
+  await menu.arm();
+  menu.main_doc.querySelectorAll = (selector: string) => (selector === "menupopup, panel" ? ([{ localName: "menupopup", id: "context", state: "open", hasAttribute: () => false, getAttribute: () => null }] as unknown as FakeNode[]) : menu.main_doc.nodes);
+  assert.equal(menu.press("j").prevented, false);
+  assert.equal(menu.held(), undefined);
+});
+
+test("a new DesertFox ends the hold", async () => {
+  const { firefox, panel_doc, focus, arm, held } = once_setup();
+  focus(panel_row(panel_doc));
+  await arm();
+  firefox.start_extension();
+  assert.equal(held(), undefined);
+});
+
+test("a core without the prefix calls keeps the sidebar keys and leaves <A-o> off", () => {
+  const { firefox, panel_doc, focus, press } = setup({ core_patch: (source) => source.replace("      scope_tree: (win)", "      scope_tree_gone: (win)") });
+  focus(panel_row(panel_doc));
+  assert.ok(press("j").prevented);
+  assert.ok(firefox.errors.some((line) => line.includes("<A-o> stays off")));
+});
+
+const chord_state = (patch: Record<string, unknown> = {}) => state({ tree: ONCE_TREE, normal_once_keys: ["<A-o>"], ...patch });
+const alt_o: Partial<FakeEvent> = { altKey: true };
+
+test("the chord's own keydown holds the keys, so a j typed at once scrolls the page, and the shortcut's late ask only confirms", async () => {
+  const { panel_doc, focus, press, arm, scrolls, held, typed, run_timers } = once_setup({ written: chord_state() });
+  focus(panel_row(panel_doc));
+  assert.ok(press("o", alt_o).prevented, "the chord went on to Firefox");
+  assert.equal(held(), "sidebar_once");
+  assert.ok(press("j").prevented);
+  assert.deepEqual(scrolls().map(({ id }) => id), ["scroll.lines"]);
+  assert.equal((await arm())?.ok, true);
+  assert.equal(held(), undefined, "the late ask started a second hold");
+  run_timers();
+  assert.deepEqual(typed, []);
+});
+
+test("a double chord ends the hold, and the shortcut's ask for either press starts none", async () => {
+  const { panel_doc, focus, press, arm, held } = once_setup({ written: chord_state() });
+  focus(panel_row(panel_doc));
+  press("o", alt_o);
+  press("o", alt_o);
+  assert.equal(held(), undefined);
+  assert.equal((await arm())?.ok, true);
+  assert.equal((await arm())?.ok, true);
+  assert.equal(held(), undefined);
+});
+
+test("without the state's chord list the keydown is left to the shortcut", () => {
+  const { panel_doc, focus, press, held } = once_setup();
+  focus(panel_row(panel_doc));
+  assert.equal(press("o", alt_o).prevented, false);
+  assert.equal(held(), undefined);
+});
+
+test("in the vertical strip the chord holds, j scrolls the page and leaves the strip's focus, and d closes no tab", async () => {
+  const { strip_tabs, tab_container, removed, focus, press, scrolls, runs, held } = once_setup({ written: chord_state(), vertical: true });
+  focus(strip_tabs[0]!);
+  tab_container.ariaFocusedItem = strip_tabs[0]!;
+  assert.ok(press("o", alt_o).prevented);
+  press("j");
+  assert.deepEqual(scrolls().map(({ id }) => id), ["scroll.lines"]);
+  assert.equal(tab_container.ariaFocusedItem, strip_tabs[0]);
+  press("o", alt_o);
+  assert.ok(press("d").prevented);
+  assert.deepEqual([removed, runs(), held()], [[], [{ keys: "d", count: 0 }], undefined]);
+});
+
+test("after a key that opens the line the hold eats the keys typed fast until the extension answers or the focus leaves", async () => {
+  const { strip_tabs, removed, focus, press, runs, held, answer_runs, page } = once_setup({ written: chord_state(), vertical: true });
+  focus(strip_tabs[0]!);
+  press("o", alt_o);
+  press(":");
+  for (const key of ["b", "d"]) assert.ok(press(key).prevented, key);
+  assert.equal(held(), "sidebar_once");
+  assert.deepEqual([removed, runs()], [[], [{ keys: ":", count: 0 }]]);
+  answer_runs();
+  await settle();
+  assert.equal(held(), undefined, "the answer did not end the hold");
+  press("o", alt_o);
+  press(":");
+  focus(page);
+  assert.equal(held(), undefined, "the focus move did not end the hold");
+});
+
+test("each key restarts the idle time, a focus move inside the place keeps the hold, and a second ask starts a fresh walk", async () => {
+  const { panel_doc, focus, press, arm, held, timers, runs } = once_setup();
+  const row = panel_row(panel_doc);
+  focus(row);
+  await arm();
+  press("g");
+  // The timer the arm set is stale once g restarted it.
+  timers.shift()!();
+  assert.equal(held(), "sidebar_once", "a key did not restart the idle time");
+  focus(panel_row(panel_doc));
+  assert.equal(held(), "sidebar_once", "a focus move inside the panel ended the hold");
+  await settle();
+  // A request with no chord typed here, from a module path or an older extension, starts the walk again.
+  await arm();
+  press("t");
+  assert.deepEqual(runs(), [{ keys: "t", count: 0 }]);
+  assert.equal(held(), undefined);
+  while (timers.length > 0) timers.shift()!();
+  assert.equal(held(), undefined);
+});
+
+test("a leaf that moves the focus on purpose keeps it where it went", async () => {
+  const { page, panel_doc, focus, press, runs, answer_runs, run_timers } = once_setup({ written: chord_state({ focus_keys: ["g t"] }) });
+  const row = panel_row(panel_doc);
+  focus(row);
+  press("o", alt_o);
+  press("g");
+  press("t");
+  assert.deepEqual(runs(), [{ keys: "g t", count: 0 }]);
+  focus(page);
+  answer_runs();
+  await settle();
+  run_timers();
+  assert.equal(row.focused, 0);
+});
+
+test("the sidebar takes a tree only where validate_scope_tree takes it", async () => {
+  const trees: unknown[] = [
+    ONCE_TREE,
+    { children: {} },
+    { children: { j: "back" } },
+    { children: { "two words": "forward" } },
+    { children: { j: { native: "scroll.lines", args: { count: 1 }, count_rule: { param: "count" } } } },
+    { children: { j: { native: "scroll.lines", args: { count: 1 }, count_rule: { param: "nope" } } } },
+    { children: { j: "forward" }, line_keys: ["j k l m n o p q r"] },
+    { children: { j: "forward" }, hint_keys: "f" },
+    { children: { "": "forward" } },
+    { children: { a: { children: { b: { children: { c: { children: { d: { children: { e: { children: { f: { children: { g: { children: { h: { children: { i: "forward" } } } } } } } } } } } } } } } } } },
+    { children: { a: { children: { b: { children: { c: { children: { d: { children: { e: { children: { f: { children: { g: { children: { h: "forward" } } } } } } } } } } } } } } } },
+    { children: { x: "forward", y: "z".repeat(40_000) } },
+  ];
+  for (const tree of trees) {
+    const { panel_doc, focus, arm } = once_setup({ written: state({ tree }) });
+    focus(panel_row(panel_doc));
+    assert.equal((await arm())?.ok, validate_scope_tree(tree).ok, JSON.stringify(tree).slice(0, 80));
+  }
+});
+
+test("the Alt keyup after a chord the module took stops too, so Firefox opens no menu bar, and other Alt keyups pass", () => {
+  const { panel_doc, focus, press, root, own, held } = once_setup({ written: chord_state() });
+  const alt_up = () => {
+    const event = key_event("Alt");
+    root.fire("keyup", event);
+    return event.prevented;
+  };
+  focus(panel_row(panel_doc));
+  assert.equal(alt_up(), false, "a lone Alt keyup stopped");
+  press("o", alt_o);
+  assert.equal(alt_up(), true, "the Alt keyup after the arming chord went on");
+  assert.equal(alt_up(), false, "a second Alt keyup stopped");
+  press("o", alt_o);
+  assert.equal(held(), undefined);
+  assert.equal(alt_up(), true, "the Alt keyup after the chord that ended the hold went on");
+  // Any Alt key the hold stops owes its keyup too, a chord the tree lacks among them.
+  press("o", alt_o);
+  alt_up();
+  assert.ok(press("p", alt_o).prevented);
+  assert.equal(alt_up(), true, "the Alt keyup after <A-p> in the hold went on");
+  // A blur drops what the window owed.
+  press("o", alt_o);
+  own.fire("blur", key_event("blur"));
+  assert.equal(alt_up(), false, "the Alt keyup after a blur stopped");
+  const plain = once_setup();
+  plain.focus(panel_row(plain.panel_doc));
+  plain.press("o", alt_o);
+  const event = key_event("Alt");
+  plain.root.fire("keyup", event);
+  assert.equal(event.prevented, false, "an Alt keyup stopped after a chord the module left to Firefox");
+});
+
+test("a held chord's auto-repeat neither ends the hold nor starts a new one", () => {
+  const { panel_doc, focus, press, held } = once_setup({ written: chord_state() });
+  focus(panel_row(panel_doc));
+  press("o", alt_o);
+  for (let repeat = 0; repeat < 3; repeat++) assert.ok(press("o", { ...alt_o, repeat: true }).prevented);
+  assert.equal(held(), "sidebar_once");
+  press("Escape");
+  press("o", { ...alt_o, repeat: true });
+  assert.equal(held(), undefined, "an auto-repeat started a hold");
 });
