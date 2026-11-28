@@ -521,6 +521,8 @@
     }
 
     function note_text(owner, token) {
+      // Taken at the key, so a draw that comes between Enter and the pick cannot move it.
+      if (token === "<Enter>") owner.enter_active = owner.active;
       if (token === "<Backspace>") {
         owner.text = owner.text === "" ? undefined : owner.text.slice(0, -1);
         return;
@@ -535,10 +537,10 @@
     // A key counts toward a label only this long after the first labels show. A key typed before (one the extension asked to start with, or a tap meant for the page) never saw them.
     const LABELS_SEEN_MS = 300;
     const spelled = (owner, id) => (owner.text === undefined ? owner.typed !== "" && owner.labels?.get(id) === owner.typed : text_spelled(owner, id)) && time_now(owner.win) - owner.typed_at <= SPELLED_MS;
-    // In text mode: the target's text matches what was typed, and the last key was Enter on it or a character that left it the one match. Tab moves the active match in the extension alone, so Enter is the user's say on which.
+    // In text mode: the target's text matches what was typed, and the last key was Enter while it was drawn active or a character that left it the one match. Tab moves the active match in the extension alone, so Enter is the user's say on which.
     function text_spelled(owner, id) {
       if (!matches_query(owner.text, owner.targets.get(id)?.text)) return false;
-      if (owner.counted_token === "<Enter>") return true;
+      if (owner.counted_token === "<Enter>") return id === owner.enter_active;
       return (owner.counted_token === "<Space>" || is_char_token(owner.counted_token ?? "")) && owner.text.trim() !== "" && matching(owner, owner.text) === 1;
     }
 
@@ -1052,6 +1054,7 @@
       }
       session.drawn_gen = args.gen;
       session.query = args.query;
+      session.active = args.active;
       apply_draw(rows_drawn, [...args.typed].length, args);
       if (first) for (const key of session.early_keys.splice(0)) push_key(key);
       return { ok: true };

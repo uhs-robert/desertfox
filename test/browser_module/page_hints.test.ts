@@ -589,7 +589,9 @@ test("Shift-Tab goes out as its own token beside the event's key, and Space as <
 
 test("a text mode pick runs only on a target whose own text matches the typed text, after Enter or a character that left it the one match", async () => {
   const enter = await text_mode_run();
-  enter.type("/", "p", "r", "Enter");
+  enter.type("/", "p", "r");
+  await enter.draw_text(2, [enter.parts.print, enter.parts.privacy], { query: "pr", active: enter.id_of(5, enter.parts.print)! });
+  enter.type("Enter");
   assert.equal((await enter.pick_id(enter.parts.print))?.ok, true);
   assert.equal(enter.parts.print.clicks, 1, "Enter on a match did not pick it");
 
@@ -622,6 +624,26 @@ test("a text mode pick runs only on a target whose own text matches the typed te
   assert.equal((await no_table.pick_id(no_table.parts.print))?.error, "The keys typed do not name this hint", "an older extension's label pick after / was taken as text");
 });
 
+test("an Enter pick in text mode runs only on the match drawn active when Enter came, even after a later draw moves it", async () => {
+  // `/` and Enter on empty text, with Print drawn active at Enter and Privacy after it. A pick ends the session, so each pick gets its own.
+  const after_enter = async () => {
+    const run = await text_mode_run();
+    run.type("/");
+    await run.draw_text(2, [run.parts.print, run.parts.privacy], { query: "", active: run.id_of(5, run.parts.print)! });
+    run.type("Enter");
+    await run.draw_text(3, [run.parts.print, run.parts.privacy], { query: "", active: run.id_of(5, run.parts.privacy)! });
+    return run;
+  };
+  for (const name of ["privacy", "dark"] as const) {
+    const run = await after_enter();
+    assert.equal((await run.pick_id(run.parts[name]))?.error, "The keys typed do not name this hint", `${name}, a match the user did not see active, was picked`);
+    assert.equal(run.parts[name].clicks, 0);
+  }
+  const run = await after_enter();
+  assert.equal((await run.pick_id(run.parts.print))?.ok, true);
+  assert.equal(run.parts.print.clicks, 1, "the match drawn active was refused");
+});
+
 test("a text mode pick of a control that grants still waits for the user's Enter", async () => {
   const permission = el("moz-toggle", 20, 20, { text: "History" });
   permission.setAttribute("permission-key", "history");
@@ -650,7 +672,7 @@ test("letters right after a character's pick are dropped for a moment, and none 
 
   const enter = await text_mode_run();
   enter.type("/");
-  await enter.draw_text(2, [enter.parts.print], { query: "" });
+  await enter.draw_text(2, [enter.parts.print], { query: "", active: enter.id_of(5, enter.parts.print)! });
   enter.type("p", "r", "Enter");
   await enter.pick_id(enter.parts.print);
   assert.equal(enter.chrome.press("j").prevented, false, "an Enter pick dropped the next key");
