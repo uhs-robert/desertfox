@@ -105,7 +105,9 @@ export async function run_cases(context) {
     await page_ready("about:addons");
     await press_keys("i");
     await poll_until("insert mode", async () => (await module_mode()) === "insert");
-    await focus_search_box("search-addons, input[type=search]");
+    // The search box sits inside the <search-addons> element, in its shadow root or not: the host takes no focus itself.
+    await in_selected_page(`(win) => { const host = win.document.querySelector("search-addons"); (host?.shadowRoot ?? host)?.querySelector("input[type=search]")?.focus(); return true; }`);
+    await poll_until("the search box to take the focus", field_focused);
     await press_keys("-k", "Escape");
     await poll_until("Escape to leave insert mode", async () => (await module_mode()) === null);
     await poll_until("Escape to blur the field", async () => !(await field_focused()));
