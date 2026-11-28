@@ -94,8 +94,7 @@ let which_key_skip: readonly string[] | undefined;
 const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => {
   bar_pending = prefix;
   report_bar();
-  // A bare count has no keys to list. The root, with no count, lists the first keys.
-  follow_which_key(bundles, prefix?.typed_.length || !prefix?.count_ ? prefix : undefined, at_once, which_key_delay_ms, which_key_skip);
+  follow_which_key(bundles, prefix?.typed_.length ? prefix : undefined, at_once, which_key_delay_ms, which_key_skip);
 };
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
@@ -510,7 +509,8 @@ function start(): void {
   page_mode.listen_display_(() => {
     refresh_mode_indicator();
     // The which-key panel lists the normal keys as soon as the one-shot normal prefix is armed.
-    if (page_mode.is_once_armed_()) follow_prefix({ mode: "normal", typed_: [] }, true);
+    // Past `follow_prefix`, which drops a prefix with no keys (a bare count): the root with no keys lists the first keys.
+    if (page_mode.is_once_armed_()) follow_which_key(bundles, { mode: "normal", typed_: [] }, true, which_key_delay_ms);
   });
 
   const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
