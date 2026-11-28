@@ -333,6 +333,7 @@
         browser2.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
         marked_browsers.delete(browser2);
       } else {
+        for (const each of marked_browsers) if (each.isConnected === false) marked_browsers.delete(each);
         marked_browsers.add(browser2);
         browser2.setAttribute(MODE_ATTRIBUTE, shown);
         browser2.setAttribute(MODE_DOCUMENT_ATTRIBUTE, String(browser2.innerWindowID));

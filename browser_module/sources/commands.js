@@ -73,6 +73,8 @@ function define(core) {
       browser.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
       marked_browsers.delete(browser);
     } else {
+      // A closed tab never leaves its mode, so its browser would stay in the set: drop those as a mode starts.
+      for (const each of marked_browsers) if (each.isConnected === false) marked_browsers.delete(each);
       marked_browsers.add(browser);
       browser.setAttribute(MODE_ATTRIBUTE, shown);
       browser.setAttribute(MODE_DOCUMENT_ATTRIBUTE, String(browser.innerWindowID));
