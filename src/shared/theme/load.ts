@@ -5,6 +5,7 @@ import { OASIS_THEMES, REPO_THEMES } from "../themes.ts";
 import { BUILT_IN_THEME_NAMES } from "../theme_names.ts";
 import { LIGHT_INTENSITIES, ROLES } from "./roles.ts";
 import type { LightIntensity, OasisTheme, RoleColors, Theme } from "./roles.ts";
+import { with_derived_roles } from "./older_tables.ts";
 import { local_theme_problem, parse_color } from "./theme_file.ts";
 
 export { local_theme_problem } from "./theme_file.ts";
@@ -30,7 +31,8 @@ export function built_in_theme_names(): string[] {
 // A local theme (a theme file or an import) wins over a built-in one of the same name. Only an Oasis theme has light intensities.
 // Undefined when the name finds nothing.
 export function load_theme(name: string, light_intensity: LightIntensity, local_themes?: Record<string, Theme>): Theme | undefined {
-  const local = local_themes && Object.hasOwn(local_themes, name) ? local_themes[name] : undefined;
+  const stored = local_themes && Object.hasOwn(local_themes, name) ? local_themes[name] : undefined;
+  const local = with_derived_roles(stored);
   if (has_all_roles(local)) return { dark: as_hex(local.dark), light: as_hex(local.light) };
   if (Object.hasOwn(REPO_THEMES, name)) return REPO_THEMES[name]!;
   const oasis = oasis_theme(name);

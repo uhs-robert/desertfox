@@ -462,7 +462,7 @@ test("a reply that settles after the setting went off is not written", async () 
   await settle();
   assert.equal(data.has(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY), false);
 });
-const THEME_COLORS = { bg_core: "#101010", mode_normal: "#89b4fa", mode_insert: "#a6e3a1", mode_ignore: "#f38ba8", mode_caret: "#cba6f7", mode_visual: "#f9e2af", mode_item: "#94e2d5", mode_media: "#fab387", fg_core: "#fff", primary: "#89b4fa", secondary: "#b4befe", accent: "#f5c2e7" };
+const THEME_COLORS = { bg_core: "#101010", mode_normal: "#89b4fa", mode_insert: "#a6e3a1", mode_ignore: "#f38ba8", mode_caret: "#cba6f7", mode_visual: "#f9e2af", mode_item: "#94e2d5", mode_media: "#fab387", mode_command: "#a6e3a1", fg_core: "#fff", primary: "#89b4fa", secondary: "#b4befe", accent: "#f5c2e7" };
 const state_of = (data: Map<string, unknown>) => data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as { tabs: Record<string, Record<string, unknown>>; bar_theme?: unknown };
 
 test("a bar report lands in the tab's entry, a child frame changes only the pending keys and a repeat writes nothing", async () => {
@@ -630,6 +630,7 @@ test("the state carries the bar theme from the stored theme and a theme change r
   module.storage_changed({ desertfox_theme: {} }, "local");
   await flush();
   assert.equal((state_of(data).bar_theme as { dark: { mode_normal: string } }).dark.mode_normal, "#000000");
+  assert.equal((state_of(data).bar_theme as { dark: { mode_command: string } }).dark.mode_command, "#a6e3a1");
   config.theme = undefined;
   await module.sync();
   await flush();
