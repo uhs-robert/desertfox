@@ -3,32 +3,7 @@ import type { Outcome } from "../../shared/messages/content.ts";
 import { copy_yank } from "../../shared/copy/copy_text.ts";
 import { read_strip_patterns } from "../strip_setting.ts";
 import { strip_tracking } from "../../shared/copy/strip_tracking.ts";
-import { link_text, markdown_address, org_address } from "../../shared/copy/link_escape.ts";
-
-export type PageLinkFacts = {
-  url: string;
-  title: string;
-  canonical_url_: string | undefined;
-  short_url_: string | undefined;
-};
-
-export function format_page_link(format: CopyFormat, facts: PageLinkFacts): string {
-  const { url, title } = facts;
-  switch (format) {
-    case "plain":
-      return url;
-    case "canonical":
-      return facts.canonical_url_ ?? url;
-    case "short":
-      return facts.short_url_ ?? url;
-    case "title":
-      return title;
-    case "markdown":
-      return `[${link_text(title)}](${markdown_address(url)})`;
-    case "org":
-      return `[[${org_address(url)}][${link_text(title)}]]`;
-  }
-}
+import { format_page_link } from "../../shared/copy/page_link.ts";
 
 function link_href(rel: string): string | undefined {
   return document.querySelector<HTMLLinkElement>(`link[rel~="${rel}"][href]`)?.href || undefined;
