@@ -350,7 +350,7 @@
       return mods === "" && key.length > 1 ? `<${key}>` : mods === "" ? key : `<${mods}-${key}>`;
     }
 
-    // The tab browser that gets the key, or null when the key is not for a page: the browser UI, DevTools (docked or its panels), a sidebar or a popup.
+    // The tab browser that gets the key, or null when the key is not for a page: the browser UI, DevTools (docked, in a tab or its panels), a sidebar or a popup.
     // A remote page's key targets its <browser>. A page in this process (about:preferences) has its own document, and its top browsing context names the browser that holds it.
     function page_of(win, target) {
       const gBrowser = win.gBrowser;

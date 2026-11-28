@@ -259,4 +259,5 @@ test("a page that only looks like the toolbox keeps its tab keys: a web principa
 test("the toolbox page name matches in any case", async () => {
   const { tab_toolbox, press } = await toolbox_tab({ uri: "ABOUT:DevTools-Toolbox?type=tab&id=2" });
   assert.equal(press("j", {}, tab_toolbox.toolbox_element).prevented, true);
+  assert.deepEqual(tab_toolbox.dispatched.map(({ key }) => key), ["ArrowDown"]);
 });

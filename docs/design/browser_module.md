@@ -28,7 +28,7 @@ A content script never runs on Firefox's own pages, the restricted sites, the PD
 All of these must hold, checked on each keydown in the capture phase of the browser window. Otherwise the key goes on as if the module were not there.
 
 1. The event is trusted, not part of an IME composition and not prevented. The pref is `true`.
-2. The key is for a tab's page. A key in the browser UI, DevTools (docked toolbox, a toolbox opened in a tab, or any panel), a sidebar or a popup is not. Its document is no content document of a tab browser. So DevTools' own keys keep working. The one exception is the DevTools feature's table, below.
+2. The key is for a tab's page. A key in the browser UI, DevTools (docked toolbox, a toolbox opened in a tab, or any panel), a sidebar or a popup is not. Its document is no content document of a tab browser, or it is the toolbox page of a tab. So DevTools' own keys keep working. The one exception is the DevTools feature's table, below.
 3. DesertFox is running, and in a private window it has private window access.
 4. The state is valid: the right `v`, `enabled` true, unknown fields ignored. The module applies the protocol's limits (32 key rows, 1024 tabs) and checks each field it reads, so a state past them claims nothing. An extension reload empties `storage.session`, so the module takes nothing until the new extension writes the state again.
 5. The key's token (the same normalization as `src/shared/keys/token.ts`) has a row whose command a feature defined, with args of the right shape. With the commands feature loaded, the feature decides instead, after checks 6 to 8 (see [Keys on locked pages](#keys-on-locked-pages)).

@@ -1,4 +1,4 @@
-// The browser module's DevTools tree keys: j, k, h and l in the Inspector markup, the Debugger sources, Storage and Network, docked and in a DevTools window.
+// The browser module's DevTools tree keys: j, k, h and l in the Inspector markup, the Debugger sources, Storage and Network, docked, in a DevTools window and in a toolbox tab.
 // Also what it leaves to DevTools: every other key, Escape (the split console), the console input, and every key with the setting browser_module off.
 // And hints in DevTools: f labels the tool tabs and the markup lines, a label picks, Escape ends them, docked and in a DevTools window, with a module that does not say devtools_hints and with a lost ask.
 import { module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
