@@ -632,7 +632,7 @@ test("a change of the mode attribute draws: the bar watches the tab panels for i
   const watching = observed.filter((each) => each.options.attributeFilter !== undefined);
   assert.equal(watching.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify([watching[0]!.options.attributes, watching[0]!.options.subtree, watching[0]!.options.attributeFilter])), [true, true, ["desertfox-module-mode", "desertfox-module-document"]]);
-  assert.equal(watching[0]!.target, (fixture.window.win.gBrowser as { tabpanels: unknown }).tabpanels);
+  assert.equal(watching[0]!.target, (fixture.window.win.gBrowser as unknown as { tabpanels: unknown }).tabpanels);
   fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
   fixture.run_frames();
   const browser = fixture.tabs[0]!.browser;

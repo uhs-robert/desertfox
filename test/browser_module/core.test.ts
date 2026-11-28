@@ -776,16 +776,16 @@ test("in a field the core calls field_key, never key, with in_field true, and no
   const { window, press, calls } = with_taker(true);
   window.win.windowUtils.IMEStatus = IME_ENABLED;
   assert.equal(press("x").prevented, false, "a key field_key does not take goes to the page, and key is not asked");
-  assert.deepEqual(calls().filter(([method]) => method !== "pending"), [["field_key", true, "x"]]);
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method !== "pending"), [["field_key", true, "x"]]);
   const taken = press("!");
   assert.deepEqual([taken.prevented, taken.stopped], [true, true]);
-  assert.deepEqual(calls().filter(([method]) => method === "key" || method === "reset"), [], "the core does not reset the taker in a field: field_key does");
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method === "key" || method === "reset"), [], "the core does not reset the taker in a field: field_key does");
 });
 
 test("outside a field the core calls key with in_field false, and the single-key rows stay out of a field", () => {
   const { window, press, calls } = with_taker(true);
   assert.equal(press("x").prevented, true);
-  assert.deepEqual(calls().filter(([method]) => method === "key"), [["key", false, "x"]]);
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method === "key"), [["key", false, "x"]]);
   window.win.windowUtils.IMEStatus = IME_ENABLED;
   press("J");
   assert.deepEqual(window.tab_moves, [], "J is a row, and a field takes no row");
@@ -795,7 +795,7 @@ test("a taker with no field_key keeps today's rule: the core resets it, passes e
   const { window, press, calls, firefox, browser } = with_taker(false);
   window.win.windowUtils.IMEStatus = IME_ENABLED;
   assert.equal(press("x").prevented, false);
-  assert.deepEqual(calls().filter(([method]) => method !== "pending"), [["reset", null, "win"]]);
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method !== "pending"), [["reset", null, "win"]]);
   firefox.report(browser, { inner: 10, listeners: 0, field: true, text_field: true });
   const escape = press("Escape");
   assert.equal(escape.prevented, true);
@@ -815,7 +815,7 @@ test("the watchers of the half-typed keys hear a field_key too, as they hear key
   const { window, press, calls } = with_taker(true);
   window.win.windowUtils.IMEStatus = IME_ENABLED;
   press("!");
-  assert.deepEqual(calls().map(([method]) => method), ["field_key", "pending"]);
+  assert.deepEqual(calls().map(([method]: unknown[]) => method), ["field_key", "pending"]);
 });
 
 test("a key in a field on a tab DesertFox runs in, or with the module off, reaches neither key nor field_key", () => {
@@ -823,11 +823,11 @@ test("a key in a field on a tab DesertFox runs in, or with the module off, reach
   live.window.win.windowUtils.IMEStatus = IME_ENABLED;
   live.firefox.report(live.browser, { inner: 10, listeners: 1, field: true });
   live.press("!");
-  assert.deepEqual(live.calls().filter(([method]) => method === "key" || method === "field_key"), []);
+  assert.deepEqual(live.calls().filter(([method]: unknown[]) => method === "key" || method === "field_key"), []);
   const off = with_taker(true, state({ enabled: false }));
   off.window.win.windowUtils.IMEStatus = IME_ENABLED;
   off.press("!");
-  assert.deepEqual(off.calls().filter(([method]) => method === "key" || method === "field_key"), []);
+  assert.deepEqual(off.calls().filter(([method]: unknown[]) => method === "key" || method === "field_key"), []);
 });
 
 test("blur_field and send_escape refuse a context whose key came from another tab", () => {

@@ -623,20 +623,26 @@ const CTRL_BRACKET: Partial<FakeEvent> = { ctrlKey: true };
 const mode_of = (browser: unknown) => (browser as { getAttribute(name: string): string | null }).getAttribute(MODE_ATTRIBUTE);
 
 // A page in this process whose field holds the focus and records every event dispatched to it, for the Escape the module sends.
-function page_with_field(browser: unknown) {
+// `system_page` models a page of the parent process: its events are trusted, and they reach the window's key listener again, as Gecko delivers them.
+function page_with_field(browser: unknown, system_page?: { deliver(event: FakeEvent): void }) {
   const { field, page_document, target } = in_process_field(browser);
   const sent: { type: string; key: string; keyCode: number; trusted: boolean }[] = [];
   class KeyboardEvent {
-    isTrusted = false;
-    type: string;
-    key: string;
-    keyCode: number;
+    isTrusted = system_page !== undefined;
+    type = "";
+    key = "";
+    keyCode = 0;
     constructor(type: string, init: { key: string; keyCode: number }) {
       Object.assign(this, { type, key: init.key, keyCode: init.keyCode });
     }
   }
   (page_document.defaultView as Record<string, unknown>)["KeyboardEvent"] = KeyboardEvent;
-  Object.assign(field, { dispatchEvent: (event: KeyboardEvent) => sent.push({ type: event.type, key: event.key, keyCode: event.keyCode, trusted: event.isTrusted }) });
+  Object.assign(field, {
+    dispatchEvent: (event: KeyboardEvent) => {
+      sent.push({ type: event.type, key: event.key, keyCode: event.keyCode, trusted: event.isTrusted });
+      if (event.type === "keydown") system_page?.deliver(key_event(event.key, { isTrusted: true, keyCode: event.keyCode, target: field, originalTarget: field }));
+    },
+  });
   return { field, page_document, target, sent };
 }
 
@@ -705,8 +711,8 @@ test("the insert table decides the leave keys: with only <C-[> in it, Escape goe
   const written = state({ insert_keys: [{ key: "<C-[>", id: "mode.escape" }] });
   const world = started({ written });
   world.press("i");
-  assert.equal(world.press("Escape").prevented, false);
-  assert.equal(mode_of(world.first.browser), "insert");
+  assert.deepEqual([world.press("Escape").prevented, mode_of(world.first.browser)], [false, null], "an unbound Escape passes and leaves insert, as on a web page");
+  world.press("i");
   const left = world.press("[", CTRL_BRACKET);
   assert.deepEqual([left.prevented, mode_of(world.first.browser)], [true, null]);
 
@@ -717,13 +723,12 @@ test("the insert table decides the leave keys: with only <C-[> in it, Escape goe
   assert.deepEqual([blurred.prevented, page.field.blurs], [true, 1], "<C-[> blurs it");
 });
 
-test("an empty insert table leaves no key that blurs a field or ends insert mode", () => {
+test("an empty insert table blurs no field, and its unbound Escape ends insert mode and passes", () => {
   const world = started({ written: state({ insert_keys: [] }) });
   const page = page_with_field(world.first.browser);
   assert.deepEqual([world.press("Escape", page.target).prevented, page.field.blurs], [false, 0]);
   world.press("i", { target: world.first.browser, originalTarget: world.first.browser });
-  assert.equal(world.press("Escape").prevented, false);
-  assert.equal(mode_of(world.first.browser), "insert");
+  assert.deepEqual([world.press("Escape").prevented, mode_of(world.first.browser)], [false, null], "an unbound Escape still ends insert mode and goes to the page");
 });
 
 test("with no insert table (an older extension) the plain Escape leaves insert and blurs, as it always did, and <C-[> does not", () => {
@@ -742,6 +747,31 @@ test("<A-Escape> in a field sends the page an untrusted Escape, takes the key an
     { type: "keydown", key: "Escape", keyCode: 27, trusted: false },
     { type: "keyup", key: "Escape", keyCode: 27, trusted: false },
   ]);
+});
+
+test("<A-Escape> on a system page: the trusted Escape the module sends does not reach its own key handling again", () => {
+  const world = started({ written: state({ insert_keys: [{ key: "<A-Escape>", id: "page.send_key" }, { key: "<Escape>", id: "mode.escape" }] }) });
+  const redelivered: FakeEvent[] = [];
+  const page = page_with_field(world.first.browser, { deliver: (event) => redelivered.push(world.window.press(event)) });
+  world.press("Escape", { ...page.target, altKey: true });
+  assert.deepEqual(plain(page.sent).map((each: { trusted: boolean }) => each.trusted), [true, true]);
+  assert.deepEqual([redelivered.length, redelivered.some((event) => event.prevented), page.field.blurs], [1, false, 0], "the page sees the Escape, and nothing blurs the field");
+  assert.equal(world.press("Escape", page.target).prevented, true, "a key the user types afterwards works again");
+});
+
+test("an Escape in a field after <C-v> goes to the page, not to the blur row", () => {
+  const { press, first } = started();
+  const page = page_with_field(first.browser);
+  press("v", { ctrlKey: true, target: first.browser, originalTarget: first.browser });
+  assert.deepEqual([press("Escape", page.target).prevented, page.field.blurs, mode_of(first.browser)], [false, 0, null]);
+});
+
+test("a shut down takes the mode attributes off every tab it marked", () => {
+  const { press, first, core } = started();
+  press("i");
+  assert.equal(mode_of(first.browser), "insert");
+  (core as unknown as { shut_down(): void }).shut_down();
+  assert.deepEqual([mode_of(first.browser), first.browser.getAttribute(DOCUMENT_ATTRIBUTE)], [null, null]);
 });
 
 test("<A-Escape> on a page in another process asks its frame script for the Escape, and an unlisted key sends none", () => {

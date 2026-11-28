@@ -461,8 +461,11 @@
       event.stopPropagation();
     }
 
+    // True while send_escape_to_page dispatches in this process: a system-principal page makes the event trusted, and the module must not take its own Escape again.
+    let sending_escape = false;
+
     function on_key(win, event) {
-      if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      if (sending_escape || !event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (MODIFIER_KEYS.has(event.key)) return;
       // A DevTools window has no tab browser, so no key there is for a page.
       const page = win.gBrowser ? page_of(win, event.target) : null;
@@ -513,12 +516,17 @@
       return page?.browser === context.browser ? page : null;
     }
 
-    // An Escape for the page, which has no way to tell it from the user's. A page in this process takes it from here, and another process takes it from its frame script. Neither is trusted, so no listener of the module takes it again.
+    // An Escape for the page, which has no way to tell it from the user's. A page in this process takes it from here, and another process takes it from its frame script. The event is untrusted in a content process, and trusted in a system-principal page, so `sending_escape` keeps on_key from taking it again.
     function send_escape_to_page(page) {
       if (page.document) {
         const view = page.document.defaultView;
         const target = deep_active(page.document) ?? page.document.documentElement;
-        for (const type of ["keydown", "keyup"]) target.dispatchEvent(new view.KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true, composed: true }));
+        sending_escape = true;
+        try {
+          for (const type of ["keydown", "keyup"]) target.dispatchEvent(new view.KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true, composed: true }));
+        } finally {
+          sending_escape = false;
+        }
         return true;
       }
       page.browser.messageManager.sendAsyncMessage(SEND_ESCAPE_MESSAGE, { inner: page.browser.innerWindowID });

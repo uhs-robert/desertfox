@@ -63,16 +63,29 @@ function define(core) {
   const is_inserted = (browser) => is_set(inserted, browser);
   const is_pass_armed = (browser) => is_set(pass_armed, browser);
 
+  // The browsers that carry the mode attributes now, so a shut down can clear them: a new module instance starts with empty flags and must not leave a badge behind.
+  const marked_browsers = new Set();
+
   function show_mode(browser) {
     const shown = is_inserted(browser) ? "insert" : is_ignored(browser) ? "ignore" : is_pass_armed(browser) ? "pass" : undefined;
     if (shown === undefined) {
       browser.removeAttribute(MODE_ATTRIBUTE);
       browser.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+      marked_browsers.delete(browser);
     } else {
+      marked_browsers.add(browser);
       browser.setAttribute(MODE_ATTRIBUTE, shown);
       browser.setAttribute(MODE_DOCUMENT_ATTRIBUTE, String(browser.innerWindowID));
     }
   }
+
+  core.on_shut_down(() => {
+    for (const browser of marked_browsers) {
+      browser.removeAttribute(MODE_ATTRIBUTE);
+      browser.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+    }
+    marked_browsers.clear();
+  });
 
   function set_flag(flags, browser, on) {
     if (on) flags.set(browser, browser.innerWindowID);
@@ -232,6 +245,11 @@ function define(core) {
       reset_walk(context.window);
       return true;
     }
+    // As on a web page, an Escape no row binds still leaves insert mode, and the page gets the key.
+    if (row === undefined && token === "<Escape>") {
+      set_flag(inserted, context.browser, false);
+      return false;
+    }
     return row === "page.send_key" && core.send_escape(context);
   }
 
@@ -305,7 +323,10 @@ function define(core) {
     // Another feature holds every key of the window, Escape included.
     if (core.keys_held_by(win) !== undefined) return false;
     // The key that ends pass-next goes to the page, as every key does here.
-    if (is_pass_armed(browser)) set_flag(pass_armed, browser, false);
+    if (is_pass_armed(browser)) {
+      set_flag(pass_armed, browser, false);
+      return false;
+    }
     if (is_ignored(browser)) return false;
     if (is_inserted(browser)) return insert_key(context, token);
     const row = insert_row_of(context, token);

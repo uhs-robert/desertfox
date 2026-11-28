@@ -28,10 +28,10 @@ function report_frame() {
   const document = { activeElement: body as unknown, hidden: false, designMode: "off", documentElement: { localName: "html", dispatchEvent: receiving("html") } };
   class KeyboardEvent {
     isTrusted = false;
-    type: string;
-    key: string;
-    keyCode: number;
-    bubbles: boolean;
+    type = "";
+    key = "";
+    keyCode = 0;
+    bubbles = false;
     constructor(type: string, init: { key: string; keyCode: number; bubbles: boolean }) {
       Object.assign(this, { type, key: init.key, keyCode: init.keyCode, bubbles: init.bubbles });
     }

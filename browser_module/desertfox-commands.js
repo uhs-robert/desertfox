@@ -325,16 +325,26 @@
     const is_ignored = (browser2) => is_set(ignored, browser2);
     const is_inserted = (browser2) => is_set(inserted, browser2);
     const is_pass_armed = (browser2) => is_set(pass_armed, browser2);
+    const marked_browsers = /* @__PURE__ */ new Set();
     function show_mode(browser2) {
       const shown = is_inserted(browser2) ? "insert" : is_ignored(browser2) ? "ignore" : is_pass_armed(browser2) ? "pass" : void 0;
       if (shown === void 0) {
         browser2.removeAttribute(MODE_ATTRIBUTE);
         browser2.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+        marked_browsers.delete(browser2);
       } else {
+        marked_browsers.add(browser2);
         browser2.setAttribute(MODE_ATTRIBUTE, shown);
         browser2.setAttribute(MODE_DOCUMENT_ATTRIBUTE, String(browser2.innerWindowID));
       }
     }
+    core2.on_shut_down(() => {
+      for (const browser2 of marked_browsers) {
+        browser2.removeAttribute(MODE_ATTRIBUTE);
+        browser2.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+      }
+      marked_browsers.clear();
+    });
     function set_flag(flags, browser2, on) {
       if (on) flags.set(browser2, browser2.innerWindowID);
       else flags.delete(browser2);
@@ -462,6 +472,10 @@
         reset_walk(context.window);
         return true;
       }
+      if (row === void 0 && token === "<Escape>") {
+        set_flag(inserted, context.browser, false);
+        return false;
+      }
       return row === "page.send_key" && core2.send_escape(context);
     }
     function take_key(context) {
@@ -522,7 +536,10 @@
       if (token === null) return void 0;
       reset_walk(win);
       if (core2.keys_held_by(win) !== void 0) return false;
-      if (is_pass_armed(browser2)) set_flag(pass_armed, browser2, false);
+      if (is_pass_armed(browser2)) {
+        set_flag(pass_armed, browser2, false);
+        return false;
+      }
       if (is_ignored(browser2)) return false;
       if (is_inserted(browser2)) return insert_key(context, token);
       const row = insert_row_of(context, token);

@@ -160,7 +160,7 @@ export async function run_cases(context) {
     await poll_until("insert mode", async () => (await module_mode()) === "insert");
     await press_keys("-k", "Escape");
     await sleep(300);
-    expect((await module_mode()) === "insert", "the unbound Escape left insert mode");
+    expect((await module_mode()) === null, "the unbound Escape left insert mode");
     await press_keys(...CTRL_BRACKET);
     await poll_until("<C-[> to leave insert mode", async () => (await module_mode()) === null);
     await close_selected_tab();
