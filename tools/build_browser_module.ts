@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url";
 
 const repo_root = fileURLToPath(new URL("../", import.meta.url));
 const module_dir = new URL("../browser_module/", import.meta.url);
-export const BROWSER_MODULE_BUNDLES: readonly Bundle[] = [{ source: "sources/commands.js", output: "desertfox-commands.js" }];
+export const BROWSER_MODULE_BUNDLES: readonly Bundle[] = [
+  { source: "sources/commands.js", output: "desertfox-commands.js" },
+  { source: "sources/whichkey.js", output: "desertfox-whichkey.js" },
+];
 
 const banner = (source: string) => `// Generated from browser_module/${source} by tools/build_browser_module.ts (just browser-module). Do not edit: change the source and build again.`;
 

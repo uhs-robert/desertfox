@@ -28,7 +28,9 @@
 //                              `row_runs` whether a single-key row would run the key. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
 //                              reset(win) drops what the taker holds half typed in `win`, or in every window with no `win`: the core calls it for a key a guard refused and when the module or the toolbar switch goes off.
 //   run_command(id, args, context)  In the sandbox: run a command a feature defined, with its args checked as for a row. Returns false when no feature defines it or the args do not fit.
-//   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The status bar reads it.
+//   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The which-key feature reads it.
+//   watch_pending(fn)          Anywhere: fn(win) after each key the taker saw and each reset, with `win` undefined for a reset of every window, so a feature can follow module_pending. Returns the call that stops it.
+//                              A listener that throws is logged and the key goes on.
 //   take_held_keys(win, end)   In the sandbox: after a key that opens the command line the taker holds the window's keys until the line has the focus. This gives the text typed meanwhile, once, and with `end` true ends the hold. "" with no hold.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
@@ -743,6 +745,18 @@
     const MAX_AWAITED_REPLIES = 256;
     const awaited_replies = new Map();
     const session_watchers = new Map();
+    // Every half-typed key change goes through the taker's `key` or `reset`, so the watchers hear it after those.
+    const pending_watchers = new Set();
+    const after_pending = (win, result) => {
+      for (const watcher of [...pending_watchers]) {
+        try {
+          watcher(win);
+        } catch (error) {
+          log_once(`a watcher of the half-typed keys failed: ${error}`);
+        }
+      }
+      return result;
+    };
 
     // As the extension's reader does, an error loses control and bidi characters before anyone shows it.
     const printable = (text) => text.replace(/[\p{Cc}\p{Cf}]/gu, "");
@@ -1083,7 +1097,7 @@
       },
       take_keys(taker) {
         if (key_taker) log_once("two feature files take keys, the first one does");
-        else if (typeof taker?.key === "function" && typeof taker.reset === "function") key_taker = taker;
+        else if (typeof taker?.key === "function" && typeof taker.reset === "function") key_taker = { ...taker, key: (context) => after_pending(context.window, taker.key(context)), reset: (win) => after_pending(win, taker.reset(win)) };
       },
       run_command(id, args, context) {
         const command = commands.get(id);
@@ -1091,6 +1105,10 @@
         if (!checked) return false;
         command.run({ ...context, args: checked });
         return true;
+      },
+      watch_pending(fn) {
+        pending_watchers.add(fn);
+        return () => void pending_watchers.delete(fn);
       },
       module_pending(win) {
         if (typeof key_taker?.pending !== "function") return undefined;
@@ -1140,6 +1158,8 @@
       page_hints_wanted: (win) => !!win && state_for(win)?.page_hints === true,
       shut_down() {
         fail_awaited("the module shut down");
+        after_pending(undefined);
+        pending_watchers.clear();
         try {
           take_back_hello();
         } catch (error) {
