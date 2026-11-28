@@ -211,6 +211,10 @@
       function is_json_viewer(win, doc) {
         return doc.nodePrincipal.spec.startsWith(JSON_VIEWER_PRINCIPAL) && /^(?:https?|file):$/.test(win.location.protocol);
       }
+      // The viewer's document never scrolls. Each tab (JSON, Raw Data, Headers) scrolls its own panel, and only the shown tab's panel has a height.
+      function shown_panel(doc) {
+        return [...doc.querySelectorAll(".panelContent")].find((panel) => panel.clientHeight > 0);
+      }
       function is_error_page(doc) {
         const principal = doc.nodePrincipal;
         return principal.isContentPrincipal === true && !principal.isSystemPrincipal && !principal.addonId && principal.schemeIs("about") && ERROR_ADDRESS.test(String(doc.documentURI ?? ""));
@@ -223,7 +227,7 @@
           if (!doc || !win.windowGlobalChild || !prefs_on()) return;
           const is_pdf = doc.contentType === "application/pdf";
           if (!is_pdf && !LOCKED_SCHEMES.includes(win.location.protocol) && !is_json_viewer(win, doc) && !is_error_page(doc)) return;
-          const box = is_pdf ? doc.getElementById("viewerContainer") : doc.scrollingElement;
+          const box = is_pdf ? doc.getElementById("viewerContainer") : is_json_viewer(win, doc) ? shown_panel(doc) : doc.scrollingElement;
           if (!box) return;
           sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, top: box.scrollTop, max: box.scrollHeight - box.clientHeight });
         } catch (_) {
@@ -234,7 +238,9 @@
         if (timer) clearTimeout(timer);
         timer = setTimeout(report, THROTTLE_MS);
       };
-      addEventListener("scroll", (event) => (event.target === content?.document || event.target?.id === "viewerContainer") && soon(), true);
+      addEventListener("scroll", (event) => (event.target === content?.document || event.target?.id === "viewerContainer" || event.target?.classList?.contains("panelContent")) && soon(), true);
+      // A switch of the viewer's tab shows another panel with its own place.
+      addEventListener("click", (event) => event.target?.closest?.(".tabs") && soon(), true);
       for (const type of ["pageshow", "load"]) addEventListener(type, (event) => event.target === content?.document && soon(), true);
       addMessageListener("desertfox-statusbar:report-now", soon);
       soon();

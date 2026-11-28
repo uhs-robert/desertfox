@@ -549,7 +549,7 @@ test("a narrow bar drops every other widget before it shortens the message, and 
 });
 
 // Runs the loaded frame script against a fake tab and returns what it sent for that page.
-type FakePage = { protocol: string; principal_spec?: string; content_principal?: boolean; scheme?: string; add_on?: boolean; document_uri?: string; content_type?: string };
+type FakePage = { protocol: string; principal_spec?: string; content_principal?: boolean; scheme?: string; add_on?: boolean; document_uri?: string; content_type?: string; panels?: { top: number; scroll_height: number; client_height: number }[] };
 function scroll_sent_for(page: FakePage): unknown[] {
   const fixture = started();
   const url = fixture.firefox.frame_scripts.find((entry) => decodeURIComponent(entry).includes("desertfox-statusbar:scroll"))!;
@@ -559,7 +559,8 @@ function scroll_sent_for(page: FakePage): unknown[] {
   const doc = {
     contentType: page.content_type ?? "text/html",
     documentURI: page.document_uri ?? "",
-    scrollingElement: scrolling_element,
+    scrollingElement: page.panels ? { scrollTop: 0, scrollHeight: 100, clientHeight: 100 } : scrolling_element,
+    querySelectorAll: () => (page.panels ?? []).map((panel) => ({ scrollTop: panel.top, scrollHeight: panel.scroll_height, clientHeight: panel.client_height })),
     nodePrincipal: {
       spec: page.principal_spec ?? "",
       isContentPrincipal: page.content_principal ?? false,
@@ -585,8 +586,8 @@ function scroll_sent_for(page: FakePage): unknown[] {
 
 test("the frame script reports the scroll place of the JSON viewer, blob: pages and Firefox's error pages, and of no web page", () => {
   const place = [{ inner: 7, top: 40, max: 400 }];
-  assert.deepEqual(scroll_sent_for({ protocol: "https:", principal_spec: "resource://devtools/client/jsonview/" }), place);
-  assert.deepEqual(scroll_sent_for({ protocol: "file:", principal_spec: "resource://devtools/client/jsonview/" }), place);
+  assert.deepEqual(scroll_sent_for({ protocol: "https:", principal_spec: "resource://devtools/client/jsonview/", panels: [{ top: 40, scroll_height: 500, client_height: 100 }] }), place);
+  assert.deepEqual(scroll_sent_for({ protocol: "file:", principal_spec: "resource://devtools/client/jsonview/", panels: [{ top: 40, scroll_height: 500, client_height: 100 }] }), place);
   assert.deepEqual(scroll_sent_for({ protocol: "blob:" }), place);
   assert.deepEqual(scroll_sent_for({ protocol: "view-source:" }), place);
   for (const name of ["neterror", "certerror", "httpsonlyerror", "blocked"]) {
@@ -594,6 +595,14 @@ test("the frame script reports the scroll place of the JSON viewer, blob: pages 
   }
   assert.deepEqual(scroll_sent_for({ protocol: "https:", principal_spec: "https://example.com" }), []);
   assert.deepEqual(scroll_sent_for({ protocol: "data:", principal_spec: "" }), []);
+});
+
+test("the frame script reads the shown panel of the JSON viewer, not its document", () => {
+  const viewer = { protocol: "https:", principal_spec: "resource://devtools/client/jsonview/" };
+  const hidden = { top: 0, scroll_height: 0, client_height: 0 };
+  assert.deepEqual(scroll_sent_for({ ...viewer, panels: [{ top: 30, scroll_height: 600, client_height: 100 }, hidden] }), [{ inner: 7, top: 30, max: 500 }]);
+  assert.deepEqual(scroll_sent_for({ ...viewer, panels: [hidden, { top: 5, scroll_height: 300, client_height: 100 }] }), [{ inner: 7, top: 5, max: 200 }]);
+  assert.deepEqual(scroll_sent_for({ ...viewer, panels: [hidden] }), []);
 });
 
 test("the frame script refuses a look-alike of the JSON viewer and of an error page", () => {

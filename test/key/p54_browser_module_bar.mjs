@@ -70,7 +70,7 @@ export async function run_cases(context) {
   });
 
   await run_case("the JSON viewer shows its scroll place in the bar", async () => {
-    const server = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ rows: Array.from({ length: 400 }, (_, index) => `row ${index}`) })));
+    const server = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(Object.fromEntries(Array.from({ length: 400 }, (_, index) => [`row_${index}`, index])))));
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     on_teardown(() => new Promise((resolve) => server.close(resolve)));
     await open_tab(`http://127.0.0.1:${server.address().port}/data.json`);
