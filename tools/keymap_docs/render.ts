@@ -20,6 +20,13 @@ const printed = (step: BoundInvocation, registry: Lookup): string => {
   return command ? print_command(command, step.args ?? {}, { flags: "long" }) : step.id;
 };
 
+// The phrase for each known guard selector, by a part that names it. Any other guard reads generically.
+const GUARD_PHRASES: readonly (readonly [string, string])[] = [
+  ["[role=tree]", "while the focus is inside a tree"],
+  ["[role=option]", "while a list item holds the focus"],
+];
+const guard_phrase = (selector: string): string => GUARD_PHRASES.find(([part]) => selector.includes(part))?.[1] ?? "while the page matches the key's guard";
+
 function bound_row(key: string, binding: KeyBinding, registry: Lookup): Row {
   const steps: BoundInvocation[] = [binding].flat();
   const first = steps[0]!;
@@ -27,7 +34,7 @@ function bound_row(key: string, binding: KeyBinding, registry: Lookup): Row {
   const guarded = first.when_present !== undefined && first.fallback !== undefined;
   const texts = (guarded ? [first.fallback!] : steps).map((step) => printed(step, registry));
   const prompts = steps.some((step) => step.prompt) ? " (prompts)" : "";
-  const guard_note = guarded ? ` (while a list item holds the focus: ${code(printed(first, registry))})` : "";
+  const guard_note = guarded ? ` (${guard_phrase(first.when_present!)}: ${code(printed(first, registry))})` : "";
   return {
     key,
     command: `${code(texts.join(" ; "))}${prompts}${guard_note}`,

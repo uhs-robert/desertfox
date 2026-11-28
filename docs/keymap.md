@@ -406,10 +406,10 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `page.item --left --hover` (while a list item holds the focus: `tree --left --aria`) | Fold, else parent in a tree, else the item to the left |
-| `l` | `page.item --right --hover` (while a list item holds the focus: `tree --child --aria`) | First child in a tree or open it, else the item to the right |
-| `}` | `page.item --next-section --hover` (while a list item holds the focus: `tree --next --aria`) | Next sibling in a tree, else the next section |
-| `{` | `page.item --prev-section --hover` (while a list item holds the focus: `tree --prev --aria`) | Previous sibling in a tree, else the previous section |
+| `h` | `page.item --left --hover` (while the focus is inside a tree: `tree --left --aria`) | Fold, else parent in a tree, else the item to the left |
+| `l` | `page.item --right --hover` (while the focus is inside a tree: `tree --child --aria`) | First child in a tree or open it, else the item to the right |
+| `}` | `page.item --next-section --hover` (while the focus is inside a tree: `tree --next --aria`) | Next sibling in a tree, else the next section |
+| `{` | `page.item --prev-section --hover` (while the focus is inside a tree: `tree --prev --aria`) | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 
