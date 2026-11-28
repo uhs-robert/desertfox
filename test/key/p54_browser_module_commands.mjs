@@ -206,15 +206,15 @@ export async function run_cases(context) {
   });
 
   // f there is a hint key, which p54_browser_module_hint_notice.mjs covers.
-  await run_case("on about:addons / reaches the page, and the module sends nothing for it", async () => {
+  await run_case("on about:addons a key the tree leaves out reaches the page, and the module sends nothing for it", async () => {
     await home("bmc_addons_keys");
     await open_tab("about:addons");
     await page_ready("about:addons");
     await in_selected_page(`(win) => { win.document.documentElement.dataset.seen = ""; win.addEventListener("keydown", (event) => { win.document.documentElement.dataset.seen += event.key; }); return true; }`);
     const before = (await session_value("desertfox_browser_module_from_module")) ?? [];
-    await press_keys("/");
-    // Firefox puts the focus in the add-ons search box on /.
-    await poll_until("/ to reach about:addons", async () => (await in_selected_page(`(win) => win.document.documentElement.dataset.seen`)) === "/");
+    // `/` is a find key now, so the module takes it. `m` needs page code and stays out of the tree.
+    await press_keys("m");
+    await poll_until("m to reach about:addons", async () => (await in_selected_page(`(win) => win.document.documentElement.dataset.seen`)) === "m");
     await sleep(NO_EFFECT_MS);
     const after = (await session_value("desertfox_browser_module_from_module")) ?? [];
     const runs = after.filter((message) => message.kind === "run" && !before.some((old) => old.id === message.id));
