@@ -276,13 +276,26 @@
     // By about: name, what a pick there waits for Enter on (`grants`) and what never gets a label (`never`). Any other about: page keeps the key taker's notice, so a page a later Firefox adds stays unlabelled.
     // about:addons: the controls that grant an add-on more (private windows, sites with restrictions, its optional permissions, enabling it) and Remove. about:config: every write to a pref, and the risk warning's button is the user's own consent.
     // about:downloads: the rules of the downloads list in `grants`.
+    // about:firefoxview: the dismiss button of a row closes an open tab, forgets a closed tab for good or dismisses a synced tab. Its sync button starts tab sync, its history and chat menus' delete items remove a page or a chat for good and a device item sends a tab to another device. about:unloads: Unload discards a tab and its page state.
+    // Left out: about:memory (it writes files and opens file pickers), about:crashes (it sends reports to Mozilla and deletes them) and about:profiling (it restarts the browser).
     const ADDON_GRANT_INPUTS = new Set(["private-browsing", "quarantined-domains-user-allowed"]);
     // Enabling an add-on again (toggle-disabled), undoing its removal and always activating a plugin each give back what it may do, with no prompt from Firefox.
     const ADDON_GRANT_ACTIONS = new Set(["remove", "toggle-disabled", "undo", "always-activate"]);
+    // Menu items of a Firefox View row that delete a page from history or a chat, with no undo.
+    const FXVIEW_DELETE_ITEMS = new Set(["firefoxview-history-context-delete", "firefoxview-chat-context-delete"]);
     const PAGE_HINT_PAGES = {
       preferences: {},
       settings: {},
       downloads: {},
+      firefoxview: {
+        grants: (element) => element.classList.contains("dismiss-button") || element.getAttribute("data-action") === "sync-tabs-disabled" || closest_of(element, (at) => at.localName === "panel-item" && (FXVIEW_DELETE_ITEMS.has(at.getAttribute("data-l10n-id")) || at.hasAttribute("device-id"))) !== null,
+      },
+      opentabs: {},
+      policies: {},
+      unloads: {
+        grants: (element) => element.id === "button-unload",
+      },
+      telemetry: {},
       addons: {
         grants: (element) => (element.localName === "input" && ADDON_GRANT_INPUTS.has(element.name)) || closest_of(element, (at) => at.hasAttribute?.("permission-key") || at.hasAttribute?.("permission-all-sites") || ADDON_GRANT_ACTIONS.has(at.getAttribute?.("action"))) !== null,
       },

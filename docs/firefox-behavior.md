@@ -598,7 +598,7 @@ Not measured: the real `storage.session` channel, a dark theme, scanned, large o
 ## Processes of Firefox's own pages (locked-page-hints)
 
 Firefox 161, the key-test copy, read from each tab's `<browser>` (key piece `test/key/p55_page_hints.mjs`):
-- In the parent process (`isRemoteBrowser` false, no `remoteType`): about:preferences, about:settings, about:addons, about:downloads, about:config and about:support. Chrome code reads their DOM directly.
+- In the parent process (`isRemoteBrowser` false, no `remoteType`): about:preferences, about:settings, about:addons, about:downloads, about:config, about:support, about:firefoxview, about:opentabs (in a split; as a plain tab it becomes about:newtab), about:policies, about:unloads, about:telemetry, about:memory, about:crashes and about:profiling. Chrome code reads their DOM directly.
 - In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there run through the module's frame script (#1045). It labels about:privatebrowsing, about:home and about:newtab, and still skips about:protections and about:logins.
 
 ## Restricted hosts (restricted-domain-hints)
