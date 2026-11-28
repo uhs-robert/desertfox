@@ -90,6 +90,8 @@ export async function run_cases(context) {
         for (const [keys, text] of Object.entries(expected)) {
           // A locked page shows the toast in the status bar's message slot, so no desktop notice goes out.
           await clear_notices();
+          // yy, yc and ys show the same text, so the key before must not leave its toast up for this one to pass on.
+          await poll_until(`the toast before ${keys} on ${page} to end`, async () => !((await bar_message()) ?? "").includes(`Copied ${text}`), { timeout_ms: 5000 });
           await chrome(set_clipboard(SENTINEL));
           await focus_page();
           await press_keys(...keys.split(""));
