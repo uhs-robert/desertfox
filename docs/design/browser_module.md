@@ -263,7 +263,7 @@ After a prefix on a locked page, the module shows the which-key panel: the keys 
 - The list stays up until the next keydown in the window (Escape included), a tab switch, a load of another document or the window losing the focus, as the page's list closes on its next key. Unlike the page, a scroll key closes it too. A caller outside the key walk (a hint session, a one-shot prefix) opens it with the core's `show_root_list(win)` and closes it with `hide_root_list(win)`. The next keydown closes it as well.
 - An older module refuses a whole tree that holds a native command it does not know. So the extension sends the `help.whichkey` leaves, in the tree and in the key rows, only to a module whose hello says `which_key_root`, and only when the table carries a root. Without either the keys stay with the page. A newer module drops a native leaf it does not know and keeps the rest of the tree, so the next added command needs no flag.
 - With which-key off (a delay of 0) the table has no prefix panels and keeps the root, as the page's list ignores the delay too.
-- DevTools takes only its single-key table, so no prefix is pending there and no panel shows, and the `?` and `<A-?>` list is not shown there either.
+- DevTools takes only its single-key table, so no prefix is pending there and no panel shows, and the root list (`,?` and `<A-?>`) is not shown there either.
 
 ## The command line panel
 

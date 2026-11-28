@@ -165,7 +165,12 @@ function start(win, core, undo) {
     fit_chip(chip, panel.title);
   }
 
-  const hide = () => surface?.host.remove();
+  // Whether the panel up is the root list, so `hide_root_list` leaves a prefix panel alone.
+  let root_shown = false;
+  const hide = () => {
+    root_shown = false;
+    surface?.host.remove();
+  };
 
   // ---- When it shows: the page's own timer, fed with the module walk's keys.
 
@@ -216,6 +221,7 @@ function start(win, core, undo) {
   const show_root = (target, shown_now) => {
     if (target !== win) return;
     if (!shown_now) {
+      if (!root_shown) return;
       close_root();
       return end_sequence();
     }
@@ -224,11 +230,14 @@ function start(win, core, undo) {
     end_sequence();
     close_root();
     draw(shown.table.root, shown.table, shown.theme);
+    root_shown = true;
     opening_root = true;
     // A listener added now would also hear the key that opened the list, so it waits one microtask.
     void Promise.resolve().then(() => {
       opening_root = false;
       if (!surface?.host.parentNode) return;
+      // A second show in the same turn queued its own microtask, so the older listener goes first.
+      close_root();
       const close_on_key = () => (close_root(), hide());
       win.addEventListener("keydown", close_on_key, true);
       stop_root_close = () => win.removeEventListener("keydown", close_on_key, true);
@@ -236,8 +245,6 @@ function start(win, core, undo) {
   };
   undo.push(core.watch_root_list(show_root));
   undo.push(close_root);
-  // Said only once the list can show, so an extension that sees the flag may send the leaf. Left on by a closing window, as the other windows still show it.
-  core.set_hello_flag("which_key_root", true);
 
   const stop_watching = core.watch_pending((changed) => {
     if (changed === undefined || changed === win) follow_keys();
@@ -271,4 +278,6 @@ function start(win, core, undo) {
       }
     }
   }, { once: true });
+  // Last, after anything that can throw: said only once the whole feature runs, so an extension that sees the flag may send the leaf. Left on by a closing window, as the other windows still show it.
+  core.set_hello_flag("which_key_root", true);
 }

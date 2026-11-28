@@ -241,7 +241,11 @@
       if (surface.host.parentNode !== doc.documentElement) doc.documentElement.append(surface.host);
       fit_chip(chip, panel.title);
     }
-    const hide = () => surface?.host.remove();
+    let root_shown = false;
+    const hide = () => {
+      root_shown = false;
+      surface?.host.remove();
+    };
     let sequence_table;
     const same_keys = (left, right) => left.length === right.length && left.every((key, index) => key === right[index]);
     const follow_prefix = create_which_key_timer(
@@ -283,6 +287,7 @@
     const show_root = (target, shown_now) => {
       if (target !== win) return;
       if (!shown_now) {
+        if (!root_shown) return;
         close_root();
         return end_sequence();
       }
@@ -291,10 +296,12 @@
       end_sequence();
       close_root();
       draw(shown.table.root, shown.table, shown.theme);
+      root_shown = true;
       opening_root = true;
       void Promise.resolve().then(() => {
         opening_root = false;
         if (!surface?.host.parentNode) return;
+        close_root();
         const close_on_key = () => (close_root(), hide());
         win.addEventListener("keydown", close_on_key, true);
         stop_root_close = () => win.removeEventListener("keydown", close_on_key, true);
@@ -302,7 +309,6 @@
     };
     undo.push(core2.watch_root_list(show_root));
     undo.push(close_root);
-    core2.set_hello_flag("which_key_root", true);
     const stop_watching = core2.watch_pending((changed) => {
       if (changed === void 0 || changed === win) follow_keys();
     });
@@ -331,5 +337,6 @@
         }
       }
     }, { once: true });
+    core2.set_hello_flag("which_key_root", true);
   }
 })();

@@ -414,6 +414,38 @@ test("show_root_list and hide_root_list open and close the list for a caller out
   assert.deepEqual(firefox.errors, []);
 });
 
+test("two shows in one turn leave one closing listener, and a key closes the list and removes it", async () => {
+  const { core, window, shown, press, firefox } = started();
+  const win = vm.runInContext("globalThis", window.win.context!);
+  const base = window.listener_count("keydown");
+  core.show_root_list(win);
+  core.show_root_list(win);
+  await Promise.resolve();
+  assert.equal(window.listener_count("keydown"), base + 1);
+  press("Shift");
+  assert.equal(shown(), undefined);
+  assert.equal(window.listener_count("keydown"), base, "the listener removed itself");
+  core.show_root_list(win);
+  await Promise.resolve();
+  assert.ok(shown(), "a later show still works");
+  assert.deepEqual(firefox.errors, []);
+});
+
+test("hide_root_list leaves a prefix panel alone", () => {
+  const { core, window, shown, type } = started();
+  const win = vm.runInContext("globalThis", window.win.context!);
+  type(",");
+  window.run_timers();
+  assert.equal(shown()?.title, "+DesertFox");
+  core.hide_root_list(win);
+  assert.equal(shown()?.title, "+DesertFox");
+});
+
+test("a start that fails after the list is wired leaves the hello without which_key_root", () => {
+  const { firefox } = started({ fail_progress: true });
+  assert.notEqual((firefox.hello() as { which_key_root?: boolean } | undefined)?.which_key_root, true);
+});
+
 test("the module says which_key_root in its hello, so the extension sends the leaf only to a module that shows the list", () => {
   const { firefox } = started();
   assert.equal((firefox.hello() as { which_key_root?: boolean } | undefined)?.which_key_root, true);
