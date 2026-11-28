@@ -565,7 +565,7 @@
           if (box.width <= 0 || box.height <= 0 || box.right <= 0 || box.bottom <= 0 || box.left >= win.innerWidth || box.top >= win.innerHeight) continue;
         }
         const pair = [address, link_label(element)];
-        bytes += JSON.stringify(pair).length + 1;
+        bytes += new TextEncoder().encode(JSON.stringify(pair)).length + 1;
         if (bytes > MAX_LINK_BYTES) break;
         seen.add(address);
         pairs.push(pair);

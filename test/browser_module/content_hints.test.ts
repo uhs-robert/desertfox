@@ -99,6 +99,7 @@ function frame_child(firefox: Firefox, chrome: Chrome, { remote_type = "privileg
   // A test sets this to swap what the frame script says before chrome hears it, as a compromised content process would.
   const tamper = { with: undefined as ((sent: Sent) => Sent | undefined) | undefined };
   const context = vm.createContext({
+    TextEncoder,
     content: chrome.content,
     Services: { prefs: firefox.Services.prefs, appinfo: { remoteType: remote_type } },
     ChromeUtils: { importESModule: () => ({ setTimeout: (run: () => void) => (timers.set(next_timer, run), next_timer++), clearTimeout: (id: number) => void timers.delete(id) }) },
@@ -1101,4 +1102,13 @@ test("the frame script's links reply refuses a page its own copy of the rule doe
   assert.deepEqual(run.child.sent.at(-1)!.data, { req: 2, inner: 10, error: "changed" });
   run.child.ask("links", { req: 3, inner: 99, kind: "restricted", scope: "page" });
   assert.deepEqual(run.child.sent.at(-1)!.data, { req: 3, inner: 99, error: "changed" });
+});
+
+test("the frame script counts the list in UTF-8 bytes, so a page of wide text stays under chrome's 64 KB reply limit", async () => {
+  // 400 links with 80 CJK characters each: about 46,000 UTF-16 units, under 60,000, but about 110,000 UTF-8 bytes.
+  const wide = Array.from({ length: 400 }, (_, index) => text_link(`https://a.example/${index}`, "\u6f22".repeat(80), 20, 20));
+  const run = links_world({}, (root) => root.append(...wide));
+  const pairs = await run.pairs("page");
+  assert.ok(pairs.length > 100 && pairs.length < 400, `${pairs.length} links`);
+  assert.ok(new TextEncoder().encode(JSON.stringify(run.child.sent.at(-1)!.data)).length <= 65536);
 });
