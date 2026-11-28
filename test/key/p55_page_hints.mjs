@@ -103,6 +103,8 @@ export async function run_cases(context) {
     console.log(`page processes: ${JSON.stringify(where)}`);
     for (const url of ["about:preferences", "about:settings", "about:addons", "about:downloads", "about:config"]) expect(where[url].remote === false && where[url].labelled === true, `${url} is not a labelled parent-process page: ${JSON.stringify(where[url])}`);
     for (const url of ["about:protections", "about:logins", "about:support"]) expect(where[url].labelled === false, `${url} got page hints: ${JSON.stringify(where[url])}`);
+    // The start pages run in a content process and the frame script labels them, so the parent route is not the one that does.
+    expect(where["about:newtab"].remote === true && where["about:newtab"].labelled === true, `about:newtab is not a labelled content-process page: ${JSON.stringify(where["about:newtab"])}`);
   });
 
   await run_case("the later pages of the allowlist run in the parent process, and about:memory, about:crashes and about:profiling stay unlabelled", async () => {
