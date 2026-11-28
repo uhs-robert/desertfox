@@ -506,9 +506,10 @@ def contacts_query(words):
     query = " ".join(words)
     if any(ord(char) < 32 or 127 <= ord(char) < 160 or unicodedata.category(char) in ("Cf", "Zl", "Zp", "Cs") for char in query):
         raise Usage("the query holds a control character")
-    if len(query.encode("utf-16-le")) // 2 > MAX_CONTACTS_QUERY_UNITS:
-        raise Usage("the query is at most %d characters" % MAX_CONTACTS_QUERY_UNITS)
     query_words = query.split()
+    # The length counts the query as sent, with each run of spaces collapsed to one.
+    if len(" ".join(query_words).encode("utf-16-le")) // 2 > MAX_CONTACTS_QUERY_UNITS:
+        raise Usage("the query is at most %d characters" % MAX_CONTACTS_QUERY_UNITS)
     if not query_words:
         raise Usage("mail contacts takes a query")
     if any(len(word) < MIN_CONTACTS_WORD_CHARS for word in query_words):
@@ -521,7 +522,7 @@ def contacts_query(words):
 def contacts_row(contact):
     """Name and email only, whatever else the reply holds."""
     emails = contact.get("emails")
-    return {"name": contact.get("name", ""), "emails": [str(email) for email in emails] if isinstance(emails, list) else []}
+    return {"name": str(contact.get("name", "")), "emails": [str(email) for email in emails] if isinstance(emails, list) else []}
 
 
 def mail_contacts(words):
