@@ -69,8 +69,8 @@
       return String(doc.defaultView?.getSelection?.() ?? "");
     }
 
-    // Line breaks and tabs become a space, so two selected lines stay two words. The extension keeps its own copy of this rule (`cleaned_line` in selection_ask.ts).
-    const cleaned = (text) => [...text.replace(/[\r\n\t]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, MAX_CHARS).join("");
+    // Line breaks (U+2028 and U+2029 too) and tabs become a space, so two selected lines stay two words. The extension keeps its own copy of this rule (`cleaned_line` in selection_ask.ts).
+    const cleaned = (text) => [...text.replace(/[\r\n\t\u2028\u2029]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, MAX_CHARS).join("");
 
     core.register_kind("selection.read", ({ tab_id }) => {
       const found = window_of(tab_id);

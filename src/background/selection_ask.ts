@@ -12,8 +12,8 @@ export type SelectionAskDeps = {
 
 export const MAX_MODULE_SELECTION_CHARS = 1000;
 
-// Line breaks and tabs become one space, so two selected lines stay two words. Other control and format characters go, then the cap. The text is data for a command line or a search, never code or an address. Typed text holds no line break, so the panel's typed keys share this rule.
-export const cleaned_line = (text: string, max_chars: number): string => [...text.replace(/[\r\n\t]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, max_chars).join("");
+// Line breaks (U+2028 and U+2029 too) and tabs become one space, so two selected lines stay two words. Other control and format characters go, then the cap. The text is data for a command line or a search, never code or an address. Typed text holds no line break, so the panel's typed keys share this rule.
+export const cleaned_line = (text: string, max_chars: number): string => [...text.replace(/[\r\n\t\u2028\u2029]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, max_chars).join("");
 export const cleaned_module_selection = (text: string): string => cleaned_line(text, MAX_MODULE_SELECTION_CHARS);
 
 // Asks first and loads the bundle only on no answer, so a frame that has the bundle pays no injection. Nothing when the frame cannot answer at all.

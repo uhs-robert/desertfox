@@ -63,3 +63,7 @@ test("the module's text loses control and format characters and is cut at 1000 c
   assert.equal(cleaned_module_selection("x".repeat(1500)).length, 1000);
   assert.equal([...cleaned_module_selection("\u{1F600}".repeat(1200))].length, 1000);
 });
+
+test("U+2028 and U+2029 become spaces like other line breaks", () => {
+  assert.equal(cleaned_module_selection("first\u2028second\u2029third"), "first second third");
+});

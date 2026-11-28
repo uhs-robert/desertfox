@@ -107,3 +107,9 @@ test("a private window with private access is read", async () => {
   show(a, "about", page_document("private words"));
   assert.deepEqual(await ask({ tab_id: ids.a }), { ok: true, value: "private words" });
 });
+
+test("U+2028 and U+2029 become spaces like other line breaks", async () => {
+  const { a, ids, ask, show } = world();
+  show(a, "about", page_document("first\u2028second\u2029third"));
+  assert.deepEqual(await ask({ tab_id: ids.a }), { ok: true, value: "first second third" });
+});
