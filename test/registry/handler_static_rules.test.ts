@@ -46,6 +46,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "pane.focus": [/Needs the browser module/],
   "pane.equalize": [/Needs the browser module/],
   "pane.focus_side": [/Needs the browser module/],
+  "pane.move": [/Needs the browser module/],
   "hint.browser": [/Needs the browser module/],
   // The browser module runs these in the sidebar. The extension has no focus there.
   "sidebar.down": [/Works only with focus in the sidebar/],
