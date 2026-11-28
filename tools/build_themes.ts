@@ -49,8 +49,8 @@ const ROLE_VARIABLES: Record<Role, string[]> = {
 // Every Oasis dark file has the same yellow cursor, which lands on the yellow primary or string of five themes and clashes with their badges.
 // So the caret badge is gold in every dark theme, and no longer matches the Neovim cursor.
 const DARK_MODE_CARET = "#f7d46c";
-// Oasis Cactus has a yellow syntax parameter, so its command badge sits within 12 of the gold caret. Its caret takes a paler yellow.
-const DARK_CARET_OVERRIDES: Record<string, string> = { oasis_cactus: "#fff3b0" };
+// Oasis Cactus has a yellow syntax parameter, so its command badge sits within 12 of the gold caret. Its caret moves toward white by the smallest step that clears the floor (8% gives 12.4).
+const DARK_CARET_OVERRIDES: Record<string, string> = { oasis_cactus: mix(DARK_MODE_CARET, "#ffffff", 0.08) };
 
 // Light Oasis command badges are the lualine green and the media badge is the darker `ok` green, so the two land under the distance floor. The media badge darkens in steps until they clear it.
 const MIN_COMMAND_MEDIA_DISTANCE = 12;
