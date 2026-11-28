@@ -96,17 +96,20 @@ export function make_tab_visual_handler(deps: TabVisualDeps, action_wait_ms = AC
     await select_only(tabs, new Set(range_between(order, active.id, cursor).map((tab) => tab.id)));
   };
 
-  // A mouse selection with no record stays.
-  const end = async (window_id: number) => {
-    if (!(await deps.read_record(window_id))) return;
+  // A mouse selection with no record stays. Only the range's own tab ends it: the late `end` of a page that hid must not clear a range that `gv` has just started in another tab of the window. A range whose anchor tab is gone ends from any tab, and so does an `end` with no sending tab.
+  const end = async (window_id: number, tab_id: number | undefined) => {
+    const record = await deps.read_record(window_id);
+    if (!record) return;
+    const tabs = await deps.tabs_in_window(window_id);
+    if (tab_id !== undefined && record.anchor !== tab_id && tabs.some((tab) => tab.id === record.anchor)) return;
     await deps.remove_record(window_id);
-    await select_only(await deps.tabs_in_window(window_id), new Set());
+    await select_only(tabs, new Set());
   };
 
   return {
     // `from` is the context of the run: the tab that sent it and the id of its noted entry.
     run: (window_id: number, args: { action: VisualAction; count?: number }, from: { tab_id?: number | undefined; noted_run?: number | undefined } = {}): Promise<void> => {
-      const turn = in_turn(() => (args.action === "start" ? start(window_id) : args.action === "end" ? end(window_id) : move(window_id, args.action, args.count ?? 1)));
+      const turn = in_turn(() => (args.action === "start" ? start(window_id) : args.action === "end" ? end(window_id, from.tab_id) : move(window_id, args.action, args.count ?? 1)));
       if (from.noted_run !== undefined) void keep_chain(turn).then(() => noted.find((entry) => entry.id === from.noted_run)?.settle());
       return turn;
     },

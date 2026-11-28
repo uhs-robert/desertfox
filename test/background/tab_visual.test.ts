@@ -141,6 +141,22 @@ test("end with no record leaves a mouse selection alone", async () => {
   assert.deepEqual(selected(), [3, 4]);
 });
 
+test("an end from another tab leaves the range alone, and the range's own tab ends it", async () => {
+  const { handler, record, selected } = make(five(), [], { anchor: 3, cursor: 4 });
+  const tabs_before = selected();
+  await handler.run(1, { action: "end" }, { tab_id: 1 });
+  assert.deepEqual(record(), { anchor: 3, cursor: 4 });
+  assert.deepEqual(selected(), tabs_before);
+  await handler.run(1, { action: "end" }, { tab_id: 3 });
+  assert.equal(record(), undefined);
+});
+
+test("an end from any tab ends a range whose anchor tab is gone", async () => {
+  const { handler, record } = make(five(), [], { anchor: 99, cursor: 4 });
+  await handler.run(1, { action: "end" }, { tab_id: 1 });
+  assert.equal(record(), undefined);
+});
+
 const PAGE = 7;
 const OTHER_PAGE = 8;
 const never = new Promise<void>(() => {});
