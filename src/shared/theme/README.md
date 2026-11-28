@@ -7,6 +7,7 @@ Behavior is in `docs/design/config.md`, section "Theme files for the config". Se
 - `roles.ts`: the public role list.
 - `derive.ts`: the one table of what a missing role becomes.
 - `theme_file.ts`: checks one parsed theme file and fills it into a full theme.
+- `older_tables.ts`: fills the roles a stored theme table from an older version lacks.
 - `base16.ts`: reads a base16 or base24 scheme and maps its slots onto the roles.
 - `contrast.ts`: the fg_dim contrast clamp, shared by the Oasis build and the base16 importer.
 - `tokens.ts`: the CSS custom property name of each role.

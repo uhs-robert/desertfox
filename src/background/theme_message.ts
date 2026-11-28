@@ -7,10 +7,9 @@ import type { SettingOverrides } from "../shared/config.ts";
 import type { ConfigFiles } from "../shared/config_build/source_files.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import { parse_base16, theme_name_problem, theme_name_shape_problem } from "../shared/theme/base16.ts";
-import { derive_roles } from "../shared/theme/derive.ts";
-import type { GivenColors } from "../shared/theme/derive.ts";
-import { REQUIRED_ROLES, ROLES } from "../shared/theme/roles.ts";
+import { ROLES } from "../shared/theme/roles.ts";
 import type { RoleColors, Theme } from "../shared/theme/roles.ts";
+import { with_derived_roles } from "../shared/theme/older_tables.ts";
 import { local_theme_problem, parse_color } from "../shared/theme/theme_file.ts";
 import { failure } from "./config_reload.ts";
 import { host_file_of } from "./native_client.ts";
@@ -91,21 +90,6 @@ export function create_theme_messages(deps: ThemeMessageDeps) {
 }
 
 const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
-// A stored table from before `mode_item`, `mode_media` and `mode_command` lacks those, so they derive from the rest. Any other missing role leaves the table for the check to refuse.
-const ROLES_ADDED_LATER = ["mode_item", "mode_media", "mode_command"] as const;
-
-function with_derived_roles(theme: unknown): unknown {
-  if (!is_record(theme)) return theme;
-  const filled: Record<string, unknown> = { ...theme };
-  for (const variant of ["dark", "light"] as const) {
-    const table = theme[variant];
-    if (!is_record(table) || !REQUIRED_ROLES.every((role) => parse_color(table[role]) !== undefined)) continue;
-    const derived = derive_roles(Object.fromEntries(Object.entries(table).filter(([, value]) => parse_color(value) !== undefined)) as GivenColors, variant);
-    filled[variant] = { ...table, ...Object.fromEntries(ROLES_ADDED_LATER.filter((role) => table[role] === undefined).map((role) => [role, derived[role]])) };
-  }
-  return filled;
-}
 
 // The imports an older version kept in browser storage, whole and well named only, with only the role keys, as #rrggbb. A broken one is dropped, as that version dropped it.
 export function stored_imports_of(stored: unknown): Record<string, Theme> {

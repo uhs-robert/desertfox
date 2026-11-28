@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { read_theme_dir } from "./build-config/theme_dir.ts";
 import { LIGHT_INTENSITIES, ROLES } from "../src/shared/theme/roles.ts";
 import type { LightIntensity, OasisTheme, Role, RoleColors } from "../src/shared/theme/roles.ts";
+import { mix } from "../src/shared/theme/derive.ts";
 import { parse_color } from "../src/shared/theme/theme_file.ts";
 import { clamped_fg_dim, FG_DIM_MIN_CONTRAST } from "../src/shared/theme/contrast.ts";
 
@@ -48,6 +49,24 @@ const ROLE_VARIABLES: Record<Role, string[]> = {
 // Every Oasis dark file has the same yellow cursor, which lands on the yellow primary or string of five themes and clashes with their badges.
 // So the caret badge is gold in every dark theme, and no longer matches the Neovim cursor.
 const DARK_MODE_CARET = "#f7d46c";
+// Oasis Cactus has a yellow syntax parameter, so its command badge sits within 12 of the gold caret. Its caret takes a paler yellow.
+const DARK_CARET_OVERRIDES: Record<string, string> = { oasis_cactus: "#fff3b0" };
+
+// Light Oasis command badges are the lualine green and the media badge is the darker `ok` green, so the two land under the distance floor. The media badge darkens in steps until they clear it.
+const MIN_COMMAND_MEDIA_DISTANCE = 12;
+function lab_of(color: string): [number, number, number] {
+  const [r, g, b] = [1, 3, 5].map((at) => Number.parseInt(color.slice(at, at + 2), 16) / 255).map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)) as [number, number, number];
+  const xyz = [(0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, 0.2126 * r + 0.7152 * g + 0.0722 * b, (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883];
+  const [fx, fy, fz] = xyz.map((value) => (value > 0.008856 ? Math.cbrt(value) : 7.787 * value + 16 / 116)) as [number, number, number];
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+function media_clear_of_command(media: string, command: string): string {
+  const [l, a, b] = lab_of(command);
+  const distance = (color: string) => { const [l2, a2, b2] = lab_of(color); return Math.hypot(l - l2, a - a2, b - b2); };
+  let darkened = media;
+  while (distance(darkened) < MIN_COMMAND_MEDIA_DISTANCE && darkened !== "#000000") darkened = mix(darkened, "#000000", 0.05);
+  return darkened;
+}
 
 // Light sets whose badge color sits too close to a sibling badge, by theme and light level. Values come from the nearest color that keeps text contrast and clears the distance floor.
 const LIGHT_BADGE_OVERRIDES: Record<string, Partial<Record<LightIntensity, Partial<RoleColors>>>> = {
@@ -90,9 +109,10 @@ function colors_of_css(path: string, name: string, light_level: LightIntensity |
   const clamped = clamp_fg_dim(colors);
   if (colors.mode_ignore === colors.fg_dim) colors.mode_ignore = clamped;
   colors.fg_dim = clamped;
-  if (light_level === undefined) colors.mode_caret = DARK_MODE_CARET;
+  if (light_level === undefined) colors.mode_caret = DARK_CARET_OVERRIDES[name] ?? DARK_MODE_CARET;
   else {
     Object.assign(colors, LIGHT_BADGE_OVERRIDES[name]?.[light_level]);
+    colors.mode_media = media_clear_of_command(colors.mode_media, colors.mode_command);
     // The visual badge is the theme's own secondary: canyon's brown visual sits on its brown primary at every level.
     if (name === "oasis_canyon") colors.mode_visual = colors.secondary;
   }
