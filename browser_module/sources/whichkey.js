@@ -11,7 +11,7 @@ import { create_which_key_timer } from "../../src/content/whichkey/timer.ts";
 const scope = globalThis;
 const core = Services.desertfox_browser_module;
 if (typeof scope.gBrowser === "object" && scope.gBrowser !== null && typeof core === "object" && core !== null) {
-  if (typeof core.watch_pending !== "function" || typeof core.module_pending !== "function" || typeof core.may_act !== "function") {
+  if (typeof core.watch_pending !== "function" || typeof core.module_pending !== "function" || typeof core.watch_root_list !== "function" || typeof core.may_act !== "function") {
     core.log_once?.("the core cannot tell a feature the half-typed keys, so the which-key panel stays off");
   } else {
     // A failed start must not reach the loader or the other features. The panel stays off in this window, with nothing left registered.
@@ -94,7 +94,7 @@ function start(win, core, undo) {
   function read_table(value) {
     if (!is_record(value) || !is_record(value.panels) || byte_size(value) > MAX_WHICH_KEY_BYTES) return undefined;
     const { delay_ms, skip, border } = value;
-    if (!Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return undefined;
+    if (!Number.isInteger(delay_ms) || delay_ms < 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return undefined;
     if (skip !== undefined && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return undefined;
     const paths = Object.keys(value.panels);
     if (paths.length > MAX_WHICH_KEY_PANELS) return undefined;
@@ -105,7 +105,9 @@ function start(win, core, undo) {
       if (!panel) return undefined;
       panels.set(path, panel);
     }
-    return { delay_ms, skip: skip === undefined ? [] : [...skip], border, panels };
+    const root = value.root === undefined ? undefined : read_panel(value.root);
+    if (value.root !== undefined && !root) return undefined;
+    return { delay_ms, skip: skip === undefined ? [] : [...skip], border, panels, root };
   }
 
   // The state is read when a sequence starts, not watched. The extension's bucket keeps the holder it wrote until the next write, so the same holder means the same table.
@@ -163,7 +165,12 @@ function start(win, core, undo) {
     fit_chip(chip, panel.title);
   }
 
-  const hide = () => surface?.host.remove();
+  // Whether the panel up is the root list, so `hide_root_list` leaves a prefix panel alone.
+  let root_shown = false;
+  const hide = () => {
+    root_shown = false;
+    surface?.host.remove();
+  };
 
   // ---- When it shows: the page's own timer, fed with the module walk's keys.
 
@@ -183,7 +190,10 @@ function start(win, core, undo) {
     },
     () => sequence_table?.table.skip,
   );
+  // The key that opened the root list reaches the watcher right after the command ran, and must not close it.
+  let opening_root = false;
   const follow_keys = () => {
+    if (opening_root) return;
     const pending = core.module_pending(win);
     if (!pending || pending.keys.length === 0) {
       sequence_table = undefined;
@@ -200,6 +210,41 @@ function start(win, core, undo) {
     sequence_table = undefined;
     follow_prefix(undefined);
   };
+
+  // The root list needs no prefix. The walk's own key reaches `follow_keys` right after the command ran, so that one notice is ignored.
+  // A caller outside the walk has no such notice, so the next keydown in the window closes the list too.
+  let stop_root_close;
+  const close_root = () => {
+    stop_root_close?.();
+    stop_root_close = undefined;
+  };
+  const show_root = (target, shown_now) => {
+    if (target !== win) return;
+    if (!shown_now) {
+      if (!root_shown) return;
+      close_root();
+      return end_sequence();
+    }
+    const shown = table_and_theme();
+    if (!shown?.table?.root) return;
+    end_sequence();
+    close_root();
+    draw(shown.table.root, shown.table, shown.theme);
+    root_shown = true;
+    opening_root = true;
+    // A listener added now would also hear the key that opened the list, so it waits one microtask.
+    void Promise.resolve().then(() => {
+      opening_root = false;
+      if (!surface?.host.parentNode) return;
+      // A second show in the same turn queued its own microtask, so the older listener goes first.
+      close_root();
+      const close_on_key = () => (close_root(), hide());
+      win.addEventListener("keydown", close_on_key, true);
+      stop_root_close = () => win.removeEventListener("keydown", close_on_key, true);
+    });
+  };
+  undo.push(core.watch_root_list(show_root));
+  undo.push(close_root);
 
   const stop_watching = core.watch_pending((changed) => {
     if (changed === undefined || changed === win) follow_keys();
@@ -233,4 +278,6 @@ function start(win, core, undo) {
       }
     }
   }, { once: true });
+  // Last, after anything that can throw: said only once the whole feature runs, so an extension that sees the flag may send the leaf. Left on by a closing window, as the other windows still show it.
+  core.set_hello_flag("which_key_root", true);
 }
