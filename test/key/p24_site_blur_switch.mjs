@@ -57,7 +57,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       const page_id = order[(start + step) % order.length];
       const mark = events.length;
       await switch_by_key("J", page_id);
-      // A page may focus its field some 300 ms after the show. The j that checks the keys ends the blur window, so j must wait for that focus and its blur, or the late focus keeps the field and the next J types into it.
+      // The page focuses its field 300 ms after the show, so wait for that focus before the j that ends the blur window.
       if (field_ids.includes(page_id)) {
         await with_state(page_id, wait_event(mark, focused_since(mark, page_id), "the page to focus its field on the show", 3000));
         await expect_blurred(page_id);
@@ -66,24 +66,34 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     }
   };
   // Holds Shift+J for 3 s and checks that each repeat went on to the next tab, with no stop at a field.
-  // Under load the repeats arrive late and the switches trail the key, so the checks wait until the switch log has been still for QUIET_MS, not for a fixed time. The hold is long enough that a slow machine still passes the tab count.
+  // Under load the repeats arrive late and the switches trail the key, so the checks wait until the switch log has been still for QUIET_MS, not for a fixed time. The still time counts only while the active tab is complete and, for a tab that was discarded, its page has sent tree_read again: a restoring tab holds its repeats and replays them late.
+  const field_text_by_page = () => in_background(`(async () => { const found = []; for (const tab of await browser.tabs.query({ currentWindow: true })) { const text = (await browser.tabs.executeScript(tab.id, { code: '[...document.querySelectorAll("input:not([type=checkbox])")].map((field) => field.value).join("")' }).catch(() => [""]))[0]; if (text) found.push(new URL(tab.url).searchParams.get("id") + ' has "' + text + '"'); } return found.join(", "); })()`);
+  const active_tab_ready = async (discarded_ids, event_mark) => {
+    const { id, status, url } = await in_background(`browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => ({ id: tab.id, status: tab.status, url: tab.url }))`);
+    if (status !== "complete") return false;
+    const page_id = URL.canParse(url) ? new URL(url).searchParams.get("id") : undefined;
+    return !discarded_ids.includes(id) || events.slice(event_mark).some((event) => event.type === "tree_read" && event.page_id === page_id);
+  };
   const hold_shift_j = async () => {
     const order = await tab_order();
     const switch_mark = await tab_switch_mark();
+    const discarded_ids = await in_background(`browser.tabs.query({ currentWindow: true, discarded: true }).then((tabs) => tabs.map((tab) => tab.id))`);
+    const event_mark = events.length;
     await send_keys("-M", "shift", "-P", "j", "-s", "3000", "-p", "j", "-m", "shift");
     let switch_count = -1;
     let still_since = Date.now();
     await poll_until("the held repeats to stop switching tabs", async () => {
       const count = (await tabs_shown_since(switch_mark)).length;
       if (count !== switch_count) [switch_count, still_since] = [count, Date.now()];
+      if (!(await active_tab_ready(discarded_ids, event_mark))) still_since = Date.now();
       return Date.now() - still_since >= QUIET_MS;
-    }, { timeout_ms: 15000 });
+    }, { timeout_ms: 5000 });
     const shown = await tabs_shown_since(switch_mark);
-    expect(shown.length >= order.length + 1, `holding Shift+J switched ${shown.length} times over ${order.length} tabs: ${shown.join(", ")}`);
+    expect(shown.length >= 2 * order.length + 1, `holding Shift+J switched ${shown.length} times over ${order.length} tabs: ${shown.join(", ")}`);
     const skipped = shown.findIndex((id, index) => index > 0 && id !== order[(order.indexOf(shown[index - 1]) + 1) % order.length]);
     expect(skipped < 0, `a repeat did not land on the next tab: ${shown.join(", ")}`);
-    const typed = await in_background(`(async () => { let text = ""; for (const tab of await browser.tabs.query({ currentWindow: true })) text += (await browser.tabs.executeScript(tab.id, { code: '[...document.querySelectorAll("input:not([type=checkbox])")].map((field) => field.value).join("")' }).catch(() => [""]))[0]; return text; })()`);
-    expect(typed === "", `a held Shift+J typed "${typed}" into a field`);
+    const typed = await field_text_by_page();
+    expect(typed === "", `a held Shift+J typed into a field: ${typed}`);
     await settle_focus();
   };
 
@@ -94,6 +104,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   });
 
   await run_case("holding Shift+J over tabs whose page focuses its field on each show keeps switching, and keys work in every tab after", async () => {
+    await close_tabs_with("blur_");
     await open_page("page", "blur_h_a", { new_tab: true });
     await open_page("switch_field", "blur_h_b", { new_tab: true });
     await open_page("switch_field", "blur_h_c_delay", { new_tab: true });
@@ -105,6 +116,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   });
 
   await run_case("holding Shift+J over discarded tabs that load on the switch and focus their field keeps switching, and keys work in every tab after", async () => {
+    await close_tabs_with("blur_");
     await open_page("page", "blur_d_a", { new_tab: true });
     await open_page("switch_field", "blur_d_b", { new_tab: true });
     await open_page("switch_field", "blur_d_c", { new_tab: true });
@@ -262,7 +274,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     for (let attempt = 0; !events.slice(mark).some((event) => event.type === "keydown" && event.page_id === "blur_key" && event.key === "F2"); attempt++) {
       if (attempt >= 5) throw new Error(`the page never saw F2: ${await page_state("blur_key")}`);
       await press_keys("-k", "F2");
-      await wait_event(mark, (event) => event.type === "keydown" && event.page_id === "blur_key" && event.key === "F2", "the page to report F2", 600).catch(() => {});
+      await wait_event(mark, (event) => event.type === "keydown" && event.page_id === "blur_key" && event.key === "F2", "the page to report F2", 250).catch(() => {});
     }
     expect(Date.now() - shown_at < BLUR_WINDOW_MS, `F2 came ${Date.now() - shown_at} ms after the switch, too late to test the window`);
     await sleep(BLUR_WINDOW_MS);
