@@ -409,6 +409,15 @@ test("a shut down hides the panel", () => {
   type("g");
   window.run_timers();
   core.shut_down();
+  window.run_timers();
+  assert.equal(shown(), undefined);
+});
+
+test("a shut down during the show delay leaves no panel behind", () => {
+  const { type, shown, window, core } = started();
+  type("g");
+  core.shut_down();
+  window.run_timers();
   assert.equal(shown(), undefined);
 });
 

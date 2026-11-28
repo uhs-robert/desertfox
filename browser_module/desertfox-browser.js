@@ -1158,7 +1158,7 @@
       page_hints_wanted: (win) => !!win && state_for(win)?.page_hints === true,
       shut_down() {
         fail_awaited("the module shut down");
-        after_pending(undefined);
+        key_taker?.reset();
         pending_watchers.clear();
         try {
           take_back_hello();
