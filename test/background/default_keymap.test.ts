@@ -490,5 +490,8 @@ test("which-key reads Focus left and Focus right for Eh and El, with the order i
   assert.equal(rows.find((row) => row.keys === "h")?.command, "Focus left");
   assert.equal(rows.find((row) => row.keys === "l")?.command, "Focus right");
   assert.equal(rows.find((row) => row.keys === "j"), undefined);
+  assert.equal(rows.find((row) => row.keys === "k")?.command, "Focus page");
+  assert.equal(rows.find((row) => row.keys === "S")?.command, "Focus sidebar");
+  assert.equal(rows.find((row) => row.keys === "D")?.command, "Focus DevTools");
   assert.match(rows.find((row) => row.keys === "h")!.description, /^Focus the other pane, then DevTools, then the sidebar there\./);
 });

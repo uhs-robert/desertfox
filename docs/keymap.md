@@ -99,9 +99,9 @@ bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `E=` | `pane.equalize` | Equal panes | yes |
 | `Eh` | `pane.focus_side left` | Focus left | yes |
 | `El` | `pane.focus_side right` | Focus right | yes |
-| `Ek` | `pane.focus page` | Focus region | yes |
-| `ES` | `pane.focus sidebar` | Focus region | yes |
-| `ED` | `pane.focus devtools` | Focus region | yes |
+| `Ek` | `pane.focus page` | Focus page | yes |
+| `ES` | `pane.focus sidebar` | Focus sidebar | yes |
+| `ED` | `pane.focus devtools` | Focus DevTools | yes |
 | `gF` | `frame.exit` | Focus top page |  |
 | `gB` | `hint.browser` | Hint browser buttons | yes |
 | `g0` | `tab.goto 1` | First tab | yes |
