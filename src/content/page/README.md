@@ -4,11 +4,12 @@ The `page` bundle (`page.js`): the rare page commands (`scroll.align`, `copy.url
 
 Behavior is in `docs/design/bundles.md`, section "Page files for the page bundle".
 
-- `main.ts`: registers the seven handlers and the `get_selection` listener. The mark and jump code sits here.
+- `main.ts`: registers the handlers and the `get_selection` listener. The mark and jump code sits here.
 - `selection.ts`: the selected text of the frame, from the focused text field first.
 - `align.ts`: the code of `scroll.align`.
 - `copy.ts`: the code of `copy.url`.
 - `focus_input.ts`: the code of `page.focus_input`.
+- `once_return.ts`: takes the frame back to the mode a one-shot normal command (`mode.normal_once`) came from, once a mode that command opened ends.
 
 Rules across files:
 
