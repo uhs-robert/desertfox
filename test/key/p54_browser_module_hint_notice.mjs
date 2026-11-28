@@ -1,4 +1,4 @@
-// The hint keys where hints cannot run: with browser_module_pages off, the module claims them on the PDF viewer and Reader View and DesertFox says to turn the setting on, once per document. On about:support, which the module does not label, it says hints do not run there.
+// The hint keys where hints cannot run: with browser_module_pages off, the module claims them on the PDF viewer, Reader View, view-source: and the JSON viewer and DesertFox says to turn the setting on, once per document. On about:support, which the module does not label, it says hints do not run there.
 // Also that the setting turning on gives the keys to the page code, and that the about:preferences search box still takes f as text. p55_page_hints covers the about: pages the module labels.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -25,7 +25,10 @@ export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, run_line, in_background, clear_notices, on_teardown } = context;
   const steps = module_steps(context);
   const { chrome, session_value, open_tab, focus_page, in_selected_page, close_selected_tab, home } = steps;
-  const server = createServer((_request, response) => response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(make_article().replace("</article>", `<p>The end: <a href="/target">the target link</a>.</p></article>`)));
+  // Hints label only what shows, so the source view gets a page whose link sits at the top of its source.
+  const server = createServer((request, response) =>
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(request.url === "/links" ? `<!doctype html><p><a href="/target">the target link</a></p>` : make_article().replace("</article>", `<p>The end: <a href="/target">the target link</a>.</p></article>`)),
+  );
   const json_server = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ link: `${origin}/target`, list: [1, 2, 3] })));
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   await new Promise((resolve) => json_server.listen(0, "127.0.0.1", resolve));
@@ -37,6 +40,9 @@ export async function run_cases(context) {
   const pages = {
     "the PDF viewer": { url: pathToFileURL(join(files_dir, "linked.pdf")).href, ready: `(win) => !!win.document.querySelector(".annotationLayer a[href]")` },
     "Reader View": { url: `about:reader?url=${encodeURIComponent(`${origin}/article`)}`, ready: `(win) => !!win.document.querySelector('.moz-reader-content a[href$="/target"]')` },
+    // view-source: turns each address in the source into a link.
+    "a view-source: page": { url: `view-source:${origin}/links`, ready: `(win) => win.document.documentURI.startsWith("view-source:") && !!win.document.querySelector("a[href]")` },
+    "the JSON viewer": { url: `http://127.0.0.1:${json_server.address().port}/data.json`, ready: `(win) => win.document.nodePrincipal.spec === "resource://devtools/client/jsonview/" && win.document.querySelectorAll("tr").length > 1` },
   };
 
   const hint_labels = () => in_selected_page(HINT_LABEL_COUNT);
@@ -94,34 +100,6 @@ export async function run_cases(context) {
       await close_selected_tab();
       await select_index(0);
       await pages_setting(false);
-    });
-  }
-
-  const principal_spec = () => chrome(`(async () => ${W}.gBrowser.selectedBrowser.browsingContext.currentWindowGlobal.documentPrincipal.spec)()`);
-  // No page code runs on these pages. The JSON viewer is an http address, so with the setting off it still says the setting text until it gets page code.
-  const no_code_pages = {
-    "a view-source: page": { url: `view-source:${origin}/article`, ready: async () => (await steps.selected_spec()).startsWith("view-source:"), notices: [NOT_HERE_NOTICE] },
-    "the JSON viewer": { url: `http://127.0.0.1:${json_server.address().port}/data.json`, ready: async () => (await principal_spec()) === "resource://devtools/client/jsonview/", notices: [NOT_HERE_NOTICE, PAGES_NOTICE] },
-  };
-  for (const [name, page] of Object.entries(no_code_pages)) {
-    await run_case(`on ${name} f shows the notice once and no hints`, async () => {
-      await home(`hn_${name.replace(/\W+/g, "_")}`);
-      await open_tab(page.url);
-      await poll_until(`${name} to load`, page.ready, { timeout_ms: 10000 });
-      await focus_page();
-      await clear_notices();
-      on_teardown(clear_notices);
-      const runs_before = (await hint_runs()).length;
-      await press_keys("f");
-      await poll_until(`the notice on ${name}`, async () => (await notices()).some((message) => page.notices.includes(message)), { timeout_ms: 5000 });
-      expect((await hint_labels()) === 0, `${name} showed hint labels`);
-      await clear_notices();
-      await focus_page();
-      await press_keys("f");
-      await sleep(NO_EFFECT_MS);
-      expect((await hint_runs()).length === runs_before + 1, `the module sent ${(await hint_runs()).length - runs_before} hint keys, not one`);
-      expect((await notices()).length === 0, `a second f showed ${JSON.stringify(await notices())}`);
-      await close_selected_tab();
     });
   }
 
