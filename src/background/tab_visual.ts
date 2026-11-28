@@ -42,17 +42,19 @@ export function range_between(order: readonly VisualTab[], anchor: number, curso
 // The longest an action waits for the moves before it. A noted run can sit behind a macro replay or a prompt, and the action must still run.
 export const ACTION_WAIT_MS = 2000;
 
-type NotedRun = { tab_id: number; settled: Promise<void>; settle: () => void };
+type NotedRun = { id: number; tab_id: number; settled: Promise<void>; settle: () => void };
 
 export function make_tab_visual_handler(deps: TabVisualDeps, action_wait_ms = ACTION_WAIT_MS) {
   const in_turn = create_write_queue();
   // The runs of `tab.visual` the background has received and whose move has not finished, oldest first. An action waits for those of its own tab, so it sees every move its page sent before it, however many steps each message takes on its way to the handler.
-  // An entry settles when a move of its tab finishes or its run answers, whichever comes first. A later step of the run (a snippet that runs `tab.act`, a prompt) then holds no action.
+  // An entry settles when a move of its own run finishes or the run answers, whichever comes first. A later step of the run (a snippet that runs `tab.act`, a prompt) then holds no action. The run carries the entry's id in its context, so a move never settles another run's entry.
   const noted: NotedRun[] = [];
+  let last_id = 0;
   const note = (tab_id: number): NotedRun => {
     let resolve!: () => void;
     const settled = new Promise<void>((done) => (resolve = done));
     const entry: NotedRun = {
+      id: ++last_id,
       tab_id,
       settled,
       settle: () => {
@@ -102,16 +104,16 @@ export function make_tab_visual_handler(deps: TabVisualDeps, action_wait_ms = AC
   };
 
   return {
-    // `tab_id` is the tab the move came from, which settles its oldest noted run.
-    run: (window_id: number, args: { action: VisualAction; count?: number }, tab_id?: number): Promise<void> => {
+    // `from` is the context of the run: the tab that sent it and the id of its noted entry.
+    run: (window_id: number, args: { action: VisualAction; count?: number }, from: { tab_id?: number | undefined; noted_run?: number | undefined } = {}): Promise<void> => {
       const turn = in_turn(() => (args.action === "start" ? start(window_id) : args.action === "end" ? end(window_id) : move(window_id, args.action, args.count ?? 1)));
-      if (tab_id !== undefined) void keep_chain(turn).then(() => noted.find((entry) => entry.tab_id === tab_id)?.settle());
+      if (from.noted_run !== undefined) void keep_chain(turn).then(() => noted.find((entry) => entry.id === from.noted_run)?.settle());
       return turn;
     },
-    // Called as the run message arrives, with the sender's tab and the run's answer.
-    received: (tab_id: number, answer: Promise<unknown>): void => {
-      const entry = note(tab_id);
-      void keep_chain(answer).then(entry.settle);
+    // Called as the run message arrives, with the sender's tab. The answer is the id the run carries.
+    note_run: (tab_id: number): number => note(tab_id).id,
+    answered: (id: number, answer: Promise<unknown>): void => {
+      void keep_chain(answer).then(() => noted.find((entry) => entry.id === id)?.settle());
     },
     idle: async (tab_id: number | undefined): Promise<void> => {
       const own = noted.filter((entry) => entry.tab_id === tab_id).map((entry) => entry.settled);

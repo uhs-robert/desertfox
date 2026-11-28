@@ -37,7 +37,7 @@ define("tab.visual", {
   runs_in: "background",
   repeatable: false,
   modes: ["normal", "tab_visual"],
-  run: (ctx, args) => tab_visual.run(require_window_id(ctx.window_id), args, ctx.tab_id),
+  run: (ctx, args) => tab_visual.run(require_window_id(ctx.window_id), args, ctx),
 });
 
 // The second step of `gv`. It runs in the page, so the bundle with the mode's sink loads before the mode is set.

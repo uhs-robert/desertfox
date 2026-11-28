@@ -110,6 +110,8 @@ export type CommandContext = {
   from_line?: true;
   // An arg of this step was read from a context source (@clipboard, @selection, the page address), so it is not text the user typed even when the line submitted it.
   from_source?: true;
+  // The id the tab range gave this run as its message arrived (`noted_run` in `src/background/tab_visual.ts`), so its move settles its own entry.
+  noted_run?: number;
 };
 
 // What a handler throws for a failure that depends on the state of the browser or the config, such as a tab that is gone or a search engine the config lacks. A bad argument value is never one of these: the param schema rules it out before the handler runs.

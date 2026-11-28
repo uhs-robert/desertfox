@@ -145,29 +145,41 @@ const PAGE = 7;
 const OTHER_PAGE = 8;
 const never = new Promise<void>(() => {});
 
+type Handler = ReturnType<typeof make>["handler"];
+// What the run handler does with a run message: note it as it arrives, and settle it on its answer. `route` is the rest of the run, given the id the run carries.
+const receive = (handler: Handler, tab_id: number, route: (noted_run: number) => Promise<unknown>) => {
+  const noted_run = handler.note_run(tab_id);
+  const answer = route(noted_run);
+  handler.answered(noted_run, answer);
+  return answer;
+};
+const gate = () => {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  return { opened, open };
+};
+
 test("an action waits for a move its page sent that has not reached the handler yet", async () => {
   const { handler, selected } = make(five());
   await run(handler, "start");
-  let deliver!: () => void;
-  const routed = new Promise<void>((resolve) => (deliver = resolve));
+  const routed = gate();
   // The move's message takes a slow path: it reaches the handler only after the action has asked for the range.
-  const answer = routed.then(() => handler.run(1, { action: "down" }, PAGE));
-  handler.received(PAGE, answer);
+  void receive(handler, PAGE, (noted_run) => routed.opened.then(() => handler.run(1, { action: "down" }, { tab_id: PAGE, noted_run })));
   const seen = handler.idle(PAGE).then(() => selected());
-  deliver();
+  routed.open();
   assert.deepEqual(await seen, [3, 4]);
 });
 
 test("a move that fails does not block the next action", async () => {
   const { handler } = make(five());
-  handler.received(PAGE, Promise.reject(new Error("refused")));
+  void receive(handler, PAGE, () => Promise.reject(new Error("refused"))).catch(() => undefined);
   await handler.idle(PAGE);
 });
 
 // A macro that switches tabs: the old page's `end` waits behind the replay, and the replay's next step is an action in the new tab.
 test("an action does not wait for a run from another tab", async () => {
   const { handler } = make(five(), [], undefined, 60_000);
-  handler.received(OTHER_PAGE, never);
+  void receive(handler, OTHER_PAGE, () => never);
   await handler.idle(PAGE);
 });
 
@@ -176,19 +188,37 @@ test("a run is settled once its move finishes, so a later step of the same run c
   const { handler, selected } = make(five(), [], undefined, 60_000);
   await run(handler, "start");
   let action_saw: number[] = [];
-  const answer = (async () => {
-    await handler.run(1, { action: "down" }, PAGE);
+  await receive(handler, PAGE, async (noted_run) => {
+    await handler.run(1, { action: "down" }, { tab_id: PAGE, noted_run });
     await handler.idle(PAGE);
     action_saw = selected();
-  })();
-  handler.received(PAGE, answer);
-  await answer;
+  });
   assert.deepEqual(action_saw, [3, 4]);
+});
+
+// Run A holds two moves. Its second move finishes after run B from the same page arrived, and must not settle B's entry.
+test("a move settles only its own run's entry, never a later run's from the same tab", async () => {
+  const { handler, selected } = make(five(), [], undefined, 60_000);
+  await run(handler, "start");
+  const second_move = gate();
+  const b_routed = gate();
+  void receive(handler, PAGE, async (noted_run) => {
+    await handler.run(1, { action: "down" }, { tab_id: PAGE, noted_run });
+    await second_move.opened;
+    await handler.run(1, { action: "down" }, { tab_id: PAGE, noted_run });
+  });
+  await Promise.resolve();
+  void receive(handler, PAGE, (noted_run) => b_routed.opened.then(() => handler.run(1, { action: "up", count: 3 }, { tab_id: PAGE, noted_run })));
+  second_move.open();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const seen = handler.idle(PAGE).then(() => selected());
+  b_routed.open();
+  assert.deepEqual(await seen, [2, 3]);
 });
 
 test("a run that never answers holds its tab's action only until the wait limit", async () => {
   const { handler } = make(five(), [], undefined, 20);
-  handler.received(PAGE, never);
+  void receive(handler, PAGE, () => never);
   const began = Date.now();
   await handler.idle(PAGE);
   assert.ok(Date.now() - began < 1000);
