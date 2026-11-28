@@ -41,7 +41,7 @@
   var PANE_MOVE_DIRECTIONS = ["left", "right", "down"];
   var PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
   var FIREFOX_PAGE_WHERE = ["tab", "here"];
-  var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start", "search.focus", "search.next", "search.prev"];
+  var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start", "search.focus", "search.next", "search.prev", "tool.prefix", "tab.next", "tab.prev"];
   var MAX_DEVTOOLS_KEY_ROWS = 16;
   var DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
   var MAX_DEVTOOLS_VISUAL_ROWS = 16;

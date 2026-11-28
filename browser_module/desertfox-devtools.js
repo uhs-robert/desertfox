@@ -2,6 +2,7 @@
 // The extension pushes the key table (`devtools.keys`), a one-character key and a fixed action per row. Each tree action becomes an arrow key on the focused DevTools element, so a DevTools tree (the Inspector markup, the Debugger sources, Storage, Network rows) moves, expands and collapses as its own arrows make it.
 // The `hints.start` action asks the extension for hints (`devtools_hints.ask`). The hints work as chrome hints do: this file collects targets from a fixed table and sends only ids and boxes, the extension makes the labels and names the pick, and this file draws them and runs one fixed action per target.
 // The `visual.start` action starts visual mode in the focused text area. Its keys come in a second table (`devtools.visual_keys`), each a fixed op that moves the end of the selection or copies it. The copy stays in this process.
+// The `tool.prefix` action holds a `g` for a second key of this file's own: `t` and `T` send the toolbox's Ctrl+] and Ctrl+[ chords, so DevTools selects its next and previous tool. The `tab.` actions run the module's own tab switch, so J and K switch browser tabs from DevTools.
 // The `search.` actions focus the Inspector's search box and press its match buttons. Escape in that box and a double Escape in the console input are fixed keys of this file, as Escape in the hints and the mode is.
 // No DesertFox page code runs in DevTools: every DevTools document has the system principal, so code there runs as the browser. This file reads no DevTools internals either, only the focused element and the elements of its fixed table.
 // The core decides that the focus is in DevTools and that the module may act. This file passes a key it has no row for, a key with a modifier, a key typed in an editable field (the console input, the markup view's inline editors) and a key for a frame of another process, so DevTools keeps those.
@@ -112,6 +113,8 @@
     const hints = define_hints(core);
     const visual = define_visual(core, in_editable);
     const search = define_search(core);
+    const prefix_hold = define_prefix_hold(core);
+    const tools = define_tool_keys(core, prefix_hold);
     const console_escape = define_console_escape(core);
     // A reloaded or older DesertFox gets a new hello. The tables, the hints and the mode of the one before go, so only a DesertFox that pushes its own table gets these keys.
     core.on_hello(() => {
@@ -120,17 +123,19 @@
       visual.forget();
       search.forget();
       console_escape.forget();
+      prefix_hold.forget();
     });
     // The pref has its own observer in each feature. The consent setting and the toolbar switch reach the module only through the state, and then no key comes to end the hints or the mode.
     core.watch_session([MODULE_STATE_KEY], (_key, state) => {
       if (state?.enabled === true) return;
       hints.end();
       visual.end();
+      prefix_hold.forget();
     });
 
     // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
     core.register_kind("devtools.keys", ({ keys }) => {
-      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START || search.ACTIONS.has(action)).map(({ key, action }) => [key, action]));
+      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START || search.ACTIONS.has(action) || tools.ACTIONS.has(action)).map(({ key, action }) => [key, action]));
       return { ok: true };
     });
 
@@ -140,6 +145,9 @@
       const taken_by_visual = visual.answer_key(win, event, token);
       if (taken_by_visual !== undefined) return taken_by_visual;
       const target = event.originalTarget ?? event.target;
+      // Every key ends a held prefix. The one that completes it runs the second key's action.
+      const second = prefix_hold.take(win, event, token);
+      if (second) return tools.run(second, target);
       // Escape is no row, since a row is one character. Any pushed table turns on the console's double Escape, and the search rows turn on the search box's Escape. Both run before the field check, as both start in a field.
       if (console_escape.answer_key(event, target, actions.size > 0)) return true;
       if (search.answer_escape(event, target, [...actions.values()].some((action) => search.ACTIONS.has(action)))) return true;
@@ -151,12 +159,94 @@
       if (in_editable(target) || is_frame(target)) return false;
       if (action === HINTS_START) return hints.ask(win);
       if (search.ACTIONS.has(action)) return search.run(action, target);
+      if (tools.ACTIONS.has(action)) return tools.start(action, win, target);
       // Chrome code makes this arrow, so Gecko marks it trusted, and it reaches the core's listener again. No row takes an arrow there, so it moves the tree once.
       const { key, keyCode } = ARROWS[action];
       const view = target.ownerDocument.defaultView;
       target.dispatchEvent(new view.KeyboardEvent("keydown", { key, code: key, keyCode, bubbles: true, cancelable: true, composed: true, repeat: event.repeat }));
       return true;
     });
+  }
+
+  // ---- A prefix key held for its second key.
+  // A table row is one character, so a two-key chord such as `gt` is a row for the prefix and a fixed set of second keys in the feature's own code. This holds the prefix: a second key that comes in time takes the feature's action, and every other key ends the hold and goes on.
+  // The hold ends on any key, a blur of the target, a click, a page hide, a new hello, the pref going off and a timer. DesertFox's own sequences have no timer, but a hold across a pause in a toolbox the user left would run a late `t` as a tool switch.
+  function define_prefix_hold(core) {
+    const HOLD_MS = 1000;
+    let held = null;
+
+    function forget() {
+      const ended = held;
+      if (!ended) return;
+      held = null;
+      undo_all(ended);
+    }
+
+    // `seconds` maps the key tokens that complete the prefix to the name of what each does.
+    function start(win, target, seconds) {
+      forget();
+      const view = target.ownerDocument.defaultView;
+      held = { win, target, seconds, undo: [] };
+      const timer = win.setTimeout(forget, HOLD_MS);
+      held.undo.push(() => win.clearTimeout(timer));
+      listen(held, target, "blur", forget);
+      listen(held, view, "pagehide", forget);
+      listen(held, win, "mousedown", forget);
+      return true;
+    }
+
+    // Each key of DevTools passes here before anything else reads it, and the hold ends on it. Gives the name of the second key's action when it completes the prefix in the same window and element, with no modifier.
+    function take(win, event, token) {
+      const ended = held;
+      if (!ended) return undefined;
+      forget();
+      const target = event.originalTarget ?? event.target;
+      if (ended.win !== win || ended.target !== target || event.ctrlKey || event.altKey || event.metaKey) return undefined;
+      return ended.seconds.get(token);
+    }
+
+    const on_pref = () => enabled_by_pref() || forget();
+    Services.prefs.addObserver(ENABLED_PREF, on_pref);
+    core.on_shut_down(() => {
+      forget();
+      Services.prefs.removeObserver(ENABLED_PREF, on_pref);
+    });
+
+    return { start, take, forget };
+  }
+
+  // ---- The tool keys and the tab keys.
+  // `gt` and `gT` send the toolbox's own next and previous tool chords (Ctrl+] and Ctrl+[) to the focused element, so DevTools runs its own tool switch, overflowed tabs and wrap-around included. This file reads no toolbox object. Linux chords: on macOS the toolbox uses Cmd+[ and Cmd+], which are also Firefox's Back and Forward.
+  // `J` and `K` run the module's tab commands. A DevTools window has no tab browser, so they act on the newest browser window.
+  function define_tool_keys(core, prefix_hold) {
+    const ACTIONS = new Set(["tool.prefix", "tab.next", "tab.prev"]);
+    const CHORDS = {
+      "tool.next": { key: "]", code: "BracketRight", keyCode: 221 },
+      "tool.prev": { key: "[", code: "BracketLeft", keyCode: 219 },
+    };
+    const AFTER_G = new Map([
+      ["t", "tool.next"],
+      ["T", "tool.prev"],
+    ]);
+
+    // The target is no field or frame here: the claim checked that before it called this.
+    function start(action, win, target) {
+      if (action === "tool.prefix") return prefix_hold.start(win, target, AFTER_G);
+      const browser_window = win.gBrowser ? win : Services.wm.getMostRecentWindow("navigator:browser");
+      return !!browser_window?.gBrowser && core.run_command(action, {}, { window: browser_window });
+    }
+
+    // Trusted, since chrome code made it, and the core's listener sees it again. The claim passes every Ctrl chord, so it goes on to the toolbox.
+    function run(second, target) {
+      const view = target.ownerDocument.defaultView;
+      target.dispatchEvent(new view.KeyboardEvent("keydown", { ...CHORDS[second], ctrlKey: true, bubbles: true, cancelable: true, composed: true }));
+      return true;
+    }
+
+    // Said last, so the extension sends these rows only to a module that runs them.
+    core.set_hello_flag("devtools_tools", true);
+
+    return { ACTIONS, start, run };
   }
 
   // ---- The Inspector search keys.
