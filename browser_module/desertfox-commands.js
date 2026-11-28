@@ -38,6 +38,7 @@
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
   var PANE_DIRECTIONS = ["left", "right"];
+  var PANE_MOVE_DIRECTIONS = ["left", "right", "down"];
   var PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
   var FIREFOX_PAGE_WHERE = ["tab", "here"];
   var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
@@ -86,6 +87,7 @@
     if (kind === "axis") return value === "x" || value === "y" ? void 0 : "must be x or y";
     if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? void 0 : `must be one of ${PANE_REGIONS.join(", ")}`;
     if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
+    if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
     if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;

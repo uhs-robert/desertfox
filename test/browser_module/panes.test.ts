@@ -8,7 +8,7 @@ const NOT_SUPPORTED = "Not supported in this Firefox version";
 const NOT_SPLIT = "This tab is not in a split view";
 
 type FakeTab = { name: string; pinned: boolean; hidden: boolean; splitview: FakeSplit | null; linkedPanel: string; linkedBrowser: { focus(): void }; focus?(): void };
-type FakeSplit = { tabs: FakeTab[]; unsplitTabs?(): void; close?(): void; resetRightPanelWidth?(): void };
+type FakeSplit = { tabs: FakeTab[]; unsplitTabs?(): void; close?(): void; resetRightPanelWidth?(): void; reverseTabs?(): void };
 type AddSplit = (pair: FakeTab[], options: { insertBefore?: FakeTab }) => FakeSplit | null;
 type Reply = { reply_to: string; ok: boolean; error?: string };
 
@@ -38,6 +38,14 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
       unsplitTabs: () => (calls.push("unsplit"), unsplit_all(split)),
       close: () => calls.push(`close ${split.tabs.map((tab) => tab.name).join(" ")}`),
       resetRightPanelWidth: () => calls.push("reset right"),
+      // Firefox's swap: the two panels change places.
+      reverseTabs: () => {
+        calls.push("reverse");
+        const [first, second] = split.tabs.map((tab) => tab.linkedPanel);
+        const first_left = panel_left.get(first!)!;
+        panel_left.set(first!, panel_left.get(second!)!);
+        panel_left.set(second!, first_left);
+      },
     };
     for (const tab of pair) tab.splitview = split;
     tabpanels.splitViewPanels = ["panel-first", "panel-second"];
@@ -93,12 +101,21 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
       calls.push(id === undefined ? "toggle sidebar" : `toggle sidebar ${id}`);
       sidebar.isOpen = sidebar.opens;
     },
+    reversePosition: (() => {
+      calls.push("reverse sidebar");
+      firefox.set_named_pref("sidebar.position_start", !(firefox.Services as PrefReader).prefs.getBoolPref("sidebar.position_start", true));
+    }) as (() => void) | undefined,
   };
-  const toolbox: { hostType: string; currentToolId: string; focusTool: ((id: string) => number) | undefined; win: { focus(): number } | undefined } = {
+  const toolbox: { hostType: string; currentToolId: string; focusTool: ((id: string) => number) | undefined; win: { focus(): number } | undefined; switchHost: ((host: string) => Promise<unknown> | null) | undefined } = {
     hostType: "bottom",
     currentToolId: "webconsole",
     focusTool: (id: string) => calls.push(`focus tool ${id}`),
     win: { focus: () => calls.push("focus toolbox window") },
+    // As DevTools does: the host changes, then the promise settles.
+    switchHost: async (host: string) => {
+      calls.push(`switch host ${host}`);
+      toolbox.hostType = host;
+    },
   };
   const shim = { initialized: true, toolbox: toolbox as typeof toolbox | null, isInitialized: () => shim.initialized, getToolboxForTab: (tab: FakeTab) => (tab === selected ? shim.toolbox : null) };
   firefox.module_exports = { DevToolsShim: shim };
@@ -132,6 +149,22 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
   const services = firefox.Services as Record<string, unknown>;
   services.focus = { activeWindow: win };
 
+  // Where the focus sits, as the core's focused_element finds it. Each stand-in answers only what the pane feature reads.
+  const no_match = { closest: () => null, getRootNode: () => ({}) };
+  const sidebar_document = { localName: "document" };
+  (sidebar.browser as Record<string, unknown>).contentDocument = sidebar_document;
+  const toolbox_document = { localName: "document", defaultView: { frameElement: { classList: { contains: (name: string) => name === "devtools-toolbox-iframe" }, ownerDocument: window.win.document } } };
+  const focus_targets = {
+    page: { ...no_match, ownerDocument: window.win.document },
+    sidebar_panel: { ...no_match, ownerDocument: sidebar_document },
+    // The launcher's buttons sit in the shadow root of <sidebar-main>.
+    launcher: { ...no_match, ownerDocument: window.win.document, getRootNode: () => ({ host: { closest: (selector: string) => (selector.includes("sidebar-main") ? {} : null) } }) },
+    strip: { ownerDocument: window.win.document, closest: (selector: string) => (selector.includes("#tabbrowser-tabs") ? {} : null), getRootNode: () => ({}) },
+    devtools: { ...no_match, ownerDocument: toolbox_document },
+  };
+  const focus_on = (target: keyof typeof focus_targets) => void ((window.win.document as Record<string, unknown>).commandDispatcher = { focusedElement: focus_targets[target] });
+  focus_on("page");
+
   let next_id = 0;
   // Sends one request, as the extension's call does, and gives back the module's reply to it.
   async function ask(kind: string, args: Record<string, unknown> = {}): Promise<Omit<Reply, "reply_to">> {
@@ -144,8 +177,11 @@ function pane_world({ names = ["a", "b", "c"], private_window = false, private_a
     return rest;
   }
   const split_first_two = () => make_split([tab_at(0), tab_at(1)]);
-  return { firefox, win, gBrowser, tab: tab_at, calls, panel, panel_left, tabpanels, sidebar, toolbox, shim, services, ask, strip, split_first_two, select: (tab: FakeTab) => (selected = tab) };
+  return { firefox, window, win, gBrowser, tab: tab_at, calls, panel, panel_left, tabpanels, sidebar, toolbox, shim, services, ask, strip, split_first_two, focus_on, select: (tab: FakeTab) => (selected = tab) };
 }
+
+type PrefReader = { prefs: { getBoolPref(name: string, fallback: boolean): boolean } };
+const sidebar_at_start = (world: { firefox: { Services: unknown } }) => (world.firefox.Services as PrefReader).prefs.getBoolPref("sidebar.position_start", true);
 
 // Values made inside a vm context have that context's prototypes, which a strict deep equal tells apart.
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -424,6 +460,7 @@ test("every pane op refuses with no focused browser window, and never reaches an
     ["pane.focus_region", { region: "devtools" }],
     ["pane.focus_direction", { direction: "left" }],
     ["pane.equalize", {}],
+    ["pane.move", { direction: "left" }],
   ] as const;
   world.split_first_two();
   for (const active of [null, { ...world.win, closed: true }, { ...world.win, document: { documentElement: { getAttribute: () => "devtools:toolbox" } } }]) {
@@ -562,4 +599,117 @@ test("pane.focus_direction refuses past the panes when Firefox lacks the DevTool
   world.split_first_two();
   assert.deepEqual(await world.ask("pane.focus_direction", { direction: "right" }), OK);
   assert.deepEqual(world.calls, ["select b", "focus page b"]);
+});
+
+test("the pane feature says pane_moves in the hello once pane.move is registered", () => {
+  const world = pane_world();
+  assert.equal((world.firefox.hello() as { pane_moves?: boolean }).pane_moves, true);
+});
+
+test("pane.move from a split pane swaps the panes once and keeps the focus on the moved pane", async () => {
+  const world = pane_world();
+  world.split_first_two();
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), OK);
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("This pane is already on the right"));
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), OK);
+  assert.deepEqual(world.calls, ["reverse", "focus page a", "reverse", "focus page a"]);
+  assert.equal(world.gBrowser.selectedTab.name, "a");
+});
+
+test("pane.move from the page refuses outside a split, down with no DevTools focus, and a split without Firefox's swap", async () => {
+  const world = pane_world();
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused(NOT_SPLIT));
+  assert.deepEqual(await world.ask("pane.move", { direction: "down" }), refused("Focus DevTools first"));
+  const split = world.split_first_two();
+  assert.deepEqual(await world.ask("pane.move", { direction: "down" }), refused("Focus DevTools first"));
+  delete split.reverseTabs;
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused(NOT_SUPPORTED));
+  split.reverseTabs = () => world.calls.push("reverse that moved nothing");
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("The panes did not swap"));
+  assert.deepEqual(world.calls, ["reverse that moved nothing", "focus page a"]);
+});
+
+test("pane.move reads the focus when it runs, not when the key was typed", async () => {
+  const world = pane_world();
+  world.split_first_two();
+  world.focus_on("devtools");
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), OK);
+  world.focus_on("page");
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), OK);
+  assert.deepEqual(world.calls, ["switch host left", "reverse", "focus page a"]);
+});
+
+test("pane.move with the focus in docked DevTools docks it left, right or at the bottom, and refuses the side it is on", async () => {
+  const world = pane_world();
+  world.focus_on("devtools");
+  assert.deepEqual(await world.ask("pane.move", { direction: "down" }), refused("DevTools is already docked at the bottom"));
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), OK);
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), OK);
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("DevTools is already docked on the right"));
+  assert.deepEqual(await world.ask("pane.move", { direction: "down" }), OK);
+  assert.deepEqual(world.calls, ["switch host left", "switch host right", "switch host bottom"]);
+  assert.equal(sidebar_at_start(world), true);
+});
+
+test("pane.move in DevTools reports a switchHost that throws, rejects, never settles or leaves the host alone", async () => {
+  const world = pane_world();
+  world.focus_on("devtools");
+  world.toolbox.switchHost = () => {
+    throw new Error("no host");
+  };
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused("DevTools could not dock on the left"));
+  world.toolbox.switchHost = () => Promise.reject(new Error("host gone"));
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused("DevTools could not dock on the left"));
+  // DevTools answers null for a toolbox that is not of a local tab, and moves nothing.
+  world.toolbox.switchHost = () => null;
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("DevTools could not dock on the right"));
+  world.toolbox.switchHost = () => new Promise(() => undefined);
+  const pending = world.ask("pane.move", { direction: "left" });
+  for (let turn = 0; turn < 3; turn++) await new Promise((resolve) => setImmediate(resolve));
+  world.window.run_timers();
+  assert.deepEqual(await pending, refused("DevTools did not finish moving"));
+  world.toolbox.switchHost = undefined;
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused(NOT_SUPPORTED));
+  assert.equal(world.toolbox.hostType, "bottom");
+  assert.deepEqual(plain(world.firefox.errors).filter((line) => line.includes("dock")), ["DesertFox browser module: DevTools refused to dock left: Error: no host", "DesertFox browser module: DevTools refused to dock left: Error: host gone"]);
+});
+
+test("pane.move with the focus in a DevTools frame that is not docked here gives the DevTools refusal", async () => {
+  const world = pane_world();
+  world.focus_on("devtools");
+  world.shim.toolbox = null;
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused("DevTools is not open for this tab"));
+  assert.deepEqual(world.calls, []);
+});
+
+test("pane.move with the focus in the sidebar panel, the launcher or the vertical strip moves the sidebar to the other side", async () => {
+  const world = pane_world();
+  world.focus_on("sidebar_panel");
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused("The sidebar is already on the left"));
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), OK);
+  world.focus_on("launcher");
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), OK);
+  world.strip.verticalMode = true;
+  world.focus_on("strip");
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), OK);
+  assert.deepEqual(await world.ask("pane.move", { direction: "down" }), refused("The sidebar moves only left or right"));
+  assert.deepEqual(world.calls, ["reverse sidebar", "reverse sidebar", "reverse sidebar"]);
+  assert.equal(sidebar_at_start(world), false);
+});
+
+test("pane.move in the sidebar refuses without Firefox's flip, and when the flip leaves the sidebar where it was", async () => {
+  const world = pane_world();
+  world.focus_on("sidebar_panel");
+  world.sidebar.reversePosition = () => world.calls.push("flip that moved nothing");
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("The sidebar did not move"));
+  world.sidebar.reversePosition = undefined;
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused(NOT_SUPPORTED));
+  assert.deepEqual(world.calls, ["flip that moved nothing"]);
+});
+
+test("the strip counts as the sidebar only while the tabs are vertical", async () => {
+  const world = pane_world();
+  world.focus_on("strip");
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused(NOT_SPLIT));
+  assert.deepEqual(world.calls, []);
 });

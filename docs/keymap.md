@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 537 (normal 284, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -102,6 +102,9 @@ bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `Ek` | `pane.focus page` | Focus page | yes |
 | `ES` | `pane.focus sidebar` | Focus sidebar | yes |
 | `ED` | `pane.focus devtools` | Focus DevTools | yes |
+| `EH` | `pane.move left` | Move left | yes |
+| `EL` | `pane.move right` | Move right | yes |
+| `EJ` | `pane.move down` | Dock DevTools at the bottom | yes |
 | `gF` | `frame.exit` | Focus top page |  |
 | `gB` | `hint.browser` | Hint browser buttons | yes |
 | `g0` | `tab.goto 1` | First tab | yes |
