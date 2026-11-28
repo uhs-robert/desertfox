@@ -60,7 +60,7 @@
 //   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
 //   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
 //   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
-//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action) }, so chrome hints and the locked page rule reach them. The first one stays.
+//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
 //   content_pages()            In the sandbox: that route, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
@@ -607,12 +607,15 @@
       return false;
     }
 
-    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field (`ignorekeys`).
+    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field.
+    // Firefox reads only "true" and "shortcuts" as leaving keys, and its select popup sets "false" once its search box blurs. "shortcuts" (the select popup on Windows) still takes the arrow keys.
+    const leaves_keys_to_field = (popup) => popup.getAttribute("ignorekeys") === "true";
+
     // A dialog's menu sits in the dialog's own document, so the focused element's document is read too.
     function key_taking_menu_open(win, focused) {
       for (const doc of new Set([win.document, focused?.ownerDocument])) {
         if (!doc) continue;
-        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !popup.hasAttribute("ignorekeys")) return true;
+        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !leaves_keys_to_field(popup)) return true;
       }
       return false;
     }
