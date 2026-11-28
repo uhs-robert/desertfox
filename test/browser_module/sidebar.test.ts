@@ -859,3 +859,26 @@ test("the sidebar takes a tree only where validate_scope_tree takes it", async (
     assert.equal((await arm())?.ok, validate_scope_tree(tree).ok, JSON.stringify(tree).slice(0, 80));
   }
 });
+
+test("the Alt keyup after a chord the module took stops too, so Firefox opens no menu bar, and other Alt keyups pass", () => {
+  const { panel_doc, focus, press, root } = once_setup({ written: chord_state() });
+  const alt_up = () => {
+    const event = key_event("Alt");
+    root.fire("keyup", event);
+    return event.prevented;
+  };
+  focus(panel_row(panel_doc));
+  assert.equal(alt_up(), false, "a lone Alt keyup stopped");
+  press("o", alt_o);
+  assert.equal(alt_up(), true, "the Alt keyup after the arming chord went on");
+  assert.equal(alt_up(), false, "a second Alt keyup stopped");
+  press("o", alt_o);
+  press("o", alt_o);
+  assert.equal(alt_up(), true, "the Alt keyup after the chord that ended the hold went on");
+  const plain = once_setup();
+  plain.focus(panel_row(plain.panel_doc));
+  plain.press("o", alt_o);
+  const event = key_event("Alt");
+  plain.root.fire("keyup", event);
+  assert.equal(event.prevented, false, "an Alt keyup stopped after a chord the module left to Firefox");
+});

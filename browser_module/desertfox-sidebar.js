@@ -309,6 +309,18 @@
     const onces = new Map();
     // Per window, when a chord was last typed here.
     const chord_at = new WeakMap();
+    // The windows whose Alt chord the module stopped. Firefox reads the Alt keyup after a stopped keydown as a lone Alt and opens the menu bar, so that keyup stops here too.
+    const alt_up_owed = new WeakSet();
+    const took_chord = (win, event) => {
+      chord_at.set(win, Date.now());
+      if (event.altKey) alt_up_owed.add(win);
+    };
+    function chord_key_up(win, event) {
+      if (!alt_up_owed.has(win) || !event.isTrusted || event.key !== "Alt") return;
+      alt_up_owed.delete(win);
+      event.preventDefault();
+      event.stopPropagation();
+    }
     const chords_in = (win) => (once_missing ? [] : core.normal_once_keys(win));
     // The panel document, or "strip", or null outside the sidebar.
     const place_key = (win, element) => {
@@ -372,7 +384,7 @@
     // The chord itself, with the focus in a sidebar place: the hold starts before a key typed fast behind it. The key stops here, so the shortcut does not fire too.
     function chord_key(win, token, event) {
       if (!chords_in(win).includes(token) || !start_once(win).ok) return false;
-      chord_at.set(win, Date.now());
+      took_chord(win, event);
       event.preventDefault();
       event.stopPropagation();
       return true;
@@ -386,7 +398,7 @@
       if (!token) return;
       event.preventDefault();
       event.stopPropagation();
-      if (once.chords.includes(token)) chord_at.set(win, Date.now());
+      if (once.chords.includes(token)) took_chord(win, event);
       if (token === ESCAPE || once.chords.includes(token)) return end_once(win);
       // The command line opens: a key typed meanwhile runs nothing.
       if (once.waiting) return;
@@ -475,6 +487,7 @@
         }
       };
       const keydown = guarded((event) => on_key(win, record, event));
+      const keyup = guarded((event) => chord_key_up(win, event));
       const focus = guarded((event) => {
         record.pending = undefined;
         // The focus left the place the prefix was typed in: the sequence ends there.
@@ -486,16 +499,19 @@
       });
       const blur = () => {
         record.pending = undefined;
+        alt_up_owed.delete(win);
         end_once(win);
       };
       const unload = () => detach(win);
       const root = win.windowRoot;
       root.addEventListener("keydown", keydown, true);
+      root.addEventListener("keyup", keyup, true);
       win.addEventListener("focus", focus, true);
       win.addEventListener("blur", blur);
       win.addEventListener("unload", unload, { once: true });
       attached.set(win, () => {
         root.removeEventListener("keydown", keydown, true);
+        root.removeEventListener("keyup", keyup, true);
         win.removeEventListener("focus", focus, true);
         win.removeEventListener("blur", blur);
         win.removeEventListener("unload", unload);
