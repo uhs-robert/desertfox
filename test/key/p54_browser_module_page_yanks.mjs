@@ -1,12 +1,12 @@
 // The page yanks (yy yc ym yo ys yt) on pages where no DesertFox page code runs: about:preferences in the parent process, the PDF viewer with browser_module_pages off, and a host on the restricted list (a localhost name, offline).
-// Each key copies the tab's address or title in its own format, with the tracking parameters stripped, and nothing else changes. yL and yl, which need the page's links, still do nothing there.
+// Each key copies the tab's address or title in its own format, with the tracking parameters stripped, and nothing else changes. yL and yl are in p54_browser_module_page_links.mjs.
 import { createServer } from "node:http";
 import { writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { make_tmp_dir } from "../support/tmp_dir.ts";
-import { make_article, make_pdf, module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
+import { make_article, make_pdf, module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["keys"];
 
@@ -95,15 +95,6 @@ export async function run_cases(context) {
           await press_keys(...keys.split(""));
           await poll_until(`${keys} on ${page}`, async () => (await chrome(clipboard_text)) === text, { timeout_ms: 5000 });
           await poll_until(`the Copied notification for ${keys} on ${page}`, async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).some((notice) => notice.message === `Copied ${text}`), { timeout_ms: 5000 });
-        }
-        // The link yanks need the page's links, so the module leaves them alone.
-        for (const keys of ["yL", "yl"]) {
-          await clear_notices();
-          await chrome(set_clipboard(SENTINEL));
-          await focus_page();
-          await press_keys(...keys.split(""));
-          await sleep(NO_EFFECT_MS);
-          expect((await chrome(clipboard_text)) === SENTINEL, `${keys} on ${page} changed the clipboard`);
         }
       } finally {
         await close_selected_tab();
