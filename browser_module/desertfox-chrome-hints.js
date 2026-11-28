@@ -938,8 +938,9 @@
     // The typed text of text mode and the hint key line, after the hint view's `.desertfox-hint-text` and `.desertfox-hint-keys`. Both go first in the layer, so labels paint over them.
     const QUERY_STYLE = "position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre; background: var(--desertfox-primary, #7fa3c9); color: var(--desertfox-bg-core, #0c0e13); font: bold 12px/1 monospace;";
     const PAGE_QUERY_STYLE = "position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre; background: #7fa3c9; color: #0c0e13; font: bold 12px/1 monospace;";
-    const KEY_LINE_STYLE = "position: fixed; right: 16px; bottom: 8px; padding: 4px 8px; white-space: pre; background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: 14px system-ui, sans-serif; border-radius: 6px;";
-    const PAGE_KEY_LINE_STYLE = "position: fixed; right: 16px; bottom: 8px; padding: 4px 8px; white-space: pre; background: #0c0e13; color: #f5f5dc; font: 14px system-ui, sans-serif; border-radius: 6px;";
+    // The key line sits at the right end of the window, so it clears the module's status bar by the height the bar publishes on the window.
+    const KEY_LINE_STYLE = "position: fixed; right: 16px; bottom: calc(8px + var(--desertfox-statusbar-height, 0px)); padding: 4px 8px; white-space: pre; background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: 14px system-ui, sans-serif; border-radius: 6px;";
+    const PAGE_KEY_LINE_STYLE = "position: fixed; right: 16px; bottom: calc(8px + var(--desertfox-statusbar-height, 0px)); padding: 4px 8px; white-space: pre; background: #0c0e13; color: #f5f5dc; font: 14px system-ui, sans-serif; border-radius: 6px;";
     // The hint view's fixed words (`label_key_line` and KEY_LINE_TEXT in src/content/hints/view.ts), less the Space words: a session here has no rapid yet.
     const KEY_LINE_LABELS = "/: type text \u00b7 Tab: turn labels";
     const KEY_LINE_TEXT = "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels";

@@ -690,7 +690,7 @@ test("a text mode draw shows the typed text, swaps the active label's colors and
   const labels = nodes.filter((node) => node.className === "desertfox-hint");
   assert.match(String(labels[0]!.style.cssText), /background: #0c0e13; color: #7fa3c9;$/);
   assert.doesNotMatch(String(labels[1]!.style.cssText), /background: #0c0e13/);
-  for (const node of nodes) assert.equal(String(node.style.cssText).includes("var("), false, "a page's text mode reads a theme variable");
+  for (const node of nodes) assert.equal(String(node.style.cssText).replaceAll("var(--desertfox-statusbar-height", "").includes("var("), false, "a page's text mode reads a theme variable");
   await run.draw_text(3, [run.parts.print, run.parts.privacy], { key_line: 1 });
   assert.equal(run.layer_box().children.find((node) => node.className === "desertfox-hint-keys")!.textContent, "/: type text \u00b7 Tab: turn labels");
   assert.equal(run.layer_box().children.some((node) => node.className === "desertfox-hint-text"), false);
