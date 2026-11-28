@@ -30,7 +30,7 @@ const set_clipboard = (text) => `(async () => { Cc["@mozilla.org/widget/clipboar
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, run_line, on_teardown, in_background, clear_notices } = context;
   const steps = module_steps(context);
-  const { chrome, open_tab, focus_page, close_selected_tab, home, selected_spec, session_value } = steps;
+  const { chrome, bar_message, open_tab, focus_page, close_selected_tab, home, selected_spec, session_value } = steps;
 
   const files_dir = make_tmp_dir("desertfox-module-yanks-");
   on_teardown(() => rm(files_dir, { recursive: true, force: true }));
@@ -88,13 +88,14 @@ export async function run_cases(context) {
         expect(title !== "", `${page} has no tab title`);
         const expected = { yy: url, yc: url, ys: url, yt: title, ym: `[${title}](${url})`, yo: `[[${url}][${title}]]` };
         for (const [keys, text] of Object.entries(expected)) {
-          // A locked page shows the toast as a desktop notification, which a test session shows as a window that takes the focus.
+          // A locked page shows the toast in the status bar's message slot, so no desktop notice goes out.
           await clear_notices();
           await chrome(set_clipboard(SENTINEL));
           await focus_page();
           await press_keys(...keys.split(""));
           await poll_until(`${keys} on ${page}`, async () => (await chrome(clipboard_text)) === text, { timeout_ms: 5000 });
-          await poll_until(`the Copied notification for ${keys} on ${page}`, async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).some((notice) => notice.message === `Copied ${text}`), { timeout_ms: 5000 });
+          await poll_until(`the Copied toast for ${keys} on ${page}`, async () => ((await bar_message()) ?? "").includes(`Copied ${text}`), { timeout_ms: 5000 });
+          expect(Object.keys((await in_background(`browser.notifications.getAll()`)) ?? {}).length === 0, `${keys} on ${page} showed a desktop notice`);
         }
         // The link yanks need the page's links, so the module leaves them alone.
         for (const keys of ["yL", "yl"]) {
