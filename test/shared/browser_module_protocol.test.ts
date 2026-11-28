@@ -4,6 +4,7 @@ import { MAX_PAGE_LINKS, MAX_PAGE_LINKS_BYTES } from "../../src/shared/browser_m
 import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
+  SIDEBAR_ONCE_KIND,
   ABSENT_TAB,
   DEVTOOLS_ACTIONS,
   DEVTOOLS_TOOL_KEYS,
@@ -147,7 +148,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.texts", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "page_links.read"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "sidebar.normal_once", "page_links.read"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -581,6 +582,11 @@ test("a __proto__ panel path stays a plain key and sets no prototype", () => {
   assert.ok(table);
   assert.equal(Object.getPrototypeOf(table.panels), Object.prototype);
   assert.deepEqual(Object.keys(table.panels), ["__proto__"]);
+});
+
+test("sidebar.normal_once carries no arg", () => {
+  const checked = validate_message({ v: V, id: "m1", kind: SIDEBAR_ONCE_KIND, args: { window_id: 3 } }, EXTENSION_TO_MODULE_KINDS);
+  assert.deepEqual(checked.ok && checked.value, { v: V, id: "m1", kind: SIDEBAR_ONCE_KIND, args: {} });
 });
 
 test("the hello says pane_moves only when it is true, and pane.move takes left, right or down only", () => {

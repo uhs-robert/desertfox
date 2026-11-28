@@ -40,6 +40,9 @@
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
 //   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
+//   scope_tree(win)            In the sandbox: the state's raw tree of the keys a locked page runs, or undefined, and undefined whenever may_act(win) is false. A feature reads it as data, never trusting its shape.
+//   normal_once_keys(win)      In the sandbox: the chords bound to the one-shot normal prefix, or [] whenever may_act(win) is false.
+//   focus_keys(win)            In the sandbox: the tree's key paths whose command moves the focus on purpose, or [] whenever may_act(win) is false.
 //   chrome_hint_keys(win)      In the sandbox: the key token lists of the `hint.browser` bindings, or [] whenever may_act(win) is false.
 //   hint_mode_keys(win)        In the sandbox: a Map of the hint mode keys a session acts on itself, key token to "escape" or "whichkey". Undefined when the extension does not run hint mode keys or may_act(win) is false.
 //   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
@@ -124,6 +127,9 @@
     const FROM_MODULE_STORAGE_KEY = "desertfox_browser_module_from_module";
     const MAX_KEY_ROWS = 32;
     const MAX_SIDEBAR_KEY_TOKENS = 2;
+    const MAX_NORMAL_ONCE_KEYS = 4;
+    const MAX_FOCUS_KEYS = 64;
+    const MAX_SEQUENCE_KEYS = 8;
     const MAX_INSERT_KEY_ROWS = 8;
     const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey"];
     const MAX_CHROME_HINT_BINDINGS = 4;
@@ -173,6 +179,7 @@
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
       "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: 8192 },
+      "sidebar.normal_once": { args: {}, reply: true, max_bytes: 256 },
       "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: 65536 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
@@ -276,7 +283,14 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, insert_keys: read_insert_keys(value.insert_keys), hint_mode_keys: read_hint_mode_keys(value.hint_mode_keys) };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, normal_once_keys: read_key_list(value.normal_once_keys, MAX_NORMAL_ONCE_KEYS, 1), focus_keys: read_key_list(value.focus_keys, MAX_FOCUS_KEYS, MAX_SEQUENCE_KEYS), insert_keys: read_insert_keys(value.insert_keys), hint_mode_keys: read_hint_mode_keys(value.hint_mode_keys) };
+    }
+
+    // normal_once_keys_of and focus_keys_of: a list of key paths of at most `max_tokens` tokens each. A bad list is [] and the rest of the state stays.
+    function read_key_list(value, max_items, max_tokens) {
+      if (!Array.isArray(value) || value.length > max_items) return [];
+      const fits = (path) => typeof path === "string" && path.split(" ").length <= max_tokens && path.split(" ").every((key) => KEY_TOKEN.test(key));
+      return value.every(fits) ? [...value] : [];
     }
 
     // read_insert_keys: a bad table is undefined, and the plain Escape stays. A row with a command this version does not know is skipped, so a newer extension can add rows. The result maps a key token to its command.
@@ -1253,6 +1267,9 @@
       },
       may_act: (win) => state_for(win) !== undefined,
       sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),
+      scope_tree: (win) => state_for(win)?.tree,
+      normal_once_keys: (win) => state_for(win)?.normal_once_keys ?? [],
+      focus_keys: (win) => state_for(win)?.focus_keys ?? [],
       chrome_hint_keys: (win) => state_for(win)?.chrome_hint_keys ?? [],
       hint_mode_keys: (win) => state_for(win)?.hint_mode_keys,
       token_of,
