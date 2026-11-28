@@ -20,7 +20,7 @@ function make_hold_flow(on_leaf?: (id: string, state: ReturnType<typeof create_m
     blur_window_open_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,
-    take_pass_next_: state.take_pass_next_,
+    take_pass_next_: state.take_pass_next_, take_once_: state.take_once_,
     run_leaf_: (leaf) => void (ran.push(String(leaf.steps[0]?.invocation.id)), on_leaf?.(String(leaf.steps[0]?.invocation.id), state)),
     leave_insert_: () => state.escape(),
     is_loading_: () => false,

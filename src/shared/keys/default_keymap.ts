@@ -494,6 +494,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "<A-k>": { id: "tab.prev" },
     "<A-,>": { id: "browser.focus_page" },
     "<A-l>": { id: "mode.site", args: { name: "arrow", toggle: true }, label: "Arrow mode" },
+    "<A-o>": { id: "mode.normal_once", label: "One normal command" },
   },
 };
 
