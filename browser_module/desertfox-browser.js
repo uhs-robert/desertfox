@@ -43,7 +43,7 @@
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
 //   blur_field(context)        In the sandbox: drop the focus from the text field a key of `context` (as the taker gets it) was typed in, as a plain Escape does. Returns whether a field was blurred: false for design mode, a field in an iframe of a remote page and a subdialog, which keep their Escape.
-//   send_escape(context)       In the sandbox: send the page an Escape keydown and keyup, from the focused element, as `page.send_key` does. They are not trusted events, so no module listener takes them again. Returns whether it was sent.
+//   send_escape(context)       In the sandbox: send the page an Escape keydown and keyup, from the focused element, as `page.send_key` does. They are trusted on a system page, so `on_key` skips them while the module sends. Returns whether it was sent.
 //   ime_in_field(win)          In the sandbox: whether the window's input state says a text field has the focus, which covers a field in a page of another process.
 //   type_key(win, key, still_holds, { menu_owns_keys })  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.

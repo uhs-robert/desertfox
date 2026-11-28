@@ -87,10 +87,14 @@ export async function run_cases(context) {
     expect(!(await seen_keys()).includes("Escape:true"), `the page saw the user's Escape: ${await seen_keys()}`);
 
     await focus_search_box("#searchInput");
+    await in_selected_page(`(win) => { win.document.documentElement.dataset.seen = ""; return true; }`);
     await press_keys(...ALT_ESCAPE);
-    await poll_until("the page to get a synthetic Escape", async () => (await seen_keys()).includes("Escape:false"));
+    // This page has the system principal, so the module's sent Escape is trusted: the page gets exactly that one Escape, and the user's own <A-Escape> never reaches it.
+    const escapes_seen = async () => ((await seen_keys()).match(/Escape:/g) ?? []).length;
+    await poll_until("the page to get the sent Escape", async () => (await escapes_seen()) >= 1);
+    await sleep(300);
+    expect((await escapes_seen()) === 1, `the page saw more than the one sent Escape: ${await seen_keys()}`);
     expect(await field_focused(), "<A-Escape> blurred the field");
-    expect(!(await seen_keys()).includes("Escape:true"), `the page saw a trusted Escape: ${await seen_keys()}`);
     await close_selected_tab();
   });
 
@@ -160,7 +164,9 @@ export async function run_cases(context) {
     await poll_until("insert mode", async () => (await module_mode()) === "insert");
     await press_keys("-k", "Escape");
     await sleep(300);
-    expect((await module_mode()) === null, "the unbound Escape left insert mode");
+    expect((await module_mode()) === null, "the unbound Escape kept insert mode");
+    await press_keys("i");
+    await poll_until("insert mode again", async () => (await module_mode()) === "insert");
     await press_keys(...CTRL_BRACKET);
     await poll_until("<C-[> to leave insert mode", async () => (await module_mode()) === null);
     await close_selected_tab();
