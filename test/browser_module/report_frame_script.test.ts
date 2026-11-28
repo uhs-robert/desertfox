@@ -5,6 +5,7 @@ import { create_firefox } from "./fake_firefox.ts";
 
 const REPORT = "desertfox-browser-module:report";
 const BLUR = "desertfox-browser-module:blur";
+const SEND_ESCAPE = "desertfox-browser-module:send-escape";
 
 // The core's report frame script as Firefox runs it in one tab: `content` is the shown top document with one search field, and the clock is the test's.
 function report_frame() {
@@ -17,11 +18,25 @@ function report_frame() {
   const messages = new Map<string, ((message: { data: unknown }) => void)[]>();
   const reports: Record<string, unknown>[] = [];
   const clock = { now: 1_000_000 };
-  const field = { localName: "input", type: "text", blurred: 0, blur: () => field.blurred++ };
-  const body = { localName: "body" };
+  // The events each element was given, as { type, key, keyCode, trusted }.
+  const dispatched: { element: string; type: string; key: string; keyCode: number; bubbles: boolean; trusted: boolean }[] = [];
+  const receiving = (element: string) => (event: { type: string; key: string; keyCode: number; bubbles: boolean; isTrusted: boolean }) =>
+    dispatched.push({ element, type: event.type, key: event.key, keyCode: event.keyCode, bubbles: event.bubbles, trusted: event.isTrusted });
+  const field = { localName: "input", type: "text", blurred: 0, blur: () => field.blurred++, dispatchEvent: receiving("field") };
+  const body = { localName: "body", dispatchEvent: receiving("body") };
   const user_activation = { hasBeenActive: false };
-  const document = { activeElement: body as unknown, hidden: false, designMode: "off", documentElement: {} };
-  const content = { document, navigator: { userActivation: user_activation }, windowGlobalChild: { innerWindowId: 7 } };
+  const document = { activeElement: body as unknown, hidden: false, designMode: "off", documentElement: { localName: "html", dispatchEvent: receiving("html") } };
+  class KeyboardEvent {
+    isTrusted = false;
+    type: string;
+    key: string;
+    keyCode: number;
+    bubbles: boolean;
+    constructor(type: string, init: { key: string; keyCode: number; bubbles: boolean }) {
+      Object.assign(this, { type, key: init.key, keyCode: init.keyCode, bubbles: init.bubbles });
+    }
+  }
+  const content = { KeyboardEvent, document, navigator: { userActivation: user_activation }, windowGlobalChild: { innerWindowId: 7 } };
   const context = vm.createContext({
     Components: {
       classes: { "@mozilla.org/eventlistenerservice;1": { getService: () => ({ getListenerInfoFor: () => [] }) } },
@@ -50,7 +65,11 @@ function report_frame() {
     for (const listener of messages.get(BLUR) ?? []) listener({ data });
     return field.blurred;
   };
-  return { document, last_report, clock, field, user_activation, fire, show, hide, focus_field, last_load_focus, core_blurs };
+  const send_escape = (data: Record<string, unknown> = { inner: 7 }) => {
+    for (const listener of messages.get(SEND_ESCAPE) ?? []) listener({ data });
+    return JSON.parse(JSON.stringify(dispatched)) as typeof dispatched;
+  };
+  return { send_escape, document, last_report, clock, field, user_activation, fire, show, hide, focus_field, last_load_focus, core_blurs };
 }
 
 test("a tab shown again marks a field that already holds the focus, even on a page used before", () => {
@@ -205,4 +224,22 @@ test("the report says text_field for a real field and not for design mode, while
   editable.document.designMode = "on";
   editable.fire("focusin");
   assert.deepEqual([editable.last_report().field, editable.last_report().text_field], [true, false]);
+});
+
+test("a send-escape message gives the focused element an untrusted Escape keydown and keyup, and only for the same document", () => {
+  const frame = report_frame();
+  frame.focus_field();
+  assert.deepEqual(
+    frame.send_escape().map(({ element, type, key, keyCode, bubbles, trusted }) => [element, type, key, keyCode, bubbles, trusted]),
+    [["field", "keydown", "Escape", 27, true, false], ["field", "keyup", "Escape", 27, true, false]],
+  );
+  assert.equal(frame.send_escape({ inner: 8 }).length, 2, "another document gets nothing more");
+  assert.equal(frame.send_escape({}).length, 2, "a message with no document id gets nothing");
+});
+
+test("a send-escape message with no focused element goes to the page's body, and with no body to the root", () => {
+  const frame = report_frame();
+  assert.deepEqual(frame.send_escape().map(({ element }) => element), ["body", "body"]);
+  (frame.document as { activeElement: unknown }).activeElement = null;
+  assert.deepEqual(frame.send_escape().slice(2).map(({ element }) => element), ["html", "html"]);
 });

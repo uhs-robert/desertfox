@@ -547,3 +547,100 @@ test("a narrow bar drops every other widget before it shortens the message, and 
   assert.ok(message!.endsWith("…") && message!.length < 32);
   assert.equal(fixture.bar()!.find((each) => each.className === "dfx-widget dfx-message")!.getAttribute("title"), "A long message that does not fit");
 });
+
+// The module's mode as the commands feature marks it on the tab's <browser>: the mode and the document it was set in.
+// A bar whose window has a MutationObserver that a test fires by hand, as Firefox fires it for an attribute change.
+function started_watching() {
+  const fixture = create_bar_fixture();
+  const callbacks: (() => void)[] = [];
+  Object.assign(fixture.window.win, { MutationObserver: class { constructor(callback: () => void) { callbacks.push(callback); } observe() {} disconnect() {} } });
+  fixture.firefox.start_extension({ private_access: true });
+  fixture.load();
+  return Object.assign(fixture, { mutate: () => callbacks.forEach((callback) => callback()) });
+}
+const mark_mode = (fixture: ReturnType<typeof started_watching>, mode: string | undefined, inner = 10) => {
+  const browser = fixture.tabs[0]!.browser;
+  if (mode === undefined) (browser.removeAttribute("desertfox-module-mode"), browser.removeAttribute("desertfox-module-document"));
+  else (browser.setAttribute("desertfox-module-mode", mode), browser.setAttribute("desertfox-module-document", String(inner)));
+  fixture.mutate();
+  fixture.run_frames();
+  return fixture.widgets("left")[0];
+};
+
+test("the mode attribute of the tab's browser draws INSERT, IGNORE and PASS with no field, and its removal draws NORMAL again", () => {
+  const fixture = started_watching();
+  fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[0], "NORMAL");
+  assert.equal(mark_mode(fixture, "insert"), "INSERT");
+  assert.equal(mark_mode(fixture, "ignore"), "IGNORE");
+  assert.equal(mark_mode(fixture, "pass"), "PASS");
+  assert.equal(mark_mode(fixture, undefined), "NORMAL");
+  assert.deepEqual(fixture.firefox.errors, []);
+});
+
+test("the mode attribute is read through its own checks: another document, a value the module never sets, and a live tab show nothing", () => {
+  const fixture = started_watching();
+  fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
+  assert.equal(mark_mode(fixture, "insert", 99), "NORMAL", "a load ended the mode");
+  assert.equal(mark_mode(fixture, "hint"), "NORMAL");
+  assert.equal(mark_mode(fixture, "<b>INSERT</b>"), "NORMAL");
+  fixture.firefox.write_state(state_with({ live: true }));
+  assert.equal(mark_mode(fixture, "ignore"), "NORMAL", "DesertFox is live there, so a flag left from before shows nothing");
+  assert.deepEqual(fixture.firefox.errors, []);
+});
+
+test("the mode attribute wins over the field inference and over nothing a record says", () => {
+  const fixture = started_watching();
+  fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
+  fixture.firefox.emit_message("desertfox-browser-module:report", fixture.tabs[0]!.browser, { inner: 10, listeners: 0, field: true });
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[0], "INSERT", "the field alone");
+  assert.equal(mark_mode(fixture, "ignore"), "IGNORE", "ignore mode with a field focused");
+  assert.equal(mark_mode(fixture, undefined), "INSERT");
+  fixture.firefox.write_state(state_with({ mode: "caret", live: false }));
+  assert.equal(mark_mode(fixture, "insert"), "CARET", "a record's own mode stays");
+});
+
+test("a message in the bar's slot shows beside the module's mode badge and never in its place", () => {
+  const fixture = started_watching();
+  fixture.firefox.write_state(state_with({ live: false, toast: toast_of() }));
+  assert.deepEqual(mark_mode(fixture, "insert") && fixture.widgets("left"), ["INSERT", "Copied the address"]);
+  assert.deepEqual(mark_mode(fixture, "pass") && fixture.widgets("left"), ["PASS", "Copied the address"]);
+});
+
+test("a change of the mode attribute draws: the bar watches the tab panels for it, and stops at unload", () => {
+  const fixture = create_bar_fixture();
+  const observed: { callback: () => void; target: unknown; options: { attributeFilter?: string[]; subtree?: boolean; attributes?: boolean }; disconnected: boolean }[] = [];
+  Object.assign(fixture.window.win, {
+    MutationObserver: class {
+      entry: (typeof observed)[number];
+      constructor(callback: () => void) {
+        this.entry = { callback, target: undefined, options: {}, disconnected: false };
+        observed.push(this.entry);
+      }
+      observe(target: unknown, options: (typeof observed)[number]["options"]) {
+        Object.assign(this.entry, { target, options });
+      }
+      disconnect() {
+        this.entry.disconnected = true;
+      }
+    },
+  });
+  fixture.firefox.start_extension({ private_access: true });
+  fixture.load();
+  const watching = observed.filter((each) => each.options.attributeFilter !== undefined);
+  assert.equal(watching.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify([watching[0]!.options.attributes, watching[0]!.options.subtree, watching[0]!.options.attributeFilter])), [true, true, ["desertfox-module-mode", "desertfox-module-document"]]);
+  assert.equal(watching[0]!.target, (fixture.window.win.gBrowser as { tabpanels: unknown }).tabpanels);
+  fixture.firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, bar: BAR_CONFIG });
+  fixture.run_frames();
+  const browser = fixture.tabs[0]!.browser;
+  browser.setAttribute("desertfox-module-mode", "insert");
+  browser.setAttribute("desertfox-module-document", "10");
+  watching[0]!.callback();
+  assert.ok(fixture.run_frames() > 0, "the change asked for a frame");
+  assert.equal(fixture.widgets("left")[0], "INSERT");
+  fixture.window.close();
+  assert.equal(watching[0]!.disconnected, true);
+});

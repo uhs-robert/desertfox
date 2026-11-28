@@ -105,6 +105,7 @@ export function create_bar_fixture(options: BarOptions = {}) {
     get visibleTabs() {
       return tabs.map((each) => each.tab);
     },
+    tabpanels: new FakeNode("tabpanels"),
     addProgressListener: (listener: unknown) => progress_listeners.add(listener),
     removeProgressListener: (listener: unknown) => progress_listeners.delete(listener),
   }));
