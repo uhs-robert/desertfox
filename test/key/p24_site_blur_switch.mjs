@@ -104,7 +104,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   });
 
   await run_case("holding Shift+J over tabs whose page focuses its field on each show keeps switching, and keys work in every tab after", async () => {
-    await close_tabs_with("blur_");
+    await close_tabs_with("id=blur_");
     await open_page("page", "blur_h_a", { new_tab: true });
     await open_page("switch_field", "blur_h_b", { new_tab: true });
     await open_page("switch_field", "blur_h_c_delay", { new_tab: true });
@@ -116,7 +116,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
   });
 
   await run_case("holding Shift+J over discarded tabs that load on the switch and focus their field keeps switching, and keys work in every tab after", async () => {
-    await close_tabs_with("blur_");
+    await close_tabs_with("id=blur_");
     await open_page("page", "blur_d_a", { new_tab: true });
     await open_page("switch_field", "blur_d_b", { new_tab: true });
     await open_page("switch_field", "blur_d_c", { new_tab: true });
