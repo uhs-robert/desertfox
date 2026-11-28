@@ -35,7 +35,7 @@ test("the locked-page set: background commands that need no page, minus the deny
   // A new background command shows here in review. A command that needs a page must stay out.
   assert.deepEqual([...allowed].sort(), [
     "bookmark.add", "bookmark.edit_url", "bookmark.move", "bookmark.open", "bookmark.open_folder", "bookmark.remove", "bookmark.rename",
-    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
+    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.page_links", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
     "help.issue", "help.key", "help.open", "hint.browser", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
     "page.back", "page.forward", "page.home", "page.print", "page.reader", "page.reload", "page.save_pdf",
@@ -69,9 +69,11 @@ test("the default tree keeps the background keys and leaves the page's keys to t
 });
 
 test("the page yanks run on a locked page as their background variant, with their args and register", () => {
-  for (const keys of [["y", "y"], ["y", "c"], ["y", "m"], ["y", "o"], ["y", "s"], ["y", "t"]]) assert.equal(node_at(DEFAULT_TREE, keys), "forward", keys.join(""));
-  // The link yanks need the page's links, so they stay out of the tree.
-  for (const keys of [["y", "L"], ["y", "l"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  for (const keys of [["y", "y"], ["y", "c"], ["y", "m"], ["y", "o"], ["y", "s"], ["y", "t"], ["y", "L"], ["y", "l"]]) assert.equal(node_at(DEFAULT_TREE, keys), "forward", keys.join(""));
+  // The link yanks ask the module for the page's links, with the scope and format of the key.
+  const links = resolve_run(compiled(), "y l", 0, allowed);
+  assert.ok(links.ok);
+  assert.deepEqual(counted_steps(links.leaf.steps, undefined).map(({ id, args }) => ({ id, ...args })), [{ id: "copy.page_links", scope: "viewport", format: "markdown", register: "" }]);
   const resolved = resolve_run(compiled(), "y m", 0, allowed);
   assert.ok(resolved.ok);
   assert.deepEqual(counted_steps(resolved.leaf.steps, undefined).map(({ id, args }) => ({ id, format: args?.["format"] })), [{ id: "copy.page", format: "markdown" }]);

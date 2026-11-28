@@ -28,8 +28,8 @@ export type CheckCommandArgs = (id: string, args: Record<string, unknown> | unde
 const has_guard = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || leaf.when_present !== undefined || leaf.otherwise !== undefined || leaf.otherwise_page !== undefined;
 
 // A content command with a background command of the same params that does the same from what the browser lists of the tab. On a locked page the leaf runs the variant, so the keymap binds one command and the page code runs where it exists.
-// `copy.page` cannot read the page's canonical or short link, so those two formats give the address.
-export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page" };
+// `copy.page` cannot read the page's canonical or short link, so those two formats give the address. `copy.page_links` asks the module for the page's links (`page_links.read`).
+export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page", "copy.links": "copy.page_links" };
 
 // Every step is a command of the set or has a variant in it, so the router runs the whole leaf with no page. A step that prompts opens the address bar (`address_bar.open`), which needs no page either.
 const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolean => {

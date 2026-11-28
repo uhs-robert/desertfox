@@ -40,6 +40,7 @@
     const COLLECT_ERRORS = { not_here: "Hints do not run on this page", login_form: "Hints do not run on this page", changed: "The page changed", nothing: "Nothing to hint here" };
     const PICK_ERRORS = { gone: "The hint's target is gone", moved: "The hint's target moved", changed: "The hint's target changed", needs_enter: "Type the hint key to pick this", no_link: "The link has no web address" };
     const PAGE_CHANGED = "The page changed";
+    const LINKS_NOT_HERE = "Links cannot be read on this page";
 
     const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
     const is_record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -173,7 +174,7 @@
     }
 
     // A reply counts only from the browser asked, for the document asked about, still shown there. A reply too big settles as no reply.
-    for (const expects of ["targets", "picked"]) {
+    for (const expects of ["targets", "picked", "linked"]) {
       on(expects, (browser, data) => {
         const asked = awaiting.get(data.req);
         if (!asked || asked.expects !== expects || asked.browser !== browser || data.inner !== asked.inner || browser.innerWindowID !== asked.inner) return;
@@ -278,6 +279,17 @@
       return { targets, remote: remote_session(browser, inner, req) };
     }
 
+    // The links of the tab's page as raw [address, text] pairs, for the page links feature, which caps and checks them again. A page the route never labels gives an error the user reads.
+    async function links(browser, scope) {
+      if (labels(browser) === undefined) return { ok: false, error: LINKS_NOT_HERE };
+      const inner = browser.innerWindowID;
+      const { reply } = ask(browser, inner, "links", { kind: labels(browser), scope }, "linked");
+      const data = await reply;
+      if (data?.error === "not_here") return { ok: false, error: LINKS_NOT_HERE };
+      if (!data || data.error !== undefined || !Array.isArray(data.pairs) || browser.innerWindowID !== inner) return { ok: false, error: PAGE_CHANGED };
+      return { ok: true, pairs: data.pairs };
+    }
+
     core.on_shut_down(() => {
       for (const [name, listener] of listeners.splice(0)) Services.mm.removeMessageListener(name, listener);
       for (const asked of [...awaiting.values()]) asked.settle(undefined);
@@ -285,7 +297,7 @@
       open_sessions.clear();
     });
 
-    core.share_content_pages({ labels, refuses, collect });
+    core.share_content_pages({ labels, refuses, collect, links });
     core.add_frame_script(content_hints_frame_script);
   }
 
@@ -528,6 +540,53 @@
         reply({ ok: true });
       } catch (_) {
         reply({ ok: false, error: "gone" });
+      }
+    });
+
+    // The page's web links for the page links feature, read on request. Nothing is kept. The cap is the feature's own (500 pairs, 60 KB), and chrome checks every pair again.
+    const MAX_LINKS = 500;
+    const MAX_LINK_BYTES = 60000;
+    const MAX_LINK_ADDRESS_CHARS = 2048;
+    const MAX_LINK_TEXT_CHARS = 512;
+    const LINK_ADDRESS = /^(?:https?|ftp|file):\S*$/i;
+    const link_label = (element) => [...String(element.innerText || element.getAttribute("aria-label") || element.getAttribute("title") || "").replace(/\s+/g, " ").trim()].slice(0, MAX_LINK_TEXT_CHARS).join("");
+    const without_fragment = (address) => String(address).split("#")[0];
+    function page_links(win, doc, link_scope) {
+      const pairs = [];
+      const seen = new Set();
+      let bytes = 2;
+      for (const element of deep_all(doc, "a[href]")) {
+        const address = String(element.href ?? "");
+        if (address.length > MAX_LINK_ADDRESS_CHARS || !LINK_ADDRESS.test(address) || seen.has(address)) continue;
+        if (address.includes("#") && without_fragment(address) === without_fragment(doc.URL)) continue;
+        if (!element.checkVisibility()) continue;
+        if (link_scope === "viewport") {
+          const box = element.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0 || box.right <= 0 || box.bottom <= 0 || box.left >= win.innerWidth || box.top >= win.innerHeight) continue;
+        }
+        const pair = [address, link_label(element)];
+        bytes += JSON.stringify(pair).length + 1;
+        if (bytes > MAX_LINK_BYTES) break;
+        seen.add(address);
+        pairs.push(pair);
+        if (pairs.length === MAX_LINKS) break;
+      }
+      return pairs;
+    }
+
+    addMessageListener(MESSAGE_PREFIX + "links", ({ data }) => {
+      const { req, inner, kind, scope: link_scope } = data ?? {};
+      if (!Number.isSafeInteger(req)) return;
+      const reply = (fields) => sendAsyncMessage(MESSAGE_PREFIX + "linked", { req, inner, ...fields });
+      try {
+        const win = content;
+        const doc = win?.document;
+        if (!module_on() || inner_of(win) !== inner || (link_scope !== "page" && link_scope !== "viewport")) return reply({ error: "changed" });
+        const page = typeof kind === "string" && Object.hasOwn(CONTENT_PAGES, kind) ? CONTENT_PAGES[kind] : undefined;
+        if (!page || !page.matches(doc)) return reply({ error: "not_here" });
+        reply({ pairs: page_links(win, doc, link_scope) });
+      } catch (_) {
+        reply({ error: "changed" });
       }
     });
 
