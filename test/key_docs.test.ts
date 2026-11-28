@@ -13,7 +13,7 @@ import { SETTING_DOCS, SETTING_HELP } from "../src/shared/settings_docs.ts";
 
 const all_commands = build_commands_file(registry).commands;
 const any_command = { runs_in: "content" as const, label: "x", count: "ignore" as const };
-const compile = (keymap: unknown) => compile_keymap(keymap as typeof DEFAULT_KEYMAP, {}, (id) => ({ ...any_command, params: all_commands.find((command) => command.id === id)?.params ?? [] })).compiled;
+const compile = (keymap: unknown) => compile_keymap(keymap as typeof DEFAULT_KEYMAP, {}, (id) => ({ ...any_command, params: all_commands.find((command) => command.id === id)?.params ?? [] }), undefined, DEFAULT_KEYMAP).compiled;
 
 const default_compiled = compile(DEFAULT_KEYMAP);
 const without = (bindings: object, ...keys: string[]) => Object.fromEntries(Object.entries(bindings).filter(([key]) => !keys.includes(key)));

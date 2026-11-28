@@ -34,28 +34,32 @@ function by_window(tabs: readonly ListedTab[]): ListedTab[][] {
   return [...windows.values()];
 }
 
+// The shared body: `copy.tabs` hands it the tabs of its scope, `tab.act` the selected tabs.
+export async function copy_listed_tabs(deps: CopyTabsDeps, ctx: CommandContext, listed: readonly ListedTab[], format: ListFormat, register: string, is_private: boolean): Promise<void> {
+  const web_tabs = listed.filter((tab) => is_web_address(tab.url));
+  if (web_tabs.length === 0) throw new RuntimeRefusal("No web tabs to copy");
+  if (register === BLACK_HOLE_REGISTER) return;
+  const patterns_for = await deps.strip_patterns();
+  const windows = by_window(web_tabs).map((tabs) => format_link_list(tabs.map((tab) => ({ url: strip_tracking(tab.url, patterns_for(tab.url)), text: tab.title })), format));
+  const text = windows.join("\n\n");
+  let clipboard_failed = false;
+  clipboard_failed = !(await refused_as(deps.write_clipboard(text).then(() => true), false));
+  // A private window's registers stay apart from the normal ones, as for every yank.
+  await deps.store.yank(register, text, is_private);
+  if (clipboard_failed) throw new RuntimeRefusal("Could not copy to the clipboard");
+  const skipped = listed.length - web_tabs.length;
+  await deps.toast(ctx, `Copied ${count_of(web_tabs.length)}${skipped > 0 ? `, skipped ${skipped} non-web ${skipped === 1 ? "tab" : "tabs"}` : ""}`);
+}
+
 export function make_copy_tabs_handler(deps: CopyTabsDeps) {
   return async (ctx: CommandContext, args: { scope: "window" | "all"; format: ListFormat; register?: string }): Promise<void> => {
-    const register = args.register ?? "";
     const is_private = await deps.is_private(ctx);
     const listed = await deps.tabs(ctx, args.scope === "all", is_private);
-    const web_tabs = listed.filter((tab) => is_web_address(tab.url));
-    if (web_tabs.length === 0) throw new RuntimeRefusal("No web tabs to copy");
-    if (register === BLACK_HOLE_REGISTER) return;
-    const patterns_for = await deps.strip_patterns();
-    const windows = by_window(web_tabs).map((tabs) => format_link_list(tabs.map((tab) => ({ url: strip_tracking(tab.url, patterns_for(tab.url)), text: tab.title })), args.format));
-    const text = windows.join("\n\n");
-    let clipboard_failed = false;
-    clipboard_failed = !(await refused_as(deps.write_clipboard(text).then(() => true), false));
-    // A private window's registers stay apart from the normal ones, as for every yank.
-    await deps.store.yank(register, text, is_private);
-    if (clipboard_failed) throw new RuntimeRefusal("Could not copy to the clipboard");
-    const skipped = listed.length - web_tabs.length;
-    await deps.toast(ctx, `Copied ${count_of(web_tabs.length)}${skipped > 0 ? `, skipped ${skipped} non-web ${skipped === 1 ? "tab" : "tabs"}` : ""}`);
+    await copy_listed_tabs(deps, ctx, listed, args.format, args.register ?? "", is_private);
   };
 }
 
-const handler = make_copy_tabs_handler({
+export const browser_copy_tabs_deps: CopyTabsDeps = {
   tabs: async (ctx, all_windows, incognito) => {
     if (ctx.window_id === undefined) throw new RuntimeRefusal("No window");
     return read_tabs(browser_complete_items_deps.query_tabs, { window_id: ctx.window_id, incognito }, all_windows);
@@ -65,7 +69,9 @@ const handler = make_copy_tabs_handler({
   write_clipboard: (text) => navigator.clipboard.writeText(text),
   store: browser_register_store,
   toast: (ctx, message) => show_toast_on_tab(ctx, "copy_tabs", message, "success"),
-});
+};
+
+const handler = make_copy_tabs_handler(browser_copy_tabs_deps);
 
 define("copy.tabs", {
   name: "copytabs",

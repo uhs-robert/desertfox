@@ -643,6 +643,16 @@ Results:
 - The labels in a docked toolbox showed in a screenshot taken 700 ms after they were in the documents, and not in one taken at once.
 - A tool tab (`.devtools-tab`) selects its tool on mousedown: `element.click()` does nothing. A `mousedown`, `mouseup`, `click` sequence made by chrome code selects it. The same sequence on a markup `.tag-line` selects its node, and the markup view keeps the keyboard focus, so j then moves on from it.
 
+## Tab range (tab-visual)
+
+Measured in Firefox 161 in the key test (`test/key/p57_tab_visual.mjs`), and read from its source (`ext-tabs.js`, `Tabbrowser.sys.mjs`).
+
+- `tabs.highlight` with the active tab listed first selects the tabs and fires no `onActivated` (probe in p57). It sets the whole selection through `gBrowser.selectedTabs`, which makes the first tab listed the active one. A tab switch that lands between reading the active tab and the call is undone, so tab range mode does not use it.
+- `tabs.update(id, { highlighted: true, active: false })` adds one tab to the selection and leaves the active tab alone (`addToMultiSelectedTabs`). Without `active: false` Firefox also makes the tab active. `tabs.update(id, { highlighted: false })` takes one tab out (`removeFromMultiSelectedTabs`). Taking the active tab out switches to another selected tab, so tab range mode never touches the active tab.
+- A tab switch clears the whole selection (`clearMultiSelectedTabs` in `updateCurrentBrowser`), also a switch to a tab inside it (p57, "a tab switch ends the mode and the range").
+- The tabs of a collapsed group stay in `tabs.query`, so the range reads `tabGroups.query({ collapsed: true })` to skip them. `j` from the tab before a collapsed group selects the tab after it and leaves the group's tabs out (p57).
+- `pinTab` puts the tab after the pinned tabs, and `unpinTab` puts it before the other tabs. Unpinning [A, B] in that order gives [B, A]. Pinning in strip order and unpinning in reverse, one tab at a time, keeps the order (p57, the `p` round trip).
+
 ## Escape in the console input and the Inspector search box (devtools-keys)
 
 - With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. Measured by `p54_browser_module_devtools_search`.

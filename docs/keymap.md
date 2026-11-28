@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 5)
+bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 5)
 
 ### normal
 
@@ -32,8 +32,8 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | --- | --- | --- | --- |
 | `h` | `scroll.pixels --dx=-50` | Scroll left | yes |
 | `l` | `scroll.pixels --dx=50` | Scroll right | yes |
-| `j` | `scroll 10` | Scroll down | yes |
-| `k` | `scroll -10` | Scroll up | yes |
+| `j` | `scroll 10` (while a list item holds the focus: `page.send_key --key=ArrowDown --key_code=40`) | Scroll down | yes |
+| `k` | `scroll -10` (while a list item holds the focus: `page.send_key --key=ArrowUp --key_code=38`) | Scroll up | yes |
 | `gg` | `scroll.to 0` | Scroll to top | yes |
 | `G` | `scroll.to 100` | Scroll to bottom | yes |
 | `$` | `scroll.to --x 100` | Scroll to right edge | yes |
@@ -53,6 +53,7 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `rC` | `page.reload --all` (prompts) | Clear all data, reload | yes |
 | `xp` | `page.stop` | Stop loading | yes |
 | `gr` | `page.reader` | Reader View | yes |
+| `gv` | `tab.visual --start ; tab.visual_enter` | Select a range of tabs |  |
 | `gh` | `page.home` | Home page | yes |
 | `gH` | `page.home --tab` | Home page | yes |
 | `]]` | `page.follow --next` | Next page |  |
@@ -243,8 +244,8 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `,,` | `anything` (prompts) | Find anything | yes |
 | `,b` | `page.blur` | Blur |  |
 | `,e` | `pane.focus sidebar` | Focus the sidebar | yes |
-| `,?` | `help.whichkey` | Which key |  |
-| `<A-?>` | `help.whichkey` | Show the keys |  |
+| `,?` | `help.whichkey` | Which key | yes |
+| `<A-?>` | `help.whichkey` | Show the keys | yes |
 | `,"` | `registers` (prompts) | List registers | yes |
 | `,fs` | `firefox settings` | Firefox settings | yes |
 | `,fa` | `firefox addons` | Firefox add-ons | yes |
@@ -408,10 +409,10 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `tree --left --aria` | Fold, else parent in a tree, else the item to the left |
-| `l` | `tree --child --aria` | First child in a tree or open it, else the item to the right |
-| `}` | `tree --next --aria` | Next sibling in a tree, else the next section |
-| `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |
+| `h` | `page.item --left --hover` (while the focus is inside a tree: `tree --left --aria`) | Fold, else parent in a tree, else the item to the left |
+| `l` | `page.item --right --hover` (while the focus is inside a tree: `tree --child --aria`) | First child in a tree or open it, else the item to the right |
+| `}` | `page.item --next-section --hover` (while the focus is inside a tree: `tree --next --aria`) | Next sibling in a tree, else the next section |
+| `{` | `page.item --prev-section --hover` (while the focus is inside a tree: `tree --prev --aria`) | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 
@@ -441,6 +442,33 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `<A-?>` | `help.whichkey` | Show the keys |
 
 Every key of item mode that this table does not bind also works here: it switches to item mode first and then runs as there.
+
+### tab_visual
+
+| Key | Command | Label |
+| --- | --- | --- |
+| `j` | `tab.visual --down` | Extend to the next tab |
+| `k` | `tab.visual --up` | Extend to the previous tab |
+| `gg` | `tab.visual --first` | Extend to the first tab |
+| `G` | `tab.visual --last` | Extend to the last tab |
+| `d` | `tab.act --close` | Close the tabs, at most 10 |
+| `D` | `tab.act --close --force` | Close the tabs, any number |
+| `ga` | `tab.act --group ; mode normal` | Put the tabs in a new group |
+| `yy` | `tab.act --copy ; mode normal` | Copy the tabs as Markdown |
+| `yu` | `tab.act --copy --plain ; mode normal` | Copy the tabs as plain addresses |
+| `yo` | `tab.act --copy --org ; mode normal` | Copy the tabs as an Org list |
+| `yt` | `tab.act --copy --title ; mode normal` | Copy the tabs as titles |
+| `p` | `tab.act --pin ; mode normal` | Toggle the pin of the tabs |
+| `m` | `tab.act --mute ; mode normal` | Toggle the mute of the tabs |
+| `r` | `tab.act --reload ; mode normal` | Reload the tabs |
+| `w` | `tab.act --attach ; mode normal` | Move the tabs to another window |
+| `b` | `tab.act --bookmark ; mode normal` | Bookmark the tabs |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
+
+Every key of normal mode that this table does not bind also works here: it switches to normal mode first and then runs as there.
 
 ### grab
 
