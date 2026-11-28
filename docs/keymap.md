@@ -24,7 +24,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 5)
+bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 5)
 
 ### normal
 
@@ -53,6 +53,7 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `rC` | `page.reload --all` (prompts) | Clear all data, reload | yes |
 | `xp` | `page.stop` | Stop loading | yes |
 | `gr` | `page.reader` | Reader View | yes |
+| `gv` | `tab.visual --start ; tab.visual_enter` | Select a range of tabs |  |
 | `gh` | `page.home` | Home page | yes |
 | `gH` | `page.home --tab` | Home page | yes |
 | `]]` | `page.follow --next` | Next page |  |
@@ -243,8 +244,8 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `,,` | `anything` (prompts) | Find anything | yes |
 | `,b` | `page.blur` | Blur |  |
 | `,e` | `pane.focus sidebar` | Focus the sidebar | yes |
-| `,?` | `help.whichkey` | Which key |  |
-| `<A-?>` | `help.whichkey` | Show the keys |  |
+| `,?` | `help.whichkey` | Which key | yes |
+| `<A-?>` | `help.whichkey` | Show the keys | yes |
 | `,"` | `registers` (prompts) | List registers | yes |
 | `,fs` | `firefox settings` | Firefox settings | yes |
 | `,fa` | `firefox addons` | Firefox add-ons | yes |
@@ -441,6 +442,33 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `<A-?>` | `help.whichkey` | Show the keys |
 
 Every key of item mode that this table does not bind also works here: it switches to item mode first and then runs as there.
+
+### tab_visual
+
+| Key | Command | Label |
+| --- | --- | --- |
+| `j` | `tab.visual --down` | Extend to the next tab |
+| `k` | `tab.visual --up` | Extend to the previous tab |
+| `gg` | `tab.visual --first` | Extend to the first tab |
+| `G` | `tab.visual --last` | Extend to the last tab |
+| `d` | `tab.act --close` | Close the tabs, at most 10 |
+| `D` | `tab.act --close --force` | Close the tabs, any number |
+| `ga` | `tab.act --group ; mode normal` | Put the tabs in a new group |
+| `yy` | `tab.act --copy ; mode normal` | Copy the tabs as Markdown |
+| `yu` | `tab.act --copy --plain ; mode normal` | Copy the tabs as plain addresses |
+| `yo` | `tab.act --copy --org ; mode normal` | Copy the tabs as an Org list |
+| `yt` | `tab.act --copy --title ; mode normal` | Copy the tabs as titles |
+| `p` | `tab.act --pin ; mode normal` | Toggle the pin of the tabs |
+| `m` | `tab.act --mute ; mode normal` | Toggle the mute of the tabs |
+| `r` | `tab.act --reload ; mode normal` | Reload the tabs |
+| `w` | `tab.act --attach ; mode normal` | Move the tabs to another window |
+| `b` | `tab.act --bookmark ; mode normal` | Bookmark the tabs |
+| `<Escape>` | `mode.escape` | Escape |
+| `<C-[>` | `mode.escape` | Escape |
+| `?` | `help.whichkey` | Show the keys |
+| `<A-?>` | `help.whichkey` | Show the keys |
+
+Every key of normal mode that this table does not bind also works here: it switches to normal mode first and then runs as there.
 
 ### grab
 

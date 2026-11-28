@@ -36,7 +36,7 @@ test("window.new turns an empty url into a blank window", async () => {
     restore_last_closed_window: async () => false,
     windows: async () => [],
     recent_window_ids: async () => [],
-    move_tab_to_window: async () => {},
+    move_tabs_to_window: async () => {},
   });
   await handlers.create({ url: "", private: true });
   await handlers.create({ url: "https://a.test/", private: false });
@@ -244,7 +244,7 @@ function attach_fake(windows: WindowLike[] = attach_windows(), recent_ids: numbe
     windows: async () => windows,
     recent_window_ids: async () => recent_ids,
     // A move never unpins: the only calls are the move and the focus.
-    move_tab_to_window: async (tab_id, window_id) => void log.push(`move ${tab_id} to ${window_id}`),
+    move_tabs_to_window: async (tab_ids, window_id) => void log.push(`move ${tab_ids.join(",")} to ${window_id}`),
   });
   return { handlers, log };
 }
