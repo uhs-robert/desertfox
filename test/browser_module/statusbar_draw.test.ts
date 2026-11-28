@@ -558,7 +558,7 @@ function scroll_sent_for(page: FakePage): unknown[] {
   const scrolling_element = { scrollTop: 40, scrollHeight: 500, clientHeight: 100 };
   const doc = {
     contentType: page.content_type ?? "text/html",
-    documentURI: page.document_uri ?? "",
+    documentURI: page.document_uri ?? `${page.protocol}//example`,
     scrollingElement: page.panels ? { scrollTop: 0, scrollHeight: 100, clientHeight: 100 } : scrolling_element,
     querySelectorAll: () => (page.panels ?? []).map((panel) => ({ scrollTop: panel.top, scrollHeight: panel.scroll_height, clientHeight: panel.client_height })),
     nodePrincipal: {
