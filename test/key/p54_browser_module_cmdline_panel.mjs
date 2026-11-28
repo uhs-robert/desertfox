@@ -160,6 +160,7 @@ export async function run_cases(context) {
 
   // A page in a content process: about:neterror runs in the web process, and no content script runs there, so the frame script of desertfox-selection.js answers.
   await run_case("a bare :search typed in the panel searches the text selected on an error page in a content process", async () => {
+    on_teardown(close_others);
     await close_panel();
     await home("bmp_home");
     const probe = create_http_server();
@@ -171,7 +172,7 @@ export async function run_cases(context) {
     const picked_json = await in_selected_page(`(win) => {
       const doc = win.document;
       const root = doc.querySelector("net-error-card")?.shadowRoot ?? doc.body;
-      const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const walker = doc.createTreeWalker(root, win.NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const word = /[A-Za-z]{5,}/.exec(node.textContent)?.[0];
         if (!word || !node.parentElement?.checkVisibility?.()) continue;
