@@ -73,9 +73,13 @@
     "scroll.pages": { fraction: "number", count: "int" },
     "scroll.to": { percent: "number", axis: "axis" },
     "page.stop": {},
+    "mode.insert": {},
+    "mode.pass_next": {},
+    "mode.set": { mode: "module_mode" },
     // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
     [ROOT_LIST_COMMAND_ID]: {}
   };
+  var MODULE_MODES = ["ignore", "insert"];
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;
   var MAX_TREE_BYTES = 32 * 1024;
@@ -92,6 +96,7 @@
     if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
     if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
     if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
+    if (kind === "module_mode") return MODULE_MODES.some((mode) => mode === value) ? void 0 : `must be one of ${MODULE_MODES.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
     if (kind === "optional_int" && value === void 0) return void 0;
@@ -323,8 +328,45 @@
     let walks = /* @__PURE__ */ new WeakMap();
     const tree_texts = /* @__PURE__ */ new WeakMap();
     const ignored = /* @__PURE__ */ new WeakMap();
+    const inserted = /* @__PURE__ */ new WeakMap();
+    const pass_armed = /* @__PURE__ */ new WeakMap();
+    const MODE_ATTRIBUTE = "desertfox-module-mode";
+    const MODE_DOCUMENT_ATTRIBUTE = "desertfox-module-document";
     const holds = /* @__PURE__ */ new Map();
-    const is_ignored = (browser2) => ignored.get(browser2) === browser2.innerWindowID;
+    const is_set = (flags, browser2) => flags.get(browser2) === browser2.innerWindowID;
+    const is_ignored = (browser2) => is_set(ignored, browser2);
+    const is_inserted = (browser2) => is_set(inserted, browser2);
+    const is_pass_armed = (browser2) => is_set(pass_armed, browser2);
+    const marked_browsers = /* @__PURE__ */ new Set();
+    function show_mode(browser2) {
+      const shown = is_inserted(browser2) ? "insert" : is_ignored(browser2) ? "ignore" : is_pass_armed(browser2) ? "pass" : void 0;
+      if (shown === void 0) {
+        browser2.removeAttribute(MODE_ATTRIBUTE);
+        browser2.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+        marked_browsers.delete(browser2);
+      } else {
+        for (const each of marked_browsers) if (each.isConnected === false) marked_browsers.delete(each);
+        marked_browsers.add(browser2);
+        browser2.setAttribute(MODE_ATTRIBUTE, shown);
+        browser2.setAttribute(MODE_DOCUMENT_ATTRIBUTE, String(browser2.innerWindowID));
+      }
+    }
+    core2.on_shut_down(() => {
+      for (const browser2 of marked_browsers) {
+        browser2.removeAttribute(MODE_ATTRIBUTE);
+        browser2.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+      }
+      marked_browsers.clear();
+    });
+    function set_flag(flags, browser2, on) {
+      if (on) flags.set(browser2, browser2.innerWindowID);
+      else flags.delete(browser2);
+      show_mode(browser2);
+    }
+    function enter_mode(browser2, flags) {
+      for (const each of [ignored, inserted, pass_armed]) each.delete(browser2);
+      set_flag(flags, browser2, true);
+    }
     const NOTICE_LEAF = "notice";
     const noticed = /* @__PURE__ */ new WeakMap();
     const hint_notice_of = (browser2, win) => core2.locked_page_rule?.()?.hint_notice(browser2, win);
@@ -430,6 +472,25 @@
       else core2.log_once(`a hint key was not sent to DesertFox: ${sent.problem}`);
       return true;
     }
+    const insert_row_of = (context, token) => context.insert_keys === void 0 ? token === "<Escape>" ? "mode.escape" : void 0 : context.insert_keys.get(token);
+    function reset_walk(win) {
+      walks.delete(win);
+      end_hold(win);
+    }
+    function insert_key(context, token) {
+      const row = insert_row_of(context, token);
+      if (row === "mode.escape") {
+        set_flag(inserted, context.browser, false);
+        if (context.in_field) core2.blur_field(context);
+        reset_walk(context.window);
+        return true;
+      }
+      if (row === void 0 && token === "<Escape>") {
+        set_flag(inserted, context.browser, false);
+        return false;
+      }
+      return row === "page.send_key" && core2.send_escape(context);
+    }
     function take_key(context) {
       const { window: win, browser: browser2, event, tree } = context;
       const token = event_to_token(event);
@@ -443,17 +504,23 @@
         end_hold(win);
         if (event.key === "Escape") return true;
       }
+      if (is_inserted(browser2)) return insert_key(context, token);
       if (is_ignored(browser2)) {
         if (token !== IGNORE_TOGGLE_KEY) return false;
-        ignored.delete(browser2);
+        set_flag(ignored, browser2, false);
         return true;
+      }
+      if (is_pass_armed(browser2)) {
+        set_flag(pass_armed, browser2, false);
+        walks.delete(win);
+        return false;
       }
       const text = tree === void 0 ? "" : tree_text(tree);
       const walk = text === "" ? void 0 : walk_for(win, browser2, text, hint_notice_of(browser2, win));
       if (!walk && context.row_runs) return void 0;
       const idle = walk === void 0 || walk.pending === void 0;
       if (idle && token === IGNORE_TOGGLE_KEY && !walk?.matcher.binds_after_("normal", [], token)) {
-        ignored.set(browser2, browser2.innerWindowID);
+        set_flag(ignored, browser2, true);
         return true;
       }
       if (idle && token === ADDRESS_BAR_KEY && !walk?.matcher.binds_after_("normal", [], token)) return open_address_bar(win, OMNIBOX_PREFIX).ok;
@@ -476,6 +543,26 @@
       if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
       return run_native(leaf, result, context);
     }
+    function field_key(context) {
+      const { window: win, browser: browser2 } = context;
+      const token = event_to_token(context.event);
+      if (token === null) return void 0;
+      reset_walk(win);
+      if (core2.keys_held_by(win) !== void 0) return false;
+      if (is_pass_armed(browser2)) {
+        set_flag(pass_armed, browser2, false);
+        return false;
+      }
+      if (is_ignored(browser2)) {
+        if (token !== IGNORE_TOGGLE_KEY) return false;
+        set_flag(ignored, browser2, false);
+        return true;
+      }
+      if (is_inserted(browser2)) return insert_key(context, token);
+      const row = insert_row_of(context, token);
+      if (row === "mode.escape") return core2.blur_field(context);
+      return row === "page.send_key" && core2.send_escape(context);
+    }
     function pending_in(win) {
       const walk = walks.get(win);
       const browser2 = win?.gBrowser?.selectedBrowser;
@@ -496,6 +583,10 @@
     }
     const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
     core2.define_command("page.stop", { args: {}, run: ({ browser: browser2 }) => browser2.stop() });
+    core2.define_command("mode.insert", { args: {}, run: ({ browser: browser2 }) => enter_mode(browser2, inserted) });
+    core2.define_command("mode.pass_next", { args: {}, run: ({ browser: browser2 }) => enter_mode(browser2, pass_armed) });
+    core2.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ browser: browser2, args }) => enter_mode(browser2, args.mode === "insert" ? inserted : ignored) });
+    core2.set_hello_flag("mode_keys", true);
     core2.register_kind("address_bar.open", ({ text, tab_id }) => {
       const win = focused_window();
       if (!win) return { ok: false, error: "No Firefox window has the focus" };
@@ -511,7 +602,8 @@
       },
       pending: pending_in,
       take_held,
-      ignores: is_ignored
+      ignores: is_ignored,
+      field_key
     });
   }
 })();

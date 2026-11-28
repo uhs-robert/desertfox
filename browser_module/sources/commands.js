@@ -1,7 +1,8 @@
 // DesertFox browser module, the commands feature: normal-mode key sequences and counts on locked pages, matched against the state's pruned tree. See docs/design/browser_module.md, "Keys on locked pages".
 // tools/build_browser_module.ts bundles this file with the extension's own matcher, token and tree check into browser_module/desertfox-commands.js, so a key event and the keymap meet in one form on both sides.
 // A forward leaf goes to the extension as a `run` request with the matched keys and the count. A native leaf runs here, through the command a feature file defined.
-// It also holds the per-tab ignore toggle, defines page.stop, and answers address_bar.open, the command line's stand-in on a page with no DesertFox page code.
+// It also holds the per-tab ignore, insert and pass-next states, defines page.stop and the mode commands, and answers address_bar.open, the command line's stand-in on a page with no DesertFox page code.
+// With the focus in a text field the core calls `field_key`, not `key`. It is the one place that decides which keys a field does not give the page, and by default none.
 // After a forward leaf that opens the command line (the tree's `line_keys`) it holds the window's keys until the line has the focus, so a key typed meanwhile never runs on the page.
 // Where hints cannot run now (the locked pages feature's rule), it claims the tree's `hint_keys` too, and sends the first one per document as a `run`, which the extension refuses with the reason.
 // On a page chrome hints label themselves (the rule says "page_hints"), each hint key starts those hints instead, through the core's `page_hints`.
@@ -45,13 +46,60 @@ function define(core) {
   let walks = new WeakMap();
   // The text of each tree the core handed over, so a state rewrite with the same tree keeps the sequence under way.
   const tree_texts = new WeakMap();
-  // Per tab browser, the document the ignore toggle was turned on in. A load makes a new document, which ends it.
+  // Per tab browser, the document each mode flag was set in. A load makes a new document, which ends it.
+  // Ignore and insert pass every key to the page (insert still takes its leave keys), and pass-next passes the one next key.
   const ignored = new WeakMap();
+  const inserted = new WeakMap();
+  const pass_armed = new WeakMap();
+  // The status bar reads the mode off the tab's <browser> element, so the module needs no message to it. The document id ends the display on a load, when no key has run yet to clear it.
+  const MODE_ATTRIBUTE = "desertfox-module-mode";
+  const MODE_DOCUMENT_ATTRIBUTE = "desertfox-module-document";
 
   // Per window, the hold after a key that opens the command line: the tab browser it was typed on and the printable text typed since.
   const holds = new Map();
 
-  const is_ignored = (browser) => ignored.get(browser) === browser.innerWindowID;
+  const is_set = (flags, browser) => flags.get(browser) === browser.innerWindowID;
+  const is_ignored = (browser) => is_set(ignored, browser);
+  const is_inserted = (browser) => is_set(inserted, browser);
+  const is_pass_armed = (browser) => is_set(pass_armed, browser);
+
+  // The browsers that carry the mode attributes now, so a shut down can clear them: a new module instance starts with empty flags and must not leave a badge behind.
+  const marked_browsers = new Set();
+
+  function show_mode(browser) {
+    const shown = is_inserted(browser) ? "insert" : is_ignored(browser) ? "ignore" : is_pass_armed(browser) ? "pass" : undefined;
+    if (shown === undefined) {
+      browser.removeAttribute(MODE_ATTRIBUTE);
+      browser.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+      marked_browsers.delete(browser);
+    } else {
+      // A closed tab never leaves its mode, so its browser would stay in the set: drop those as a mode starts.
+      for (const each of marked_browsers) if (each.isConnected === false) marked_browsers.delete(each);
+      marked_browsers.add(browser);
+      browser.setAttribute(MODE_ATTRIBUTE, shown);
+      browser.setAttribute(MODE_DOCUMENT_ATTRIBUTE, String(browser.innerWindowID));
+    }
+  }
+
+  core.on_shut_down(() => {
+    for (const browser of marked_browsers) {
+      browser.removeAttribute(MODE_ATTRIBUTE);
+      browser.removeAttribute(MODE_DOCUMENT_ATTRIBUTE);
+    }
+    marked_browsers.clear();
+  });
+
+  function set_flag(flags, browser, on) {
+    if (on) flags.set(browser, browser.innerWindowID);
+    else flags.delete(browser);
+    show_mode(browser);
+  }
+
+  // The modes exclude each other: only one tab state shows at a time.
+  function enter_mode(browser, flags) {
+    for (const each of [ignored, inserted, pass_armed]) each.delete(browser);
+    set_flag(flags, browser, true);
+  }
 
   // A hint key leaf, which only says why hints do not run here. Per tab browser, the document whose first hint key was sent, so the reason shows once per document.
   const NOTICE_LEAF = "notice";
@@ -182,6 +230,31 @@ function define(core) {
     return true;
   }
 
+  // The leave and send keys of insert mode, from the state's table. Without a table (an older extension) only the plain Escape leaves, as it always did.
+  const insert_row_of = (context, token) => (context.insert_keys === undefined ? (token === "<Escape>" ? "mode.escape" : undefined) : context.insert_keys.get(token));
+
+  function reset_walk(win) {
+    walks.delete(win);
+    end_hold(win);
+  }
+
+  // A key in insert mode, with or without a field. A leave key ends the mode and drops the focus from a field, and the key is consumed, as in a web page. Every other key goes to the page.
+  function insert_key(context, token) {
+    const row = insert_row_of(context, token);
+    if (row === "mode.escape") {
+      set_flag(inserted, context.browser, false);
+      if (context.in_field) core.blur_field(context);
+      reset_walk(context.window);
+      return true;
+    }
+    // As on a web page, an Escape no row binds still leaves insert mode, and the page gets the key.
+    if (row === undefined && token === "<Escape>") {
+      set_flag(inserted, context.browser, false);
+      return false;
+    }
+    return row === "page.send_key" && core.send_escape(context);
+  }
+
   function take_key(context) {
     const { window: win, browser, event, tree } = context;
     const token = event_to_token(event);
@@ -195,10 +268,17 @@ function define(core) {
       end_hold(win);
       if (event.key === "Escape") return true;
     }
+    if (is_inserted(browser)) return insert_key(context, token);
     if (is_ignored(browser)) {
       if (token !== IGNORE_TOGGLE_KEY) return false;
-      ignored.delete(browser);
+      set_flag(ignored, browser, false);
       return true;
+    }
+    // <C-v>: the next key goes to the page, and a count or half-typed sequence before it is dropped.
+    if (is_pass_armed(browser)) {
+      set_flag(pass_armed, browser, false);
+      walks.delete(win);
+      return false;
     }
     const text = tree === undefined ? "" : tree_text(tree);
     const walk = text === "" ? undefined : walk_for(win, browser, text, hint_notice_of(browser, win));
@@ -207,7 +287,7 @@ function define(core) {
     const idle = walk === undefined || walk.pending === undefined;
     // The tree wins over the module's own keys, so a user who binds them gets the binding.
     if (idle && token === IGNORE_TOGGLE_KEY && !walk?.matcher.binds_after_("normal", [], token)) {
-      ignored.set(browser, browser.innerWindowID);
+      set_flag(ignored, browser, true);
       return true;
     }
     if (idle && token === ADDRESS_BAR_KEY && !walk?.matcher.binds_after_("normal", [], token)) return open_address_bar(win, OMNIBOX_PREFIX).ok;
@@ -232,6 +312,33 @@ function define(core) {
     if (leaf === NOTICE_LEAF) return notice_once(result, browser);
     if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
     return run_native(leaf, result, context);
+  }
+
+  // Keys in a field. The core calls this, not `key`, while a text field has the focus, because the page types there. It returns true for a key it took, and false to leave the key to the page, which is the default for every key.
+  // Only the insert table's rows are taken here: the leave key blurs the field and a send key sends the page a plain Escape. The walk resets, as a key the guards refuse resets it, so a half-typed sequence never ends in a field.
+  // A later feature that takes keys in a field (a one-shot normal command) adds its arm check at the top of this function and hands the key to `take_key`.
+  function field_key(context) {
+    const { window: win, browser } = context;
+    const token = event_to_token(context.event);
+    if (token === null) return undefined;
+    reset_walk(win);
+    // Another feature holds every key of the window, Escape included.
+    if (core.keys_held_by(win) !== undefined) return false;
+    // The key that ends pass-next goes to the page, as every key does here.
+    if (is_pass_armed(browser)) {
+      set_flag(pass_armed, browser, false);
+      return false;
+    }
+    if (is_ignored(browser)) {
+      // As on a web page, the ignore leave key ends the mode in a field too.
+      if (token !== IGNORE_TOGGLE_KEY) return false;
+      set_flag(ignored, browser, false);
+      return true;
+    }
+    if (is_inserted(browser)) return insert_key(context, token);
+    const row = insert_row_of(context, token);
+    if (row === "mode.escape") return core.blur_field(context);
+    return row === "page.send_key" && core.send_escape(context);
   }
 
   function pending_in(win) {
@@ -262,6 +369,10 @@ function define(core) {
   const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
 
   core.define_command("page.stop", { args: {}, run: ({ browser }) => browser.stop() });
+  core.define_command("mode.insert", { args: {}, run: ({ browser }) => enter_mode(browser, inserted) });
+  core.define_command("mode.pass_next", { args: {}, run: ({ browser }) => enter_mode(browser, pass_armed) });
+  core.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ browser, args }) => enter_mode(browser, args.mode === "insert" ? inserted : ignored) });
+  core.set_hello_flag("mode_keys", true);
   core.register_kind("address_bar.open", ({ text, tab_id }) => {
     const win = focused_window();
     if (!win) return { ok: false, error: "No Firefox window has the focus" };
@@ -279,5 +390,6 @@ function define(core) {
     pending: pending_in,
     take_held,
     ignores: is_ignored,
+    field_key,
   });
 }
