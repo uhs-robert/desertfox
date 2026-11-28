@@ -167,9 +167,9 @@ export async function run_cases(context) {
     await new Promise((resolve) => probe.close(resolve));
     await open_tab(`http://127.0.0.1:${closed_port}/`, { loaded: (spec) => spec.includes(String(closed_port)) });
     await poll_until("the error page", () => in_selected_page(`(win) => win.document.documentURI.startsWith("about:neterror")`));
-    const picked = await in_selected_page(`(win) => {
+    // The error page keeps its text in the open shadow root of net-error-card. The code has no comment: it travels as one line.
+    const picked_json = await in_selected_page(`(win) => {
       const doc = win.document;
-      // The error page keeps its text in the open shadow root of net-error-card.
       const root = doc.querySelector("net-error-card")?.shadowRoot ?? doc.body;
       const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -179,11 +179,11 @@ export async function run_cases(context) {
         range.selectNodeContents(node);
         win.getSelection().removeAllRanges();
         win.getSelection().addRange(range);
-        // The page's own selection may stop at the shadow boundary, so the word is what the frame script must return.
-        return { word: win.getSelection().toString().match(/[A-Za-z]{5,}/)?.[0] ?? word };
+        return JSON.stringify({ word: win.getSelection().toString().match(/[A-Za-z]{5,}/)?.[0] ?? word });
       }
-      return { problem: "no text on the page" };
+      return JSON.stringify({ problem: "no text on the page" });
     }`);
+    const picked = typeof picked_json === "string" ? JSON.parse(picked_json) : { problem: `unexpected result ${JSON.stringify(picked_json)}` };
     // Count the frame script's replies from the chrome side, so the case passes only when that path answered.
     await chrome(`(async () => { const core = Services.desertfox_key_test_selection ??= { replies: 0 }; core.replies = 0; core.listener ??= () => core.replies++; Services.mm.addMessageListener("desertfox-browser-module:selection-text", core.listener); })()`);
     on_teardown(() => chrome(`(async () => { const spy = Services.desertfox_key_test_selection; if (spy) Services.mm.removeMessageListener("desertfox-browser-module:selection-text", spy.listener); })()`));
