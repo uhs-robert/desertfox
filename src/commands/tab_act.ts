@@ -8,6 +8,7 @@ import { browser_group_deps, browser_tab_action_deps, close_tabs, group_tabs, se
 import type { GroupDeps, TabActionDeps } from "../background/tab_actions.ts";
 import { add_many_bookmarks } from "./bookmark.ts";
 import { browser_copy_tabs_deps, copy_listed_tabs } from "./copy_tabs.ts";
+import type { CopyTabsDeps } from "./copy_tabs.ts";
 import { nearest_tab } from "./tab.ts";
 import { tab_visual } from "./tab_visual.ts";
 import { attach_many_tabs } from "./window.ts";
@@ -35,7 +36,7 @@ export type TabAction = "close" | "pin" | "mute" | "reload" | "copy" | "group" |
 export function make_tab_act_handler(deps: TabActDeps) {
   // Focus moves to the nearest tab outside the range first, so Firefox does not pick its own. A tab of a collapsed group is a poor target, so it counts only when no other tab is outside, and a hidden tab never takes the focus.
   async function close(window_id: number, tabs: ActTab[], force: boolean): Promise<void> {
-    if (!force && tabs.length > CLOSE_LIMIT) throw new RuntimeRefusal(`Refused to close ${tabs.length} tabs at once, the limit is ${CLOSE_LIMIT}, force it with the force flag`);
+    if (!force && tabs.length > CLOSE_LIMIT) throw new RuntimeRefusal(`Refused to close ${tabs.length} tabs, the limit is ${CLOSE_LIMIT}. Press D, or add --force`);
     const all = await deps.window_tabs(window_id);
     if (tabs.length === all.length) throw new RuntimeRefusal("The range holds every tab in the window, use wc to close the window");
     const inside = new Set(tabs.map((tab) => tab.id));
@@ -59,8 +60,12 @@ export function make_tab_act_handler(deps: TabActDeps) {
       case "close":
         return close(ctx.window_id, tabs, args.force ?? false);
       // Any tab off turns the whole range on, else it turns the whole range off, as the tab list does.
-      case "pin":
-        return set_pinned(deps, ids, tabs.some((tab) => !tab.pinned));
+      // Firefox puts a tab it pins after the pinned tabs and a tab it unpins before the other tabs, so pinning in strip order and unpinning in reverse, one tab at a time, keeps the order.
+      case "pin": {
+        const pinned = tabs.some((tab) => !tab.pinned);
+        for (const id of pinned ? ids : ids.toReversed()) await set_pinned(deps, [id], pinned);
+        return;
+      }
       case "mute":
         return set_muted(deps, ids, tabs.some((tab) => !tab.muted));
       case "reload":
@@ -93,6 +98,16 @@ const to_act_tab = (tab: browser.tabs.Tab): ActTab => ({
 
 const by_index = (a: ActTab, b: ActTab) => a.index - b.index;
 
+// The `copy.tabs` body over the selected tabs, into the unnamed register.
+export const copy_selected_tabs =
+  (copy_deps: CopyTabsDeps, get_tab: (tab_id: number) => Promise<browser.tabs.Tab>): TabActDeps["copy"] =>
+  async (ctx, tab_ids, format) => {
+    const is_private = await copy_deps.is_private(ctx);
+    const tabs = await Promise.all(tab_ids.map(get_tab));
+    const listed = listed_tabs(tabs, { window_id: ctx.window_id!, incognito: is_private });
+    await copy_listed_tabs(copy_deps, ctx, listed, format, "", is_private);
+  };
+
 const browser_tab_act_deps: TabActDeps = {
   ...browser_tab_action_deps,
   selected_tabs: async (window_id) => {
@@ -105,12 +120,7 @@ const browser_tab_act_deps: TabActDeps = {
   activate: async (tab_id) => void (await browser.tabs.update(tab_id, { active: true })),
   reload: (tab_id) => browser.tabs.reload(tab_id),
   group: browser_group_deps,
-  copy: async (ctx, tab_ids, format) => {
-    const is_private = await browser_copy_tabs_deps.is_private(ctx);
-    const tabs = await Promise.all(tab_ids.map((id) => browser.tabs.get(id)));
-    const listed = listed_tabs(tabs, { window_id: ctx.window_id!, incognito: is_private });
-    await copy_listed_tabs(browser_copy_tabs_deps, ctx, listed, format, "", is_private);
-  },
+  copy: copy_selected_tabs(browser_copy_tabs_deps, (id) => browser.tabs.get(id)),
   attach: attach_many_tabs,
   bookmark: (ctx, tabs) => add_many_bookmarks(ctx, tabs),
 };

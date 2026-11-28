@@ -39,12 +39,12 @@ function make(window_tabs: ActTab[], selected_ids: number[], collapsed: number[]
 const strip = (count: number, active_id = 3) => Array.from({ length: count }, (_, at) => tab(at + 1, { active: at + 1 === active_id }));
 const refused = (pattern: RegExp) => (error: unknown) => error instanceof RuntimeRefusal && pattern.test(error.message);
 
-test("pin turns every tab on when any is off, else every tab off", async () => {
-  const mixed = make(strip(5).map((one) => (one.id === 2 ? { ...one, pinned: true } : one)), [2, 3]);
+test("pin turns every tab on in strip order when any is off, else every tab off in reverse order", async () => {
+  const mixed = make(strip(5).map((one) => (one.id === 2 ? { ...one, pinned: true } : one)), [2, 3, 4]);
   await mixed.run(ctx, { action: "pin" });
-  const all_pinned = make(strip(5).map((one) => ({ ...one, pinned: true })), [2, 3]);
+  const all_pinned = make(strip(5).map((one) => ({ ...one, pinned: true })), [2, 3, 4]);
   await all_pinned.run(ctx, { action: "pin" });
-  assert.deepEqual([...mixed.log, ...all_pinned.log], ["pin 2,3 true", "pin 2,3 false"]);
+  assert.deepEqual([...mixed.log, ...all_pinned.log], ["pin 2 true", "pin 3 true", "pin 4 true", "pin 4 false", "pin 3 false", "pin 2 false"]);
 });
 
 test("mute follows the same any-off rule", async () => {
@@ -95,12 +95,12 @@ test("the focus skips a hidden tab and a tab of a collapsed group when another t
   assert.deepEqual(only_collapsed.log.slice(0, 1), ["activate 5"], "a collapsed tab over a hidden one");
 });
 
-test("close takes the limit and refuses one tab more, naming the count", async () => {
+test("close takes the limit and refuses one tab more, naming the count and D", async () => {
   const at_limit = make(strip(CLOSE_LIMIT + 5), Array.from({ length: CLOSE_LIMIT }, (_, at) => at + 1), []);
   await at_limit.run({ ...ctx, tab_id: 1 }, { action: "close" });
   assert.equal(at_limit.log.length, CLOSE_LIMIT + 1);
   const over = make(strip(CLOSE_LIMIT + 5), Array.from({ length: CLOSE_LIMIT + 1 }, (_, at) => at + 1));
-  await assert.rejects(over.run(ctx, { action: "close" }), refused(new RegExp(`${CLOSE_LIMIT + 1} tabs`)));
+  await assert.rejects(over.run(ctx, { action: "close" }), refused(new RegExp(`${CLOSE_LIMIT + 1} tabs.*Press D`)));
   assert.deepEqual(over.log, []);
   const forced = make(strip(CLOSE_LIMIT + 5), Array.from({ length: CLOSE_LIMIT + 1 }, (_, at) => at + 1));
   await forced.run(ctx, { action: "close", force: true });
