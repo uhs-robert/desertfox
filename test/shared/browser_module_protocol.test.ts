@@ -658,3 +658,12 @@ test("page_links.read names a tab and a scope only, and a full-size reply fits t
   assert.ok(new TextEncoder().encode(value).length <= MAX_PAGE_LINKS_BYTES);
   assert.equal(reply_fits({ v: V, reply_to: "l1", ok: true, value }, row), true);
 });
+
+test("a scope tree keeps register_keys only as true", () => {
+  const kept = validate_scope_tree({ children: { x: "forward" }, register_keys: true });
+  assert.ok(kept.ok && kept.value.register_keys === true);
+  for (const register_keys of [false, "yes", 1]) {
+    const checked = validate_scope_tree({ children: { x: "forward" }, register_keys });
+    assert.ok(checked.ok && !("register_keys" in checked.value), String(register_keys));
+  }
+});

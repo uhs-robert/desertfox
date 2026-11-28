@@ -132,8 +132,8 @@ test("a remapped key follows, and an unbound key leaves the tree", () => {
   // A key bound to a page command leaves too.
   const to_page = scope_tree_of(compiled({ normal: { u: { id: "hint.run" } } }), allowed, real_check);
   assert.equal(node_at(to_page, ["u"]), undefined);
-  assert.deepEqual(scope_tree_of(undefined, allowed, real_check), { children: {} });
-  assert.deepEqual(scope_tree_of({ ...compiled(), format_version: 1 as never }, allowed, real_check), { children: {} });
+  assert.deepEqual(scope_tree_of(undefined, allowed, real_check), { children: {}, register_keys: true });
+  assert.deepEqual(scope_tree_of({ ...compiled(), format_version: 1 as never }, allowed, real_check), { children: {}, register_keys: true });
 });
 
 test("a guarded leaf, a step of another mode and a multi-step leaf with a page step stay out", () => {
@@ -202,6 +202,16 @@ test("a run request's keys are matched again against the full tree", () => {
   assert.ok(open.ok && open.leaf.steps[0]!.invocation.prompt !== undefined);
 });
 
+test("a register before a yank runs it and fills the register into its steps", () => {
+  const keymap = compiled({ normal: { e: { id: "copy.url", args: { format: "title" } } } });
+  const bound = resolve_run(keymap, "\" a e", 0, allowed);
+  assert.equal(bound.ok, true);
+  if (!bound.ok) return;
+  assert.deepEqual(counted_steps(bound.leaf.steps, undefined).map(({ args }) => args?.register), ["a"]);
+  const black_hole = resolve_run(keymap, "\" _ e", 0, allowed);
+  assert.equal(black_hole.ok && counted_steps(black_hole.leaf.steps, undefined)[0]!.args?.register, "_");
+});
+
 test("a forged, stale or page key, a typed count or register and junk are refused", () => {
   const keymap = compiled();
   const refused = (keys: string, count = 0, at: CompiledKeymap | undefined = keymap) => {
@@ -213,8 +223,8 @@ test("a forged, stale or page key, a typed count or register and junk are refuse
   for (const keys of ["Q Q Q", "g", "g J", "x x x", "<C-S-F12>"]) assert.equal(refused(keys)?.shown, true, keys);
   // Bound, but to page code: hints, find, the command line, a mark.
   for (const keys of ["f", "/", "A", "m a"]) assert.match(refused(keys)!.problem, /needs a page/, keys);
-  // A count, a register or a hold belong in `count`, never in the keys.
-  for (const keys of ["5 x x", "\" a x x", "t <Space> n"]) refused(keys);
+  // A count or a hold belongs in `count` or nowhere, never in the keys. A register name the pattern refuses, or a register with no command, runs nothing.
+  for (const keys of ["5 x x", "t <Space> n", "\" ! x x", "\"", "\" a", "\" \" x x", "x \" a x"]) refused(keys);
   // Junk keys text is no sequence and is not shown.
   for (const keys of ["", "x  x", "x\tx", "a".repeat(30), Array(MAX_SEQUENCE_KEYS + 1).fill("x").join(" "), "\u0000"]) assert.equal(refused(keys)?.shown, undefined, JSON.stringify(keys));
   for (const count of [-1, 1.5, MAX_COUNT + 1]) assert.equal(refused("x x", count)?.shown, undefined, String(count));
