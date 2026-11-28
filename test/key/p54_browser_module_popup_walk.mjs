@@ -116,25 +116,25 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  // Where a field sits in every variant below: fixed at the page's top left, so one point reaches it and a frame holding it.
-  const FIELD_POINT = [50, 35];
-  const mouse_at = (steps_of_events) =>
+  // Every injected field and frame sits fixed at the page's top left, so one point reaches it.
+  const INJECTED_POINT = [50, 35];
+  const at_point = (point, body) =>
     chrome(`(async () => {
       const w = ${W};
       const browser = w.gBrowser.selectedBrowser;
       const box = browser.getBoundingClientRect();
-      const [x, y] = [box.left + ${FIELD_POINT[0]}, box.top + ${FIELD_POINT[1]}];
-      ${steps_of_events}
+      const [x, y] = [${point[0]}, ${point[1]}];
+      ${body}
     })()`);
   // A real press: the page gets trusted events and the field takes the focus as for a user.
-  const click_field = () =>
-    mouse_at(`for (const message of [w.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, w.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, w.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
-      w.windowUtils.sendNativeMouseEvent((w.mozInnerScreenX + x - box.left + box.left) * w.devicePixelRatio, (w.mozInnerScreenY + y) * w.devicePixelRatio, message, 0, 0, browser, null);
+  const click_at = (point) =>
+    at_point(point, `for (const message of [w.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, w.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, w.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
+      w.windowUtils.sendNativeMouseEvent((w.mozInnerScreenX + box.left + x) * w.devicePixelRatio, (w.mozInnerScreenY + box.top + y) * w.devicePixelRatio, message, 0, 0, browser, null);
       await new Promise((resolve) => w.setTimeout(resolve, 20));
     }`);
   // The native widget has no right button, so the menu comes from a synthesized one: a press and the contextmenu event.
-  const right_click_field = () =>
-    mouse_at(`for (const type of ["mousedown", "contextmenu"]) w.synthesizeMouseEvent(type, x, y, { button: 2, buttons: type === "mousedown" ? 2 : 0, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });`);
+  const right_click_at = (point) =>
+    at_point(point, `for (const type of ["mousedown", "contextmenu"]) w.synthesizeMouseEvent(type, box.left + x, box.top + y, { button: 2, buttons: type === "mousedown" ? 2 : 0, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });`);
   const FIELD_BOX = "position:fixed;left:20px;top:20px;width:200px;height:30px;margin:0;box-sizing:border-box;";
   const FIELD_MARKUP = {
     input: `<input id="field" type="text" value="helo wrld" style="${FIELD_BOX}">`,
@@ -142,54 +142,89 @@ export async function run_cases(context) {
     password: `<input id="field" type="password" value="helowrld" style="${FIELD_BOX}">`,
     contenteditable: `<div id="field" contenteditable="true" style="${FIELD_BOX}border:1px solid #888">helo wrld</div>`
   };
+  const FRAME_STYLE = `${FIELD_BOX}border:0;width:300px;height:100px;`;
   const FRAME_INPUT = `<body style="margin:0"><input id="field" type="text" value="helo wrld" style="width:200px;height:30px;box-sizing:border-box">`;
 
-  // What the field holds, read in the page process (same-origin frames included). A field in a frame of another site cannot be read from here.
-  const field_value = (where) =>
-    steps.in_selected_page(`(win) => { const doc = ${where === "same" ? `win.document.getElementById("frame").contentDocument` : "win.document"}; const field = doc.getElementById("field"); return field ? (field.value ?? field.textContent) : null; }`);
+  // What the field holds, read in the page process. There is no cross-origin frame variant: the synthesized right-click does not reach a frame of another process.
+  const field_value = (frame) =>
+    steps.in_selected_page(`(win) => { const doc = ${frame === "same" ? `win.document.getElementById("frame").contentDocument` : "win.document"}; const field = doc.getElementById("field"); return field ? (field.value ?? field.textContent) : null; }`);
+  // With the module on, the browser bar shows the mode and the page has no corner badge.
+  const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left").children[0]?.textContent ?? null : null; })()`);
+  const context_active = async () => (await menu_item("#contentAreaContextMenu")).active;
 
-  // Opens the field's context menu as a user would and checks that j and k walk it and the field takes no letter.
+  // j moves the menu on, and k moves it back one.
+  async function walk_context_menu(what) {
+    const seen = [await context_active()];
+    for (let step = 0; step < 3; step++) {
+      await press_keys("j");
+      const last = seen.at(-1);
+      await poll_until(`j to move the menu over ${what}`, async () => (await context_active()) !== last);
+      seen.push(await context_active());
+    }
+    await press_keys("k");
+    await poll_until(`k to move the menu back over ${what}`, async () => (await context_active()) === seen[2]);
+  }
+
+  // Right-clicks at `point`, checks that the menu shows `item` (so it is the menu the case means), walks it with j and k and closes it with Escape.
+  async function walk_menu_over(name, point, item) {
+    await right_click_at(point);
+    await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
+    expect(await chrome(`(async () => !!${W}.document.querySelector(${JSON.stringify(`#contentAreaContextMenu ${item}:not([hidden])`)}))()`), `the menu over ${name} lacks ${item}`);
+    await walk_context_menu(name);
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
+  }
+
+  // Opens the field's context menu as a user would, walks it with j and k, and checks that the field takes no letter.
+  // `focus` is "click" (a real click first), "none" (the right-click reaches the field itself) or "insert" (the served /field page, clicked until the bar shows INSERT).
   const field_menu_case = (name, { kind = "input", frame = "none", focus = "click", page_handler = false }) =>
     walk_case(`a context menu over ${name} is walked by j and k and the field gets no letter`, async () => {
-      await home(`pw_field_${kind}_${frame}_${focus}`);
-      const frame_url = `http://localhost:${new URL(await steps.selected_spec()).port}/frame_field?id=pw_field_cross`;
-      await focus_page();
-      await steps.in_selected_page(`(win) => {
-        const doc = win.document;
-        const holder = doc.createElement("div");
-        const frame_style = "${FIELD_BOX}border:0;width:300px;height:100px;";
-        holder.innerHTML = ${JSON.stringify(frame === "none" ? FIELD_MARKUP[kind] : "")} || ${frame === "same" ? "`<iframe id=\"frame\" style=\"${frame_style}\"></iframe>`" : "`<iframe id=\"frame\" src=\"${" + JSON.stringify(frame_url) + "}\" style=\"${frame_style}\"></iframe>`"};
-        doc.body.prepend(holder);
-        if (${frame === "same"}) doc.getElementById("frame").contentDocument.body.outerHTML = ${JSON.stringify(FRAME_INPUT)};
-        ${page_handler ? `win.addEventListener("keydown", (event) => { if (event.key === "j" || event.key === "k") { event.preventDefault(); event.stopPropagation(); } }, true);` : ""}
-        return true;
-      }`);
-      await poll_until("the field to be laid out", () => steps.in_selected_page(`(win) => !!win.document.getElementById(${JSON.stringify(frame === "none" ? "field" : "frame")})?.getBoundingClientRect().width`));
-      await sleep(1200);
-      const before = frame === "cross" ? null : await field_value(frame);
-      if (focus === "click") {
-        await click_field();
-        if (frame === "cross") await sleep(600);
-        else await poll_until("the field to hold the focus", () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`));
+      let point = INJECTED_POINT;
+      try {
+        if (focus === "insert") {
+          await home("pw_insert_bar");
+          // The bar is set before a field has the focus, since the command line does not open from a field.
+          on_teardown(() => run_line(":unset browser_bar"));
+          await run_line(":set browser_bar true");
+          await poll_until("the bar to show NORMAL", async () => (await bar_mode()) === "NORMAL");
+          await open_page("field", "pw_insert_static", { new_tab: false });
+          // The page focuses its field at load, so the field is blurred to let the click be the first focus.
+          point = await steps.in_selected_page(`(win) => { const field = win.document.getElementById("field"); field.blur(); const box = field.getBoundingClientRect(); return [box.left + 10, box.top + box.height / 2]; }`);
+        } else {
+          await home(`pw_field_${kind}_${frame}_${focus}`);
+          await focus_page();
+          const markup =
+            frame === "none" ? FIELD_MARKUP[kind]
+            : `<iframe id="frame" style="${FRAME_STYLE}"></iframe>`;
+          await steps.in_selected_page(`(win) => {
+            const holder = win.document.createElement("div");
+            holder.innerHTML = ${JSON.stringify(markup)};
+            win.document.body.prepend(holder);
+            if (${frame === "same"}) win.document.getElementById("frame").contentDocument.body.outerHTML = ${JSON.stringify(FRAME_INPUT)};
+            ${page_handler ? `win.addEventListener("keydown", (event) => { if (event.key === "j" || event.key === "k") { event.preventDefault(); event.stopPropagation(); } }, true);` : ""}
+            return true;
+          }`);
+          await poll_until("the field to be laid out", () => steps.in_selected_page(`(win) => !!win.document.getElementById(${JSON.stringify(frame === "none" ? "field" : "frame")})?.getBoundingClientRect().width`));
+        }
+        const before = await field_value(frame);
+        if (focus !== "none") {
+          // A click right after the page loads can land before the window takes it, so the click repeats until the field holds the focus.
+          const field_focused = () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`);
+          const focus_reached = focus === "insert" ? async () => (await bar_mode()) === "INSERT" : field_focused;
+          await poll_until("the click to focus the field", async () => {
+            await click_at(point);
+            return poll_until("the focus to show", focus_reached, { timeout_ms: 600, expected_timeout: true }).then(() => true, () => false);
+          }, { timeout_ms: 10000 });
+        }
+        await walk_menu_over(name, point, "#context-paste");
+        expect((await field_value(frame)) === before, `the field changed from ${JSON.stringify(before)} to ${JSON.stringify(await field_value(frame))} while the menu was open`);
+      } finally {
+        // A field with the focus keeps the command line from opening, so the bar is unset after the focus leaves.
+        if (focus === "insert") {
+          await focus_page();
+          await run_line(":unset browser_bar");
+        }
       }
-      await right_click_field();
-      await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
-      const editable = await chrome(`(async () => !!${W}.gContextMenu?.onEditable)()`);
-      if (frame !== "cross") expect(editable === true, "the menu is not the field's editing menu");
-      await sleep(300);
-      const seen = [];
-      for (let step = 0; step < 3; step++) {
-        await press_keys("j");
-        await sleep(150);
-        seen.push((await menu_item("#contentAreaContextMenu")).active);
-      }
-      expect(seen[0] !== null && seen[0] !== seen[1] && seen[1] !== seen[2], `j did not move through the context menu over ${name}: ${seen.join(", ")}`);
-      await press_keys("k");
-      await sleep(150);
-      expect((await menu_item("#contentAreaContextMenu")).active === seen[1], `k did not move back to ${seen[1]}`);
-      await press_keys("-k", "Escape");
-      await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
-      if (frame !== "cross") expect((await field_value(frame)) === before, `the field changed from ${JSON.stringify(before)} to ${JSON.stringify(await field_value(frame))} while the menu was open`);
     });
 
   await field_menu_case("an input clicked first", {});
@@ -198,47 +233,31 @@ export async function run_cases(context) {
   await field_menu_case("a contenteditable div", { kind: "contenteditable" });
   await field_menu_case("a password input", { kind: "password" });
   await field_menu_case("an input in a same-origin frame", { frame: "same" });
-  await field_menu_case("an input in a cross-origin frame", { frame: "cross" });
   await field_menu_case("an input of a page whose own handler stops j and k", { page_handler: true });
+  await field_menu_case("an input in INSERT mode", { focus: "insert" });
 
-  // With the module on, the browser bar shows the mode and the page has no corner badge.
-  const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left").children[0]?.textContent ?? null : null; })()`);
-
-  await walk_case("a context menu over a field in INSERT mode is walked by j and k and the field keeps its value", async () => {
-    await home("pw_insert_bar");
-    // The bar is set before a field has the focus, since the command line does not open from a field.
-    on_teardown(() => run_line(":unset browser_bar"));
-    await run_line(":set browser_bar true");
-    await poll_until("the bar to show NORMAL", async () => (await bar_mode()) === "NORMAL");
-    await open_page("field", "pw_insert_static", { new_tab: false });
-    await sleep(1500);
-    const [x, y] = await steps.in_selected_page(`(win) => { const box = win.document.getElementById("field").getBoundingClientRect(); return [box.left + 10, box.top + box.height / 2]; }`);
-    FIELD_POINT[0] = x;
-    FIELD_POINT[1] = y;
-    await click_field();
-    await poll_until("the bar to show INSERT", async () => (await bar_mode()) === "INSERT");
-    const before = await steps.in_selected_page(`(win) => win.document.getElementById("field").value`);
-    await right_click_field();
-    await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
-    await sleep(300);
-    const seen = [];
-    for (let step = 0; step < 3; step++) {
-      await press_keys("j");
-      await sleep(150);
-      seen.push((await menu_item("#contentAreaContextMenu")).active);
-    }
-    expect(seen[0] !== null && seen[0] !== seen[1] && seen[1] !== seen[2], `j did not move through the context menu in INSERT mode: ${seen.join(", ")}`);
-    await press_keys("k");
-    await sleep(150);
-    expect((await menu_item("#contentAreaContextMenu")).active === seen[1], `k did not move back to ${seen[1]}`);
-    await press_keys("-k", "Escape");
-    await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
-    const after = await steps.in_selected_page(`(win) => win.document.getElementById("field").value`);
-    expect(after === before, `the field changed from ${JSON.stringify(before)} to ${JSON.stringify(after)}`);
-    // Leave the field so the cleanup can open the command line.
-    await focus_page();
-    await run_line(":unset browser_bar");
-  });
+  // The page's own context menu in NORMAL mode, with no field focused: Back and Reload, a link, an image, selected text.
+  const PAGE_TARGETS = {
+    "a plain page": { markup: `<div id="target" style="${FIELD_BOX}">plain</div>`, item: "#context-back" },
+    "a link": { markup: `<a id="target" href="#linked" style="${FIELD_BOX}display:block">a link</a>`, item: "#context-openlinkintab" },
+    "an image": { markup: `<img id="target" alt="" src="data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='200' height='30'><rect width='200' height='30' fill='red'/></svg>")}" style="${FIELD_BOX}">`, item: "#context-viewimage" },
+    "selected text": { markup: `<p id="target" style="${FIELD_BOX}">selected words</p>`, item: "#context-copy", select: true }
+  };
+  for (const [name, { markup, item, select }] of Object.entries(PAGE_TARGETS)) {
+    await walk_case(`the context menu over ${name} is walked by j and k in NORMAL mode`, async () => {
+      await home(`pw_page_menu_${item.slice(9)}`);
+      await focus_page();
+      await steps.in_selected_page(`(win) => {
+        const holder = win.document.createElement("div");
+        holder.innerHTML = ${JSON.stringify(markup)};
+        win.document.body.prepend(holder);
+        if (${select === true}) win.getSelection().selectAllChildren(win.document.getElementById("target"));
+        return true;
+      }`);
+      await poll_until("the target to be laid out", () => steps.in_selected_page(`(win) => !!win.document.getElementById("target").getBoundingClientRect().width`));
+      await walk_menu_over(name, INJECTED_POINT, item);
+    });
+  }
 
   await walk_case("in a menu bar menu j moves and l opens a submenu that h closes", async () => {
     await home("pw_menubar");
