@@ -152,7 +152,8 @@
         if (!deeper || deeper === hit) break;
         hit = deeper;
       }
-      for (let node = hit; node; node = node.parentNode ?? node.host) if (node === element) return true;
+      // A slotted node sits under the slot it is assigned to, as drawn: the label of a nav link is a light child of its host, drawn inside the link in the host's shadow root.
+      for (let node = hit; node; node = node.assignedSlot ?? node.parentNode ?? node.host) if (node === element) return true;
       return false;
     }
 
@@ -228,16 +229,20 @@
       return found;
     }
 
-    // An element's box in its window's own pixels. A dialog's document sits in frames of the window, so each frame's place adds up.
+    // An element's box in its window's own pixels. A dialog's or a page's document sits in frames of the window, so each frame's place adds up. A page's own pixels are scaled by its zoom, so each hop scales the box before it adds the frame's place.
     function window_box(win, element) {
       const box = box_of(element);
       let doc = element.ownerDocument;
       while (doc && doc !== win.document) {
-        const frame = doc.defaultView?.browsingContext?.embedderElement;
+        const context = doc.defaultView?.browsingContext;
+        const frame = context?.embedderElement;
         if (!frame) break;
+        const zoom = context.fullZoom ?? 1;
         const outer = frame.getBoundingClientRect();
-        box.left += outer.left + (frame.clientLeft ?? 0);
-        box.top += outer.top + (frame.clientTop ?? 0);
+        box.left = box.left * zoom + outer.left + (frame.clientLeft ?? 0);
+        box.top = box.top * zoom + outer.top + (frame.clientTop ?? 0);
+        box.width *= zoom;
+        box.height *= zoom;
         doc = frame.ownerDocument;
       }
       return box;

@@ -22,7 +22,9 @@ const label_on = (pick) => `(async () => {
   if (!el) return null;
   const outer = b.getBoundingClientRect();
   const r = el.getBoundingClientRect();
-  const x = Math.max(0, Math.round(r.left + outer.left)), y = Math.max(0, Math.round(r.top + outer.top));
+  // The page's pixels are scaled by its zoom in the window.
+  const zoom = b.fullZoom ?? 1;
+  const x = Math.max(0, Math.round(r.left * zoom + outer.left)), y = Math.max(0, Math.round(r.top * zoom + outer.top));
   let best = null, best_distance = Infinity;
   for (const host of w.document.querySelectorAll(".desertfox-page-hints")) for (const node of host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint")) {
     const box = node.getBoundingClientRect();
@@ -36,6 +38,19 @@ const page_layers = `(async () => ${W}.document.querySelectorAll(".desertfox-pag
 const confirm_shown = `(async () => [...${W}.document.querySelectorAll(".desertfox-page-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`;
 const held_by = `(async () => Services.desertfox_browser_module.keys_held_by(${W}) ?? null)()`;
 const in_field = `(async () => ${W}.windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`;
+
+// Chrome code: the clipboard's text.
+const clipboard_text = `(async () => {
+  const transferable = Cc["@mozilla.org/widget/transferable;1"].createInstance(Ci.nsITransferable);
+  transferable.init(null);
+  transferable.addDataFlavor("text/plain");
+  Services.clipboard.getData(transferable, Services.clipboard.kGlobalClipboard, null);
+  const data = {};
+  try { transferable.getTransferData("text/plain", data); } catch { return ""; }
+  return data.value.QueryInterface(Ci.nsISupportsString).data;
+})()`;
+// Page code: the links of about:addons the user sees in the first screen, the web links and the sidebar's, as selectors-free pickers by index.
+const VISIBLE_LINKS = `(doc, deep_find) => { const all = []; const walk = (root) => { for (const el of root.querySelectorAll("a[href]")) all.push(el); for (const el of root.querySelectorAll("*")) if (el.openOrClosedShadowRoot) walk(el.openOrClosedShadowRoot); }; walk(doc); return all.filter((a) => a.checkVisibility() && a.getBoundingClientRect().width > 4 && a.getBoundingClientRect().top >= 0 && a.getBoundingClientRect().bottom <= doc.defaultView.innerHeight); }`;
 
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, take_shot, run_line, on_teardown, in_background, clear_notices } = context;
@@ -210,6 +225,52 @@ export async function run_cases(context) {
     await press_keys("-k", "Return");
     await poll_until("Enter to toggle the pref", () => chrome(`(async () => Services.prefs.getBoolPref("${TEST_PREF}"))()`), { timeout_ms: 3000 });
   });
+
+  for (const zoom of [1, 1.5]) {
+    await tab_case(`on about:addons every link in view gets a label at zoom ${zoom}, the sidebar's too, and F and the copy take a web link`, async () => {
+      await home("ph_addons_links");
+      await open_page("about:addons", `(win) => win.document.readyState === "complete" && !!win.gViewController`);
+      await in_selected_page(`(win) => (win.gViewController.loadView("addons://discover/"), true)`);
+      await sleep(2500);
+      await chrome(`(async () => { ${W}.gBrowser.selectedBrowser.fullZoom = ${zoom}; })()`);
+      await sleep(500);
+      await focus_page();
+      const link_count = await in_selected_page(`(win) => { ${DEEP_FIND} return (${VISIBLE_LINKS})(win.document, deep_find).length; }`);
+      expect(link_count >= 4, `about:addons shows only ${link_count} links in view`);
+      await start_hints("f", `f on about:addons at zoom ${zoom}`);
+      const missing = [];
+      for (let index = 0; index < link_count; index++) {
+        const label = await chrome(label_on(`(doc, deep_find) => (${VISIBLE_LINKS})(doc, deep_find)[${index}]`));
+        if (label === null) missing.push(await in_selected_page(`(win) => { ${DEEP_FIND} return (${VISIBLE_LINKS})(win.document, deep_find)[${index}].href; }`));
+      }
+      expect(missing.length === 0, `links with no label at zoom ${zoom}: ${missing.join(" ")}`);
+      await press_keys("-k", "Escape");
+      await expect_ended("Escape in the session");
+      const web_link = `(doc, deep_find) => (${VISIBLE_LINKS})(doc, deep_find).find((a) => /^https?:/.test(a.href))`;
+      const href = await in_selected_page(`(win) => { ${DEEP_FIND} return (${web_link})(win.document, deep_find)?.href ?? null; }`);
+      expect(href !== null, "about:addons shows no web link in view");
+      await chrome(`(async () => { Services.desertfox_key_test_tabs_before = new Set(${W}.gBrowser.tabs); })()`);
+      const tabs_before = await chrome(`(async () => ${W}.gBrowser.tabs.length)()`);
+      await start_hints("F", `F on about:addons at zoom ${zoom}`);
+      const tab_label = await chrome(label_on(web_link));
+      expect(tab_label !== null, "the web link got no F label");
+      await press_keys(...tab_label.split(""));
+      await poll_until("a new tab", async () => (await chrome(`(async () => ${W}.gBrowser.tabs.length)()`)) === tabs_before + 1, { timeout_ms: 3000 });
+      const new_tab = `${W}.gBrowser.tabs.find((tab) => !Services.desertfox_key_test_tabs_before.has(tab))`;
+      await poll_until("the new tab to take the address", async () => (await chrome(`(async () => { const b = ${new_tab}?.linkedBrowser; return b?.currentURI?.spec === ${JSON.stringify(href)} || b?.userTypedValue === ${JSON.stringify(href)}; })()`)) === true, { timeout_ms: 5000 });
+      await chrome(`(async () => { ${W}.gBrowser.removeTab(${new_tab}); delete Services.desertfox_key_test_tabs_before; })()`);
+      await expect_ended("F on about:addons");
+      await focus_page();
+      await press_keys(";", "y", "l");
+      await poll_until(`;yl on about:addons at zoom ${zoom}: the labels to show`, async () => (await chrome(label_count)) > 0, { timeout_ms: 5000 });
+      await sleep(LABELS_SEEN_MS);
+      const copy_label = await chrome(label_on(web_link));
+      expect(copy_label !== null, "the web link got no copy label");
+      await press_keys(...copy_label.split(""));
+      await poll_until("the copy", async () => (await chrome(clipboard_text)) === href, { timeout_ms: 5000 });
+      await expect_ended(";yl on about:addons");
+    });
+  }
 
   await tab_case("a hint that needs page code says so on about:preferences and starts nothing", async () => {
     await home("ph_refused");
