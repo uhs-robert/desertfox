@@ -1,5 +1,5 @@
-// DesertFox's page code on view-source: and the JSON viewer, which the browser module runs there (browser_module/desertfox-locked-pages.js) while browser_module_pages is on.
-// Hints and yy on both, a move from a web page to its source and back, a reload of the JSON viewer, and view-source: of another extension's page, which never gets page code. p54_browser_module_page_code covers the PDF viewer and Reader View.
+// DesertFox's page code on view-source:, the JSON viewer and a blob: page shown in its tab, which the browser module runs there (browser_module/desertfox-locked-pages.js) while browser_module_pages is on.
+// Hints and yy on each, a move from a web page to its source and back, a reload of the JSON viewer, and view-source: of another extension's page, which never gets page code. p54_browser_module_page_code covers the PDF viewer and Reader View.
 import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,6 +52,11 @@ export async function run_cases(context) {
   const steps = module_steps(context);
   const { chrome, open_tab, focus_page, in_selected_page, close_selected_tab, home, selected_spec, session_value, wait_loaded } = steps;
   const server = createServer((request, response) => {
+    // The page makes a blob: of HTML and shows it in its own tab, so the blob: carries this page's http principal.
+    if (request.url === "/to_blob")
+      return response
+        .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+        .end(`<!doctype html><title>to blob</title><script>location.href = URL.createObjectURL(new Blob([${JSON.stringify(`<!doctype html><title>blob</title><p><a href="${origin}/target">the target link</a> <a href="${origin}/other">another link</a></p>`)}], { type: "text/html" }));</script>`);
     if (request.url === "/data.json") return response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ link: `${origin}/target`, list: [1, 2, 3], words: "desert fox" }));
     // Hints label only what shows, so the links sit at the top of the page and of its source.
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(`<!doctype html><title>links</title><p><a href="/target">the target link</a> <a href="/other">another link</a></p>${make_article()}`);
@@ -67,6 +72,7 @@ export async function run_cases(context) {
   const pages = {
     "view-source: of a file page": { url: `view-source:${pathToFileURL(join(files_dir, "links.html")).href}`, ready: source_ready },
     "the JSON viewer": { url: `${origin}/data.json`, ready: `(win) => win.document.nodePrincipal.spec === "${JSON_VIEWER_PRINCIPAL}" && win.document.querySelectorAll("tr").length > 1` },
+    "a blob: page": { url: `${origin}/to_blob`, loaded: (spec) => spec.startsWith("blob:http:"), ready: `(win) => win.document.documentURI.startsWith("blob:http:") && !!win.document.querySelector("a[href]")` },
   };
 
   const page_code_ran = () => in_selected_page(`(win) => win.document.documentElement?.hasAttribute("data-desertfox-tree-read-ms") ?? false`);
@@ -86,7 +92,7 @@ export async function run_cases(context) {
 
   const wait_page_code = (what) => poll_until(`the page code to start on ${what}`, async () => (await page_code_ran()) && (await listeners()) > 0, { timeout_ms: 8000 });
   async function open_kind(name) {
-    await open_tab(pages[name].url);
+    await open_tab(pages[name].url, pages[name].loaded && { loaded: pages[name].loaded });
     await poll_until(`${name} to draw`, () => in_selected_page(pages[name].ready), { timeout_ms: 10000 });
     await wait_page_code(name);
     await focus_page();

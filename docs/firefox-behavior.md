@@ -600,6 +600,11 @@ view-source: and the JSON viewer (Firefox 161, key piece `test/key/p54_browser_m
 - `yy` copies the tab's address on the JSON viewer and on view-source: of a file page. view-source: of an http page is no secure context, even on 127.0.0.1 where the http page itself is one, so the page code's clipboard write fails there and `yy` says it could not copy, as on any plain http page.
 - view-source: turns each address in the source into a link with a `view-source:` address.
 
+A blob: page in its tab (Firefox 161, same key piece):
+- A web page that sets `location.href` to a blob: of HTML it made shows a document whose `documentURI` is `blob:http://host:port/<uuid>`, under the maker's http content principal (spec `http://host:port/`). No content script runs there.
+- `tabs.executeScript` on that tab rejects with "Missing host permission for the tab", even with `match_origin_as_fallback` on the content script, while `tabs.sendMessage` reaches the tab. So the module's page code is the one way in: its bundles load through the module, never through `executeScript`.
+- With the page code on, `f` draws labels and `yy` copies the blob: address. A blob: made by an http page on 127.0.0.1 is a secure context, as its maker is.
+
 Not measured: the real `storage.session` channel, a dark theme, scanned, large or form PDFs, real Reader View articles, and an IME.
 
 ## Processes of Firefox's own pages (locked-page-hints)
