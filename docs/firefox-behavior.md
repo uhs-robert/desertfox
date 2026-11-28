@@ -597,7 +597,7 @@ Not measured: the real `storage.session` channel, a dark theme, scanned, large o
 
 Firefox 161, the key-test copy, read from each tab's `<browser>` (key piece `test/key/p55_page_hints.mjs`):
 - In the parent process (`isRemoteBrowser` false, no `remoteType`): about:preferences, about:settings, about:addons, about:downloads, about:config and about:support. Chrome code reads their DOM directly.
-- In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there run through the module's frame script (#1045 and the start pages change). It labels about:privatebrowsing, about:home and about:newtab, and still skips about:protections and about:logins.
+- In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there run through the module's frame script (#1045). It labels about:privatebrowsing, about:home and about:newtab, and still skips about:protections and about:logins.
 
 ## Restricted hosts (restricted-domain-hints)
 
