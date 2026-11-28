@@ -7,7 +7,7 @@ import { RuntimeRefusal } from "../../src/shared/command.ts";
 const tab = (id: number, over: Partial<VisualTab> = {}): VisualTab => ({ id, index: id - 1, active: false, highlighted: false, hidden: false, group_id: -1, ...over });
 
 // The fake keeps Firefox's rule that the active tab is always selected. The log holds one entry per tab added (+) or taken out (-).
-function make(tabs: VisualTab[], collapsed: number[] = [], record?: RangeRecord) {
+function make(tabs: VisualTab[], collapsed: number[] = [], record?: RangeRecord, action_wait_ms?: number) {
   const log: string[] = [];
   let stored = record;
   const deps: TabVisualDeps = {
@@ -22,7 +22,7 @@ function make(tabs: VisualTab[], collapsed: number[] = [], record?: RangeRecord)
     remove_record: async () => void (stored = undefined),
   };
   const selected = () => tabs.filter((one) => one.highlighted || one.active).map((one) => one.id);
-  return { handler: make_tab_visual_handler(deps), log, record: () => stored, selected };
+  return { handler: make_tab_visual_handler(deps, action_wait_ms), log, record: () => stored, selected };
 }
 
 const five = (active = 3) => [1, 2, 3, 4, 5].map((id) => tab(id, { active: id === active }));
@@ -141,23 +141,57 @@ test("end with no record leaves a mouse selection alone", async () => {
   assert.deepEqual(selected(), [3, 4]);
 });
 
-test("an action waits for a move that has arrived but not reached the handler yet", async () => {
+const PAGE = 7;
+const OTHER_PAGE = 8;
+const never = new Promise<void>(() => {});
+
+test("an action waits for a move its page sent that has not reached the handler yet", async () => {
   const { handler, selected } = make(five());
   await run(handler, "start");
   let deliver!: () => void;
   const routed = new Promise<void>((resolve) => (deliver = resolve));
   // The move's message takes a slow path: it reaches the handler only after the action has asked for the range.
-  const answer = routed.then(() => run(handler, "down"));
-  handler.received(answer);
-  const seen = handler.idle().then(() => selected());
+  const answer = routed.then(() => handler.run(1, { action: "down" }, PAGE));
+  handler.received(PAGE, answer);
+  const seen = handler.idle(PAGE).then(() => selected());
   deliver();
   assert.deepEqual(await seen, [3, 4]);
 });
 
 test("a move that fails does not block the next action", async () => {
   const { handler } = make(five());
-  handler.received(Promise.reject(new Error("refused")));
-  await handler.idle();
+  handler.received(PAGE, Promise.reject(new Error("refused")));
+  await handler.idle(PAGE);
+});
+
+// A macro that switches tabs: the old page's `end` waits behind the replay, and the replay's next step is an action in the new tab.
+test("an action does not wait for a run from another tab", async () => {
+  const { handler } = make(five(), [], undefined, 60_000);
+  handler.received(OTHER_PAGE, never);
+  await handler.idle(PAGE);
+});
+
+// A snippet that runs `tab.act` after a move in the same run: the run answers only after the action.
+test("a run is settled once its move finishes, so a later step of the same run can act", async () => {
+  const { handler, selected } = make(five(), [], undefined, 60_000);
+  await run(handler, "start");
+  let action_saw: number[] = [];
+  const answer = (async () => {
+    await handler.run(1, { action: "down" }, PAGE);
+    await handler.idle(PAGE);
+    action_saw = selected();
+  })();
+  handler.received(PAGE, answer);
+  await answer;
+  assert.deepEqual(action_saw, [3, 4]);
+});
+
+test("a run that never answers holds its tab's action only until the wait limit", async () => {
+  const { handler } = make(five(), [], undefined, 20);
+  handler.received(PAGE, never);
+  const began = Date.now();
+  await handler.idle(PAGE);
+  assert.ok(Date.now() - began < 1000);
 });
 
 test("forgetting a window drops its record", async () => {

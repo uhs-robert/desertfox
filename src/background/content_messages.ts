@@ -131,7 +131,7 @@ export const content_handlers = (deps: ContentDeps) => {
         });
         // A run that holds `tab.act` as well waits on nothing here, as it would wait on its own answer.
         const ids = request.invocations.map((invocation) => invocation.id);
-        if (ids.includes("tab.visual") && !ids.includes("tab.act")) deps.tab_visual.received(answer);
+        if (sender.tab?.id !== undefined && ids.includes("tab.visual") && !ids.includes("tab.act")) deps.tab_visual.received(sender.tab.id, answer);
         return answer;
       },
     },

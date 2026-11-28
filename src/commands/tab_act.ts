@@ -20,7 +20,8 @@ export type ActTab = { id: number; index: number; active: boolean; pinned: boole
 
 export type TabActDeps = Pick<TabActionDeps, "set_muted" | "set_pinned" | "remove"> & {
   // The tabs Firefox shows as selected in the window, in strip order. A window with no selection answers the active tab.
-  selected_tabs: (window_id: number) => Promise<ActTab[]>;
+  // `tab_id` is the tab the action came from: the moves it sent before are waited for.
+  selected_tabs: (window_id: number, tab_id: number | undefined) => Promise<ActTab[]>;
   window_tabs: (window_id: number) => Promise<ActTab[]>;
   collapsed_group_ids: (window_id: number) => Promise<ReadonlySet<number>>;
   activate: (tab_id: number) => Promise<void>;
@@ -53,7 +54,7 @@ export function make_tab_act_handler(deps: TabActDeps) {
   // One tab is a range of one: the keys and the typed command act on the tab itself.
   return async (ctx: CommandContext, args: { action: TabAction; format?: ListFormat; force?: boolean }): Promise<void> => {
     if (ctx.window_id === undefined) throw new RuntimeRefusal("No window");
-    const tabs = await deps.selected_tabs(ctx.window_id);
+    const tabs = await deps.selected_tabs(ctx.window_id, ctx.tab_id);
     if (tabs.length === 0) throw new RuntimeRefusal("No tabs selected");
     const ids = tabs.map((tab) => tab.id);
     switch (args.action) {
@@ -110,8 +111,8 @@ export const copy_selected_tabs =
 
 const browser_tab_act_deps: TabActDeps = {
   ...browser_tab_action_deps,
-  selected_tabs: async (window_id) => {
-    await tab_visual.idle();
+  selected_tabs: async (window_id, tab_id) => {
+    await tab_visual.idle(tab_id);
     const selected = (await browser.tabs.query({ windowId: window_id, highlighted: true })).map(to_act_tab);
     return (selected.length > 0 ? selected : (await browser.tabs.query({ windowId: window_id, active: true })).map(to_act_tab)).toSorted(by_index);
   },
