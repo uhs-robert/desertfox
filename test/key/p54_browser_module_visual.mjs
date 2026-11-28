@@ -28,7 +28,7 @@ export async function run_cases(context) {
     await chrome(`(async () => { ${W}.gBrowser.selectedBrowser.focus(); ${W}.gBrowser.selectedBrowser.contentDocument?.activeElement?.blur?.(); })()`);
     await press_keys("v");
     await poll_until("caret browsing on", caret_pref, { timeout_ms: 5000 }).catch(async (error) => {
-      throw new Error(`${error.message}; module ${JSON.stringify(await steps.module_status())}; tree ${JSON.stringify(await steps.session_value("desertfox_browser_module_state").then((state) => state?.tree?.children?.v ?? null))}; hello ${JSON.stringify(await steps.session_value("desertfox_browser_module_hello"))}; bar ${await bar_mode()}`);
+      throw new Error(`${error.message}; module ${JSON.stringify(await steps.module_status())}; tree ${JSON.stringify(await steps.session_value("desertfox_browser_module_state").then((state) => state?.tree?.children?.v ?? null))}; hello ${JSON.stringify(await steps.session_value("desertfox_browser_module_hello"))}; bar ${await bar_mode()}; active ${await in_selected_page(`(win) => win.document.activeElement?.localName + ":" + win.document.activeElement?.id`)}; errors ${JSON.stringify((await steps.module_status()).errors)}`);
     });
     await poll_until("CARET in the bar", mode_is("CARET"), { timeout_ms: 8000 });
     await poll_until("caret browsing on", caret_pref);
@@ -42,7 +42,10 @@ export async function run_cases(context) {
     await open_tab("about:support");
     await focus_page();
     await press_keys("V");
-    await poll_until("VISUAL in the bar", mode_is("VISUAL"), { timeout_ms: 8000 });
+    await poll_until("VISUAL in the bar", mode_is("VISUAL"), { timeout_ms: 5000 }).catch(async (error) => {
+      const state = await steps.session_value("desertfox_browser_module_state");
+      throw new Error(`${error.message}; module errors ${JSON.stringify((await steps.module_status()).errors)}; tabs ${JSON.stringify(state?.tabs)}; from_module ${JSON.stringify(await steps.session_value("desertfox_browser_module_from_module"))}; from_extension ${JSON.stringify(await steps.session_value("desertfox_browser_module_from_extension"))}`);
+    });
     await poll_until("a selection in the page", () => in_selected_page(`(win) => win.getSelection().toString().length > 0`));
     await chrome(`(async () => { const g = ${W}.gBrowser; g.selectedTab = g.tabs.find((tab) => tab !== g.selectedTab); })()`);
     await poll_until("the pref back", async () => !(await caret_pref()));
