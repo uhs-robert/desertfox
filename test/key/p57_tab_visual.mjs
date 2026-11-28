@@ -40,8 +40,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     })()`);
     await activate(anchor);
     await background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.highlight({ windowId: tab.windowId, tabs: [tab.index] }); return 0; })()`);
-    await expect_highlighted([anchor], "one tab selected");
+    if ((await badge()) !== "NORMAL") await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
+    await expect_highlighted([anchor], "one tab selected");
   };
   // Opens n tabs after the current one, the last of them active, and answers the ids of the whole strip in order.
   const make_strip = async (name, count) => {
@@ -148,6 +149,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await poll_until("both tabs muted", async () => (await strip()).filter((tab) => tab.muted).length === 2);
     await expect_badge("NORMAL");
     await press_keys("gv");
+    await expect_badge("TAB VISUAL");
     await grow("j", 2);
     await press_keys("m");
     await poll_until("the mutes gone", async () => (await strip()).filter((tab) => tab.muted).length === 0);
