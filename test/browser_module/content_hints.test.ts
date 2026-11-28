@@ -130,7 +130,7 @@ function frame_child(firefox: Firefox, chrome: Chrome, { remote_type = "privileg
   return { sent, tamper, fire, listening, ask, pump, timers, kill: () => void (alive = false), received: () => chrome.to_child };
 }
 
-function start_on(options: Options = {}, build = listing().build, { state_hints = true, files = [] as string[] } = {}) {
+function start_on(options: Options = {}, build = listing().build, { state_hints = true, files = [] as string[], more_state = {} as Record<string, unknown> } = {}) {
   let chrome!: Chrome;
   const run = started(
     (firefox) => {
@@ -138,7 +138,7 @@ function start_on(options: Options = {}, build = listing().build, { state_hints 
       chrome = restricted_window(firefox, options, build);
       return chrome;
     },
-    { state: { v: 1, enabled: true, keys: [], tabs: {}, ...(state_hints && { page_hints: true }) }, files: [FILE, ...files] },
+    { state: { v: 1, enabled: true, keys: [], tabs: {}, ...(state_hints && { page_hints: true }), ...more_state }, files: [FILE, ...files] },
   );
   run.firefox.extension!.privateBrowsingAllowed = options.private_access === true;
   const copied: string[] = [];
@@ -393,8 +393,8 @@ test("the frame script in a page that is not on the list answers not_here and ke
 });
 
 // A reply the parent hears in place of the frame script's own.
-async function tampered(change: (data: Record<string, unknown>) => Record<string, unknown> | undefined, options: Options = {}) {
-  const run = start_on(options);
+async function tampered(change: (data: Record<string, unknown>) => Record<string, unknown> | undefined, options: Options = {}, more_state: Record<string, unknown> = {}) {
+  const run = start_on(options, listing().build, { more_state });
   run.child.tamper.with = (message) => {
     if (message.name !== `${PREFIX}targets`) return message;
     const data = change(message.data);
@@ -875,6 +875,53 @@ test("the search handoff button gets one label: the invisible input inside it ge
   assert.equal(rows.length, Object.keys(parts).length, "a target for the nested input");
 });
 
+// ---- Text mode: the frame script reads each target's text, and chrome hints check a text pick against it.
+
+const PICKER_STATE = { hint_mode_keys: [] as unknown[] };
+const sent_texts = (run: Run) => new Map(run.pushes("chrome_hints.texts").flatMap((args) => JSON.parse(args.texts as string) as [number, string][]));
+
+test("the frame script sends each target's shown text or name, cut and stripped, and a field's name, never what was typed in it", async () => {
+  const { parts, build } = listing();
+  parts.other.text = "Other\u202e  add-on\n";
+  parts.rating.text = "r".repeat(100);
+  Object.assign(parts.search, { value: "my secret" });
+  parts.search.setAttribute("aria-label", "Search add-ons");
+  const run = start_on({}, build, { more_state: PICKER_STATE });
+  run.hint_key();
+  assert.equal((await run.collect(5))?.ok, true);
+  const texts = sent_texts(run);
+  assert.equal(texts.get(run.id_of(5, parts.other)!), "Other add-on");
+  assert.equal(texts.get(run.id_of(5, parts.rating)!), "r".repeat(64));
+  assert.equal(texts.get(run.id_of(5, parts.search)!), "Search add-ons", "a field's typed text left the page");
+  assert.equal(texts.has(run.id_of(5, parts.report)!), false);
+});
+
+test("chrome cleans the frame script's texts again and drops a list that does not fit the rows", async () => {
+  const long = await tampered((data) => ({ ...data, texts: (data.rows as unknown[]).map(() => "\u0000x\u202e".repeat(80)) }), {}, PICKER_STATE);
+  assert.equal(long.result?.ok, true);
+  assert.ok([...sent_texts(long.run).values()].every((text) => text === "x ".repeat(32).trim()), "a control or format character, or a text past its length, reached the extension");
+  const short = await tampered((data) => ({ ...data, texts: ["one"] }), {}, PICKER_STATE);
+  assert.equal(short.result?.ok, true);
+  assert.deepEqual(short.run.pushes("chrome_hints.texts"), [], "texts that fit no rows were taken");
+});
+
+test("a text pick on a restricted host goes to the frame script only for a target whose text the typed text matches", async () => {
+  const { parts, build } = listing();
+  parts.other.text = "Other add-on";
+  parts.rating.text = "Rate it";
+  const run = start_on({}, build, { more_state: PICKER_STATE });
+  await labelled(run, 5);
+  for (const key of ["/", "o", "t"]) run.chrome.press(key);
+  assert.equal((await run.pick(5, run.id_of(5, parts.rating)!))?.error, "The keys typed do not name this hint");
+  assert.deepEqual(run.child_picks(), []);
+
+  const again = start_on({}, build, { more_state: PICKER_STATE });
+  await labelled(again, 6);
+  for (const key of ["/", "o", "t"]) again.chrome.press(key);
+  assert.equal((await again.pick(6, again.id_of(6, parts.other)!))?.ok, true);
+  assert.equal(parts.other.clicks, 1);
+});
+
 // An error page as Firefox shows it in a web process: its own principal is a content principal with the about: scheme, and the remote type names the failed site.
 const ERROR_NAMES = ["about:neterror", "about:certerror", "about:httpsonlyerror", "about:blocked"];
 const error_address = (name: string) => `${name}?e=nssBadCert&u=https%3A//127.0.0.1%3A1/&c=UTF-8`;
@@ -1064,6 +1111,60 @@ test("a start page and an error page give their links, and a link with a control
     const run = links_world(options, build);
     assert.deepEqual(await run.pairs("page"), [["https://a.example/", "A"]], JSON.stringify(options));
   }
+});
+
+// The PDF viewer and Reader View, whose page code is off: no hint row labels them, and the frame script reads their links after it checks the document's own principal.
+const viewer_principal = (spec: string): Principal => ({ isContentPrincipal: true, isSystemPrincipal: false, addonId: "", asciiHost: "", spec, schemeIs: () => false });
+function viewer_world(kind: "pdf" | "reader", build: (root: Node) => void, patch: { principal?: Principal; address?: string; type?: string } = {}) {
+  const reader_address = "about:reader?url=https%3A%2F%2Fa.example%2Fpost";
+  const options: Options =
+    kind === "pdf"
+      ? { remote_type: "file", principal: patch.principal ?? viewer_principal("resource://pdf.js/web/viewer.html") }
+      : { about: patch.address ?? reader_address, remote_type: "web", principal: patch.principal ?? viewer_principal(reader_address) };
+  const run = links_world(options, build, kind === "pdf" ? "file:///tmp/a.pdf" : (patch.address ?? reader_address));
+  Object.assign(run.chrome.browser, kind === "pdf" ? { documentContentType: patch.type ?? "application/pdf", currentURI: { scheme: "file", spec: "file:///tmp/a.pdf" } } : { currentURI: { scheme: "about", spec: patch.address ?? reader_address } });
+  return run;
+}
+
+test("the PDF viewer gives the links of its annotation layer, and not its toolbar or a link to its own page", async () => {
+  const toolbar = text_link("https://support.mozilla.org/kb/pdf", "Learn more", 20, 20);
+  const own_page = text_link("file:///tmp/a.pdf#page=2", "Page 2", 20, 60);
+  const annotation = text_link("https://example.org/from-the-pdf", "", 20, 100);
+  const run = viewer_world("pdf", (root) => {
+    const layer = el("div", 0, 90, { className: "annotationLayer" });
+    layer.append(own_page, annotation);
+    root.append(toolbar, layer);
+  });
+  assert.deepEqual(await run.pairs("page"), [["https://example.org/from-the-pdf", ""]]);
+  assert.deepEqual(await run.pairs("viewport"), [["https://example.org/from-the-pdf", ""]]);
+});
+
+test("Reader View gives the links of the article, absolute, without the ones to its own page, a mail link or a repeat", async () => {
+  const run = viewer_world("reader", (root) =>
+    root.append(text_link("https://a.example/post", "a.example", 20, 20), text_link("https://a.example/more?x=1", "More", 20, 60), text_link("about:reader?url=https%3A%2F%2Fa.example%2Fpost#sec", "Section", 20, 100), text_link("mailto:a@b.c", "Mail", 20, 140), text_link("https://a.example/more?x=1", "More again", 20, 180)),
+  );
+  assert.deepEqual(await run.pairs("page"), [["https://a.example/post", "a.example"], ["https://a.example/more?x=1", "More"]]);
+});
+
+test("a PDF whose browser the restricted list labels still gives its links", async () => {
+  const run = links_world({ host: "addons.mozilla.org" }, (root) => root.append(text_link("https://a.example/", "A", 20, 20)));
+  Object.assign(run.chrome.browser, { documentContentType: "application/pdf", currentURI: { scheme: "https", spec: "https://addons.mozilla.org/a.pdf" } });
+  Object.assign(run.chrome.page, { nodePrincipal: viewer_principal("resource://pdf.js/web/viewer.html") });
+  assert.deepEqual(await run.pairs("page"), [], "the frame script found no annotation layer, so no links, and no notice");
+});
+
+test("a page that only claims to be the PDF viewer or Reader View gives the notice", async () => {
+  const build = (root: Node) => root.append(text_link("https://a.example/", "A", 20, 20));
+  const web_pdf = viewer_world("pdf", build, { principal: web_principal("example.com") });
+  assert.equal((await web_pdf.ask("page"))?.error, NO_LINKS_HERE, "a web page that sent the PDF content type");
+  const system_pdf = viewer_world("pdf", build, { principal: { ...viewer_principal("resource://pdf.js/web/viewer.html"), isSystemPrincipal: true } });
+  assert.equal((await system_pdf.ask("page"))?.error, NO_LINKS_HERE, "a system principal");
+  const not_pdf = viewer_world("pdf", build, { type: "text/html" });
+  assert.equal((await not_pdf.ask("page"))?.error, NO_LINKS_HERE, "a document that is not a PDF");
+  const web_reader = viewer_world("reader", build, { principal: web_principal("example.com") });
+  assert.equal((await web_reader.ask("page"))?.error, NO_LINKS_HERE, "an about:reader address under a web principal");
+  const extension_reader = viewer_world("reader", build, { principal: { ...viewer_principal("about:reader?url=x"), addonId: "other@example" } });
+  assert.equal((await extension_reader.ask("page"))?.error, NO_LINKS_HERE, "an extension's principal");
 });
 
 test("a page the content route does not label, an account host, a page that changed and a tab that is not selected give the notice or a refusal and no links", async () => {

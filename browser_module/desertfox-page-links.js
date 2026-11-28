@@ -1,6 +1,6 @@
 // DesertFox browser module, the page links: it answers `page_links.read { tab_id, scope }` with the web links of a page where DesertFox's own page code does not run, for `copy.page_links` (yL and yl). See docs/design/browser_module.md, "Links on locked pages".
 // The reply value is JSON text of [address, text] pairs. It is data: the extension only formats and copies it, and nothing here or there opens an address. The request names no address, selector or URL.
-// Two collectors: a parent-process about: page (about:preferences, about:addons, about:config and the like), read here from the parent, and a page in a content process that the content hints route covers (a restricted host, a start page, an error page), read by that route's frame script through the core's `content_pages().links`.
+// Two collectors: a parent-process about: page (about:preferences, about:addons, about:config and the like), read here from the parent, and a page in a content process that the content hints route covers (a restricted host, a start page, an error page) or that is the PDF viewer or Reader View, read by that route's frame script through the core's `content_pages().links`.
 // Any other page is refused. The caps below are the extension's too (src/shared/browser_module_page_links.ts, which a test holds equal), and the extension checks the reply again.
 // In a window it asks the core to load it into the core sandbox, where it registers its kind once per process.
 
@@ -133,16 +133,15 @@
       const browser = tab.linkedBrowser;
       const route = core.content_pages?.();
       if (route?.refuses(browser)) return refuse(NO_LINKS_HERE);
-      if (route?.labels(browser) !== undefined) {
-        const read = await route.links(browser, link_scope);
-        if (!read.ok) return refuse(read.error);
-        // The user can switch tabs while the frame script reads.
-        if (win.gBrowser.selectedTab !== tab) return refuse("The tab that asked is no longer selected");
-        return { ok: true, value: value_of(read.pairs) };
-      }
       const content = browser.currentURI?.scheme === "about" ? browser.contentWindow : null;
-      if (!content?.document) return refuse(NO_LINKS_HERE);
-      return { ok: true, value: parent_page_value(content, link_scope) };
+      // A page in a parent process has a window here. Every other page asks the route's frame script, which also reads the PDF viewer and Reader View and refuses what it does not know.
+      if (route?.labels(browser) === undefined && content?.document) return { ok: true, value: parent_page_value(content, link_scope) };
+      if (!route) return refuse(NO_LINKS_HERE);
+      const read = await route.links(browser, link_scope);
+      if (!read.ok) return refuse(read.error);
+      // The user can switch tabs while the frame script reads.
+      if (win.gBrowser.selectedTab !== tab) return refuse("The tab that asked is no longer selected");
+      return { ok: true, value: value_of(read.pairs) };
     });
   }
 })(this);

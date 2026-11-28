@@ -37,9 +37,9 @@ export const HELLO_MIN_INTERVAL_MS = 1000;
 export const MESSAGE_MIN_GAP_MS = 50;
 
 // `text` is any string. The kind's `max_bytes` bounds it.
-// `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
+// `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out. `optional_text` is text or absent, for the same reason.
 // `firefox_page` is a name from MODULE_FIREFOX_PAGES. `optional_open_where` is absent, "tab" or "here".
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction" | "module_mode" | "field_direction" | "heading_direction" | "align_position";
+type ArgKind = "int" | "optional_int" | "optional_text" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction" | "module_mode" | "field_direction" | "heading_direction" | "align_position";
 
 // The page keys of `desertfox-page-keys.js`: the values of the direction and position args, as the registry's params list them.
 export const FIELD_DIRECTIONS = ["next", "prev"] as const;
@@ -181,8 +181,18 @@ export const MAX_SIDEBAR_KEY_TOKENS = 2;
 export type SidebarKeyRow = { keys: string[]; id: SidebarCommandId };
 // The command whose bindings the module takes with the focus in Firefox's own dialogs, windows and panels, where no content script hears a key. It starts the hints over that place.
 export const CHROME_HINT_COMMAND_ID = "hint.browser";
+// The one-shot normal prefix, whose `browser` chords the state carries as `normal_once_keys`.
+export const NORMAL_ONCE_COMMAND_ID = "mode.normal_once";
 export const MAX_CHROME_HINT_BINDINGS = 4;
 export const MAX_CHROME_HINT_KEY_TOKENS = 4;
+// The hint mode keys the module acts on itself in a session: a single key bound in the hint keymap to `mode.escape` or `help.whichkey`, beside the keys the picker takes. Plain Escape needs no row, since it always ends a session.
+export const HINT_MODE_KEY_OPS = ["escape", "whichkey"] as const;
+export type HintModeKeyRow = { key: string; op: (typeof HINT_MODE_KEY_OPS)[number] };
+export const MAX_HINT_MODE_KEYS = 16;
+// The text of one target that the module sends for text mode (`/`), and the typed query the extension sends back to draw. The module cuts each target's text to this.
+export const CHROME_HINT_TEXT_CHARS = 64;
+// The most parts a session's texts come in. The targets of 400 targets take about 4 parts, and the from-module list keeps only its newest 16, so the texts of a session stay well within it: a text past the parts is left out, and text mode skips its target.
+export const MAX_CHROME_HINT_TEXT_PARTS = 6;
 
 export type ModuleCommandId = keyof typeof MODULE_COMMAND_ARGS;
 export const MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS) as ModuleCommandId[];
@@ -210,14 +220,20 @@ export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
 // `page_hints` says the extension answers `page_hints.want`, so the module may start hints on Firefox's own pages. Without it the hint keys there keep the notice.
 // `which_key` holds the which-key panels of the tree, drawn by the module where no DesertFox page code runs.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable; insert_keys?: InsertKeyRow[] };
+// `hint_mode_keys` says the extension runs a module session's keys through the hint mode picker (`/`, Tab, Shift-Tab, Enter), and holds the rows of HintModeKeyRow. An older module ignores it, and a module that finds none keeps to labels.
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable; normal_once_keys?: string[]; focus_keys?: string[]; insert_keys?: InsertKeyRow[]; hint_mode_keys?: HintModeKeyRow[] };
+// `normal_once_keys`: the chords bound to `mode.normal_once`, so the module starts the one-shot prefix in the sidebar on the keydown itself, before a key typed fast behind it. An older module ignores the field and waits for `sidebar.normal_once`.
+// `focus_keys`: the key paths of the tree's forward leaves whose command moves the focus on purpose (a pane focus), so the module leaves the focus where the command put it. An older module ignores the field.
+export const MAX_NORMAL_ONCE_KEYS = 4;
+export const MAX_FOCUS_KEYS = 64;
 // The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
 export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
 // `line_keys`, on the root only: the key paths (tokens joined by one space) of the forward leaves that open the command line. After one of them the module holds the keys that follow until the line has the focus, so they never run on the page. An older module ignores the field.
 // `hint_keys`, on the root only: the key paths of the hint leaves, which need page code and so are not in the tree. Where hints cannot run now, the module claims them and sends the first one as a `run`, so the extension says why. An older module ignores the field.
-export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[] };
+// `register_keys`, on the root only: the extension accepts a register (`"a`) before the keys of a `run`. A module that sees no flag keeps a register typed on a locked page silent. An older module ignores the field.
+export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[]; register_keys?: true };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 7 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
@@ -237,8 +253,20 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list.
-export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true; mode_keys?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list. `f` lists the codes of HELLO_FEATURES that the module runs.
+export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true; mode_keys?: true; f?: string };
+// Each new feature says itself in the hello as a short code in `f`, the codes joined by one space, and not as a flag of its own: an extension before the 320 byte cap refuses a hello over 256 bytes, and the flags above already fill most of that.
+// `hk`: the chrome and page sessions send each key as a token and the targets' texts (`chrome_hints.texts`).
+export const HELLO_FEATURES = { hint_mode_keys: "hk" } as const;
+export const MAX_HELLO_FEATURE_CHARS = 64;
+const KNOWN_FEATURES: readonly string[] = Object.values(HELLO_FEATURES);
+
+// The known codes of a hello's `f`, joined by one space, or undefined. A value that is not codes of one or two lowercase letters is dropped whole, and a code this version does not know is skipped, so a newer module can add codes.
+function hello_features_of(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > MAX_HELLO_FEATURE_CHARS || !/^[a-z]{1,2}(?: [a-z]{1,2})*$/.test(value)) return undefined;
+  const known = [...new Set(value.split(" "))].filter((code) => KNOWN_FEATURES.includes(code));
+  return known.length > 0 ? known.join(" ") : undefined;
+}
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -268,6 +296,7 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "module_mode") return MODULE_MODES.some((mode) => mode === value) ? undefined : `must be one of ${MODULE_MODES.join(", ")}`;
   if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? undefined : "must be a page from the list";
   if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.some((where) => where === value) ? undefined : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
+  if (kind === "optional_text") return value === undefined || typeof value === "string" ? undefined : "must be text";
   if (kind === "optional_int" && value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
   if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? undefined : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
@@ -340,7 +369,9 @@ export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
   const root = value as { line_keys?: unknown; hint_keys?: unknown };
   const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
-  return problem === undefined ? { ok: true, value: kept_tree(value as ScopeTree) } : bad(problem);
+  if (problem !== undefined) return bad(problem);
+  const { register_keys, ...rest } = kept_tree(value as ScopeTree);
+  return { ok: true, value: { ...rest, ...(register_keys === true && { register_keys }) } };
 }
 
 const is_color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
@@ -390,6 +421,17 @@ export function bar_config_of(value: unknown): BarConfig | undefined {
 }
 
 // The sidebar table, or undefined when any part of it is bad: then the sidebar has no keys, and the tab and scroll keys stay. A row may not begin another row, because the module would never see the longer one.
+// A bad list is left out and the rest of the state stays, as for the sidebar table.
+export function normal_once_keys_of(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_NORMAL_ONCE_KEYS || !value.every(is_key_token)) return undefined;
+  return [...(value as string[])];
+}
+
+export function focus_keys_of(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_FOCUS_KEYS || key_paths_problem(value, "focus") !== undefined) return undefined;
+  return [...(value as string[])];
+}
+
 export function sidebar_keys_of(value: unknown): SidebarKeyRow[] | undefined {
   if (!Array.isArray(value) || value.length > MAX_KEY_ROWS) return undefined;
   const rows: SidebarKeyRow[] = [];
@@ -424,6 +466,17 @@ export function chrome_hint_keys_of(value: unknown): string[][] | undefined {
   const joined = (value as string[][]).map((keys) => keys.join(" "));
   if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return undefined;
   return (value as string[][]).map((keys) => [...keys]);
+}
+
+// The hint mode key table, or undefined when any row is bad: then the module takes no remapped key and keeps to labels, and the rest of the state stays.
+export function hint_mode_keys_of(value: unknown): HintModeKeyRow[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_HINT_MODE_KEYS) return undefined;
+  const rows: HintModeKeyRow[] = [];
+  for (const row of value) {
+    if (!is_record(row) || !is_key_token(row.key) || !(HINT_MODE_KEY_OPS as readonly unknown[]).includes(row.op) || rows.some((kept) => kept.key === row.key)) return undefined;
+    rows.push({ key: row.key, op: row.op as HintModeKeyRow["op"] });
+  }
+  return rows;
 }
 
 // One line of text the panel shows: no control or format characters (bidi among them), within its limit.
@@ -503,8 +556,11 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
   const chrome_hint_keys = chrome_hint_keys_of(value.chrome_hint_keys);
   const which_key = which_key_table_of(value.which_key);
+  const normal_once_keys = normal_once_keys_of(value.normal_once_keys);
+  const focus_keys = focus_keys_of(value.focus_keys);
   const insert_keys = insert_keys_of(value.insert_keys);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }), ...(insert_keys && { insert_keys }) } };
+  const hint_mode_keys = hint_mode_keys_of(value.hint_mode_keys);
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }), ...(normal_once_keys && { normal_once_keys }), ...(focus_keys && { focus_keys }), ...(insert_keys && { insert_keys }), ...(hint_mode_keys && { hint_mode_keys }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -516,11 +572,12 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   } catch {
     return bad("hello is not plain data");
   }
-  if (size > MAX_HELLO_BYTES) return bad("hello is too large");
+  if (size > MAX_HELLO_BYTES) return bad(`hello is ${size} bytes, over the ${MAX_HELLO_BYTES} byte cap: a browser module newer than this DesertFox sends more, so update DesertFox`);
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }), ...(value.mode_keys === true && { mode_keys: true as const }) } };
+  const features = hello_features_of(value.f);
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }), ...(value.mode_keys === true && { mode_keys: true as const }), ...(features && { f: features }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -575,8 +632,10 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
   // One part of a session's targets: `targets` is a list of [id, left, top, width, height] in CSS pixels.
   "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
-  // A key typed while the labels show. `seq` counts up per session, so a key read twice runs once.
-  "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // A key typed while the labels show. `seq` counts up per session, so a key read twice runs once. `key` is the event's key, and `token` the key as a key row names it (`<S-Tab>`, `<Space>`), which an older module leaves out.
+  "chrome_hints.key": { args: { session: "int", seq: "int", key: "text", token: "optional_text" }, reply: false, max_bytes: PANE_CALL_BYTES },
+  // One part of the texts of a session's targets, for text mode: `texts` is a list of [id, text], each text at most CHROME_HINT_TEXT_CHARS with no control or format character. A target with no text has no row.
+  "chrome_hints.texts": { args: { session: "int", part: "int", parts: "int", texts: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
   // The session ended in chrome: Escape, a click, the window left the front or closed, or no labels came.
   "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
   // The user typed a `hint.browser` binding with the focus in a dialog, the Library, Page Info or an open panel. `start` is a token the module made for that key in that window. A reply, so a start read twice runs once.
@@ -588,6 +647,7 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   // `<C-r>` in a text field: the register `name` (one key, which the extension checks again) of the tab `tab_id` (a fact chrome reads). The reply value is the register's text, cleaned and capped by the extension (`REGISTER_TEXT_CHARS`), and a refusal for a macro, an empty or an unknown register. The text goes into the field the user typed in and nowhere else.
   "register.read": { args: { tab_id: "int", name: "text" }, reply: true, max_bytes: REGISTER_REPLY_BYTES },
 };
+export const SIDEBAR_ONCE_KIND = "sidebar.normal_once";
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
   page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
@@ -612,7 +672,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // Starts a session where the user typed the binding, for a `chrome_hints.want`. The module takes its own `start` token once, while fresh, and only in the window that made it, so this names no window.
   "chrome_hints.collect_here": { args: { session: "int", start: "int", colors: "text" }, reply: true, max_bytes: 1024 },
   // One part of the labels to show: `labels` is a list of [id, label]. Only a draw whose parts all came shows, and it replaces the one before.
-  "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  // In text mode `query` is the typed text and `active` the id Enter picks. `key_line` is 1 when the hint key line shows (the `hint_key_line` setting). An older module ignores all three.
+  "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
   // Runs the target's fixed action. The reply refuses an id of another session and a target that is gone or moved.
   "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // Ends the session in chrome. The extension sends it after a failed collect, whose lost reply can hide a session that started.
@@ -624,7 +685,7 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86_400_000 },
   // Hints over DevTools, for a `devtools_hints.ask`: the module takes its own `ask` token once, while fresh, and only with the focus still in DevTools. Draw, pick and clear match the chrome_hints rows, apart so that the file that holds a DevTools session gets them.
   "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
-  "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
+  "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },
   "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: PANE_CALL_BYTES },
   // The keys of visual mode in DevTools, pushed with the key table and kept the same way. Each row maps a key to an op from the closed list, so the module moves and copies only the user's own selection. No text, selector or range comes or goes.
@@ -634,6 +695,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The text selected on a parent-process about: page, where no content script runs, as the reply value. The module caps and cleans it too, and the extension checks it again. An older module refuses the kind and the extension reads no selection there.
   "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
+  // `<A-o>` (`mode.normal_once`) with the focus in Firefox's own sidebar, sent whenever the module is on, with no hello flag, because the hello is near the size an older extension accepts. The module checks that the focus of the window in front is in the sidebar, then holds that window's next key sequence and runs it from the tree. It refuses anywhere else, and an older module refuses the unknown kind: either way the page's own arm acts. No arg: the module reads the focus itself.
+  "sidebar.normal_once": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   // The web links of a page where DesertFox's page code does not run, for `copy.page_links`. `scope` is "page" or "viewport", which the module checks. The reply value is JSON text of [address, text] pairs, capped by the module and checked again by the extension (browser_module_page_links.ts). The one kind whose reply carries addresses: they are only copied, and the request names no address.
   "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: MAX_KIND_BYTES },
   // The headings of a page for the command line list of `sh`: the reply value is JSON text of `[level, text]` pairs in page order, capped by the module and checked again by the extension. It also makes the module's snapshot, which `page_heading.go` indexes.

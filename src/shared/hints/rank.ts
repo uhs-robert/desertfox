@@ -1,5 +1,5 @@
 // Ranks hint texts against a typed query. Pure and free of page types, so a caller that gathers texts from several frames can rank them in one place.
-// This is whole-word and prefix matching, a different model from the letters-in-order scoring of the command line in `../../shared/score.ts`.
+// This is whole-word and prefix matching, a different model from the letters-in-order scoring of the command line in `../score.ts`.
 
 const WHOLE_FIRST_WORD = 8;
 const WHOLE_LATER_WORD = 4;
