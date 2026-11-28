@@ -382,7 +382,7 @@ test("with no tree or a bad one, the single-key rows decide", () => {
 });
 
 const HOLD_TREE: ScopeTree = {
-  children: { E: { children: { x: "forward", y: "forward", j: { native: "tab.next", args: {} } } }, y: { children: { y: "forward" } }, j: { native: "tab.next", args: {} } },
+  children: { E: { children: { x: "forward", y: "forward", j: { native: "tab.next", args: {} }, i: { native: "mode.insert", args: {} } } }, y: { children: { y: "forward" } }, o: "forward", j: { native: "tab.next", args: {} } },
   register_keys: true,
 };
 // `module_pending` is asked with the window's own global, as the status bar does.
@@ -405,6 +405,20 @@ test("Space in a group holds it: each leaf runs with its full path, a second Spa
   assert.equal(pending(), undefined);
   // The hold is over: x is no longer bound at the root, so it goes to the page.
   assert.equal(press("x").prevented, false);
+});
+
+test("a key that breaks a prefix, or leaves a hold, runs as a first key with its own path", () => {
+  const { press, type, runs } = hold_world();
+  type("y", "o");
+  type("E", " ", "o");
+  assert.equal(press("x").prevented, false);
+  assert.deepEqual(runs(), [{ keys: "o", count: 0 }, { keys: "o", count: 0 }]);
+});
+
+test("a leaf that sets a mode inside a hold ends the hold", () => {
+  const { type, pending } = hold_world();
+  type("E", " ", "i");
+  assert.equal(pending(), undefined);
 });
 
 test("a hold ignores the auto-repeat of its opening Space, takes a native leaf and ends on a tab switch", () => {

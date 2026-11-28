@@ -96,7 +96,9 @@ function define(core) {
   }
 
   // The modes exclude each other: only one tab state shows at a time.
-  function enter_mode(browser, flags) {
+  function enter_mode(win, browser, flags) {
+    // A leaf that changes the mode ends the sequence and any hold, as on a web page.
+    reset_walk(win);
     for (const each of [ignored, inserted, pass_armed]) each.delete(browser);
     set_flag(flags, browser, true);
   }
@@ -298,7 +300,8 @@ function define(core) {
     // The key that opened a hold repeats while it is down, and the matcher would take the repeat as the Space that ends the hold.
     if (event.repeat && walk.held && token === "<Space>") return true;
     const result = walk.matcher.feed("normal", token);
-    const path = [...walk.typed, token];
+    // Inside a hold the matcher's `keys` drop the leaf, so the walk's typed group is used. Elsewhere the keys of the binding alone come from the matcher, which drops a broken prefix when it retries the key as a first key.
+    const path = result.kind_ !== "match" ? [] : result.held_ !== undefined ? [...walk.typed, token] : result.keys.slice(String(result.count ?? "").length + (result.register_keys_?.length ?? 0));
     walk.pending = undefined;
     walk.held = result.held_ !== undefined;
     walk.typed = (result.kind_ === "pending" ? result.typed_ : result.held_) ?? [];
@@ -378,9 +381,9 @@ function define(core) {
   const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
 
   core.define_command("page.stop", { args: {}, run: ({ browser }) => browser.stop() });
-  core.define_command("mode.insert", { args: {}, run: ({ browser }) => enter_mode(browser, inserted) });
-  core.define_command("mode.pass_next", { args: {}, run: ({ browser }) => enter_mode(browser, pass_armed) });
-  core.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ browser, args }) => enter_mode(browser, args.mode === "insert" ? inserted : ignored) });
+  core.define_command("mode.insert", { args: {}, run: ({ window, browser }) => enter_mode(window, browser, inserted) });
+  core.define_command("mode.pass_next", { args: {}, run: ({ window, browser }) => enter_mode(window, browser, pass_armed) });
+  core.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ window, browser, args }) => enter_mode(window, browser, args.mode === "insert" ? inserted : ignored) });
   core.set_hello_flag("mode_keys", true);
   core.register_kind("address_bar.open", ({ text, tab_id }) => {
     const win = focused_window();

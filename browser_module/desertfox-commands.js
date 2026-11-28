@@ -365,7 +365,8 @@
       else flags.delete(browser2);
       show_mode(browser2);
     }
-    function enter_mode(browser2, flags) {
+    function enter_mode(win, browser2, flags) {
+      reset_walk(win);
       for (const each of [ignored, inserted, pass_armed]) each.delete(browser2);
       set_flag(flags, browser2, true);
     }
@@ -530,7 +531,7 @@
       if (!walk) return void 0;
       if (event.repeat && walk.held && token === "<Space>") return true;
       const result = walk.matcher.feed("normal", token);
-      const path = [...walk.typed, token];
+      const path = result.kind_ !== "match" ? [] : result.held_ !== void 0 ? [...walk.typed, token] : result.keys.slice(String(result.count ?? "").length + (result.register_keys_?.length ?? 0));
       walk.pending = void 0;
       walk.held = result.held_ !== void 0;
       walk.typed = (result.kind_ === "pending" ? result.typed_ : result.held_) ?? [];
@@ -590,9 +591,9 @@
     }
     const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
     core2.define_command("page.stop", { args: {}, run: ({ browser: browser2 }) => browser2.stop() });
-    core2.define_command("mode.insert", { args: {}, run: ({ browser: browser2 }) => enter_mode(browser2, inserted) });
-    core2.define_command("mode.pass_next", { args: {}, run: ({ browser: browser2 }) => enter_mode(browser2, pass_armed) });
-    core2.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ browser: browser2, args }) => enter_mode(browser2, args.mode === "insert" ? inserted : ignored) });
+    core2.define_command("mode.insert", { args: {}, run: ({ window: window2, browser: browser2 }) => enter_mode(window2, browser2, inserted) });
+    core2.define_command("mode.pass_next", { args: {}, run: ({ window: window2, browser: browser2 }) => enter_mode(window2, browser2, pass_armed) });
+    core2.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ window: window2, browser: browser2, args }) => enter_mode(window2, browser2, args.mode === "insert" ? inserted : ignored) });
     core2.set_hello_flag("mode_keys", true);
     core2.register_kind("address_bar.open", ({ text, tab_id }) => {
       const win = focused_window();
