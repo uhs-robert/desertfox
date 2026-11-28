@@ -56,6 +56,8 @@
 //   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
 //   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
 //   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
+//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action) }, so chrome hints and the locked page rule reach them. The first one stays.
+//   content_pages()            In the sandbox: that route, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
 // It never makes a network request and never runs code it reads from storage: a key row names a command from the fixed list the feature files define, with checked args.
@@ -1002,6 +1004,7 @@
     let hint_drawing;
     let locked_page_rule;
     let page_hints;
+    let content_pages;
     const core = {
       attach(win) {
         if (shut || windows.has(win)) return;
@@ -1156,6 +1159,11 @@
       },
       page_hints: () => page_hints,
       page_hints_wanted: (win) => !!win && state_for(win)?.page_hints === true,
+      share_content_pages(route) {
+        if (content_pages) log_once("two feature files share a content page route, the first one stays");
+        else content_pages = Object.freeze({ ...route });
+      },
+      content_pages: () => content_pages,
       shut_down() {
         fail_awaited("the module shut down");
         key_taker?.reset();

@@ -108,6 +108,10 @@
       const global = browser?.browsingContext?.currentWindowGlobal;
       const principal = global?.documentPrincipal;
       if (!principal || principal.addonId) return undefined;
+      // A page of Firefox's restricted list, which no content script reaches: hints run there through the content hints route, except on the account and Sync hosts.
+      const content_pages = core.content_pages?.();
+      if (content_pages?.refuses(browser)) return "not_here";
+      if (content_pages?.labels(browser)) return core.page_hints?.()?.handles(browser) && core.page_hints_wanted?.(win) ? "page_hints" : "not_here";
       if (page_kind_of(browser, global.innerWindowId)) return pages_on(desertfox()) ? undefined : "pages_off";
       const address = global.documentURI?.spec ?? "";
       if (!/^about:(?!(?:blank|srcdoc|reader)\b|devtools)/i.test(address)) return undefined;
