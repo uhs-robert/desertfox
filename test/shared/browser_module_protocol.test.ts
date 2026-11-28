@@ -6,7 +6,9 @@ import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
   ABSENT_TAB,
   DEVTOOLS_ACTIONS,
+  DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_HINT_KEY,
+  DEVTOOLS_SEARCH_KEYS,
   DEVTOOLS_TREE_KEYS,
   DEVTOOLS_VISUAL_KEY,
   DEVTOOLS_VISUAL_KEYS,
@@ -377,12 +379,13 @@ test("the DevTools key table is a push of one-character keys with actions from t
   assert.equal(EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.reply, false);
   assert.deepEqual(push([{ key: "j", action: "tree.down", later: 1 }]), { ok: true, value: { v: V, id: "d1", kind: "devtools.keys", args: { keys: [{ key: "j", action: "tree.down" }] } } });
   assert.ok(push(DEVTOOLS_TREE_KEYS).ok);
-  const full = Array.from({ length: MAX_DEVTOOLS_KEY_ROWS }, (_, index) => ({ key: "abcdefgh"[index]!, action: "tree.collapse" }));
+  const longest_action = [...DEVTOOLS_ACTIONS].sort((a, b) => b.length - a.length)[0]!;
+  const full = Array.from({ length: MAX_DEVTOOLS_KEY_ROWS }, (_, index) => ({ key: "abcdefghijklmnop"[index]!, action: longest_action }));
   assert.ok(push(full).ok);
   const largest = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys: full }, sent_at: Number.MAX_SAFE_INTEGER };
   assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes!, "the largest table fits its kind");
   assert.ok(EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes! * 2 <= MAX_MESSAGE_LIST_BYTES);
-  for (const bad of [undefined, "j", [], [...full, { key: "i", action: "tree.up" }], [{ key: "<C-j>", action: "tree.down" }], [{ key: "Escape", action: "tree.down" }], [{ key: "\t", action: "tree.down" }], [{ key: "j", action: "eval" }], [{ key: "j", action: "tree.down" }, { key: "j", action: "tree.up" }], [null]]) {
+  for (const bad of [undefined, "j", [], [...full, { key: "q", action: "tree.up" }], [{ key: "<C-j>", action: "tree.down" }], [{ key: "Escape", action: "tree.down" }], [{ key: "\t", action: "tree.down" }], [{ key: "j", action: "eval" }], [{ key: "j", action: "tree.down" }, { key: "j", action: "tree.up" }], [null]]) {
     assert.equal(push(bad).ok, false, JSON.stringify(bad));
   }
 });
@@ -420,6 +423,34 @@ test("visual mode is one more DevTools action with a push of its own keys, and t
   }
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_visual: true }), { ok: true, value: { v: V, module_version: "1", devtools_visual: true } });
   for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_visual: flag }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+test("the search rows are three more DevTools actions behind devtools_search, and every flagged row together fits the table's cap and bytes", () => {
+  const push = (keys: unknown) => validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys } }, EXTENSION_TO_MODULE_KINDS);
+  const every_row = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ keys }) => keys)];
+  assert.deepEqual(DEVTOOLS_SEARCH_KEYS.map(({ key }) => key), ["/", "n", "N"]);
+  assert.ok(push(every_row).ok);
+  assert.ok(every_row.length <= MAX_DEVTOOLS_KEY_ROWS);
+  const largest = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys: every_row }, sent_at: Number.MAX_SAFE_INTEGER };
+  assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes!);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_search: true }), { ok: true, value: { v: V, module_version: "1", devtools_search: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_search: flag }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+// A module from before the search keys read the table with 8 rows and 512 bytes at most and without the search actions. The flag keeps its table to rows it knows, and the newer reader still takes that older table.
+test("an older module never gets a table it refuses, and a newer module takes the table of an older extension", () => {
+  const OLDER_ROWS = 8;
+  const OLDER_BYTES = 512;
+  const older_actions: readonly string[] = DEVTOOLS_ACTIONS.filter((action) => !action.startsWith("search."));
+  const older_takes = (keys: { action: string }[]) => {
+    const message = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys }, sent_at: Number.MAX_SAFE_INTEGER };
+    return keys.length <= OLDER_ROWS && new TextEncoder().encode(JSON.stringify(message)).length <= OLDER_BYTES && keys.every(({ action }) => older_actions.includes(action));
+  };
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+  const older_hello = { devtools_hints: true, devtools_visual: true };
+  assert.ok(older_takes(table_for(older_hello)), "the table for an older module's hello");
+  assert.equal(older_takes(table_for({ ...older_hello, devtools_search: true })), false, "the reason for the flag");
+  assert.ok(validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys: table_for(older_hello) } }, EXTENSION_TO_MODULE_KINDS).ok);
 });
 
 test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {

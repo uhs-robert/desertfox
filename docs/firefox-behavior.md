@@ -600,6 +600,11 @@ view-source: and the JSON viewer (Firefox 161, key piece `test/key/p54_browser_m
 - `yy` copies the tab's address on the JSON viewer and on view-source: of a file page. view-source: of an http page is no secure context, even on 127.0.0.1 where the http page itself is one, so the page code's clipboard write fails there and `yy` says it could not copy, as on any plain http page.
 - view-source: turns each address in the source into a link with a `view-source:` address.
 
+A blob: page in its tab (Firefox 161, same key piece):
+- A web page that sets `location.href` to a blob: of HTML it made shows a document whose `documentURI` is `blob:http://host:port/<uuid>`, under the maker's http content principal (spec `http://host:port/`). No content script runs there.
+- `tabs.executeScript` on that tab rejects with "Missing host permission for the tab", even with `match_origin_as_fallback` on the content script, while `tabs.sendMessage` reaches the tab. So the module's page code is the one way in: its bundles load through the module, never through `executeScript`.
+- With the page code on, `f` draws labels and `yy` copies the blob: address. A blob: made by an http page on 127.0.0.1 is a secure context, as its maker is.
+
 Not measured: the real `storage.session` channel, a dark theme, scanned, large or form PDFs, real Reader View articles, and an IME.
 
 ## Processes of Firefox's own pages (locked-page-hints)
@@ -652,6 +657,13 @@ Measured in Firefox 161 in the key test (`test/key/p57_tab_visual.mjs`), and rea
 - A tab switch clears the whole selection (`clearMultiSelectedTabs` in `updateCurrentBrowser`), also a switch to a tab inside it (p57, "a tab switch ends the mode and the range").
 - The tabs of a collapsed group stay in `tabs.query`, so the range reads `tabGroups.query({ collapsed: true })` to skip them. `j` from the tab before a collapsed group selects the tab after it and leaves the group's tabs out (p57).
 - `pinTab` puts the tab after the pinned tabs, and `unpinTab` puts it before the other tabs. Unpinning [A, B] in that order gives [B, A]. Pinning in strip order and unpinning in reverse, one tab at a time, keeps the order (p57, the `p` round trip).
+
+## Escape in the console input and the Inspector search box (devtools-keys)
+
+- With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. Measured by `p54_browser_module_devtools_search`.
+- The cause: the console's editor maps Escape to nothing (`Esc: false` in `JSTerm.js`). Read from Firefox 161 code, not measured.
+- With DesertFox's Inspector search keys on, Escape in the Search HTML box stops in the parent, so the box keeps its text and the split console does not open. Measured by `p54_browser_module_devtools_search`.
+- Without DesertFox, the box clears and Escape toggles the split console (`toolbox.js`). Read from Firefox 161 code, not measured.
 
 ## Visual mode in DevTools (devtools-keys)
 

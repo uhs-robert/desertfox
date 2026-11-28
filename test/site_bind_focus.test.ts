@@ -154,7 +154,8 @@ test("the result page rows bind j and k to page.item on their addresses, and def
     for (const url of urls) {
       for (const key of ["j", "k"]) {
         const selector_of = async (compiled: CompiledKeymap) => ((await item_tree(compiled, url)).children[key] as TreeLeaf).steps[0]?.invocation.args?.["selector"] || undefined;
-        assert.equal(((await page_tree(with_defaults({}), url)).children[key] as TreeLeaf).steps[0]?.invocation.id, "scroll.lines", `${url} ${key} scrolls in normal mode`);
+        const normal_leaf = (await page_tree(with_defaults({}), url)).children[key] as TreeLeaf;
+        assert.equal(normal_leaf.otherwise?.steps[0]?.invocation.id, "scroll.lines", `${url} ${key} scrolls in normal mode unless a list item holds the focus`);
         assert.equal(typeof (await selector_of(with_defaults({}))), "string", `${url} ${key}`);
         assert.equal(await selector_of(with_defaults({ default_site_rows_off: [name] })), undefined, `${url} ${key} with ${name} off`);
       }
