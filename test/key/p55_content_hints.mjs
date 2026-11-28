@@ -281,14 +281,32 @@ export async function run_cases(context) {
   // Firefox's start pages run in the privilegedabout process, which the route labels by the page's own about: address.
   const EXTENSION_ID = "desertfox@uhs-robert";
   const route_kind = `(async () => Services.desertfox_browser_module.content_pages()?.labels(${W}.gBrowser.selectedBrowser) ?? null)()`;
-  async function expect_start_page_labels(page, kind, shot) {
+  // The text of the label highest in the window, which is the search box on about:privatebrowsing.
+  const top_label = `(async () => {
+    let best = null;
+    for (const host of ${W}.document.querySelectorAll(".desertfox-page-hints")) for (const node of host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint")) {
+      const top = node.getBoundingClientRect().top;
+      if (best === null || top < best.top) best = { top, text: node.textContent };
+    }
+    return best?.text ?? null;
+  })()`;
+  async function expect_start_page_labels(page, kind, shot, { labels, picks_search_box = false } = {}) {
     await poll_until(`${page} to be the selected page in privilegedabout`, async () => (await chrome(`(async () => { const b = ${W}.gBrowser.selectedBrowser; return b.currentURI.spec === "${page}" && b.remoteType === "privilegedabout"; })()`)), { timeout_ms: 10000 });
     await focus_page();
     expect((await chrome(route_kind)) === kind, `${page} is not a ${kind} page of the route`);
     await start_hints("f", `f on ${page}`);
     const shown = await chrome(label_count);
     expect(shown >= 1, `${page} got no labels`);
+    if (labels !== undefined) expect(shown === labels, `${page} got ${shown} labels, not ${labels}`);
     await take_shot(shot);
+    if (picks_search_box) {
+      const label = await chrome(top_label);
+      expect(label !== null, "no label on the search box");
+      await press_keys(...label.split(""));
+      await poll_until("the pick of the search box to hand the typing to the address bar", () => chrome(`(async () => ${W}.gURLBar.focused)()`), { timeout_ms: 5000 });
+      await expect_ended(`the pick on ${page}`);
+      return;
+    }
     await press_keys("-k", "Escape");
     await expect_ended(`Escape on ${page}`);
   }
@@ -319,7 +337,7 @@ export async function run_cases(context) {
       await new Promise((resolve) => Services.obs.addObserver(function seen(subject) { if (subject === w) { Services.obs.removeObserver(seen, "browser-delayed-startup-finished"); resolve(); } }, "browser-delayed-startup-finished"));
     })()`);
     await poll_until("the private window to show about:privatebrowsing", async () => (await selected_spec()) === "about:privatebrowsing", { timeout_ms: 10000 });
-    await expect_start_page_labels("about:privatebrowsing", "privatebrowsing", "/tmp/desertfox-content-hints-about-privatebrowsing.png");
+    await expect_start_page_labels("about:privatebrowsing", "privatebrowsing", "/tmp/desertfox-content-hints-about-privatebrowsing.png", { labels: 2, picks_search_box: true });
     await close_private();
   });
 
