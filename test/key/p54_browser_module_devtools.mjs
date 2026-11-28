@@ -219,6 +219,41 @@ export async function run_cases(context) {
     await poll_until("the DevTools window to close and lose the module", async () => (await module_status()).windows === windows_before, { timeout_ms: 10000 });
   });
 
+  await run_case("a toolbox opened as a tab (about:debugging Inspect) keeps its keys: J and x x change no tab, and j and k move the Inspector tree", async () => {
+    await home("bm_dt_tab_toolbox");
+    await open_tab(TREE_PAGE);
+    const target_id = await chrome(`(async () => ${W}.gBrowser.selectedBrowser.browserId)()`);
+    on_teardown(() => chrome(`(async () => { ${DT} const w = ${W}; for (const tb of gDevTools.getToolboxes()) await tb.destroy(); w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); w.focus(); w.gBrowser.selectedBrowser.focus(); })()`));
+    await open_tab(`about:devtools-toolbox?type=tab&id=${target_id}`, { wait_load: false });
+    // The toolbox of a tab host is not the toolbox of a page tab, so it is found by its host.
+    const TAB_TOOLBOX = `${DT} const tb = gDevTools.getToolboxes().find((one) => one.hostType === "page");`;
+    await poll_until("the toolbox in its own tab to show the Inspector", () => chrome(`(async () => { ${TAB_TOOLBOX} if (!tb) return false; if (tb.currentToolId !== "inspector") { tb.selectTool("inspector"); return false; } return !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 20000 });
+    const tabs_before = await chrome(`(async () => { const w = ${W}; return [w.gBrowser.tabs.length, w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab)]; })()`);
+    const tab_state = () => chrome(`(async () => { const w = ${W}; return [w.gBrowser.tabs.length, w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab)]; })()`);
+    const tree_state = () => chrome(`(async () => { ${TAB_TOOLBOX} const inspector = tb.getPanel("inspector"); const node = inspector.selection.nodeFront; return [node?.displayName ?? null, inspector.markup.getContainer(node)?.expanded ?? null]; })()`);
+    await poll_until("the section to have a markup container", () =>
+      chrome(`(async () => {
+        ${TAB_TOOLBOX}
+        const inspector = tb.getPanel("inspector");
+        const node = await inspector.walker.querySelector(inspector.walker.rootNode, "section");
+        await inspector.selection.setNodeFront(node, { reason: "test" });
+        if (!inspector.markup.getContainer(node)) return false;
+        await inspector.markup.collapseNode(node);
+        ${W}.focus();
+        inspector.markup.doc.defaultView.focus();
+        inspector.markup.getContainer(node).focus();
+        return true;
+      })()`),
+    { timeout_ms: 10000 });
+    await focus_in_devtools();
+    await moves("j", tree_state, ["p", false], "in a toolbox tab: j moves down past the collapsed section");
+    await moves("k", tree_state, ["section", false], "in a toolbox tab: k moves back up");
+    await switches_none("J in a toolbox tab");
+    await press_keys("x", "x");
+    await sleep(NO_EFFECT_MS);
+    expect(JSON.stringify(await tab_state()) === JSON.stringify(tabs_before), `J or x x changed the tabs: ${JSON.stringify(tabs_before)} to ${JSON.stringify(await tab_state())}`);
+  });
+
   await run_case("with the setting browser_module off DevTools gets every key, and turned on again the module gets the table again", async () => {
     // The command line needs DesertFox's own page, so the setting changes in the first tab before DevTools opens in a second one.
     await home("bm_dt_consent");
