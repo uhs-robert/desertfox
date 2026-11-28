@@ -2,7 +2,7 @@
 // A run request is foreign input from chrome code. Its keys are matched again against the stored keymap, and only a leaf of the locked-page set runs, in the active tab.
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
-import { counted_steps, opens_line_leaf, resolve_run } from "../shared/browser_module_scope.ts";
+import { counted_steps, line_text_of, resolve_run } from "../shared/browser_module_scope.ts";
 import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
@@ -16,8 +16,8 @@ export type ModuleRunDeps = {
   run: (request: RouteRequest) => Promise<RunResponse>;
   // With no tab, a refusal shows as a desktop notification.
   show_refusal: (tab_id: undefined, refusal: Refusal) => Promise<unknown>;
-  // The command line over the active tab, for the bare `:`: the panel, else the address bar.
-  open_line: () => Promise<unknown>;
+  // The command line over the active tab, for a line key (`:`, `tM`): the panel, else the address bar.
+  open_line: (text: string) => Promise<unknown>;
   // The active tab's address and whether `browser_module_pages` is on, for the reason a hint key gives.
   active_url: () => Promise<string | undefined>;
   pages_on: () => Promise<boolean>;
@@ -47,8 +47,9 @@ export function create_module_run(deps: ModuleRunDeps) {
     const resolved = resolve_run(await deps.read_keymap(), keys, count, deps.locked_commands);
     if (!resolved.ok && resolved.hint) return refuse(hint_refusal_text(await deps.active_url(), await deps.pages_on()), true);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
-    if (opens_line_leaf(resolved.leaf)) {
-      await deps.open_line();
+    const line_text = line_text_of(resolved.leaf, deps.locked_commands);
+    if (line_text !== undefined) {
+      await deps.open_line(line_text);
       return;
     }
     // No sender tab: the router runs the binding in the active tab, so a module cannot aim it at another one. The router shows its own refusals, a count over a step's `repeat_limit` among them.

@@ -62,9 +62,10 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.equal(node_at(DEFAULT_TREE, ["q"]), undefined);
   // Hints, find, the command line, marks and insert mode need DesertFox's page code.
   for (const keys of [["f"], ["/"], ["i"], ["m"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
-  // The bare command line key stays, so the background opens the line as a panel. A line with typed text (`A`, `tM`) does not.
+  // The bare command line key stays, so the background opens the line as a panel. A line with typed text stays only when its command runs with no page (`tM`), not for `A`, `sh` or `;;`.
   assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
-  for (const keys of [["A"], ["t", "M"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  assert.equal(node_at(DEFAULT_TREE, ["t", "M"]), "forward");
+  for (const keys of [["A"], ["s", "h"], [";", ";"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
 });
 
@@ -95,7 +96,7 @@ test("the tree names the hint keys of the user's keymap, which the module claims
 
 test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
   // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
-  for (const keys of [":", "o", "T", "w w"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of [":", "o", "T", "w w", "t M"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
   for (const keys of ["u", "x x", "g t"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
   assert.equal(DEFAULT_TREE.line_keys?.some((keys) => keys.split(" ").includes("")), false, "a path through the capture key");
   for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, line_keys: [junk] }).ok, false, JSON.stringify(junk));

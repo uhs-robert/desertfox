@@ -142,7 +142,7 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `tS` | `session.open` (prompts) | Open tab session | yes |
 | `td` | `tab.duplicate` | Duplicate tab | yes |
 | `tm` | `tab.move` (prompts) | Move tab | yes |
-| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset |  |
+| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset | yes |
 | `tn` | `tab.next` | Next tab | yes |
 | `tp` | `tab.prev` | Previous tab | yes |
 | `ta` | `tab.goto_audible` | Go to audible tab | yes |
