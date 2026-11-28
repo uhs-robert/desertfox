@@ -16,7 +16,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `cmdline.ts`: the `cmdline.*` commands, `list.act` and `list.select`. The code sits in the `cmdline` bundle.
 - `command.ts`: `command.repeat`, which replays the stored request through a router that `main.ts` wires in.
 - `config.ts`: `config.reload` and `debug.restart`.
-- `copy.ts`: `copy.url` and `copy.links`.
+- `copy.ts`: `copy.url` and `copy.links`, and `copy.page`, the background variant of `copy.url` that a locked page runs.
 - `copy_tabs.ts`: `copy.tabs` (`yT`), which lists the open web tabs in the link-list formats.
 - `engine.ts`: `engine.show`.
 - `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.

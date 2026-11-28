@@ -25,7 +25,7 @@ const GROUP_IDS: Record<KeyGroup, readonly string[]> = {
 // Commands the bridge never runs (`never_listed`) that reach nothing off the device, read no clipboard and need no listing. `register.paste` reads the clipboard only for the `+` register, which its argument decides. A test forces every such command into a group or into this list.
 export const LOCAL_ONLY_IDS: readonly string[] = [
   "session.save", "session.open", "session.delete", "session.rename", "register.list", "register.paste", "macro.play", "command.repeat",
-  "page.reload", "page.save_pdf", "copy.url", "copy.links", "copy.tabs", "hint.run", "hint.key", "visual.act", "debug.perf",
+  "page.reload", "page.save_pdf", "copy.url", "copy.page", "copy.links", "copy.tabs", "hint.run", "hint.key", "visual.act", "debug.perf",
 ];
 export const CLASSIFIED_IDS: readonly string[] = Object.values(GROUP_IDS).flat();
 export const CLASSIFIED_PREFIXES: readonly string[] = GROUP_PREFIXES.map(([, prefix]) => prefix);
