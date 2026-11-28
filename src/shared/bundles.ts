@@ -5,8 +5,8 @@ import type { Mode } from "./command.ts";
 export const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "editor", "site_actions", "grab", "item", "item_act", "tree", "next_page", "tab_visual"] as const;
 export type BundleName = (typeof BUNDLE_NAMES)[number];
 
-// The modes whose keys go to a sink, and the bundle that registers it.
-export const BUNDLE_FOR_MODE: Partial<Record<Mode, BundleName>> = { hint: "hints", caret: "caret", visual: "caret", visual_line: "caret", cmdline: "cmdline", grab: "grab", tab_visual: "tab_visual" };
+// The modes whose keys go to a sink, and the bundle that registers it. Keys typed while one of these loads wait for it. `tab_visual` is not here: its sink passes every key, so a key typed during its load waits only when normal mode binds it, and content.js carries no entry for it.
+export const BUNDLE_FOR_MODE: Partial<Record<Mode, BundleName>> = { hint: "hints", caret: "caret", visual: "caret", visual_line: "caret", cmdline: "cmdline", grab: "grab" };
 
 // A handler of the `whichkey` bundle, not a command. Only the background sends it, so it takes no argument.
 export const MEDIA_PANEL_HANDLER = "whichkey.media_panel";
