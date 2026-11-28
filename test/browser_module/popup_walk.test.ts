@@ -545,37 +545,81 @@ function address_bar(walk: ReturnType<typeof setup>, behavior?: string) {
   return made;
 }
 
+// Firefox's own Tab with the results open: the walk hears it first, then Firefox sets the selection state.
+function tab_into(walk: ReturnType<typeof setup>, bar: { controller: { userSelectionBehavior: string | undefined } }, key = "Tab") {
+  assert.equal(walk.browser.press(key).prevented, false, `the walk took ${key} from Firefox`);
+  bar.controller.userSelectionBehavior = key === "Tab" ? "tab" : "arrow";
+}
+
 test("in the address bar j and k select through Firefox's own results once Tab or an arrow key moved into them, and type before that", () => {
   const walk = setup();
   const { bar, selections } = address_bar(walk);
   assert.equal(walk.browser.press("j").prevented, false, "j was taken while the user typed");
   assert.equal(walk.browser.press("k").prevented, false, "k was taken while the user typed");
-  for (const behavior of ["tab", "arrow"]) {
-    bar.controller.userSelectionBehavior = behavior;
+  for (const key of ["Tab", "ArrowDown", "ArrowUp", "PageDown", "PageUp"]) {
+    tab_into(walk, bar, key);
     const event = walk.browser.press("j");
-    assert.ok(event.prevented && event.stopped, `j did not walk after ${behavior}`);
+    assert.ok(event.prevented && event.stopped, `j did not walk after ${key}`);
     assert.equal(bar.controller.userSelectionBehavior, "arrow", "j did not mark an arrow selection, as Firefox's own arrow key does");
-    assert.ok(walk.browser.press("k").prevented, `k did not walk after ${behavior}`);
-    for (const key of ["h", "l", "x", "J"]) assert.equal(walk.browser.press(key).prevented, false, `${key} was taken from the address bar`);
-    for (const patch of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }, { isTrusted: false }]) assert.equal(walk.browser.press("j", patch).prevented, false, JSON.stringify(patch));
+    assert.ok(walk.browser.press("k").prevented, `k did not walk on after j, from ${key}`);
+    assert.equal(walk.browser.press("x").prevented, false, "x was taken from the address bar");
   }
-  for (const behavior of [undefined, "none", "mouse"]) {
+  tab_into(walk, bar);
+  for (const key of ["h", "l", "J"]) assert.equal(walk.browser.press(key).prevented, false, `${key} was taken from the address bar`);
+  for (const patch of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }, { isTrusted: false }]) {
+    tab_into(walk, bar);
+    assert.equal(walk.browser.press("j", patch).prevented, false, JSON.stringify(patch));
+  }
+  walk.run_timers();
+  assert.equal(selections.length, 10);
+  assert.deepEqual(walk.typed, [], "an arrow key was typed into the address bar");
+});
+
+test("in the address bar a caret key, Ctrl+A, any other key or a mousedown hands the text back, so j types until the selection moves again", () => {
+  const walk = setup();
+  const { bar, selections } = address_bar(walk);
+  // Firefox keeps `userSelectionBehavior` through these, so only the walk's own flag can tell.
+  for (const leave of [() => walk.browser.press("End"), () => walk.browser.press("Home"), () => walk.browser.press("ArrowLeft"), () => walk.browser.press("ArrowRight"), () => walk.browser.press("a", { ctrlKey: true }), () => walk.browser.press("Delete"), () => walk.browser.own.fire("mousedown", key_event("mousedown"))]) {
+    tab_into(walk, bar);
+    leave();
+    assert.equal(walk.browser.press("j").prevented, false, `j was taken after ${leave.toString()}`);
+    assert.equal(walk.browser.press("k").prevented, false, "k was taken after j typed");
+  }
+  tab_into(walk, bar);
+  walk.browser.press("Shift");
+  assert.ok(walk.browser.press("j").prevented, "a Shift on its own ended the walk");
+  bar.controller.userSelectionBehavior = "none";
+  assert.equal(walk.browser.press("k").prevented, false, "k was taken after Firefox saw an edit");
+  for (const behavior of [undefined, "mouse"]) {
+    tab_into(walk, bar);
     bar.controller.userSelectionBehavior = behavior as string;
     assert.equal(walk.browser.press("j").prevented, false, `j was taken with userSelectionBehavior ${behavior}`);
   }
-  walk.run_timers();
-  assert.deepEqual(selections, ["down 1", "up 1", "down 1", "up 1"]);
-  assert.deepEqual(walk.typed, [], "an arrow key was typed into the address bar");
+  tab_into(walk, bar);
   bar.view.isOpen = false;
-  bar.controller.userSelectionBehavior = "tab";
   assert.equal(walk.browser.press("j").prevented, false, "j was taken with the results closed");
-  assert.equal(selections.length, 4);
+  assert.equal(selections.length, 1);
+});
+
+test("a Tab with no results open, or outside the bar, starts no walk", () => {
+  const walk = setup();
+  const { bar } = address_bar(walk);
+  bar.view.isOpen = false;
+  walk.browser.press("Tab");
+  bar.view.isOpen = true;
+  bar.controller.userSelectionBehavior = "tab";
+  assert.equal(walk.browser.press("j").prevented, false, "a Tab with the results closed started a walk");
+  walk.browser.focus({ localName: "input", type: "text" });
+  walk.browser.press("Tab");
+  walk.browser.focus(bar.inputField);
+  assert.equal(walk.browser.press("j").prevented, false, "a Tab in another field started a walk");
 });
 
 test("the new search bar's results walk as the address bar's do, a menu over the bar keeps its keys, and the gates hold", () => {
   const walk = setup();
-  const { bar, selections } = results_bar(walk, "tab");
+  const { bar, selections } = results_bar(walk);
   walk.browser.elements.set("searchbar-new", { localName: "moz-searchbar", ...bar });
+  tab_into(walk, bar);
   assert.ok(walk.browser.press("j").prevented, "j did not walk the search bar's results");
   const menu = popup("menupopup", "menu_FilePopup");
   walk.browser.show(menu);
@@ -584,7 +628,8 @@ test("the new search bar's results walk as the address bar's do, a menu over the
   assert.deepEqual(selections, ["down 1"]);
   assert.deepEqual(walk.typed.map(({ key }) => key), ["ArrowDown"], "j under the menu did not walk the menu");
   const gated = setup({ pref: false });
-  address_bar(gated, "tab");
+  const gated_bar = address_bar(gated);
+  tab_into(gated, gated_bar.bar);
   assert.equal(gated.browser.press("j").prevented, false, "j walked with the pref off");
 });
 

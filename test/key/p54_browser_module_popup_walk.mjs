@@ -303,45 +303,74 @@ export async function run_cases(context) {
   const RESULT_WORD = "jkwalk";
   const results = () => chrome(`(async () => { const bar = ${W}.gURLBar; return { open: bar.view.isOpen, row: bar.view.selectedRowIndex, rows: bar.view.visibleRowCount, value: bar.value, behavior: bar.controller.userSelectionBehavior }; })()`);
 
-  await walk_case("in the address bar j and k type until Tab or Down moves into the results, then walk them", async () => {
-    await home("pw_results");
-    await chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); for (const n of [1, 2, 3]) await PlacesUtils.bookmarks.insert({ parentGuid: PlacesUtils.bookmarks.unfiledGuid, url: "https://example.com/${RESULT_WORD}-" + n, title: "${RESULT_WORD}xj " + n }); })()`);
-    try {
-      await chrome(`(async () => { const w = ${W}; w.gURLBar.focus(); w.gURLBar.value = ""; })()`);
-      await sleep(300);
-      await press_keys(RESULT_WORD);
-      await poll_until("the results to show the bookmarks", async () => {
-        const now = await results();
-        return now.open && now.rows >= 4 && now.value === RESULT_WORD;
-      }).catch(async (error) => {
-        throw new Error(`${error.message}: ${JSON.stringify(await results())}`);
-      });
-      const step = async (keys, what, check) => {
-        await press_keys(...keys);
-        await poll_until(what, async () => check(await results())).catch(async (error) => {
-          throw new Error(`${error.message}: ${JSON.stringify(await results())}`);
-        });
-      };
-      await step(["-k", "Tab"], "Tab to move into the results", (now) => now.row === 1);
-      await step(["j"], "j to walk down the results", (now) => now.row === 2);
-      await step(["k"], "k to walk back up", (now) => now.row === 1);
-      // Back on the first row the address shows the typed word again, so the edit below still matches the bookmarks.
-      await step(["-k", "Up"], "Up to move back to the first row", (now) => now.row === 0 && now.value === RESULT_WORD);
-      await step(["x"], "x to edit the address", (now) => now.open && now.value.endsWith("x") && now.behavior === "none");
-      await step(["j"], "j to type after an edit", (now) => now.value.endsWith("xj"));
-      const typed_row = (await results()).row;
-      await step(["-k", "Down"], "Down to move into the results from typing", (now) => now.row === typed_row + 1);
-      await step(["j"], "j to walk on after Down", (now) => now.row === typed_row + 2);
-      await step(["-k", "Escape"], "Escape to close the results", (now) => !now.open);
-    } finally {
-      await chrome(`(async () => {
-        const w = ${W};
-        const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");
-        w.gURLBar.value = ""; w.gURLBar.handleRevert?.(); w.gBrowser.selectedBrowser.focus();
-        for (const n of [1, 2, 3]) await PlacesUtils.bookmarks.remove(await PlacesUtils.bookmarks.fetch({ url: "https://example.com/${RESULT_WORD}-" + n }));
-      })()`);
-    }
+  const result_step = async (keys, what, check) => {
+    await press_keys(...keys);
+    await poll_until(what, async () => check(await results())).catch(async (error) => {
+      throw new Error(`${error.message}: ${JSON.stringify(await results())}`);
+    });
+  };
+  // Types the word into the cleared address bar and waits for the bookmark rows.
+  async function type_into_results() {
+    await chrome(`(async () => { const w = ${W}; w.gURLBar.focus(); w.gURLBar.value = ""; })()`);
+    await sleep(300);
+    await press_keys(RESULT_WORD);
+    await poll_until("the results to show the bookmarks", async () => {
+      const now = await results();
+      return now.open && now.rows >= 4 && now.value === RESULT_WORD;
+    }).catch(async (error) => {
+      throw new Error(`${error.message}: ${JSON.stringify(await results())}`);
+    });
+  }
+  const results_case = (page_id, name, body) =>
+    walk_case(name, async () => {
+      await home(page_id);
+      await chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); for (const n of [1, 2, 3]) await PlacesUtils.bookmarks.insert({ parentGuid: PlacesUtils.bookmarks.unfiledGuid, url: "https://example.com/${RESULT_WORD}-" + n, title: "${RESULT_WORD}xj " + n }); })()`);
+      try {
+        await body();
+      } finally {
+        await chrome(`(async () => {
+          const w = ${W};
+          const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");
+          w.gURLBar.value = ""; w.gURLBar.handleRevert?.(); w.gBrowser.selectedBrowser.focus();
+          for (const n of [1, 2, 3]) await PlacesUtils.bookmarks.remove(await PlacesUtils.bookmarks.fetch({ url: "https://example.com/${RESULT_WORD}-" + n }));
+        })()`);
+      }
+    });
+
+  await results_case("pw_results", "in the address bar j and k type until Tab or Down moves into the results, then walk them", async () => {
+    await type_into_results();
+    await result_step(["-k", "Tab"], "Tab to move into the results", (now) => now.row === 1);
+    await result_step(["j"], "j to walk down the results", (now) => now.row === 2);
+    await result_step(["k"], "k to walk back up", (now) => now.row === 1);
+    // Back on the first row the address shows the typed word again, so the edit below still matches the bookmarks.
+    await result_step(["-k", "Up"], "Up to move back to the first row", (now) => now.row === 0 && now.value === RESULT_WORD);
+    await result_step(["x"], "x to edit the address", (now) => now.open && now.value.endsWith("x") && now.behavior === "none");
+    await result_step(["j"], "j to type after an edit", (now) => now.value.endsWith("xj"));
+    const typed_row = (await results()).row;
+    await result_step(["-k", "Down"], "Down to move into the results from typing", (now) => now.row === typed_row + 1);
+    await result_step(["j"], "j to walk on after Down", (now) => now.row === typed_row + 2);
+    await result_step(["-k", "Escape"], "Escape to close the results", (now) => !now.open);
   });
+
+  // A real press at the end of the address bar's text, which keeps the results open.
+  const click_address_bar = () =>
+    chrome(`(async () => {
+      const w = ${W};
+      const box = w.gURLBar.inputField.getBoundingClientRect();
+      for (const type of ["mousedown", "mouseup"]) w.synthesizeMouseEvent(type, box.right - 10, box.top + box.height / 2, { button: 0, buttons: type === "mousedown" ? 1 : 0, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });
+    })()`);
+
+  for (const [what, leave] of [["End", () => press_keys("-k", "End")], ["a click", click_address_bar]]) {
+    await results_case(`pw_results_${what === "End" ? "end" : "click"}`, `in the address bar ${what} after Tab hands the address back to typing, so j types`, async () => {
+      await type_into_results();
+      await result_step(["-k", "Tab"], "Tab to move into the results", (now) => now.row === 1);
+      const chosen = (await results()).value;
+      await leave();
+      await sleep(300);
+      expect((await results()).open, `the results closed after ${what}`);
+      await result_step(["j"], `j to type after ${what}`, (now) => now.value === `${chosen}j`);
+    });
+  }
 
   await walk_case("in a menu bar menu j moves and l opens a submenu that h closes", async () => {
     await home("pw_menubar");
