@@ -3,7 +3,7 @@ import { evaluate_in_background } from "./rdp.mjs";
 
 export const areas = ["tabs", "keys", "bundles", "ui"];
 
-export async function run_cases({ rdp, extension_id, run_case, setup, press_keys, open_page, poll_until, settle_focus, expect, in_active_tab, sleep }) {
+export async function run_cases({ rdp, extension_id, run_case, setup, press_keys, open_page, poll_until, settle_focus, expect, in_active_tab, sleep, events, wait_event }) {
   const background = (code) => evaluate_in_background(rdp, extension_id, code);
   const badge = () => in_active_tab(`document.querySelector("[data-desertfox-mode]")?.getAttribute("data-desertfox-mode") ?? null`);
   const expect_badge = (label) => poll_until(`the ${label} badge`, async () => (await badge()) === label);
@@ -212,9 +212,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await in_active_tab(`window.__p57_keys = []; addEventListener("keydown", (event) => window.__p57_keys.push(event.key)); 0`);
+    const mark = events.length;
     await press_keys("Q");
-    await poll_until("the page saw Q", async () => (await in_active_tab(`window.__p57_keys.includes("Q")`)) === true);
+    await wait_event(mark, (event) => event.type === "keydown" && event.key === "Q", "the page to get the unbound key");
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
   });
