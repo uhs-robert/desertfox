@@ -48,6 +48,7 @@ import type { create_repeat_memory } from "./repeat_memory.ts";
 import type { create_frame_cue } from "./frame_cue.ts";
 import type { create_router } from "./router.ts";
 import type { create_media_quality } from "./media_quality.ts";
+import type { make_tab_visual_handler } from "./tab_visual.ts";
 import type { make_router_deps } from "./browser_deps.ts";
 import type { get_config, get_search_engine_names, snippets } from "./config_main.ts";
 
@@ -85,6 +86,7 @@ export type ContentDeps = {
   browser_module: Pick<ReturnType<typeof create_browser_module>, "bar_report" | "bar_active" | "bar_focus">;
   is_locked_tab: (tab_id: number) => Promise<boolean>;
   cmdline_panel: Pick<CmdlinePanel, "opened" | "asker_of" | "closed">;
+  tab_visual: Pick<ReturnType<typeof make_tab_visual_handler>, "received">;
 };
 
 // The messages content scripts, bundles and the command line page send, one entry per type. A handler that checks its own sender or request (`inspect_pick`, `find_scan`) is `any`: the other guards can only answer nothing.
@@ -99,7 +101,7 @@ export const content_handlers = (deps: ContentDeps) => {
       from: "any",
       run: (request, sender) => {
         if (sender.tab?.id !== undefined && sender.frameId !== undefined) void media_discovery.key_ran(sender.tab.id, sender.frameId, request.mode).catch(warn_and_go("media_discovery.key_ran"));
-        return get_config().then(async (config) => {
+        const answer = get_config().then(async (config) => {
           // The panel's line has no tab, and runs its command from the tab it was opened over.
           const panel_tab_id = sender.tab === undefined && request.from_line === true ? (await asker_of(sender))?.tab_id : undefined;
           // Enter ends the panel's line. Its command can open a new panel, which the record must not outlive.
@@ -127,6 +129,10 @@ export const content_handlers = (deps: ContentDeps) => {
             ...(request.from_line === true && { from_line: true as const }),
           });
         });
+        // A run that holds `tab.act` as well waits on nothing here, as it would wait on its own answer.
+        const ids = request.invocations.map((invocation) => invocation.id);
+        if (ids.includes("tab.visual") && !ids.includes("tab.act")) deps.tab_visual.received(answer);
+        return answer;
       },
     },
     mode_changed: {

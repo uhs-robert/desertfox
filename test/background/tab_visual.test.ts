@@ -1,25 +1,28 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { highlight_indexes, make_tab_visual_handler, moved_cursor, range_between, visible_order } from "../../src/background/tab_visual.ts";
+import { make_tab_visual_handler, moved_cursor, range_between, visible_order } from "../../src/background/tab_visual.ts";
 import type { RangeRecord, TabVisualDeps, VisualTab } from "../../src/background/tab_visual.ts";
 import { RuntimeRefusal } from "../../src/shared/command.ts";
 
-const tab = (id: number, over: Partial<VisualTab> = {}): VisualTab => ({ id, index: id - 1, active: false, hidden: false, group_id: -1, ...over });
+const tab = (id: number, over: Partial<VisualTab> = {}): VisualTab => ({ id, index: id - 1, active: false, highlighted: false, hidden: false, group_id: -1, ...over });
 
+// The fake keeps Firefox's rule that the active tab is always selected. The log holds one entry per tab added (+) or taken out (-).
 function make(tabs: VisualTab[], collapsed: number[] = [], record?: RangeRecord) {
   const log: string[] = [];
   let stored = record;
-  let highlighted = 1;
   const deps: TabVisualDeps = {
-    tabs_in_window: async () => tabs,
+    tabs_in_window: async () => tabs.map((one) => ({ ...one, highlighted: one.highlighted || one.active })),
     collapsed_group_ids: async () => new Set(collapsed),
-    highlighted_count: async () => highlighted,
-    highlight: async (_window, indexes) => (log.push(`highlight ${indexes.join(",")}`), void (highlighted = indexes.length)),
+    set_highlighted: async (id, on) => {
+      log.push(`${on ? "+" : "-"}${id}`);
+      tabs.find((one) => one.id === id)!.highlighted = on;
+    },
     read_record: async () => stored,
     write_record: async (_window, next) => void (stored = next),
     remove_record: async () => void (stored = undefined),
   };
-  return { handler: make_tab_visual_handler(deps), log, record: () => stored };
+  const selected = () => tabs.filter((one) => one.highlighted || one.active).map((one) => one.id);
+  return { handler: make_tab_visual_handler(deps), log, record: () => stored, selected };
 }
 
 const five = (active = 3) => [1, 2, 3, 4, 5].map((id) => tab(id, { active: id === active }));
@@ -44,12 +47,6 @@ test("moves clamp at the ends, and a lost cursor restarts from the anchor", () =
   assert.equal(moved_cursor(order, { anchor: 3, cursor: 99 }, "down", 1), 4);
 });
 
-test("the highlight lists the active tab first, then the rest ascending", () => {
-  const order = five();
-  assert.deepEqual(highlight_indexes(2, range_between(order, 3, 1)), [2, 0, 1]);
-  assert.deepEqual(highlight_indexes(2, range_between(order, 3, 5)), [2, 3, 4]);
-});
-
 test("start needs two visible tabs and records the active tab as both ends", async () => {
   const lone = make([tab(1, { active: true }), tab(2, { hidden: true })]);
   await assert.rejects(run(lone.handler, "start"), (error) => error instanceof RuntimeRefusal && /Only one tab/.test(error.message));
@@ -59,64 +56,108 @@ test("start needs two visible tabs and records the active tab as both ends", asy
   assert.deepEqual(two.log, []);
 });
 
-test("j and k grow the range, cross the anchor to shrink one side and grow the other", async () => {
+test("j and k grow the range, cross the anchor to shrink one side and grow the other, and never touch the active tab", async () => {
+  const { handler, log, selected } = make(five());
+  const after: number[][] = [];
+  await run(handler, "start");
+  for (const [action, count] of [["down", 1], ["down", 1], ["up", 3], ["first", 1], ["last", 1]] as const) {
+    await run(handler, action, count);
+    after.push(selected());
+  }
+  assert.deepEqual(after, [[3, 4], [3, 4, 5], [2, 3], [1, 2, 3], [3, 4, 5]]);
+  assert.ok(!log.some((entry) => entry.endsWith("3")), `the active tab was touched: ${log}`);
+});
+
+test("a move changes only the tabs that enter or leave the range", async () => {
   const { handler, log } = make(five());
   await run(handler, "start");
-  await run(handler, "down");
-  await run(handler, "down");
-  await run(handler, "up", 3);
-  await run(handler, "first");
-  await run(handler, "last");
-  assert.deepEqual(log, ["highlight 2,3", "highlight 2,3,4", "highlight 2,1", "highlight 2,0,1", "highlight 2,3,4"]);
+  await run(handler, "down", 2);
+  log.length = 0;
+  await run(handler, "up");
+  assert.deepEqual(log, ["-5"]);
 });
 
 test("a count moves that many tabs", async () => {
-  const { handler, log, record } = make(five(1));
+  const { handler, record, selected } = make(five(1));
   await run(handler, "start");
   await run(handler, "down", 3);
-  assert.deepEqual(log, ["highlight 0,1,2,3"]);
+  assert.deepEqual(selected(), [1, 2, 3, 4]);
   assert.deepEqual(record(), { anchor: 1, cursor: 4 });
 });
 
 test("a collapsed group is stepped over", async () => {
   const tabs = [tab(1, { active: true }), tab(2, { group_id: 9 }), tab(3, { group_id: 9 }), tab(4)];
-  const { handler, log } = make(tabs, [9]);
+  const { handler, selected } = make(tabs, [9]);
   await run(handler, "start");
   await run(handler, "down");
-  assert.deepEqual(log, ["highlight 0,3"]);
+  assert.deepEqual(selected(), [1, 4]);
 });
 
-test("a record whose anchor is not the active tab starts over at the active tab", async () => {
-  const { handler, log, record } = make(five(4), [], { anchor: 1, cursor: 2 });
-  await run(handler, "down");
-  assert.deepEqual(log, ["highlight 3,4"]);
-  assert.deepEqual(record(), { anchor: 4, cursor: 5 });
+test("start clears a mouse selection to the active tab", async () => {
+  const tabs = five().map((one) => (one.id === 1 || one.id === 5 ? { ...one, highlighted: true } : one));
+  const { handler, selected, record } = make(tabs);
+  await run(handler, "start");
+  assert.deepEqual(selected(), [3]);
+  assert.deepEqual(record(), { anchor: 3, cursor: 3 });
 });
 
-test("end clears the selection to the current active tab and drops the record", async () => {
+test("a move with no record does nothing, as a late key or a typed command in normal mode", async () => {
   const { handler, log, record } = make(five());
-  await run(handler, "start");
   await run(handler, "down");
-  await run(handler, "end");
-  assert.deepEqual(log, ["highlight 2,3", "highlight 2"]);
-  assert.equal(record(), undefined);
-});
-
-test("end leaves the selection alone when the active tab is no longer the anchor", async () => {
-  const { handler, log, record } = make(five(4), [], { anchor: 3, cursor: 5 });
-  await run(handler, "end");
   assert.deepEqual(log, []);
   assert.equal(record(), undefined);
 });
 
-test("end with no record leaves a mouse selection alone, and with one tab selected only drops the record", async () => {
-  const none = make(five());
-  await run(none.handler, "end");
-  assert.deepEqual(none.log, []);
-  const settled = make(five(), [], { anchor: 3, cursor: 4 });
-  await run(settled.handler, "end");
-  assert.deepEqual(settled.log, []);
-  assert.equal(settled.record(), undefined);
+test("a move after a tab switch does nothing", async () => {
+  const { handler, log, record } = make(five(4), [], { anchor: 1, cursor: 2 });
+  await run(handler, "down");
+  assert.deepEqual(log, []);
+  assert.deepEqual(record(), { anchor: 1, cursor: 2 });
+});
+
+test("end clears the selection to the active tab and drops the record", async () => {
+  const { handler, record, selected } = make(five());
+  await run(handler, "start");
+  await run(handler, "down");
+  await run(handler, "end");
+  assert.deepEqual(selected(), [3]);
+  assert.equal(record(), undefined);
+});
+
+test("end after a tab switch takes the old range out and leaves the new active tab", async () => {
+  const tabs = five(4).map((one) => (one.id === 3 ? { ...one, highlighted: true } : one));
+  const { handler, log, record, selected } = make(tabs, [], { anchor: 3, cursor: 5 });
+  await run(handler, "end");
+  assert.deepEqual(log, ["-3"]);
+  assert.deepEqual(selected(), [4]);
+  assert.equal(record(), undefined);
+});
+
+test("end with no record leaves a mouse selection alone", async () => {
+  const tabs = five().map((one) => (one.id === 4 ? { ...one, highlighted: true } : one));
+  const { handler, log, selected } = make(tabs);
+  await run(handler, "end");
+  assert.deepEqual(log, []);
+  assert.deepEqual(selected(), [3, 4]);
+});
+
+test("an action waits for a move that has arrived but not reached the handler yet", async () => {
+  const { handler, selected } = make(five());
+  await run(handler, "start");
+  let deliver!: () => void;
+  const routed = new Promise<void>((resolve) => (deliver = resolve));
+  // The move's message takes a slow path: it reaches the handler only after the action has asked for the range.
+  const answer = routed.then(() => run(handler, "down"));
+  handler.received(answer);
+  const seen = handler.idle().then(() => selected());
+  deliver();
+  assert.deepEqual(await seen, [3, 4]);
+});
+
+test("a move that fails does not block the next action", async () => {
+  const { handler } = make(five());
+  handler.received(Promise.reject(new Error("refused")));
+  await handler.idle();
 });
 
 test("forgetting a window drops its record", async () => {

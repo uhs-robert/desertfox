@@ -1,13 +1,14 @@
 import { RuntimeRefusal } from "../shared/command.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { make_tab_visual_handler, session_record_store } from "../background/tab_visual.ts";
 import type { TabVisualDeps } from "../background/tab_visual.ts";
 
 const tab_visual_deps: TabVisualDeps = {
-  tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map((tab) => ({ id: tab.id!, index: tab.index, active: tab.active, hidden: !!tab.hidden, group_id: tab.groupId ?? -1 })),
+  tabs_in_window: async (window_id) => (await browser.tabs.query({ windowId: window_id })).map((tab) => ({ id: tab.id!, index: tab.index, active: tab.active, highlighted: tab.highlighted, hidden: !!tab.hidden, group_id: tab.groupId ?? -1 })),
   collapsed_group_ids: async (window_id) => new Set((await browser.tabGroups.query({ windowId: window_id, collapsed: true })).map((group) => group.id)),
-  highlighted_count: async (window_id) => (await browser.tabs.query({ windowId: window_id, highlighted: true })).length,
-  highlight: async (window_id, indexes) => void (await browser.tabs.highlight({ windowId: window_id, tabs: indexes })),
+  // `active: false` keeps Firefox from making a tab it adds the active one (ext-tabs.js).
+  set_highlighted: async (tab_id, highlighted) => void (await ignore_refusal(browser.tabs.update(tab_id, { highlighted, active: false }))),
   ...session_record_store(() => browser.storage.session),
 };
 
@@ -21,7 +22,7 @@ const require_window_id = (window_id: number | undefined): number => {
 define("tab.visual", {
   completion: "hidden",
   label: "Select a range of tabs",
-  intent: "Move the tab range. Firefox shows it as selected tabs. Start makes the active tab the anchor. Down, up, first and last move the other end through the tabs of the strip in order, and skip hidden tabs and tabs of a collapsed group. A count prefix moves that many tabs. End clears the range back to the active tab.",
+  intent: "Move the tab range. Firefox shows it as selected tabs. Start makes the active tab the anchor. Down, up, first and last move the other end through the tabs of the strip in order, and skip hidden tabs and tabs of a collapsed group. End clears the range back to the active tab.",
   params: [
     {
       name: "action",
@@ -35,7 +36,6 @@ define("tab.visual", {
   bridge: false,
   runs_in: "background",
   repeatable: false,
-  count: { param: "count" },
   modes: ["normal", "tab_visual"],
   run: (ctx, args) => tab_visual.run(require_window_id(ctx.window_id), args),
 });

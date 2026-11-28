@@ -3,19 +3,18 @@
 
 import { TAB_VISUAL_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
+import { keep_chain } from "../shared/swallow.ts";
 import { create_write_queue } from "./store_turns.ts";
 
-export type VisualTab = { id: number; index: number; active: boolean; hidden: boolean; group_id: number };
+export type VisualTab = { id: number; index: number; active: boolean; highlighted: boolean; hidden: boolean; group_id: number };
 export type RangeRecord = { anchor: number; cursor: number };
 export type VisualAction = "start" | "down" | "up" | "first" | "last" | "end";
 
 export type TabVisualDeps = {
   tabs_in_window: (window_id: number) => Promise<VisualTab[]>;
   collapsed_group_ids: (window_id: number) => Promise<ReadonlySet<number>>;
-  // How many tabs of the window Firefox shows as selected.
-  highlighted_count: (window_id: number) => Promise<number>;
-  // Tab indexes, the first one active. Listing the active tab first keeps Firefox from switching tabs.
-  highlight: (window_id: number, indexes: number[]) => Promise<void>;
+  // Adds one tab to the selection or takes it out, and never makes it the active tab.
+  set_highlighted: (tab_id: number, highlighted: boolean) => Promise<void>;
   read_record: (window_id: number) => Promise<RangeRecord | undefined>;
   write_record: (window_id: number, record: RangeRecord) => Promise<void>;
   remove_record: (window_id: number) => Promise<void>;
@@ -40,51 +39,60 @@ export function range_between(order: readonly VisualTab[], anchor: number, curso
   return order.slice(ends[0]!, ends[1]! + 1);
 }
 
-export function highlight_indexes(active_index: number, range: readonly VisualTab[]): number[] {
-  return [active_index, ...range.map((tab) => tab.index).filter((index) => index !== active_index).toSorted((a, b) => a - b)];
-}
-
 export function make_tab_visual_handler(deps: TabVisualDeps) {
   const in_turn = create_write_queue();
+  // The runs of `tab.visual` the background has received and not answered yet. An action waits for all of them, so it sees every move the page sent before it, however many steps each message takes on its way to the handler.
+  const moves_in_flight = new Set<Promise<void>>();
 
   async function read_window(window_id: number) {
     const tabs = await deps.tabs_in_window(window_id);
     const active = tabs.find((tab) => tab.active);
     if (!active) throw new RuntimeRefusal("no active tab");
-    return { active, order: visible_order(tabs, await deps.collapsed_group_ids(window_id)) };
+    return { tabs, active, order: visible_order(tabs, await deps.collapsed_group_ids(window_id)) };
   }
 
+  // One tab at a time, and never the active tab. `tabs.highlight` sets the whole selection and makes its first tab active, so a tab switch that lands between the read and the call would be undone. Taking the active tab out would switch tabs too.
+  const select_only = (tabs: readonly VisualTab[], wanted: ReadonlySet<number>) =>
+    Promise.all(tabs.filter((tab) => !tab.active && tab.highlighted !== wanted.has(tab.id)).map((tab) => deps.set_highlighted(tab.id, !tab.highlighted)));
+
+  // A selection made with the mouse goes: the range starts at the active tab alone.
   const start = async (window_id: number) => {
-    const { active, order } = await read_window(window_id);
+    const { tabs, active, order } = await read_window(window_id);
     if (order.length < 2) throw new RuntimeRefusal("Only one tab to select");
     await deps.write_record(window_id, { anchor: active.id, cursor: active.id });
+    await select_only(tabs, new Set());
   };
 
+  // Only `start` begins a range. A move with no record, or after a tab switch, is a late key or a typed command in normal mode, and does nothing.
   const move = async (window_id: number, action: "down" | "up" | "first" | "last", count: number) => {
-    const { active, order } = await read_window(window_id);
-    const stored = await deps.read_record(window_id);
-    // A record whose anchor is not the active tab is stale: the range starts again at the active tab.
-    const record = stored && stored.anchor === active.id ? stored : { anchor: active.id, cursor: active.id };
+    const { tabs, active, order } = await read_window(window_id);
+    const record = await deps.read_record(window_id);
+    if (record?.anchor !== active.id) return;
     const cursor = moved_cursor(order, record, action, count);
     await deps.write_record(window_id, { anchor: active.id, cursor });
-    await deps.highlight(window_id, highlight_indexes(active.index, range_between(order, active.id, cursor)));
+    await select_only(tabs, new Set(range_between(order, active.id, cursor).map((tab) => tab.id)));
   };
 
-  // The reset only runs while the active tab is still the anchor. A key that switches tabs right after the leave step must not be undone by a late reset, and Firefox clears the selection itself on a plain switch. The active tab is read last, just before the highlight. A mouse selection with no record stays.
+  // A mouse selection with no record stays.
   const end = async (window_id: number) => {
-    const record = await deps.read_record(window_id);
-    if (!record) return;
+    if (!(await deps.read_record(window_id))) return;
     await deps.remove_record(window_id);
-    if ((await deps.highlighted_count(window_id)) < 2) return;
-    const active = (await deps.tabs_in_window(window_id)).find((tab) => tab.active);
-    if (active?.id === record.anchor) await deps.highlight(window_id, [active.index]);
+    await select_only(await deps.tabs_in_window(window_id), new Set());
   };
 
   return {
     run: (window_id: number, args: { action: VisualAction; count?: number }): Promise<void> =>
       in_turn(() => (args.action === "start" ? start(window_id) : args.action === "end" ? end(window_id) : move(window_id, args.action, args.count ?? 1))),
-    // Settles when every move queued before this call has set the selection, so an action key typed right after a motion sees its range.
-    idle: (): Promise<void> => in_turn(async () => {}),
+    // Called as the run message arrives, with its answer.
+    received: (answer: Promise<unknown>): void => {
+      const settled = keep_chain(answer);
+      moves_in_flight.add(settled);
+      void settled.then(() => moves_in_flight.delete(settled));
+    },
+    idle: async (): Promise<void> => {
+      await Promise.all(moves_in_flight);
+      await in_turn(async () => {});
+    },
     forget_window: (window_id: number): Promise<void> => in_turn(() => deps.remove_record(window_id)),
   };
 }
