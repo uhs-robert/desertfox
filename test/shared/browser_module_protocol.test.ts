@@ -6,7 +6,9 @@ import {
   ABSENT_TAB,
   DEVTOOLS_ACTIONS,
   DEVTOOLS_TOOL_KEYS,
+  DEVTOOLS_CMDLINE_KEY,
   DEVTOOLS_FLAGGED_KEYS,
+  has_hello_feature,
   DEVTOOLS_HINT_KEY,
   DEVTOOLS_SEARCH_KEYS,
   DEVTOOLS_TREE_KEYS,
@@ -464,15 +466,17 @@ test("the tool and tab rows are behind devtools_tools, so a module that knows th
   assert.equal(table_for({ ...search_hello, devtools_tools: true }).every(({ action }) => with_search_only.includes(action)), false, "the reason for the flag");
 });
 
-test("the : row is behind devtools_cmdline, and the ask takes a tab id or none", () => {
-  assert.deepEqual(DEVTOOLS_FLAGGED_KEYS.find(({ flag }) => flag === "devtools_cmdline")!.keys, [{ key: ":", action: "cmdline.open" }]);
-  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_cmdline: true }), { ok: true, value: { v: V, module_version: "1", devtools_cmdline: true } });
-  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_cmdline: flag }), { ok: true, value: { v: V, module_version: "1" } });
-  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+test("the : row is behind the c feature of the packed hello field, and the ask takes a tab id or none", () => {
+  assert.deepEqual(DEVTOOLS_CMDLINE_KEY, { key: ":", action: "cmdline.open" });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", f: "c" }), { ok: true, value: { v: V, module_version: "1", f: "c" } });
+  for (const f of [false, 1, "C", "c-", "abcdefghijklmnopq"]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", f }), { ok: true, value: { v: V, module_version: "1" } });
+  assert.equal(has_hello_feature({ v: V, module_version: "1", f: "xc" }, "c"), true);
+  assert.equal(has_hello_feature({ v: V, module_version: "1" }, "c"), false);
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : [])), ...(hello.f === "c" ? [DEVTOOLS_CMDLINE_KEY] : [])];
   const tools_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true };
   assert.equal(table_for(tools_hello).some(({ action }) => action === "cmdline.open"), false, "a module without the flag gets no row it would refuse the table for");
-  assert.ok(table_for({ ...tools_hello, devtools_cmdline: true }).length <= MAX_DEVTOOLS_KEY_ROWS);
-  assert.ok(validate_message({ v: V, id: "c1", kind: "devtools.keys", args: { keys: table_for({ ...tools_hello, devtools_cmdline: true }) } }, EXTENSION_TO_MODULE_KINDS).ok);
+  assert.ok(table_for({ ...tools_hello, f: "c" }).length <= MAX_DEVTOOLS_KEY_ROWS);
+  assert.ok(validate_message({ v: V, id: "c1", kind: "devtools.keys", args: { keys: table_for({ ...tools_hello, f: "c" }) } }, EXTENSION_TO_MODULE_KINDS).ok);
   assert.deepEqual(MODULE_TO_EXTENSION_KINDS["devtools_cmdline.ask"], { args: { tab_id: "optional_int" }, reply: true, max_bytes: 256 });
   const ask = (args: unknown) => validate_message({ v: V, id: "a1", kind: "devtools_cmdline.ask", args, sent_at: Date.now() }, MODULE_TO_EXTENSION_KINDS).ok;
   assert.ok(ask({ tab_id: 3 }));

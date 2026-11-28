@@ -893,7 +893,7 @@ test("the tool and tab rows go only to a module whose hello says devtools_tools"
   assert.ok(validate_message(pushes().at(-1), EXTENSION_TO_MODULE_KINDS).ok);
 });
 
-test("the : row goes only to a module whose hello says devtools_cmdline", async () => {
+test("the : row goes only to a module whose hello says the c feature", async () => {
   const { data, config, module, flush, timers } = setup({ kinds: { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS } });
   const pushes = () => outbox_of(data).filter((message) => message.kind === "devtools.keys");
   const hello = async (value: unknown) => {
@@ -907,7 +907,7 @@ test("the : row goes only to a module whose hello says devtools_cmdline", async 
   await module.sync();
   await hello({ v: 1, module_version: "1", devtools_search: true, devtools_tools: true });
   assert.equal(JSON.stringify(pushes().at(-1)!.args).includes("cmdline.open"), false);
-  await hello({ v: 1, module_version: "1", devtools_search: true, devtools_tools: true, devtools_cmdline: true });
+  await hello({ v: 1, module_version: "1", devtools_search: true, devtools_tools: true, f: "c" });
   assert.deepEqual(pushes().at(-1)!.args, { keys: [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_SEARCH_KEYS, ...DEVTOOLS_TOOL_KEYS, DEVTOOLS_CMDLINE_KEY] });
   assert.ok(validate_message(pushes().at(-1), EXTENSION_TO_MODULE_KINDS).ok);
 });

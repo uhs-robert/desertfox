@@ -82,7 +82,7 @@ export const DEVTOOLS_TOOL_KEYS: DevtoolsKeyRow[] = [
   { key: "J", action: "tab.next" },
   { key: "K", action: "tab.prev" },
 ];
-// Pushed only to a module whose hello says `devtools_cmdline`, for the same reason. `:` opens the command line panel over the toolbox's inspected tab.
+// Pushed only to a module whose hello says the `c` feature (`has_hello_feature`), for the same reason. `:` opens the command line panel over the toolbox's inspected tab.
 export const DEVTOOLS_CMDLINE_KEY: DevtoolsKeyRow = { key: ":", action: "cmdline.open" };
 // The rows past the tree keys, each list behind the hello flag of its feature. A new feature adds its flag and rows here, and the background pushes them.
 export const DEVTOOLS_FLAGGED_KEYS = [
@@ -90,8 +90,9 @@ export const DEVTOOLS_FLAGGED_KEYS = [
   { flag: "devtools_visual", keys: [DEVTOOLS_VISUAL_KEY] },
   { flag: "devtools_search", keys: DEVTOOLS_SEARCH_KEYS },
   { flag: "devtools_tools", keys: DEVTOOLS_TOOL_KEYS },
-  { flag: "devtools_cmdline", keys: [DEVTOOLS_CMDLINE_KEY] },
 ] as const satisfies readonly { flag: keyof ModuleHello; keys: readonly DevtoolsKeyRow[] }[];
+// Stand-in for the packed hello field of #1073: one helper, so the key and the code change in one place.
+export const has_hello_feature = (hello: ModuleHello | undefined, code: string): boolean => hello?.f?.includes(code) === true;
 // The keys of visual mode in DevTools, a push of their own (`devtools.visual_keys`), so a module before visual mode keeps its tree table. Each op moves the end of the selection or copies it.
 // The module copies on its own, so no text ever comes back. Escape ends the mode in the module, as it ends the hints, since a one-character key cannot name it.
 export const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"] as const;
@@ -215,8 +216,8 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `devtools_cmdline` says it runs the `:` key there, so it may get the `cmdline.open` row. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list.
-export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; devtools_cmdline?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `f` holds one letter per feature that has no flag of its own, and `c` says it runs the `:` key in DevTools, so it may get the `cmdline.open` row. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list.
+export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; f?: string; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -478,7 +479,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(value.devtools_cmdline === true && { devtools_cmdline: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(typeof value.f === "string" && /^[a-z]{1,16}$/.test(value.f) && { f: value.f }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.

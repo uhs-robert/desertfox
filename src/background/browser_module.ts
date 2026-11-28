@@ -22,6 +22,8 @@ import {
   DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_TREE_KEYS,
   DEVTOOLS_VISUAL_KEYS,
+  DEVTOOLS_CMDLINE_KEY,
+  has_hello_feature,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
   MESSAGE_MIN_GAP_MS,
@@ -286,7 +288,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const hello = validate_module_hello(stored_hello);
     const flags = hello.ok ? hello.value : undefined;
     if (flags?.devtools_visual === true && !(await send_now("devtools.visual_keys", { keys: DEVTOOLS_VISUAL_KEYS })).ok) return false;
-    const keys = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys: rows }) => (flags?.[flag] === true ? rows : []))];
+    const keys = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys: rows }) => (flags?.[flag] === true ? rows : [])), ...(has_hello_feature(flags, "c") ? [DEVTOOLS_CMDLINE_KEY] : [])];
     return (await send_now("devtools.keys", { keys })).ok;
   };
   const bar_built = (stored_hello: unknown): boolean => {

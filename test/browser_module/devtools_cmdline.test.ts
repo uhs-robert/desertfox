@@ -9,7 +9,7 @@ import { create_firefox, key_event } from "./fake_firefox.ts";
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const STATE = { v: 1, enabled: true, keys: [], tabs: {} };
-const TABLE = [...protocol.DEVTOOLS_TREE_KEYS, ...protocol.DEVTOOLS_FLAGGED_KEYS.flatMap(({ keys }) => keys)];
+const TABLE = [...protocol.DEVTOOLS_TREE_KEYS, ...protocol.DEVTOOLS_FLAGGED_KEYS.flatMap(({ keys }) => keys), protocol.DEVTOOLS_CMDLINE_KEY];
 const INSPECTED_BROWSER_ID = 55;
 const toolbox_address = (id: number, type = "tab") => `about:devtools-toolbox?type=${type}&id=${id}`;
 const BARE = "about:devtools-toolbox";
@@ -107,10 +107,4 @@ test("a table without the row, as from an older extension, leaves : to DevTools"
   await settle();
   assert.equal(env.press(":"), false);
   assert.deepEqual(env.asks(), []);
-});
-
-test("the module says devtools_cmdline in its hello", async () => {
-  const env = world();
-  await settle();
-  assert.equal((env.firefox.hello() as Record<string, unknown>).devtools_cmdline, true);
 });

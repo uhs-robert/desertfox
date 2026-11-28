@@ -352,7 +352,7 @@ export async function run_cases(context) {
     // Teardowns run at the piece's end, and the cases after this one need the hint key back.
     try {
       await set_session_value(HELLO_KEY, Object.fromEntries(Object.entries(own_hello).filter(([name]) => name !== "devtools_hints")));
-      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhlv/nNgJK:", { timeout_ms: 5000 });
+      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhlv/nNgJK", { timeout_ms: 5000 });
       await open_tab(TREE_PAGE);
       await show_tool("inspector");
       await markup_on_section();
@@ -364,7 +364,7 @@ export async function run_cases(context) {
       await moves("l", markup_state, ["section", true], "the tree keys stay: l expands");
     } finally {
       await set_session_value(HELLO_KEY, own_hello);
-      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlfv/nNgJK:", { timeout_ms: 5000 });
+      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlfv/nNgJK", { timeout_ms: 5000 });
     }
   });
 
@@ -520,6 +520,18 @@ export async function run_cases(context) {
   const panel_closed = (what) => poll_until(`${what} to close the command line panel`, async () => (await panel_now()) === null, { timeout_ms: 5000 });
   const marked_markup_element = () => chrome(`(async () => { ${TOOLBOX} const doc = tb.getPanel("inspector").markup.doc; Services.desertfox_key_test_focus = doc.activeElement; return !!doc.activeElement; })()`);
   const markup_element_has_focus = () => chrome(`(async () => { ${TOOLBOX} const doc = tb.getPanel("inspector").markup.doc; return !!Services.desertfox_key_test_focus && doc.activeElement === Services.desertfox_key_test_focus && Services.focus.focusedWindow === doc.defaultView; })()`);
+  // The module does not say the `c` feature yet (the packed hello field comes with #1073), so the case writes the hello it will say, and the extension pushes the row.
+  async function with_cmdline_hello(body) {
+    const HELLO_KEY = "desertfox_browser_module_hello";
+    const own_hello = await session_value(HELLO_KEY);
+    try {
+      await set_session_value(HELLO_KEY, { ...own_hello, f: "c" });
+      await poll_until("the extension to push the : row", async () => (((await session_value("desertfox_browser_module_from_extension")) ?? []).filter((message) => message.kind === "devtools.keys").at(-1)?.args.keys ?? []).some(({ key }) => key === ":"), { timeout_ms: 5000 });
+      await body();
+    } finally {
+      await set_session_value(HELLO_KEY, own_hello);
+    }
+  }
   async function colon_opens_line(where, window_type) {
     expect(await marked_markup_element(), `${where}: no markup element holds the focus`);
     on_teardown(() => chrome(`(async () => { delete Services.desertfox_key_test_focus; for (const w of Services.wm.getEnumerator(null)) w.document.getElementById("desertfox-cmdline-panel")?.hidePopup?.(); })()`));
@@ -546,6 +558,7 @@ export async function run_cases(context) {
     await show_tool("inspector");
     await markup_on_section();
     await focus_in_devtools();
+    await with_cmdline_hello(async () => {
     await colon_opens_line("docked", "navigator:browser");
     await press_keys("-k", "Escape");
     await poll_until("Escape to open the split console", () => chrome(`(async () => { ${TOOLBOX} return tb.splitConsole === true && !!tb.getPanel("webconsole")?.hud; })()`), { timeout_ms: 5000 });
@@ -556,13 +569,14 @@ export async function run_cases(context) {
     await sleep(NO_EFFECT_MS);
     expect((await panel_now()) === null, ": in the console input opened the command line");
     await chrome(`(async () => { ${TOOLBOX} await tb.closeSplitConsole(); })()`);
+    });
   });
 
   await run_case(": in a DevTools window of its own opens no line and asks the extension for a notice, since nothing there names the inspected tab", async () => {
     await home("bm_dt_cmdline_window");
     await open_tab(TREE_PAGE);
     await show_tool("inspector");
-    await in_devtools_window(async () => {
+    await with_cmdline_hello(() => in_devtools_window(async () => {
       const asks_before = (((await session_value("desertfox_browser_module_from_module")) ?? []).filter((message) => message.kind === "devtools_cmdline.ask")).length;
       await press_keys(":");
       await poll_until("the ask without a tab to reach the extension", async () => {
@@ -571,6 +585,6 @@ export async function run_cases(context) {
       }, { timeout_ms: 5000 });
       await sleep(NO_EFFECT_MS);
       expect((await panel_now()) === null, ": in a DevTools window opened the command line");
-    });
+    }));
   });
 }

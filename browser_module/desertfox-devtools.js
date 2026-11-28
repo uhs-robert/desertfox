@@ -292,9 +292,6 @@
       return sent.ok;
     }
 
-    // Said last, so the extension sends the row only to a module that runs it.
-    core.set_hello_flag("devtools_cmdline", true);
-
     return { ACTIONS, start };
   }
 
