@@ -31,7 +31,7 @@ const DEFAULT = compiled();
 function run_setup(answer: RunResponse = { ok: true }) {
   const runs: RouteRequest[] = [];
   const shown: Refusal[] = [];
-  const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false, incognito: false };
+  const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false, incognito: false, tab_id: 7 };
   const lines: number[] = [];
   const run = create_module_run({
     read_keymap: async () => state.keymap,
@@ -40,7 +40,8 @@ function run_setup(answer: RunResponse = { ok: true }) {
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
     open_line: async () => void lines.push(1),
     active_url: async () => state.url,
-    active_page: async () => ({ url: state.url, incognito: state.incognito }),
+    active_page: async () => ({ tab_id: state.tab_id, url: state.url, incognito: state.incognito }),
+    check_args: real_check,
     pages_on: async () => state.pages_on,
   });
   return { run, runs, shown, state, lines };
@@ -50,9 +51,9 @@ test("a run request runs its binding in the active tab, in normal mode, with the
   const { run, runs, shown } = run_setup();
   await run({ keys: "x x", count: 3 });
   assert.equal(runs.length, 1);
-  assert.deepEqual(runs[0], { invocations: [{ id: "tab.close", args: { side: "none" }, count: 3 }], mode: "normal", may_prompt: true });
-  // No sender tab: chrome names none, so the router takes the active tab.
-  assert.equal("sender_tab_id" in runs[0]!, false);
+  assert.deepEqual(runs[0], { invocations: [{ id: "tab.close", args: { side: "none" }, count: 3 }], mode: "normal", may_prompt: true, sender_tab_id: 7 });
+  // The tab the background found active carries the binding, never one the module names.
+  assert.equal(runs[0]!.sender_tab_id, 7);
   await run({ keys: "H", count: 0 });
   assert.deepEqual(runs[1]!.invocations, [{ id: "page.back", args: {} }]);
   assert.deepEqual(shown, []);

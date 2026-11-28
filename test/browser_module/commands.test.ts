@@ -676,3 +676,25 @@ test("a bad entry is left out and the others stay, and a half-typed sequence end
   type("t");
   assert.equal(runs().length, 1);
 });
+
+test("on an off about: page Escape in a field goes to the page, and stays the module's elsewhere", () => {
+  const escape_in_field = (entries: unknown[]) => {
+    const { first, firefox, press } = started({ written: address_state(entries) });
+    at_address(first, "about:config");
+    firefox.report(first.browser, { inner: 10, listeners: 0, field: true, text_field: true });
+    return press("Escape").prevented;
+  };
+  assert.equal(escape_in_field([]), true);
+  assert.equal(escape_in_field([{ sites: ["about:config"], tree: { children: {} }, off: true }]), false);
+});
+
+test("an exact pattern wins a tie with a prefix pattern of the same base", () => {
+  const exact: ScopeTree = { children: { a: "forward" } };
+  const prefix: ScopeTree = { children: { b: "forward" } };
+  const { first, type, runs } = started({ written: address_state([{ sites: ["about:config*"], tree: prefix }, { sites: ["about:config"], tree: exact }]) });
+  at_address(first, "about:config");
+  type("a", "b");
+  at_address(first, "about:config?x");
+  type("a", "b");
+  assert.deepEqual(runs(), [{ keys: "a", count: 0 }, { keys: "b", count: 0 }]);
+});

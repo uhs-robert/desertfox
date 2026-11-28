@@ -344,23 +344,24 @@ browser.tabs.onUpdated.addListener((tab_id, change) => {
 browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const locked_commands = locked_page_command_ids(registry.list());
+const module_check_args = (id: string, args: Record<string, unknown> | undefined) => {
+  const command = registry.get(id);
+  const checked = command && check_args(command, args);
+  return checked?.ok ? checked.args : undefined;
+};
 const browser_module = create_browser_module({
   session: browser.storage.session,
   is_on: () => module_setting_on(browser.storage.local),
   read_bar_config: () => read_bar_config(browser.storage.local),
   read_theme: async () => (await browser.storage.local.get(THEME_STORAGE_KEY))[THEME_STORAGE_KEY],
   on_bar_change: () => void browser.tabs.query({}).then((tabs) => tabs.forEach((tab) => tab.id === undefined || void best_effort(send_to_tab(tab.id, { type: "tree_updated" })))).catch(warn_and_go("browser_module.on_bar_change")),
-  check_args: (id, args) => {
-    const command = registry.get(id);
-    const checked = command && check_args(command, args);
-    return checked?.ok ? checked.args : undefined;
-  },
+  check_args: module_check_args,
   locked_commands,
   find_command: (id) => registry.get(id),
-  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async () => {
+  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, check_args: module_check_args, show_refusal: router_deps.show_refusal, open_line: async () => {
     const tab = await router_deps.active_tab();
     if (tab) await router_deps.open_cmdline(tab.tab_id, 0, "");
-  }, active_url: async () => (await router_deps.active_tab())?.url, active_page: async () => { const tab = await router_deps.active_tab(); return tab && { url: tab.url, incognito: tab.incognito !== false }; }, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers },
+  }, active_url: async () => (await router_deps.active_tab())?.url, active_page: async () => { const tab = await router_deps.active_tab(); return tab && { tab_id: tab.tab_id, url: tab.url, incognito: tab.incognito !== false }; }, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);

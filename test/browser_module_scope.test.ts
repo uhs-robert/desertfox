@@ -3,9 +3,11 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
+import { page_keymap_of } from "../src/shared/site/page_keymap_resolve.ts";
+import { site_columns_for } from "../src/shared/site/site_columns.ts";
 import { MAX_ADDRESS_TREES, MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
-import { address_trees_of_keymap, keymap_for_page, locked_page_command_ids, matcher_keymap_of, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
+import { address_entry_of, address_trees_of_keymap, keymap_for_page, locked_page_command_ids, matcher_keymap_of, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
@@ -265,7 +267,7 @@ test("a web rule makes no entry, and a keymap with no about: rule gives none", (
 
 test("a run request on an about: page matches against the tree of its address, and a private tab or a web page keeps the full tree", () => {
   const keymap = with_rules([{ site: "about:config", bind: { Q: { id: "page.reload" } }, pass: "H" }, { site: "about:support", off: true }]);
-  const run = (keys: string, url: string, incognito = false) => resolve_run(keymap_for_page(keymap, { url, incognito }), keys, 0, allowed).ok;
+  const run = (keys: string, url: string, incognito = false) => resolve_run(keymap_for_page(keymap, { url, incognito }, allowed, real_check), keys, 0, allowed).ok;
   assert.equal(run("Q", "about:config"), true);
   assert.equal(run("Q", "about:config#x"), true);
   assert.equal(run("H", "about:config"), false);
@@ -275,7 +277,7 @@ test("a run request on an about: page matches against the tree of its address, a
   assert.equal(run("H", "about:config", true), true);
   assert.equal(run("Q", "https://a.test/"), false);
   assert.equal(run("H", "about:addons"), true);
-  assert.equal(keymap_for_page(keymap, undefined), keymap);
+  assert.equal(keymap_for_page(keymap, undefined, allowed, real_check), keymap);
 });
 
 test("the state keeps the address trees, drops a bad entry and the extra ones, and a state without them is unchanged", () => {
@@ -291,4 +293,44 @@ test("the state keeps the address trees, drops a bad entry and the extra ones, a
   assert.equal(checked("junk"), undefined);
   assert.equal(checked(undefined), undefined);
   assert.equal(checked(Array(MAX_ADDRESS_TREES + 4).fill(entry))?.length, MAX_ADDRESS_TREES);
+});
+
+test("an about: rule changes nothing for a web page, its blank frames or Reader View under the shim", () => {
+  const rules = [{ site: "about:blank", off: true }, { site: "about:b*", off: true }, { site: "about:srcdoc", pass: "H" }, { site: "about:reader*", off: true, zoom: 2 }];
+  const [plain, ruled] = [with_rules([]), with_rules(rules)];
+  for (const addresses of [["https://a.test/"], ["about:blank", "https://a.test/"], ["about:srcdoc", "https://a.test/"], ["about:reader?url=https%3A%2F%2Fa.test%2F"]]) {
+    assert.deepEqual(site_columns_for(ruled, addresses), site_columns_for(plain, addresses), addresses.join(" "));
+    assert.deepEqual(page_keymap_of(ruled, addresses)?.all_off, page_keymap_of(plain, addresses)?.all_off, addresses.join(" "));
+  }
+  assert.equal(site_columns_for(ruled, ["about:blank"]).off, undefined);
+  assert.deepEqual(site_columns_for(ruled, ["about:reader?url=x"]).values, {});
+});
+
+test("an exact rule and a prefix rule on one base get their own trees, and an address with a query takes the prefix one", () => {
+  const rules = [{ site: "about:reader", off: true }, { site: "about:reader*", bind: { Q: { id: "page.reload" } } }];
+  const keymap = with_rules(rules);
+  const entries = address_trees_of_keymap(keymap, allowed, real_check);
+  assert.equal(entries.length, 2);
+  assert.equal(address_entry_of(entries, "about:reader")?.off, true);
+  assert.equal(address_entry_of(entries, "about:reader#x")?.off, true);
+  const query = address_entry_of(entries, "about:reader?url=x")!;
+  assert.equal(query.off, undefined);
+  assert.equal(node_at(query.tree, ["Q"]), "forward");
+  const run = (url: string) => resolve_run(keymap_for_page(keymap, { url, incognito: false }, allowed, real_check), "Q", 0, allowed).ok;
+  assert.equal(run("about:reader?url=x"), true);
+  assert.equal(run("about:reader"), false);
+  // An exact rule that binds a key does not reach the address with a query.
+  const bound = with_rules([{ site: "about:config", pass: "H" }, { site: "about:config*", bind: { Q: { id: "page.reload" } } }]);
+  const [exact, prefix] = address_trees_of_keymap(bound, allowed, real_check);
+  assert.equal(node_at(exact!.tree, ["H"]), undefined);
+  assert.equal(node_at(prefix!.tree, ["H"]), "forward");
+});
+
+test("past the cap the run check and the module both keep the global tree for the dropped address", () => {
+  const rules = Array.from({ length: MAX_ADDRESS_TREES }, (_, index) => ({ site: `about:p${index}`, pass: ["H", "L", "u", "o", "J", "K", "T", "D"][index] }));
+  rules.push({ site: "about:late", bind: { Q: { id: "tab.close" } } } as never);
+  const keymap = with_rules(rules);
+  assert.equal(address_entry_of(address_trees_of_keymap(keymap, allowed, real_check), "about:late"), undefined);
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, allowed, real_check), "L", 0, allowed).ok, true);
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, allowed, real_check), "Q", 0, allowed).ok, false);
 });

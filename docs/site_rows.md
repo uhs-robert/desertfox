@@ -501,7 +501,7 @@ On these pages `off`, `pass`, `only` and `bind` apply, and the first matching ru
 - A bind in another keymap mode (`keymap`), and every site mode (`modes`), which need DesertFox's page code.
 - Any rule in a private tab, where the keys stay as the global keymap has them.
 
-Where several patterns cover one address, the module uses the keys of the longest pattern. The module takes at most eight different key sets for these pages, and a page past them keeps the global keys. The which-key panel stays the global one. An older browser module ignores these rules and keeps the global keys.
+Where several patterns cover one address, the module uses the keys of the longest pattern, and an exact pattern beats a prefix pattern of the same length. A rule for an about: page applies nowhere else: not on web pages, in their blank frames or in Reader View with the page code on, and no other column (such as `zoom`) takes effect there. The module takes at most eight different key sets for these pages. A pattern past them keeps the global keys, in the module and when it runs a key alike. The which-key panel stays the global one. An older browser module ignores these rules and keeps the global keys.
 
 ## Turn a row off
 

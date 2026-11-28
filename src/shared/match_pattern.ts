@@ -9,7 +9,9 @@ const PATTERN_PARTS = /^(\*|https?|file|ftp):\/\/([^/]*)(\/.*)$/;
 const escape_regex = (text: string) => text.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
 
 // A site pattern for one of Firefox's own pages: `about:name` for that page (a fragment allowed), or `about:name*` for every address that starts so. There is no `about:*`: a rule may never reach every page of Firefox.
-const ABOUT_PATTERN = /^about:([a-z0-9][a-z0-9._-]*)(\*?)$/;
+export const ABOUT_PATTERN = /^about:([a-z0-9][a-z0-9._-]*)(\*?)$/;
+
+const NEVER_MATCHES = "(?!)";
 
 export type AboutPattern = { base: string; prefix: boolean };
 
@@ -18,7 +20,7 @@ export function about_pattern_of(pattern: string): AboutPattern | undefined {
   return parts ? { base: `about:${parts[1]}`, prefix: parts[2] === "*" } : undefined;
 }
 
-// Whether an about: pattern covers an address, by the same rule as the regex `match_regex_source` builds for it.
+// Whether an about: pattern covers an address: the page itself with a fragment, or for a prefix pattern every address that starts so.
 export function matches_about_pattern(pattern: string, address: string): boolean {
   const about = about_pattern_of(pattern);
   return about !== undefined && (about.prefix ? address.startsWith(about.base) : address === about.base || address.startsWith(`${about.base}#`));
@@ -62,8 +64,9 @@ export function match_regex_source(patterns: readonly string[]): string | undefi
       continue;
     }
     const about = about_pattern_of(pattern);
+    // The regex stands for a rule that no content frame or page shim may match: about:blank and srcdoc frames and Reader View would otherwise take it. The module path matches by `matches_about_pattern`.
     if (about) {
-      alternatives.push(`${escape_regex(about.base)}${about.prefix ? ".*" : "(?:#.*)?"}`);
+      alternatives.push(NEVER_MATCHES);
       continue;
     }
     const parts = PATTERN_PARTS.exec(pattern);

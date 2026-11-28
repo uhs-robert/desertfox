@@ -267,7 +267,7 @@
     }
 
     // address_trees_of: an entry that fails is left out and its pages keep `tree`, as with an extension that sends none. The taker checks each tree itself.
-    const ABOUT_SITE = /^about:[a-z0-9][a-z0-9._-]*\*?$/;
+    const ABOUT_SITE = /^about:([a-z0-9][a-z0-9._-]*)(\*?)$/;
     function read_address_trees(value) {
       if (!Array.isArray(value)) return [];
       return value.slice(0, MAX_ADDRESS_TREES).flatMap((entry) => {
@@ -276,18 +276,19 @@
       });
     }
 
-    // The entry of the site rules for the address a tab shows: the longest pattern that covers it, `about:name` with a fragment allowed or `about:name*` as a prefix, as `matches_about_pattern` does. None in a private window, where no rule applies.
+    // The entry of the site rules for the address a tab shows: the longest pattern that covers it, an exact one before a prefix one of the same length, `about:name` with a fragment allowed or `about:name*` as a prefix, as `matches_about_pattern` does. None in a private window, where no rule applies.
     function address_entry(state, win, browser) {
       const address = browser.currentURI?.spec;
       if (state.address_trees.length === 0 || typeof address !== "string" || PrivateBrowsingUtils.isWindowPrivate(win)) return undefined;
       let best;
       let best_length = -1;
+      let best_exact = false;
       for (const entry of state.address_trees) {
         for (const site of entry.sites) {
           const prefix = site.endsWith("*");
           const base = prefix ? site.slice(0, -1) : site;
           const covers = prefix ? address.startsWith(base) : address === base || address.startsWith(`${base}#`);
-          if (covers && base.length > best_length) [best, best_length] = [entry, base.length];
+          if (covers && (base.length > best_length || (base.length === best_length && !prefix && !best_exact))) [best, best_length, best_exact] = [entry, base.length, !prefix];
         }
       }
       return best;
@@ -482,10 +483,10 @@
       const state = state_for(win);
       // A key the module may not take here ends a half-typed sequence, as a key DesertFox does not see ends it in a page.
       if (!state) return void key_taker?.reset(win);
-      if (escape_blurs_field(win, page, state, event)) return;
       const address = address_entry(state, win, page.browser);
-      // Site rules turned DesertFox off on this about: page: no key of the module runs there.
+      // Site rules turned DesertFox off on this about: page: no key of the module runs there, Escape included.
       if (address?.off) return void key_taker?.reset(win);
+      if (escape_blurs_field(win, page, state, event)) return;
       const row = state.keys.get(token_of(event));
       const command = row && commands.get(row.id);
       const args = command && checked_args(command, row.args);

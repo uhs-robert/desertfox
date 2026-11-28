@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
+import { ABOUT_PATTERN } from "../../src/shared/match_pattern.ts";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_PROTOCOL_VERSION, MODULE_COMMAND_ARGS } from "../../src/shared/browser_module_protocol.ts";
 import {
@@ -739,4 +740,10 @@ test("hold_keys refuses a window another owner holds, and the owner's own second
   core.release_keys(window.win, "first");
   assert.equal(core.hold_keys(window.win, "second"), true);
   assert.equal(core.keys_held_by(window.win), "second");
+});
+
+test("the module's about: site check is the pattern of src/shared/match_pattern.ts", () => {
+  const source = source_of(CORE_FILE);
+  const copy = /const ABOUT_SITE = \/(.*)\/;/.exec(source)?.[1];
+  assert.equal(copy, ABOUT_PATTERN.source);
 });

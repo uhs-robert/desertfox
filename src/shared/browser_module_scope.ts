@@ -5,7 +5,7 @@ import type { CommandDef } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { AddressTree, NativeLeaf, PageHintAction, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
 import { check_module_args, is_module_command_id, MAX_ADDRESS_TREES, MAX_ADDRESS_TREE_SITES, MAX_COUNT, MAX_SEQUENCE_KEYS, validate_scope_tree } from "./browser_module_protocol.ts";
-import { about_pattern_of } from "./match_pattern.ts";
+import { about_pattern_of, matches_about_pattern } from "./match_pattern.ts";
 import { normal_tree_for, unguarded_columns_for } from "./site/site_columns.ts";
 import { create_matcher } from "./keys/matcher.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "./prefix_tree.ts";
@@ -100,23 +100,38 @@ export function normal_tree_at(keymap: CompiledKeymap | undefined, address: stri
   return page.all_off ? "off" : page.tree;
 }
 
-// The keymap a run request is matched against for the page the key came from: on an about: address in a normal tab, the normal tree under that address's site rules, else the keymap as it is.
-export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined): CompiledKeymap | undefined {
+// The entry the module takes for an address: the longest pattern that covers it, an exact pattern before a prefix pattern of the same length. The module has a copy of this rule (`address_entry` in desertfox-browser.js).
+export function address_entry_of(entries: readonly AddressTree[], address: string): AddressTree | undefined {
+  let best: { entry: AddressTree; length: number; exact: boolean } | undefined;
+  for (const entry of entries) {
+    for (const site of entry.sites) {
+      const about = about_pattern_of(site);
+      if (!about || !matches_about_pattern(site, address)) continue;
+      const [length, exact] = [about.base.length, !about.prefix];
+      if (!best || length > best.length || (length === best.length && exact && !best.exact)) best = { entry, length, exact };
+    }
+  }
+  return best?.entry;
+}
+
+// The keymap a run request is matched against for the page the key came from. On an about: address in a normal tab whose rules the state published (the same cap as the module's), it holds the normal tree under that address's site rules. Any other page, and a page past the cap, get the keymap as it is, as the module takes the global tree there.
+export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): CompiledKeymap | undefined {
   const current = current_keymap(keymap);
-  if (!current || !page?.url?.startsWith("about:") || page.incognito || !current.site_rules?.some((rule) => about_pattern_of(rule.site))) return keymap;
+  if (!current || !page?.url?.startsWith("about:") || page.incognito) return keymap;
+  if (!address_entry_of(address_trees_of_keymap(current, allowed, check_args), page.url)) return keymap;
   const root = normal_tree_at(current, page.url);
   const normal = root === "off" ? { kind: "branch" as const, children: {} } : root;
   const { normal: _, ...others } = current.modes;
   return { ...current, modes: { ...others, ...(normal && { normal }) } };
 }
 
-// One tree for each distinct outcome of the about: site rules, with every rule pattern that gives it. A pattern is judged at its own base address, `about:name` for `about:name*`. The module takes the longest pattern that covers the tab's address, so a longer rule overrides a shorter one for the addresses it names. Past MAX_ADDRESS_TREES distinct trees the later patterns keep the global tree.
+// One tree for each distinct outcome of the about: site rules, with every rule pattern that gives it. An exact pattern is judged at its own address and a prefix pattern at its base plus `?`, an address that no exact rule covers, so the two never share a tree by accident. The module takes the entry `address_entry_of` names. Past MAX_ADDRESS_TREES distinct trees the later patterns keep the global tree, in the module and in the run check alike.
 export function address_trees_of_keymap(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): AddressTree[] {
   const groups = new Map<string, AddressTree>();
   for (const site of new Set((current_keymap(keymap)?.site_rules ?? []).map((rule) => rule.site))) {
     const about = about_pattern_of(site);
     if (!about) continue;
-    const root = normal_tree_at(keymap, about.base);
+    const root = normal_tree_at(keymap, about.prefix ? `${about.base}?` : about.base);
     const tree = root === "off" ? { children: {} } : scope_tree_from(root, allowed, check_args);
     if (!validate_scope_tree(tree).ok) continue;
     const key = JSON.stringify([tree, root === "off"]);

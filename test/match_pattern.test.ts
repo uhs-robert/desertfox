@@ -22,7 +22,7 @@ test("text that is not a URL matches nothing", () => {
 
 test("an about: pattern names one page or a prefix, and there is no about:*", () => {
   const source = (pattern: string) => match_regex_source([pattern]);
-  const covers = (pattern: string, address: string) => new RegExp(source(pattern) ?? "$^").test(address);
+  const covers = matches_about_pattern;
   assert.ok(covers("about:preferences", "about:preferences"));
   assert.ok(covers("about:preferences", "about:preferences#privacy"));
   assert.ok(!covers("about:preferences", "about:preferences?x=1"));
@@ -34,8 +34,8 @@ test("an about: pattern names one page or a prefix, and there is no about:*", ()
   for (const bad of ["about:*", "about:", "about:Config", "about:a b", "about:a*b", "ABOUT:config"]) assert.equal(source(bad), undefined, bad);
   assert.deepEqual(about_pattern_of("about:config*"), { base: "about:config", prefix: true });
   assert.equal(about_pattern_of("*://a.test/*"), undefined);
-  // The module's own check agrees with the regex.
-  for (const [pattern, address] of [["about:config", "about:config#a"], ["about:config", "about:configx"], ["about:config*", "about:configx"], ["about:config*", "about:cons"]] as const) assert.equal(matches_about_pattern(pattern, address), covers(pattern, address), `${pattern} ${address}`);
+  // The regex of an about: rule matches no address, so no content frame or page shim takes the rule.
+  for (const address of ["about:blank", "about:srcdoc", "about:reader?url=x", "about:config", "https://a.test/"]) assert.equal(new RegExp(source("about:b*")!).test(address), false, address);
 });
 
 test("an about: pattern is disjoint from a web pattern, and from another page unless a prefix reaches it", () => {

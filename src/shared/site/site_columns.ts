@@ -2,7 +2,7 @@
 
 import type { CompiledKeymap, PageFrees, SiteBind, SiteRule, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { frees_of, is_empty_tree, prune_tree, type KeyRule } from "../keys/prune_tree.ts";
-import { matches_any_address, resolve_site_columns, type ResolvedSiteColumns } from "../match_pattern.ts";
+import { matches_about_pattern, matches_any_address, resolve_site_columns, type ResolvedSiteColumns } from "../match_pattern.ts";
 
 export type PageSiteColumns = ResolvedSiteColumns<KeyRule, SiteBind>;
 
@@ -15,7 +15,7 @@ export function unguarded_columns_for(keymap: CompiledKeymap | undefined, addres
     const { keymap: _, modes: __, ...rest } = rule;
     return { ...rest, ...(rule.bind && { bind: Object.fromEntries(Object.entries(rule.bind).filter(([, { leaf }]) => !has_page_guard(leaf))) }) };
   };
-  return resolve_site_columns(site_rules_matching(keymap, [address]).map(unguarded));
+  return resolve_site_columns((keymap?.site_rules ?? []).filter(({ site }) => matches_about_pattern(site, address)).map(unguarded));
 }
 
 // The rows that fit the page, in table order.
