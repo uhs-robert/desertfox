@@ -547,3 +547,62 @@ test("a narrow bar drops every other widget before it shortens the message, and 
   assert.ok(message!.endsWith("…") && message!.length < 32);
   assert.equal(fixture.bar()!.find((each) => each.className === "dfx-widget dfx-message")!.getAttribute("title"), "A long message that does not fit");
 });
+
+// Runs the loaded frame script against a fake tab and returns what it sent for that page.
+type FakePage = { protocol: string; principal_spec?: string; content_principal?: boolean; scheme?: string; add_on?: boolean; document_uri?: string; content_type?: string };
+function scroll_sent_for(page: FakePage): unknown[] {
+  const fixture = started();
+  const url = fixture.firefox.frame_scripts.find((entry) => decodeURIComponent(entry).includes("desertfox-statusbar:scroll"))!;
+  const source = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+  const sent: unknown[] = [];
+  const scrolling_element = { scrollTop: 40, scrollHeight: 500, clientHeight: 100 };
+  const doc = {
+    contentType: page.content_type ?? "text/html",
+    documentURI: page.document_uri ?? "",
+    scrollingElement: scrolling_element,
+    nodePrincipal: {
+      spec: page.principal_spec ?? "",
+      isContentPrincipal: page.content_principal ?? false,
+      isSystemPrincipal: false,
+      addonId: page.add_on ? "x@y" : "",
+      schemeIs: (scheme: string) => scheme === page.scheme,
+    },
+  };
+  const content = { document: doc, location: { protocol: page.protocol }, windowGlobalChild: { innerWindowId: 7 } };
+  const timers: (() => void)[] = [];
+  const fake_services = { prefs: { getBoolPref: () => true } };
+  new Function("content", "Services", "ChromeUtils", "sendAsyncMessage", "addEventListener", "addMessageListener", source)(
+    content,
+    fake_services,
+    { importESModule: () => ({ setTimeout: (callback: () => void) => timers.push(callback), clearTimeout() {} }) },
+    (_name: string, data: unknown) => sent.push(data),
+    () => {},
+    () => {},
+  );
+  for (const run of timers.splice(0)) run();
+  return sent;
+}
+
+test("the frame script reports the scroll place of the JSON viewer, blob: pages and Firefox's error pages, and of no web page", () => {
+  const place = [{ inner: 7, top: 40, max: 400 }];
+  assert.deepEqual(scroll_sent_for({ protocol: "https:", principal_spec: "resource://devtools/client/jsonview/" }), place);
+  assert.deepEqual(scroll_sent_for({ protocol: "file:", principal_spec: "resource://devtools/client/jsonview/" }), place);
+  assert.deepEqual(scroll_sent_for({ protocol: "blob:" }), place);
+  assert.deepEqual(scroll_sent_for({ protocol: "view-source:" }), place);
+  for (const name of ["neterror", "certerror", "httpsonlyerror", "blocked"]) {
+    assert.deepEqual(scroll_sent_for({ protocol: "https:", content_principal: true, scheme: "about", document_uri: `about:${name}?e=x` }), place, name);
+  }
+  assert.deepEqual(scroll_sent_for({ protocol: "https:", principal_spec: "https://example.com" }), []);
+  assert.deepEqual(scroll_sent_for({ protocol: "data:", principal_spec: "" }), []);
+});
+
+test("the frame script refuses a look-alike of the JSON viewer and of an error page", () => {
+  assert.deepEqual(scroll_sent_for({ protocol: "moz-foo:", principal_spec: "resource://devtools/client/jsonview/" }), []);
+  assert.deepEqual(scroll_sent_for({ protocol: "https:", principal_spec: "https://devtools.example/client/jsonview/" }), []);
+  const error = { protocol: "https:", content_principal: true, scheme: "about", document_uri: "about:neterror?e=x" };
+  assert.deepEqual(scroll_sent_for({ ...error, add_on: true }), []);
+  assert.deepEqual(scroll_sent_for({ ...error, scheme: "https" }), []);
+  assert.deepEqual(scroll_sent_for({ ...error, content_principal: false }), []);
+  assert.deepEqual(scroll_sent_for({ ...error, document_uri: "https://example.com/about:neterror?e=x" }), []);
+  assert.deepEqual(scroll_sent_for({ ...error, document_uri: "about:blank" }), []);
+});

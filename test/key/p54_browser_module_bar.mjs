@@ -1,5 +1,6 @@
 // The status bar the browser module draws under the page area: it shows the mode, the half-typed keys and the scroll place of a locked page, it takes the corner badge's place, and it leaves with its setting.
 // Set DESERTFOX_SHOT_DIR to also save screenshots of the bar.
+import { createServer } from "node:http";
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["ui", "keys"];
@@ -65,6 +66,15 @@ export async function run_cases(context) {
     await press_keys("j");
     await poll_until("a percent in the bar", async () => (await bar_now())?.right.some((text) => /^\d+%$/.test(text)));
     await shot("locked-scroll");
+    await close_selected_tab();
+  });
+
+  await run_case("the JSON viewer shows its scroll place in the bar", async () => {
+    const server = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ rows: Array.from({ length: 400 }, (_, index) => `row ${index}`) })));
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    on_teardown(() => new Promise((resolve) => server.close(resolve)));
+    await open_tab(`http://127.0.0.1:${server.address().port}/data.json`);
+    await poll_until("Top in the bar on the JSON viewer", async () => (await bar_now())?.right.includes("Top"), { timeout_ms: 8000 });
     await close_selected_tab();
   });
 

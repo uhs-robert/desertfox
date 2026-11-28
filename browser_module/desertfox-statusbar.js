@@ -189,11 +189,15 @@
     // The newest report of each of this window's tabs, by <browser>.
     const scrolls = new WeakMap();
 
-    // Runs in each tab. It reports only where DesertFox's page code is absent (about: pages, add-on pages, the PDF viewer, Reader View), so a web page costs no message.
+    // Runs in each tab. It reports only where DesertFox's page code is absent (about: pages, add-on pages, the PDF viewer, Reader View, view-source:, the JSON viewer, blob: pages and Firefox's error pages), so a web page costs no message.
     function scroll_frame_script() {
       const MESSAGE = "desertfox-statusbar:scroll";
       const PREFS = ["desertfox.browser_module.enabled", "desertfox.browser_module.statusbar"];
-      const LOCKED_SCHEMES = ["about:", "chrome:", "resource:", "moz-extension:", "view-source:"];
+      const LOCKED_SCHEMES = ["about:", "chrome:", "resource:", "moz-extension:", "view-source:", "blob:"];
+      // The JSON viewer shows an http, https or file response under its own principal, and no web page holds a resource: principal.
+      const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
+      // An error page keeps the failed site's address as its location, so only its about: content principal and its own document address name it. A web page's principal is http or https.
+      const ERROR_ADDRESS = /^about:(?:neterror|certerror|httpsonlyerror|blocked)\?/i;
       const THROTTLE_MS = 100;
       const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
       let timer = 0;
@@ -204,6 +208,13 @@
           return false;
         }
       };
+      function is_json_viewer(win, doc) {
+        return doc.nodePrincipal.spec.startsWith(JSON_VIEWER_PRINCIPAL) && /^(?:https?|file):$/.test(win.location.protocol);
+      }
+      function is_error_page(doc) {
+        const principal = doc.nodePrincipal;
+        return principal.isContentPrincipal === true && !principal.isSystemPrincipal && !principal.addonId && principal.schemeIs("about") && ERROR_ADDRESS.test(String(doc.documentURI ?? ""));
+      }
       function report() {
         timer = 0;
         try {
@@ -211,7 +222,7 @@
           const doc = win?.document;
           if (!doc || !win.windowGlobalChild || !prefs_on()) return;
           const is_pdf = doc.contentType === "application/pdf";
-          if (!is_pdf && !LOCKED_SCHEMES.includes(win.location.protocol)) return;
+          if (!is_pdf && !LOCKED_SCHEMES.includes(win.location.protocol) && !is_json_viewer(win, doc) && !is_error_page(doc)) return;
           const box = is_pdf ? doc.getElementById("viewerContainer") : doc.scrollingElement;
           if (!box) return;
           sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, top: box.scrollTop, max: box.scrollHeight - box.clientHeight });
