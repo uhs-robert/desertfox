@@ -55,6 +55,8 @@ export async function run_cases(context) {
   const steps = module_steps(context);
   const { chrome, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page } = steps;
   const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left")?.children[0]?.textContent ?? null : null; })()`);
+  // With the bar up the refusal shows in its message slot and no notification goes out.
+  const bar_message = () => chrome(`(async () => ${W}.document.getElementById("desertfox-statusbar")?.querySelector(".dfx-message")?.textContent ?? null)()`);
   const notices = async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
   const tab_case = (name, body) =>
     run_case(name, async () => {
@@ -276,7 +278,7 @@ export async function run_cases(context) {
     await clear_notices();
     on_teardown(clear_notices);
     await press_keys(";", "v");
-    await poll_until("the refusal", async () => (await notices()).includes("This hint does not run on this page"), { timeout_ms: 5000 });
+    await poll_until("the refusal", async () => (await notices()).includes("This hint does not run on this page") || ((await bar_message()) ?? "").includes("This hint does not run on this page"), { timeout_ms: 5000 });
     await poll_until("the start to give the keys back", async () => (await chrome(held_by)) === null, { timeout_ms: 3000 });
     expect((await chrome(page_layers)) === 0, "a refused hint drew labels");
     await clear_notices();
