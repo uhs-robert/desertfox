@@ -214,7 +214,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await expect_badge("TAB VISUAL");
     const mark = events.length;
     await press_keys("Q");
-    await wait_event(mark, (event) => event.type === "keydown" && event.key === "Q", "the page to get the unbound key");
+    await sleep(800);
+    const seen = events.slice(mark).filter((event) => event.type === "keydown").map((event) => `${event.page_id}:${event.key}`);
+    expect(seen.some((entry) => entry.endsWith(":Q")), `the page got no Q (saw ${JSON.stringify(seen)}, badge ${await badge()})`);
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
   });
