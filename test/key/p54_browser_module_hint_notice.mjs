@@ -24,7 +24,7 @@ const NOT_HERE_NOTICE = "Hints do not run on this page";
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, run_line, in_background, clear_notices, on_teardown } = context;
   const steps = module_steps(context);
-  const { chrome, session_value, open_tab, focus_page, in_selected_page, close_selected_tab, home } = steps;
+  const { chrome, bar_message, session_value, open_tab, focus_page, in_selected_page, close_selected_tab, home } = steps;
   // Hints label only what shows, so the source view gets a page whose link sits at the top of its source.
   const server = createServer((request, response) =>
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(request.url === "/links" ? `<!doctype html><p><a href="/target">the target link</a></p>` : make_article().replace("</article>", `<p>The end: <a href="/target">the target link</a>.</p></article>`)),
@@ -46,6 +46,8 @@ export async function run_cases(context) {
   };
 
   const hint_labels = () => in_selected_page(HINT_LABEL_COUNT);
+  // With the bar up a refusal on a locked tab shows in its message slot and no desktop notice goes out.
+  const bar_says = (text) => async () => ((await bar_message()) ?? "").includes(text);
   const notices = async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
   const hint_runs = async () => ((await session_value(FROM_MODULE_KEY)) ?? []).filter((message) => message.kind === "run" && /^(f|F)$/.test(message.args?.keys));
   const select_index = (index) => chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[${index}]; })()`);
@@ -79,7 +81,8 @@ export async function run_cases(context) {
       on_teardown(clear_notices);
       const runs_before = (await hint_runs()).length;
       await press_keys("f");
-      await poll_until(`the notice on ${name}`, async () => (await notices()).includes(PAGES_NOTICE), { timeout_ms: 5000 });
+      await poll_until(`the notice on ${name}`, bar_says(PAGES_NOTICE), { timeout_ms: 5000 });
+      expect((await notices()).length === 0, `${name} showed a desktop notice: ${JSON.stringify(await notices())}`);
       expect((await hint_labels()) === 0, `${name} showed hint labels with the setting off`);
       await clear_notices();
       await focus_page();
@@ -127,7 +130,8 @@ export async function run_cases(context) {
     await clear_notices();
     on_teardown(clear_notices);
     await press_keys("f");
-    await poll_until("the notice on about:support", async () => (await notices()).includes(NOT_HERE_NOTICE), { timeout_ms: 5000 });
+    await poll_until("the notice on about:support", bar_says(NOT_HERE_NOTICE), { timeout_ms: 5000 });
+    expect((await notices()).length === 0, `about:support showed a desktop notice: ${JSON.stringify(await notices())}`);
     expect((await hint_labels()) === 0, "about:support showed hint labels");
     expect((await chrome(`(async () => ${W}.document.querySelectorAll(".desertfox-page-hints").length)()`)) === 0, "about:support got the module's page labels");
     await clear_notices();
