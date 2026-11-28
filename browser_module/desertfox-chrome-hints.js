@@ -237,7 +237,8 @@
         const context = doc.defaultView?.browsingContext;
         const frame = context?.embedderElement;
         if (!frame) break;
-        const zoom = context.fullZoom ?? 1;
+        // Gecko gives a frame its parent's zoom, and both share one pixel scale then, so only the difference between the two scales the box.
+        const zoom = (context.fullZoom ?? 1) / (frame.ownerDocument?.defaultView?.browsingContext?.fullZoom ?? 1);
         const outer = frame.getBoundingClientRect();
         box.left = box.left * zoom + outer.left + (frame.clientLeft ?? 0);
         box.top = box.top * zoom + outer.top + (frame.clientTop ?? 0);

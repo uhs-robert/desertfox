@@ -20,11 +20,9 @@ const label_on = (pick) => `(async () => {
   const b = w.gBrowser.selectedBrowser;
   const el = (${pick})(b.contentDocument, deep_find);
   if (!el) return null;
-  const outer = b.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
-  // The page's pixels are scaled by its zoom in the window.
-  const zoom = b.fullZoom ?? 1;
-  const x = Math.max(0, Math.round(r.left * zoom + outer.left)), y = Math.max(0, Math.round(r.top * zoom + outer.top));
+  // Firefox's own answer for where the element sits in the window, so the module's zoom math is not checked against itself.
+  const quad = el.getBoxQuads({ relativeTo: w.document })[0].getBounds();
+  const x = Math.max(0, Math.round(quad.left)), y = Math.max(0, Math.round(quad.top));
   let best = null, best_distance = Infinity;
   for (const host of w.document.querySelectorAll(".desertfox-page-hints")) for (const node of host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint")) {
     const box = node.getBoundingClientRect();
@@ -49,7 +47,7 @@ const clipboard_text = `(async () => {
   try { transferable.getTransferData("text/plain", data); } catch { return ""; }
   return data.value.QueryInterface(Ci.nsISupportsString).data;
 })()`;
-// Page code: the links of about:addons the user sees in the first screen, the web links and the sidebar's, as selectors-free pickers by index.
+// Page code: the links in the first screen of the page, in shadow roots too, in document order.
 const VISIBLE_LINKS = `(doc, deep_find) => { const all = []; const walk = (root) => { for (const el of root.querySelectorAll("a[href]")) all.push(el); for (const el of root.querySelectorAll("*")) if (el.openOrClosedShadowRoot) walk(el.openOrClosedShadowRoot); }; walk(doc); return all.filter((a) => a.checkVisibility() && a.getBoundingClientRect().width > 4 && a.getBoundingClientRect().top >= 0 && a.getBoundingClientRect().bottom <= doc.defaultView.innerHeight); }`;
 
 export async function run_cases(context) {

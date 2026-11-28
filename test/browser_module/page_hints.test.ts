@@ -6,7 +6,7 @@ import { test } from "node:test";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { key_event } from "./fake_firefox.ts";
 import { Node } from "./chrome_dom.ts";
-import { box, button, chrome_document, chrome_window, plain, settle, started } from "./chrome_windows.ts";
+import { box, browser_with_dialog, button, chrome_document, chrome_window, plain, settle, started } from "./chrome_windows.ts";
 import type { Firefox } from "./chrome_windows.ts";
 
 const PAGE_LAYER = "desertfox-page-hints";
@@ -492,4 +492,35 @@ test("a page beside vertical tabs keeps its labels on the links", async () => {
   assert.equal(run.hint_key(), true);
   assert.equal((await run.collect(5))?.ok, true);
   assert.deepEqual(run.rows(5).map((row) => [row[1], row[2]]), [[320, 180]]);
+});
+
+test("a settings sub-dialog in a page zoomed to 1.5 scales its boxes once, since the dialog shares the page's zoom", async () => {
+  const run = started((firefox) => browser_with_dialog(firefox, { nested: true }));
+  const chrome = run.chrome as unknown as { dialog_view: { browsingContext: { fullZoom?: number } }; frame: { ownerDocument: { defaultView: { browsingContext: { fullZoom?: number } } } } };
+  chrome.dialog_view.browsingContext.fullZoom = 1.5;
+  chrome.frame.ownerDocument.defaultView.browsingContext.fullZoom = 1.5;
+  run.type_binding();
+  assert.equal((await run.collect_here(5))?.ok, true);
+  // The accept button is at (200, 150) in the dialog, the dialog at (300, 200) in the page, the page at (0, 80) in the window.
+  assert.deepEqual(run.target_rows()[0]!.slice(1, 3), [Math.round((200 + 300) * 1.5), Math.round((150 + 200) * 1.5 + 80)]);
+});
+
+test("a link whose text sits in a slot of its host's shadow root is labelled, as a nav link of about:addons is", async () => {
+  const host = new Node("moz-page-nav-button", { box: box(40, 300, 200, 40) });
+  const shadow = new Node("#shadow");
+  const nav_link = el("a", 40, 300, { href: "about:preferences" });
+  nav_link.box = box(40, 300, 200, 40);
+  const slot = new Node("slot");
+  nav_link.append(slot);
+  shadow.append(nav_link);
+  host.openOrClosedShadowRoot = shadow;
+  shadow.host = host;
+  const text = Object.assign(new Node("span", { box: box(40, 300, 200, 40) }), { assignedSlot: slot });
+  host.append(text);
+  // The page's hit test finds the slotted text, as Firefox does, not the link under it.
+  nav_link.setAttribute("covered", "");
+  const run = start_on("about:addons", (root) => root.append(host));
+  assert.equal(run.hint_key(), true);
+  assert.equal((await run.collect(5))?.ok, true);
+  assert.equal(run.rows(5).length, 1, "the nav link got no label");
 });
