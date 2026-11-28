@@ -32,13 +32,13 @@ function run_setup(answer: RunResponse = { ok: true }) {
   const runs: RouteRequest[] = [];
   const shown: Refusal[] = [];
   const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false, incognito: false, tab_id: 7 };
-  const lines: number[] = [];
+  const lines: string[] = [];
   const run = create_module_run({
     read_keymap: async () => state.keymap,
     locked_commands,
     run: async (request) => (runs.push(request), answer),
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
-    open_line: async () => void lines.push(1),
+    open_line: async (text) => void lines.push(text),
     active_url: async () => state.url,
     active_page: async () => ({ tab_id: state.tab_id, url: state.url, incognito: state.incognito }),
     check_args: real_check,
@@ -272,9 +272,19 @@ test("the panel kind takes a whole tab id and nothing else", () => {
 test("the bare command line key opens the line over the active tab and runs nothing through the router", async () => {
   const { run, runs, shown, lines } = run_setup();
   await run({ keys: ":", count: 0 });
-  assert.deepEqual(lines, [1]);
+  assert.deepEqual(lines, [""]);
   assert.deepEqual(runs, []);
   assert.deepEqual(shown, []);
+});
+
+test("a line key with text opens the line with it when its command needs no page, and refuses otherwise", async () => {
+  const { run, runs, shown, lines } = run_setup();
+  await run({ keys: "t M", count: 0 });
+  assert.deepEqual(lines, ["tab.move --offset="]);
+  assert.deepEqual(runs, []);
+  for (const keys of ["s h", "; ;", "A"]) await assert.rejects(run({ keys, count: 0 }), /not a key|needs a page/, keys);
+  assert.deepEqual(lines, ["tab.move --offset="]);
+  assert.equal(shown.length, 3);
 });
 
 test("a prompt step handed to the address bar ends the binding, so its later steps do not run", async () => {

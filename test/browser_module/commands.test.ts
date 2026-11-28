@@ -91,9 +91,9 @@ test("a count past the cap repeats a native command 100 times", () => {
   assert.equal(window.tab_moves.length, 100);
 });
 
-test("keys the tree leaves out reach the page: f, / and i", () => {
+test("keys the tree leaves out reach the page: f, / and v", () => {
   const { press, runs } = started();
-  for (const key of ["f", "/", "i"]) assert.equal(press(key).prevented, false, key);
+  for (const key of ["f", "/", "v"]) assert.equal(press(key).prevented, false, key);
   assert.deepEqual(runs(), []);
 });
 
@@ -512,13 +512,13 @@ test("address_bar.open refuses with no focused window, a private window DesertFo
 test("set_hello_flag puts bar in the hello, takes it out again, and refuses other names and values", () => {
   const { firefox, core } = started();
   assert.equal(core.set_hello_flag("bar", true), true);
-  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true });
+  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, mode_keys: true, bar: true });
   const checked = validate_module_hello(firefox.hello());
   assert.ok(checked.ok && checked.value.bar === true);
   for (const [name, on] of [["keys", true], ["bar", "yes"], ["bar", 1]] as const) assert.equal(core.set_hello_flag(name, on), false, `${name} ${on}`);
   assert.equal(firefox.errors.filter((line) => line.includes("refused the hello flag")).length, 2);
   core.set_hello_flag("bar", false);
-  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true });
+  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, mode_keys: true });
 });
 
 test("a flag set while the pref is off goes in the hello when it comes on", () => {
@@ -527,7 +527,7 @@ test("a flag set while the pref is off goes in the hello when it comes on", () =
   core.set_hello_flag("bar", true);
   assert.equal(firefox.hello(), undefined);
   firefox.set_pref(true);
-  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true });
+  assert.deepEqual(plain(firefox.hello()), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, mode_keys: true, bar: true });
 });
 
 // A page in this process (about:preferences) whose search box holds the focus, and the key target that reaches it.
@@ -697,4 +697,284 @@ test("an exact pattern wins a tie with a prefix pattern of the same base", () =>
   at_address(first, "about:config?x");
   type("a", "b");
   assert.deepEqual(runs(), [{ keys: "a", count: 0 }, { keys: "b", count: 0 }]);
+});
+
+// ---- The module's own modes: insert, ignore, pass-next, and the keys a field takes.
+
+const MODE_ATTRIBUTE = "desertfox-module-mode";
+const DOCUMENT_ATTRIBUTE = "desertfox-module-document";
+const CTRL_BRACKET: Partial<FakeEvent> = { ctrlKey: true };
+const mode_of = (browser: unknown) => (browser as { getAttribute(name: string): string | null }).getAttribute(MODE_ATTRIBUTE);
+
+// A page in this process whose field holds the focus and records every event dispatched to it, for the Escape the module sends.
+// `system_page` models a page of the parent process: its events are trusted, and they reach the window's key listener again, as Gecko delivers them.
+function page_with_field(browser: unknown, system_page?: { deliver(event: FakeEvent): void }) {
+  const { field, page_document, target } = in_process_field(browser);
+  const sent: { type: string; key: string; keyCode: number; trusted: boolean }[] = [];
+  class KeyboardEvent {
+    isTrusted = system_page !== undefined;
+    type = "";
+    key = "";
+    keyCode = 0;
+    constructor(type: string, init: { key: string; keyCode: number }) {
+      Object.assign(this, { type, key: init.key, keyCode: init.keyCode });
+    }
+  }
+  (page_document.defaultView as Record<string, unknown>)["KeyboardEvent"] = KeyboardEvent;
+  Object.assign(field, {
+    dispatchEvent: (event: KeyboardEvent) => {
+      sent.push({ type: event.type, key: event.key, keyCode: event.keyCode, trusted: event.isTrusted });
+      if (event.type === "keydown") system_page?.deliver(key_event(event.key, { isTrusted: true, keyCode: event.keyCode, target: field, originalTarget: field }));
+    },
+  });
+  return { field, page_document, target, sent };
+}
+
+test("i starts insert mode: every key reaches the page, the attribute says insert, and a load ends it", () => {
+  const { press, type, window, first, runs } = started();
+  assert.equal(press("i").prevented, true);
+  assert.equal(mode_of(first.browser), "insert");
+  assert.equal(first.browser.getAttribute(DOCUMENT_ATTRIBUTE), "10");
+  assert.ok(["J", "j", "x", "i", ":", "<"].every((key) => !press(key).prevented), "no key is taken");
+  assert.ok(type("x", "x").every((event) => !event.prevented));
+  assert.deepEqual([window.tab_moves, runs()], [[], []]);
+  first.browser.innerWindowID = 12;
+  press("J");
+  assert.deepEqual(window.tab_moves, [1], "the new document is in normal mode");
+});
+
+test("Escape leaves insert mode and is consumed, as on a web page, and the keys work again", () => {
+  const { press, window, first, runs } = started();
+  press("i");
+  const escape = press("Escape");
+  assert.deepEqual([escape.prevented, escape.stopped, mode_of(first.browser)], [true, true, null]);
+  assert.equal(first.browser.getAttribute(DOCUMENT_ATTRIBUTE), null);
+  press("J");
+  assert.deepEqual(window.tab_moves, [1]);
+  assert.equal(press("Escape").prevented, false, "in normal mode with no field the page gets Escape");
+  assert.deepEqual(runs(), []);
+});
+
+test("Escape in insert mode with a field blurs it too, on a page in this process and in another one", () => {
+  const local = started();
+  const page = page_with_field(local.first.browser);
+  local.press("i", { target: local.first.browser, originalTarget: local.first.browser });
+  assert.equal(page.field.blurs, 0);
+  const escape = local.press("Escape", page.target);
+  assert.deepEqual([page.field.blurs, escape.prevented, mode_of(local.first.browser)], [1, true, null]);
+
+  const remote = started();
+  remote.firefox.report(remote.first.browser, { inner: 10, listeners: 0, field: true, text_field: true });
+  remote.press("i");
+  const left = remote.press("Escape");
+  assert.deepEqual([left.prevented, mode_of(remote.first.browser)], [true, null]);
+  assert.deepEqual(remote.firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")).map(({ data }) => plain(data)), [{ inner: 10, escape: true }]);
+});
+
+test("a key typed in a field in insert mode goes to the page and the mode stays", () => {
+  const { press, first } = started();
+  const page = page_with_field(first.browser);
+  press("i");
+  const typed = press("a", page.target);
+  assert.deepEqual([typed.prevented, mode_of(first.browser), page.field.blurs], [false, "insert", 0]);
+});
+
+test("insert mode belongs to its tab, and a state of the extension with a tab record in another mode still wins over it", () => {
+  const { press, type, window, first, second, on_tab } = started();
+  press("i");
+  on_tab(second);
+  press("J");
+  assert.deepEqual(window.tab_moves, [1], "the other tab is in normal mode");
+  on_tab(first);
+  assert.equal(press("J").prevented, false);
+  assert.equal(mode_of(second.browser), null);
+  assert.ok(type("x", "x").every((event) => !event.prevented));
+});
+
+test("the insert table decides the leave keys: with only <C-[> in it, Escape goes to the page and <C-[> leaves", () => {
+  const written = state({ insert_keys: [{ key: "<C-[>", id: "mode.escape" }] });
+  const world = started({ written });
+  world.press("i");
+  assert.deepEqual([world.press("Escape").prevented, mode_of(world.first.browser)], [false, null], "an unbound Escape passes and leaves insert, as on a web page");
+  world.press("i");
+  const left = world.press("[", CTRL_BRACKET);
+  assert.deepEqual([left.prevented, mode_of(world.first.browser)], [true, null]);
+
+  const field = started({ written });
+  const page = page_with_field(field.first.browser);
+  assert.deepEqual([field.press("Escape", page.target).prevented, page.field.blurs], [false, 0], "plain Escape leaves a field alone");
+  const blurred = field.press("[", { ...page.target, ...CTRL_BRACKET });
+  assert.deepEqual([blurred.prevented, page.field.blurs], [true, 1], "<C-[> blurs it");
+});
+
+test("an empty insert table blurs no field, and its unbound Escape ends insert mode and passes", () => {
+  const world = started({ written: state({ insert_keys: [] }) });
+  const page = page_with_field(world.first.browser);
+  assert.deepEqual([world.press("Escape", page.target).prevented, page.field.blurs], [false, 0]);
+  world.press("i", { target: world.first.browser, originalTarget: world.first.browser });
+  assert.deepEqual([world.press("Escape").prevented, mode_of(world.first.browser)], [false, null], "an unbound Escape still ends insert mode and goes to the page");
+});
+
+test("with no insert table (an older extension) the plain Escape leaves insert and blurs, as it always did, and <C-[> does not", () => {
+  const world = started();
+  const page = page_with_field(world.first.browser);
+  assert.deepEqual([world.press("[", { ...page.target, ...CTRL_BRACKET }).prevented, page.field.blurs], [false, 0]);
+  assert.deepEqual([world.press("Escape", page.target).prevented, page.field.blurs], [true, 1]);
+});
+
+test("<A-Escape> in a field sends the page an untrusted Escape, takes the key and does not blur", () => {
+  const world = started({ written: state({ insert_keys: [{ key: "<A-Escape>", id: "page.send_key" }, { key: "<Escape>", id: "mode.escape" }] }) });
+  const page = page_with_field(world.first.browser);
+  const sent = world.press("Escape", { ...page.target, altKey: true });
+  assert.deepEqual([sent.prevented, sent.stopped, page.field.blurs], [true, true, 0]);
+  assert.deepEqual(plain(page.sent), [
+    { type: "keydown", key: "Escape", keyCode: 27, trusted: false },
+    { type: "keyup", key: "Escape", keyCode: 27, trusted: false },
+  ]);
+});
+
+test("<A-Escape> on a system page: the trusted Escape the module sends does not reach its own key handling again", () => {
+  const world = started({ written: state({ insert_keys: [{ key: "<A-Escape>", id: "page.send_key" }, { key: "<Escape>", id: "mode.escape" }] }) });
+  const redelivered: FakeEvent[] = [];
+  const page = page_with_field(world.first.browser, { deliver: (event) => redelivered.push(world.window.press(event)) });
+  world.press("Escape", { ...page.target, altKey: true });
+  assert.deepEqual(plain(page.sent).map((each: { trusted: boolean }) => each.trusted), [true, true]);
+  assert.deepEqual([redelivered.length, redelivered.some((event) => event.prevented), page.field.blurs], [1, false, 0], "the page sees the Escape, and nothing blurs the field");
+  assert.equal(world.press("Escape", page.target).prevented, true, "a key the user types afterwards works again");
+});
+
+test("an Escape in a field after <C-v> goes to the page, not to the blur row", () => {
+  const { press, first } = started();
+  const page = page_with_field(first.browser);
+  press("v", { ctrlKey: true, target: first.browser, originalTarget: first.browser });
+  assert.deepEqual([press("Escape", page.target).prevented, page.field.blurs, mode_of(first.browser)], [false, 0, null]);
+});
+
+test("<S-Escape> in a field ends ignore mode, and every other key there still goes to the page", () => {
+  const { press, first } = started();
+  const page = page_with_field(first.browser);
+  press("Escape", { shiftKey: true, target: first.browser, originalTarget: first.browser });
+  assert.equal(mode_of(first.browser), "ignore");
+  assert.equal(press("a", page.target).prevented, false);
+  assert.equal(mode_of(first.browser), "ignore");
+  const left = press("Escape", { ...page.target, shiftKey: true });
+  assert.deepEqual([left.prevented, mode_of(first.browser)], [true, null]);
+});
+
+test("a shut down takes the mode attributes off every tab it marked", () => {
+  const { press, first, core } = started();
+  press("i");
+  assert.equal(mode_of(first.browser), "insert");
+  (core as unknown as { shut_down(): void }).shut_down();
+  assert.deepEqual([mode_of(first.browser), first.browser.getAttribute(DOCUMENT_ATTRIBUTE)], [null, null]);
+});
+
+test("<A-Escape> on a page in another process asks its frame script for the Escape, and an unlisted key sends none", () => {
+  const world = started({ written: state({ insert_keys: [{ key: "<A-Escape>", id: "page.send_key" }] }) });
+  world.firefox.report(world.first.browser, { inner: 10, listeners: 0, field: true, text_field: true });
+  assert.equal(world.press("Escape", { altKey: true }).prevented, true);
+  assert.deepEqual(world.firefox.sent_to_frames.filter(({ name }) => name.endsWith(":send-escape")).map(({ data }) => plain(data)), [{ inner: 10 }]);
+  world.press("a", { altKey: true });
+  assert.equal(world.firefox.sent_to_frames.filter(({ name }) => name.endsWith(":send-escape")).length, 1);
+});
+
+test("a reserved help.whichkey row takes no key yet, and a row for a command this version does not know is skipped", () => {
+  const world = started({ written: state({ insert_keys: [{ key: "<A-?>", id: "help.whichkey" }, { key: "<C-r>", id: "register.paste" }] }) });
+  const page = page_with_field(world.first.browser);
+  assert.equal(world.press("?", { ...page.target, altKey: true }).prevented, false);
+  assert.equal(world.press("r", { ...page.target, ctrlKey: true }).prevented, false);
+  assert.deepEqual(world.firefox.sent_to_frames, []);
+});
+
+test("a bad insert table is left out whole, so the plain Escape stays", () => {
+  for (const insert_keys of [[{ key: "<Escape>", id: "mode.escape" }, { key: "<Escape>", id: "mode.escape" }], [{ key: 5, id: "mode.escape" }], "junk", Array.from({ length: 9 }, (_, index) => ({ key: `<F${index + 1}>`, id: "mode.escape" }))]) {
+    const world = started({ written: state({ insert_keys }) });
+    const page = page_with_field(world.first.browser);
+    assert.deepEqual([world.press("Escape", page.target).prevented, page.field.blurs], [true, 1], JSON.stringify(insert_keys).slice(0, 40));
+  }
+});
+
+test("<C-v> passes the next key to the page and then the keys walk again, and a sequence typed before it is dropped", () => {
+  const { press, type, window, first, runs } = started();
+  assert.equal(press("v", { ctrlKey: true }).prevented, true);
+  assert.equal(mode_of(first.browser), "pass");
+  assert.equal(press("J").prevented, false, "the next key goes to the page");
+  assert.equal(mode_of(first.browser), null);
+  assert.deepEqual(window.tab_moves, []);
+  press("J");
+  assert.deepEqual(window.tab_moves, [1]);
+  type("x");
+  press("v", { ctrlKey: true });
+  assert.equal(press("x").prevented, false, "a key half-way into a sequence is passed too");
+  assert.deepEqual(type("x", "x").map((event) => event.prevented), [true, true]);
+  assert.deepEqual(runs(), [{ keys: "x x", count: 0 }]);
+});
+
+test("<C-v> twice passes the second <C-v> to the page, and a key in a field after <C-v> spends it", () => {
+  const { press, first } = started();
+  press("v", { ctrlKey: true });
+  assert.equal(press("v", { ctrlKey: true }).prevented, false);
+  assert.equal(mode_of(first.browser), null);
+  const page = page_with_field(first.browser);
+  press("v", { ctrlKey: true, target: first.browser, originalTarget: first.browser });
+  press("a", page.target);
+  assert.equal(mode_of(first.browser), null);
+});
+
+test("the ignore keys, in every spelling the default keymap has, give every key to the page until <S-Escape>", () => {
+  const spellings: [string, Partial<FakeEvent>[]][] = [
+    ["<S-Insert>", [{ shiftKey: true }]],
+    ["<AC-Escape>", [{ ctrlKey: true, altKey: true }]],
+    ["<AC-`>", [{ ctrlKey: true, altKey: true }]],
+    [",i", [{}, {}]],
+  ];
+  const keys: Record<string, string[]> = { "<S-Insert>": ["Insert"], "<AC-Escape>": ["Escape"], "<AC-`>": ["`"], ",i": [",", "i"] };
+  for (const [name, patches] of spellings) {
+    const { press, window, first } = started();
+    keys[name]!.forEach((key, index) => press(key, patches[index]));
+    assert.equal(mode_of(first.browser), "ignore", name);
+    assert.equal(press("J").prevented, false, name);
+    assert.deepEqual(window.tab_moves, [], name);
+    assert.equal(press("Escape", { shiftKey: true }).prevented, true, name);
+    assert.equal(mode_of(first.browser), null, name);
+    press("J");
+    assert.deepEqual(window.tab_moves, [1], name);
+  }
+});
+
+test("the hard-coded <S-Escape> still toggles ignore mode with a state that has no tree, and shows the attribute", () => {
+  const { press, first, window } = started({ written: state({ tree: undefined }) });
+  press("Escape", { shiftKey: true });
+  assert.equal(mode_of(first.browser), "ignore");
+  press("Escape", { shiftKey: true });
+  assert.equal(mode_of(first.browser), null);
+  press("J");
+  assert.deepEqual(window.tab_moves, [1]);
+});
+
+test("a tree with the mode keys pruned (an extension that has not seen the hello) keeps i and <C-v> with the page", () => {
+  const children = Object.fromEntries(Object.entries(DEFAULT_TREE.children).filter(([token]) => !["i", "<C-v>", "<S-Insert>"].includes(token)));
+  const { press, first } = started({ written: state({ tree: { ...DEFAULT_TREE, children } }) });
+  assert.equal(press("i").prevented, false);
+  assert.equal(press("v", { ctrlKey: true }).prevented, false);
+  assert.equal(mode_of(first.browser), null);
+});
+
+test("insert, ignore and pass-next exclude each other, and insert ends a pass-next", () => {
+  const { press, first, type } = started();
+  press("v", { ctrlKey: true });
+  press("x");
+  press("i");
+  assert.equal(mode_of(first.browser), "insert");
+  press("Escape");
+  type(",", "i");
+  assert.equal(mode_of(first.browser), "ignore");
+  press("Escape", { shiftKey: true });
+  assert.equal(mode_of(first.browser), null);
+});
+
+test("the commands feature says mode_keys in the hello, and the hello still validates", () => {
+  const { firefox } = started();
+  const checked = validate_module_hello(firefox.hello());
+  assert.ok(checked.ok && checked.value.mode_keys === true);
 });

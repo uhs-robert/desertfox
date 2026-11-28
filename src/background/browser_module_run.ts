@@ -2,7 +2,7 @@
 // A run request is foreign input from chrome code. Its keys are matched again against the stored keymap, and only a leaf of the locked-page set runs, in the active tab.
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
-import { counted_steps, keymap_for_page, opens_line_leaf, resolve_run } from "../shared/browser_module_scope.ts";
+import { counted_steps, keymap_for_page, line_text_of, resolve_run } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
@@ -17,8 +17,8 @@ export type ModuleRunDeps = {
   run: (request: RouteRequest) => Promise<RunResponse>;
   // With no tab, a refusal shows as a desktop notification.
   show_refusal: (tab_id: undefined, refusal: Refusal) => Promise<unknown>;
-  // The command line over the active tab, for the bare `:`: the panel, else the address bar.
-  open_line: () => Promise<unknown>;
+  // The command line over the active tab, for a line key (`:`, `tM`): the panel, else the address bar.
+  open_line: (text: string) => Promise<unknown>;
   // The active tab's address and whether `browser_module_pages` is on, for the reason a hint key gives.
   active_url: () => Promise<string | undefined>;
   pages_on: () => Promise<boolean>;
@@ -55,8 +55,9 @@ export function create_module_run(deps: ModuleRunDeps) {
     const resolved = resolve_run(deps.check_args ? keymap_for_page(keymap, page, deps.locked_commands, deps.check_args) : keymap, keys, count, deps.locked_commands);
     if (!resolved.ok && resolved.hint) return refuse(hint_refusal_text(await deps.active_url(), await deps.pages_on()), true);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
-    if (opens_line_leaf(resolved.leaf)) {
-      await deps.open_line();
+    const line_text = line_text_of(resolved.leaf, deps.locked_commands);
+    if (line_text !== undefined) {
+      await deps.open_line(line_text);
       return;
     }
     // The tab is the one the background found active, never one the module names, so a module cannot aim the binding at another tab. The router shows its own refusals, a count over a step's `repeat_limit` among them.

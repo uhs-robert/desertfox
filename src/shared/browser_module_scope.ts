@@ -4,9 +4,10 @@
 import type { CommandDef } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { AddressTree, NativeLeaf, PageHintAction, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
-import { check_module_args, is_module_command_id, MAX_ADDRESS_TREES, MAX_ADDRESS_TREE_SITES, MAX_COUNT, MAX_SEQUENCE_KEYS, validate_scope_tree } from "./browser_module_protocol.ts";
+import { check_module_args, is_module_command_id, MAX_ADDRESS_TREES, MAX_ADDRESS_TREE_SITES, MAX_COUNT, MAX_SEQUENCE_KEYS, MODE_KEY_COMMAND_IDS, validate_scope_tree } from "./browser_module_protocol.ts";
 import { about_pattern_of, matches_about_pattern } from "./match_pattern.ts";
 import { normal_tree_for, unguarded_columns_for } from "./site/site_columns.ts";
+import type { ModuleHello } from "./browser_module_protocol.ts";
 import { create_matcher } from "./keys/matcher.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "./prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch, TreeLeaf, TreeNode } from "./prefix_tree.ts";
@@ -33,8 +34,8 @@ const has_guard = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || 
 export const without_list_guard = (leaf: TreeLeaf): TreeLeaf => (leaf.when_present !== undefined && leaf.when_focus === undefined && leaf.otherwise !== undefined && leaf.otherwise_page === undefined ? leaf.otherwise : leaf);
 
 // A content command with a background command of the same params that does the same from what the browser lists of the tab. On a locked page the leaf runs the variant, so the keymap binds one command and the page code runs where it exists.
-// `copy.page` cannot read the page's canonical or short link, so those two formats give the address.
-export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page" };
+// `copy.page` cannot read the page's canonical or short link, so those two formats give the address. `copy.page_links` asks the module for the page's links (`page_links.read`).
+export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page", "copy.links": "copy.page_links" };
 
 // Every step is a command of the set or has a variant in it, so the router runs the whole leaf with no page. A step that prompts opens the address bar (`address_bar.open`), which needs no page either.
 const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolean => {
@@ -43,18 +44,29 @@ const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolea
 };
 export const forwards_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => !has_guard(leaf) && leaf.steps.length > 0 && leaf.steps.every((step) => step.leave !== true && runs_without_page(step, allowed));
 
-// The bare command line key (`:`): the background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`). A line with typed text is left out, because its commands mostly need a page.
-export const opens_line_leaf = (leaf: TreeLeaf): boolean => {
+// A key that opens the command line: the bare `:`, or one with text typed in whose first word is a command of the locked-page set (`tM` types `tab.move --offset=`). The background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`).
+// Text for any other command is left out, because that command needs a page. That keeps `sh` (the heading list reads the page), `;;` and `A` on the page.
+export const opens_line_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => line_text_of(leaf, allowed) !== undefined;
+
+// The text a line key types, or undefined when the leaf opens no line on a locked page.
+export const line_text_of = (leaf: TreeLeaf, allowed: ReadonlySet<string>): string | undefined => {
   const step = leaf.steps.length === 1 ? leaf.steps[0] : undefined;
-  const text = step?.invocation.args?.["text"];
-  return !has_guard(leaf) && step?.invocation.id === "cmdline.open" && step.capture === undefined && step.register === undefined && (text === undefined || text === "");
+  if (has_guard(leaf) || step?.invocation.id !== "cmdline.open" || step.capture !== undefined || step.register !== undefined) return undefined;
+  const text = step.invocation.args?.["text"];
+  if (text === undefined || text === "") return "";
+  return typeof text === "string" && allowed.has(text.split(" ", 1)[0]!) ? text : undefined;
 };
 
+// Whether the module that said this hello runs a native command. A command added after the first module version waits for its hello flag, so an older module never gets a tree with a command it does not define (it refuses the whole tree for one). With no hello yet only the first commands are on.
+export type NativeAllowed = (id: string) => boolean;
+export const native_allowed_by = (hello: Pick<ModuleHello, "mode_keys"> | undefined): NativeAllowed => (id) => hello?.mode_keys === true || !(MODE_KEY_COMMAND_IDS as readonly string[]).includes(id);
+const ALL_NATIVE: NativeAllowed = () => true;
+
 // A leaf of one step that the module runs itself (the protocol's command list), with its args filled and checked by the registry.
-export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): NativeLeaf | undefined {
+export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs, allowed: NativeAllowed = ALL_NATIVE): NativeLeaf | undefined {
   if (has_guard(leaf) || leaf.steps.length !== 1) return undefined;
   const { invocation, capture, register, count_rule } = leaf.steps[0]!;
-  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !is_module_command_id(invocation.id)) return undefined;
+  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !is_module_command_id(invocation.id) || !allowed(invocation.id)) return undefined;
   const filled = check_args(invocation.id, invocation.args);
   const args = filled && check_module_args(invocation.id, filled);
   if (!args?.ok) return undefined;
@@ -64,22 +76,22 @@ export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): Nativ
 // A leaf that starts hints, which run only in DesertFox's page code.
 export const is_hint_leaf = (leaf: TreeLeaf): boolean => leaf.steps.some((step) => step.invocation.id === "hint.run");
 
-// A forward leaf after which the line opens: the bare `:`, or a key whose command prompts for a value (`o`).
-const prompts_or_opens_line = (leaf: TreeLeaf): boolean => opens_line_leaf(leaf) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
+// A forward leaf after which the line opens: a line key (`:`, `tM`), or a key whose command prompts for a value (`o`).
+const prompts_or_opens_line = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => opens_line_leaf(leaf, allowed) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
 
-type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[] };
+type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; native_allowed: NativeAllowed; line_keys: string[]; hint_keys: string[] };
 
 function prune_node(node: TreeNode, depth: number, path: readonly string[], pruning: Pruning): ScopeNode | undefined {
   if (node.kind === "leaf") {
     node = without_list_guard(node);
-    const native = native_leaf(node, pruning.check_args);
+    const native = native_leaf(node, pruning.check_args, pruning.native_allowed);
     if (native) return native;
-    if (!forwards_leaf(node, pruning.allowed) && !opens_line_leaf(node)) {
+    if (!forwards_leaf(node, pruning.allowed) && !opens_line_leaf(node, pruning.allowed)) {
       if (is_hint_leaf(node) && !path.includes("")) pruning.hint_keys.push(path.join(" "));
       return undefined;
     }
     // A path through a capture key (the empty token) names no keys the module could match it by.
-    if (prompts_or_opens_line(node) && !path.includes("")) pruning.line_keys.push(path.join(" "));
+    if (prompts_or_opens_line(node, pruning.allowed) && !path.includes("")) pruning.line_keys.push(path.join(" "));
     return "forward";
   }
   if (depth >= MAX_SEQUENCE_KEYS) return undefined;
@@ -95,14 +107,14 @@ function prune_children(branch: TreeBranch, depth: number, path: readonly string
 }
 
 // The leaves of one normal tree that a locked page can run. The global tree and the tree of each about: address both go through here, so a rule that maps a leaf for locked pages maps it on every tree. A key that leads only to other leaves is left out, so the page or Firefox keeps it. The bare command line key stays, as a forward leaf.
-function scope_tree_from(root: TreeBranch | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): ScopeTree {
-  const pruning: Pruning = { allowed, check_args, line_keys: [], hint_keys: [] };
+function scope_tree_from(root: TreeBranch | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed): ScopeTree {
+  const pruning: Pruning = { allowed, check_args, native_allowed, line_keys: [], hint_keys: [] };
   const children = root ? prune_children(root, 1, [], pruning) : {};
   return { children, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }) };
 }
 
 // The global tree: the normal tree with no site rule applied. A tree of an older format has another shape, so it gives no keys until the background recompiles.
-export const scope_tree_of = (keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): ScopeTree => scope_tree_from(current_keymap(keymap)?.modes.normal, allowed, check_args);
+export const scope_tree_of = (keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): ScopeTree => scope_tree_from(current_keymap(keymap)?.modes.normal, allowed, check_args, native_allowed);
 
 // The normal tree of an about: address under the site rules that match it, or undefined when the rules turn DesertFox off there. Never used for a private tab.
 export function normal_tree_at(keymap: CompiledKeymap | undefined, address: string): TreeBranch | undefined | "off" {
@@ -127,10 +139,10 @@ export function address_entry_of(entries: readonly AddressTree[], address: strin
 }
 
 // The keymap a run request is matched against for the page the key came from. On an about: address in a normal tab whose rules the state published (the same cap as the module's), it holds the normal tree under that address's site rules. Any other page, and a page past the cap, get the keymap as it is, as the module takes the global tree there.
-export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): CompiledKeymap | undefined {
+export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): CompiledKeymap | undefined {
   const current = current_keymap(keymap);
   if (!current || !page?.url?.startsWith("about:") || page.incognito) return keymap;
-  if (!address_entry_of(address_trees_of_keymap(current, allowed, check_args), page.url)) return keymap;
+  if (!address_entry_of(address_trees_of_keymap(current, allowed, check_args, native_allowed), page.url)) return keymap;
   const root = normal_tree_at(current, page.url);
   const normal = root === "off" ? { kind: "branch" as const, children: {} } : root;
   const { normal: _, ...others } = current.modes;
@@ -138,13 +150,13 @@ export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url:
 }
 
 // One tree for each distinct outcome of the about: site rules, with every rule pattern that gives it. An exact pattern is judged at its own address and a prefix pattern at its base plus `?`, an address that no exact rule covers, so the two never share a tree by accident. The module takes the entry `address_entry_of` names. Past MAX_ADDRESS_TREES distinct trees the later patterns keep the global tree, in the module and in the run check alike.
-export function address_trees_of_keymap(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): AddressTree[] {
+export function address_trees_of_keymap(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): AddressTree[] {
   const groups = new Map<string, AddressTree>();
   for (const site of new Set((current_keymap(keymap)?.site_rules ?? []).map((rule) => rule.site))) {
     const about = about_pattern_of(site);
     if (!about) continue;
     const root = normal_tree_at(keymap, about.prefix ? `${about.base}?` : about.base);
-    const tree = root === "off" ? { children: {} } : scope_tree_from(root, allowed, check_args);
+    const tree = root === "off" ? { children: {} } : scope_tree_from(root, allowed, check_args, native_allowed);
     if (!validate_scope_tree(tree).ok) continue;
     const key = JSON.stringify([tree, root === "off"]);
     const group = groups.get(key);
@@ -193,7 +205,7 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
     if (result.kind_ === "pending" && !last && result.count === undefined && result.register_keys_ === undefined && result.held_ === undefined) continue;
     if (result.kind_ !== "match" || !last || result.count !== undefined || result.held_ !== undefined || result.keys?.length !== keys.length) return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
     const leaf = without_list_guard(result.leaf);
-    if (!forwards_leaf(leaf, allowed) && !opens_line_leaf(leaf)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(leaf) && { hint: true as const }) };
+    if (!forwards_leaf(leaf, allowed) && !opens_line_leaf(leaf, allowed)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(leaf) && { hint: true as const }) };
     return { ok: true, leaf, count: count === 0 ? undefined : count };
   }
   return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };

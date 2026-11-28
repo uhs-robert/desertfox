@@ -7,7 +7,7 @@ import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 import { panel_after_prefix } from "../../src/background/list_keys.ts";
 import { BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_WHICH_KEY_BYTES, which_key_table_of } from "../../src/shared/browser_module_protocol.ts";
 import type { ModuleState, ScopeTree, WhichKeyTable } from "../../src/shared/browser_module_protocol.ts";
-import { locked_page_command_ids, scope_tree_of } from "../../src/shared/browser_module_scope.ts";
+import { locked_page_command_ids, native_allowed_by, scope_tree_of } from "../../src/shared/browser_module_scope.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
 import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import type { CompiledKeymap } from "../../src/shared/prefix_tree.ts";
@@ -149,7 +149,8 @@ function setup({ which_key_delay_ms = DEFAULT_KEYMAP_COMPILED.which_key_delay_ms
 test("the state carries the table beside the tree, and a keymap change rewrites it", async () => {
   const { module, config, state } = setup();
   await module.sync();
-  assert.deepEqual(state()?.which_key, table_of());
+  // No hello yet, so the mode keys are not in the tree and not in the table.
+  assert.deepEqual(state()?.which_key, table_of(DEFAULT_KEYMAP_COMPILED, scope_tree_of(DEFAULT_KEYMAP_COMPILED, LOCKED, real_check, native_allowed_by(undefined))));
   config.keymap = { ...config.keymap, which_key_border: "round" };
   await module.sync();
   assert.equal((state()?.which_key as WhichKeyTable).border, "round");
