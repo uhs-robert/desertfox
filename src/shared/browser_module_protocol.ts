@@ -444,6 +444,8 @@ const PAGE_GONE_BYTES = 256;
 const PAGE_GONE_MAX_AGE_MS = 60000;
 const PANE_CALL_BYTES = 256;
 const RUN_BYTES = 512;
+// 1000 characters at up to 4 bytes each, with the escapes and the envelope of the reply.
+const SELECTION_REPLY_BYTES = 8192;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
 const PANEL_CALL_BYTES = 256;
@@ -515,6 +517,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // Opens one Firefox page from the fixed list, sent only to a module whose hello says `firefox_pages`. The module builds the address from its own table, so no address, query or fragment crosses the channel.
   // `tab_id` names the tab that asked, as for `address_bar.open`: the page opens in that tab's window, and `here` replaces that tab only while it is still the selected tab. A reply, because an open read twice must open once.
   "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
+  // The text selected on a parent-process about: page, where no content script runs, as the reply value. The module caps and cleans it too, and the extension checks it again. An older module refuses the kind and the extension reads no selection there.
+  "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
 };
 
 // The module core's fixed refusal of a request whose arg has the wrong shape (`checked_message` in browser_module/desertfox-browser.js). An older module that knows the kind but not a newer value of an arg answers with it.
