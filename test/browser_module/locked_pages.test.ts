@@ -305,6 +305,10 @@ test("the rule says page_hints only on a page chrome hints label, once the exten
   firefox.write_state({ ...STATE, page_hints: true });
   (browser as { handled?: boolean }).handled = false;
   assert.equal(notice_on("about:support"), "not_here");
+  for (const name of ["firefoxview", "opentabs", "policies", "unloads", "telemetry"]) {
+    (browser as { handled?: boolean }).handled = true;
+    assert.equal(notice_on(`about:${name}`), "page_hints", name);
+  }
   assert.equal(notice_on("https://a.test/"), undefined);
 });
 

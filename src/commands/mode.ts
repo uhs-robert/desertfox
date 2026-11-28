@@ -1,4 +1,4 @@
-import { SETTABLE_MODES } from "../shared/command.ts";
+import { MODES, SETTABLE_MODES } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { require_tab_id } from "./open_target.ts";
 
@@ -67,6 +67,17 @@ define("mode.pass_next", {
   runs_in: "content",
   repeatable: false,
   modes: ["normal", "item"],
+});
+
+// Every mode, so its `browser` chord reaches the content script in each mode, and a Firefox shortcut runs it in ignore mode too.
+define("mode.normal_once", {
+  completion: "hidden",
+  label: "Normal once",
+  intent: "Run the next key sequence as a normal-mode command. A count and a key group count as part of it. The frame then goes back to the mode it came from, and a command that opens a mode goes back when that mode ends. It ends hint mode and closes the command line first. Escape or the key again drops it.",
+  bridge: false,
+  runs_in: "content",
+  repeatable: false,
+  modes: [...MODES],
 });
 
 // Defined here with the mode commands because both change what has the focus.
