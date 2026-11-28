@@ -439,6 +439,23 @@ export function start_server() {
       </script>`;
       return response.end(page(`arrow_widgets ${id}`, widgets + tall_filler + script));
     }
+    if (url.pathname === "/dropdown_widgets") {
+      // A menu whose items take the focus. Its script moves the focus on a keydown ArrowDown or ArrowUp, and `active` in a data attribute names the item it landed on.
+      const widgets = '<div id="menu" role="menu"><div id="m1" role="menuitem" tabindex="0">first</div><div id="m2" role="menuitem" tabindex="-1">second</div><div id="m3" role="menuitem" tabindex="-1">third</div></div>';
+      const script = `<script>
+        const dropdown_root = document.documentElement;
+        dropdown_root.dataset.active = "";
+        document.getElementById("menu").addEventListener("keydown", (event) => {
+          const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+          if (!step) return;
+          const items = [...document.querySelectorAll("#menu [role=menuitem]")];
+          const next = items[Math.max(0, Math.min(items.length - 1, items.indexOf(document.activeElement) + step))];
+          next.focus();
+          dropdown_root.dataset.active = next.id;
+        });
+      </script>`;
+      return response.end(page(`dropdown_widgets ${id}`, widgets + tall_filler + script));
+    }
     if (url.pathname === "/framed") {
       const frame = '<iframe id="inner" src="/page?id=inner" style="width:300px;height:200px"></iframe>';
       return response.end(page(`framed ${id}`, frame, "<script>addEventListener('load', () => document.getElementById('inner').contentWindow.focus())</script>"));

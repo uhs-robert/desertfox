@@ -231,3 +231,10 @@ test("a hint key on one of Firefox's own pages maps to the page action of its bi
   assert.equal(page_hint_action_of(keymap, "a b".repeat(9)).ok, false);
   assert.equal(page_hint_action_of(undefined, "f").ok, false);
 });
+
+test("the guarded default j and k stay on locked pages as their scroll fallback", () => {
+  for (const [key, count] of [["j", 10], ["k", -10]] as const) {
+    const node = node_at(DEFAULT_TREE, [key]);
+    assert.deepEqual(node && typeof node === "object" && "native" in node ? [node.native, (node.args as { count?: number }).count] : node, ["scroll.lines", count], key);
+  }
+});

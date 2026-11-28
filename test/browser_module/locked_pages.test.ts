@@ -31,7 +31,8 @@ type Page = { principal: Principal; uri: string; inner: number };
 
 const JSON_VIEWER = { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" };
 const source_of_page = (uri: string): Page => ({ principal: { ...PDF_PRINCIPAL, spec: uri }, uri, inner: 5 });
-// The page kinds past the PDF viewer and Reader View, as Firefox shows them: view-source: under a principal whose spec is the view-source: address, and the JSON viewer under its own principal on the response's address.
+const blob_of_page = (maker: string, uri: string): Page => ({ principal: { ...PDF_PRINCIPAL, spec: maker }, uri, inner: 5 });
+// The page kinds past the PDF viewer and Reader View, as Firefox shows them: view-source: under a principal whose spec is the view-source: address, the JSON viewer under its own principal on the response's address, and a blob: page under its maker's principal.
 const PAGE_CODE_KINDS: Page[] = [
   source_of_page("view-source:https://a.test/"),
   source_of_page("view-source:http://a.test/x.json"),
@@ -39,7 +40,11 @@ const PAGE_CODE_KINDS: Page[] = [
   { principal: JSON_VIEWER, uri: "https://a.test/x.json", inner: 5 },
   { principal: JSON_VIEWER, uri: "http://a.test/x.json", inner: 5 },
   { principal: JSON_VIEWER, uri: "file:///tmp/x.json", inner: 5 },
+  blob_of_page("https://a.test/", "blob:https://a.test/0b3c5d7e-0000-4000-8000-000000000001"),
+  blob_of_page("http://127.0.0.1:8080/", "blob:http://127.0.0.1:8080/0b3c5d7e-0000-4000-8000-000000000002"),
+  blob_of_page("file:///tmp/a.html", "blob:file:///0b3c5d7e-0000-4000-8000-000000000003"),
 ];
+const BLOB_PAGE = PAGE_CODE_KINDS.at(-3)!;
 type FakeSandbox = { Promise: PromiseConstructor; desertfox_locked_transport?: Transport };
 type Transport = {
   extension_id: string;
@@ -168,7 +173,7 @@ test("the feature's copies of the snapshot keys, the version and the bundle name
   const message_tables = [...source.matchAll(/const MESSAGE = (\{[^}]*\});/g)].map((match) => plain(vm.runInNewContext(`(${match[1]})`)));
   assert.equal(message_tables.length, 2);
   assert.deepEqual(message_tables[0], message_tables[1]);
-  for (const name of ["JSON_VIEWER_PRINCIPAL", "VIEW_SOURCE_OF_PAGE", "JSON_VIEWER_DOCUMENT"]) {
+  for (const name of ["JSON_VIEWER_PRINCIPAL", "VIEW_SOURCE_OF_PAGE", "JSON_VIEWER_DOCUMENT", "BLOB_OF_PAGE", "BLOB_MAKER_PRINCIPAL"]) {
     const copies = [...source.matchAll(new RegExp(`const ${name} = (.+);`, "g"))].map((match) => match[1]);
     assert.equal(copies.length, 2, name);
     assert.equal(copies[0], copies[1], `the two halves' ${name}`);
@@ -233,7 +238,7 @@ test("Reader View gets page code, and no other page does: about: pages, extensio
   assert.equal(lying.frame.sandboxes.length, 0, "chrome checks the page itself");
 });
 
-test("view-source: of a web or file page and the JSON viewer on a web or file document get the sandbox [page, extension], and the frame and chrome agree on every case", async () => {
+test("view-source: of a web or file page, the JSON viewer on a web or file document and a blob: of a web or file address get the sandbox [page, extension], and the frame and chrome agree on every case", async () => {
   for (const page of PAGE_CODE_KINDS) {
     const { frame, load, extension } = locked({ page });
     await load();
@@ -264,6 +269,15 @@ test("view-source: of a web or file page and the JSON viewer on a web or file do
     // A web page that only names view-source:, and a view-source: address under a principal that is not its own.
     { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "view-source:https://a.test/", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "view-source:https://a.test/" }, uri: "https://a.test/", inner: 5 },
+    // blob: of an opaque origin, of an extension (its addonId set, or not), under the system principal, and a blob: of JSON under the JSON viewer's principal.
+    blob_of_page("moz-nullprincipal:{1}", "blob:null/0b3c5d7e-0000-4000-8000-000000000004"),
+    blob_of_page("moz-nullprincipal:{1}", "blob:https://a.test/0b3c5d7e-0000-4000-8000-000000000005"),
+    { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/", addonId: "other@example" }, uri: "blob:moz-extension://0123abcd-0000-4000-8000-00000000cafe/0b3c", inner: 5 },
+    blob_of_page("moz-extension://0123abcd-0000-4000-8000-00000000cafe/", "blob:moz-extension://0123abcd-0000-4000-8000-00000000cafe/0b3c"),
+    { principal: { ...SYSTEM_PRINCIPAL, spec: "https://a.test/" }, uri: "blob:https://a.test/0b3c", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/", addonId: "other@example" }, uri: "blob:https://a.test/0b3c", inner: 5 },
+    { principal: JSON_VIEWER, uri: "blob:https://a.test/0b3c", inner: 5 },
+    blob_of_page("https://a.test/", "blob:view-source:https://a.test/0b3c"),
   ];
   for (const page of refused) {
     const each = locked({ page });
@@ -278,6 +292,8 @@ test("view-source: of a web or file page and the JSON viewer on a web or file do
     source_of_page("view-source:https://user@ACCOUNTS.firefox.com:443/"),
     { principal: JSON_VIEWER, uri: "https://accounts.firefox.com/.well-known/openid-configuration", inner: 5 },
     { principal: JSON_VIEWER, uri: "https://sync.services.mozilla.com./x.json", inner: 5 },
+    blob_of_page("https://accounts.firefox.com/", "blob:https://accounts.firefox.com/0b3c"),
+    blob_of_page("https://user@accounts.firefox.com/", "blob:https://user@Accounts.Firefox.com./0b3c"),
   ];
   for (const page of account_pages) {
     const each = locked({ page });
@@ -291,7 +307,7 @@ test("view-source: of a web or file page and the JSON viewer on a web or file do
     assert.equal(each.frame.sandboxes.length, 1, uri);
   }
   // Without the content hints feature's host test, the new kinds stay out, and the PDF viewer still gets page code.
-  for (const page of [PAGE_CODE_KINDS[0]!, PAGE_CODE_KINDS[3]!]) {
+  for (const page of [PAGE_CODE_KINDS[0]!, PAGE_CODE_KINDS[3]!, BLOB_PAGE]) {
     const each = locked({ page, content_hints: false });
     await each.load();
     assert.equal(each.frame.sandboxes.length, 0, `${page.uri} with no host test`);
@@ -389,6 +405,7 @@ test("the rule it lends the key taker: the page kinds that get page code need th
     { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", addonId: "other@example" }, uri: "about:x", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", addonId: "other@example" }, uri: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", addonId: "other@example" }, uri: "view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/", addonId: "other@example" }, uri: "blob:moz-extension://0123abcd-0000-4000-8000-00000000cafe/1234", inner: 5 },
   ];
   for (const page of no_notice) assert.equal(notice_on(page), undefined, page.uri);
   // Pages no page code reaches yet: the notice says hints do not run there.
@@ -402,10 +419,13 @@ test("the rule it lends the key taker: the page kinds that get page code need th
     { principal: { ...PDF_PRINCIPAL, spec: "view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json" }, uri: "view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json", inner: 5 },
     { principal: SYSTEM_PRINCIPAL, uri: "view-source:about:preferences", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "view-source:data:text/html,hi", inner: 5 },
-    { principal: web, uri: "blob:https://a.test/1234", inner: 5 },
+    // blob: of an opaque origin, of JSON under the viewer, and of an account host.
+    { principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "blob:null/1234", inner: 5 },
+    { principal: JSON_VIEWER, uri: "blob:https://a.test/1234", inner: 5 },
+    blob_of_page("https://accounts.firefox.com/", "blob:https://accounts.firefox.com/1234"),
   ];
   for (const page of no_hints) assert.equal(notice_on(page), "not_here", page.uri);
-  // view-source: of a web or file page and the JSON viewer get page code, so with the setting off they say to turn it on.
+  // view-source: of a web or file page, the JSON viewer and a blob: of a web or file address get page code, so with the setting off they say to turn it on.
   for (const page of PAGE_CODE_KINDS) assert.equal(notice_on(page), "pages_off", page.uri);
   // DesertFox's content script runs on a data: page, so its hint keys go on.
   assert.equal(notice_on({ principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "data:text/html,hi", inner: 5 }), undefined);

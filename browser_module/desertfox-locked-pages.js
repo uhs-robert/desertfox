@@ -1,4 +1,4 @@
-// DesertFox browser module, the locked pages feature: DesertFox's own page code (`content.js` and the bundles) in the PDF viewer, Reader View, view-source: and the JSON viewer, where no content script runs. See docs/design/browser_module.md.
+// DesertFox browser module, the locked pages feature: DesertFox's own page code (`content.js` and the bundles) in the PDF viewer, Reader View, view-source:, the JSON viewer and a blob: page shown in its tab, where no content script runs. See docs/design/browser_module.md.
 // Chrome only carries the page code's messages. It hands the JSON text of each one on as it came and never parses it, so no message can pick an action, an address or a selector for chrome code.
 // The code runs in a sandbox under the expanded principal [page, extension], as Firefox runs a content script, never under the system principal. Every other page, about:addons and about:preferences included, gets nothing. Chrome hints label a few of those themselves.
 //
@@ -96,10 +96,14 @@
     const VIEW_SOURCE_OF_PAGE = /^view-source:(?:https?|file):/;
     // The JSON viewer also renders file: JSON. Any other document under its principal stays out.
     const JSON_VIEWER_DOCUMENT = /^(?:https?|file):/;
+    // A blob: document carries the principal of the page that made it, so its address names that page's origin. blob:null (an opaque origin made it) and blob:moz-extension (an extension made it) stay out.
+    const BLOB_OF_PAGE = /^blob:(?:https?|file):/;
+    // The maker's principal, which a blob: of HTML carries. A blob: of JSON or a PDF shows under its viewer's principal instead: the JSON viewer's stays out, and the PDF viewer's is the "pdf" kind.
+    const BLOB_MAKER_PRINCIPAL = /^(?:https?|file):/;
 
-    // The host of a web address, or of the web page a view-source: address shows, without a final dot.
-    const web_host_of = (address) => /^(?:view-source:)?https?:\/\/(?:[^/?#@]*@)?([^/?#:]*)/i.exec(address)?.[1]?.toLowerCase().replace(/\.$/, "");
-    // The account and Sync hosts, which content hints never label, get no page code either, as the source or the JSON of one of their pages. The list is the content hints feature's, and without it these kinds stay out.
+    // The host of a web address, or of the web page a view-source: or blob: address names, without a final dot.
+    const web_host_of = (address) => /^(?:view-source:|blob:)?https?:\/\/(?:[^/?#@]*@)?([^/?#:]*)/i.exec(address)?.[1]?.toLowerCase().replace(/\.$/, "");
+    // The account and Sync hosts, which content hints never label, get no page code either, as the source, the JSON or a blob: of one of their pages. The list is the content hints feature's, and without it these kinds stay out.
     function on_account_host(address) {
       const host = web_host_of(address);
       if (host === undefined) return false;
@@ -119,10 +123,11 @@
       if (principal.spec.startsWith("about:reader?") && address.startsWith("about:reader?")) return "reader";
       if (VIEW_SOURCE_OF_PAGE.test(principal.spec) && VIEW_SOURCE_OF_PAGE.test(address)) return on_account_host(address) ? undefined : "source";
       if (principal.spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address)) return on_account_host(address) ? undefined : "json";
+      if (BLOB_MAKER_PRINCIPAL.test(principal.spec) && BLOB_OF_PAGE.test(address)) return on_account_host(address) ? undefined : "blob";
       return undefined;
     }
 
-    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on a page kind that gets page code (`page_kind_of`) while page code is off, "not_here" on an about: page, on the view-source: and JSON viewer pages that are no such kind, and on blob: pages, where page code never runs. Undefined everywhere else, so the key goes on.
+    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on a page kind that gets page code (`page_kind_of`) while page code is off, "not_here" on an about: page, and on the view-source:, JSON viewer and blob: pages that are no such kind, where page code never runs. Undefined everywhere else, so the key goes on.
     // "page_hints" instead on an about: page that chrome hints label themselves (their own fixed list), once the extension's state says it answers their start. The key taker then starts those hints.
     // An initial about:blank and a srcdoc frame are no page the user sees as Firefox's own. A DevTools toolbox in a tab is DevTools, whose keys stay its own. Firefox matches about: names in any case, so the test does too.
     // `win` is the browser window that shows `browser`.
@@ -347,6 +352,8 @@
     const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
     const VIEW_SOURCE_OF_PAGE = /^view-source:(?:https?|file):/;
     const JSON_VIEWER_DOCUMENT = /^(?:https?|file):/;
+    const BLOB_OF_PAGE = /^blob:(?:https?|file):/;
+    const BLOB_MAKER_PRINCIPAL = /^(?:https?|file):/;
 
     // The page code of each document of this tab, by inner window id: the shown one, and any in the back-forward cache (`suspended`), which Back brings back under a new attach.
     const pages = new Map();
@@ -361,7 +368,7 @@
         return false;
       }
     };
-    // The same rule chrome checks again (`page_kind_of`): the PDF viewer, Reader View, view-source: of a web or file page and the JSON viewer on a web or file document, never a page under the system principal or an extension's.
+    // The same rule chrome checks again (`page_kind_of`): the PDF viewer, Reader View, view-source: of a web or file page, the JSON viewer on a web or file document and a blob: that a web page made, never a page under the system principal or an extension's.
     function is_locked_page(doc) {
       const principal = doc?.nodePrincipal;
       if (!principal || principal.isSystemPrincipal || principal.addonId) return false;
@@ -371,7 +378,8 @@
         spec.startsWith("resource://pdf.js/") ||
         (spec.startsWith("about:reader?") && address.startsWith("about:reader?")) ||
         (VIEW_SOURCE_OF_PAGE.test(spec) && VIEW_SOURCE_OF_PAGE.test(address)) ||
-        (spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address))
+        (spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address)) ||
+        (BLOB_MAKER_PRINCIPAL.test(spec) && BLOB_OF_PAGE.test(address))
       );
     }
     const inner_of = (win) => win?.windowGlobalChild?.innerWindowId;
