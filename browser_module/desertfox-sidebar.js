@@ -578,7 +578,6 @@
         core.register_kind("sidebar.normal_once", arm_once);
         // A new DesertFox knows nothing of a sequence typed for the one before.
         core.on_hello(() => [...onces.keys()].forEach(end_once));
-        core.set_hello_flag("sidebar_once", true);
       }
       Services.ww.registerNotification(window_watcher);
       for (const win of Services.wm.getEnumerator(BROWSER)) attach_when_loaded(win);

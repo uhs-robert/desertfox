@@ -565,9 +565,9 @@ function once_setup(options: Parameters<typeof setup>[0] = {}) {
   return { ...env, core, arm, runs, answer_runs, scrolls, held, write };
 }
 
-test("the hello says sidebar_once, and <A-o> arms only with the focus in the sidebar", async () => {
+test("<A-o> arms only with the focus in the sidebar, and the hello names no flag for it", async () => {
   const { firefox, page, panel_doc, focus, arm, held } = once_setup();
-  assert.equal((firefox.hello() as { sidebar_once?: boolean }).sidebar_once, true);
+  assert.equal(Object.hasOwn(firefox.hello() as object, "sidebar_once"), false);
   focus(page);
   assert.deepEqual(await arm(), { v: 1, reply_to: "r0", ok: false, error: "The focus is not in the sidebar" });
   assert.equal(held(), undefined);
@@ -731,11 +731,10 @@ test("a new DesertFox ends the hold", async () => {
   assert.equal(held(), undefined);
 });
 
-test("a core without the prefix calls keeps the sidebar keys and says no sidebar_once", () => {
+test("a core without the prefix calls keeps the sidebar keys and leaves <A-o> off", () => {
   const { firefox, panel_doc, focus, press } = setup({ core_patch: (source) => source.replace("      scope_tree: (win)", "      scope_tree_gone: (win)") });
   focus(panel_row(panel_doc));
   assert.ok(press("j").prevented);
-  assert.equal((firefox.hello() as { sidebar_once?: boolean }).sidebar_once, undefined);
   assert.ok(firefox.errors.some((line) => line.includes("<A-o> stays off")));
 });
 

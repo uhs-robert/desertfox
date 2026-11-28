@@ -583,9 +583,7 @@ test("a __proto__ panel path stays a plain key and sets no prototype", () => {
   assert.deepEqual(Object.keys(table.panels), ["__proto__"]);
 });
 
-test("the hello says sidebar_once only when it is true, and sidebar.normal_once carries no arg", () => {
-  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", sidebar_once: true }), { ok: true, value: { v: V, module_version: "1", sidebar_once: true } });
-  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", sidebar_once: 1 }), { ok: true, value: { v: V, module_version: "1" } });
+test("sidebar.normal_once carries no arg", () => {
   const checked = validate_message({ v: V, id: "m1", kind: SIDEBAR_ONCE_KIND, args: { window_id: 3 } }, EXTENSION_TO_MODULE_KINDS);
   assert.deepEqual(checked.ok && checked.value, { v: V, id: "m1", kind: SIDEBAR_ONCE_KIND, args: {} });
 });

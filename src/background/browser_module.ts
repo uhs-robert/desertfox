@@ -8,7 +8,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleHello, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -669,8 +669,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   };
 }
 
-// `<A-o>` with the focus in Firefox's own sidebar, where no page hears it. Runs beside the page's own arm, which acts only in a page with the focus, so the two never both hold the keys. The reply only says whether the module armed.
-export async function arm_sidebar_once(deps: { read_hello: () => Promise<ModuleHello | undefined>; call: (kind: string, args: ModuleArgs) => Promise<{ ok: boolean }> }): Promise<boolean> {
-  if ((await deps.read_hello())?.sidebar_once !== true) return false;
-  return (await deps.call(SIDEBAR_ONCE_KIND, {})).ok;
+// `<A-o>` with the focus in Firefox's own sidebar, where no page hears it. Runs beside the page's own arm, which acts only in a page with the focus, so the two never both hold the keys. The reply only says whether the module armed. No hello flag gates the send: a module older than the kind refuses it, which reads as not armed.
+export async function arm_sidebar_once(call: (kind: string, args: ModuleArgs) => Promise<{ ok: boolean }>): Promise<boolean> {
+  return (await call(SIDEBAR_ONCE_KIND, {})).ok;
 }

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { arm_sidebar_once, create_browser_module, focus_keys_of_keymap, normal_once_keys_of_keymap, sidebar_rows_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
-import { BROWSER_MODULE_STATE_STORAGE_KEY, focus_keys_of, MAX_KEY_ROWS, normal_once_keys_of } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION, BROWSER_MODULE_STATE_STORAGE_KEY, focus_keys_of, MAX_KEY_ROWS, normal_once_keys_of } from "../../src/shared/browser_module_protocol.ts";
+import type { ModuleArgs, ModuleStatus } from "../../src/shared/browser_module_protocol.ts";
+import { create_module_call } from "../../src/background/browser_module_call.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf, TreeNode } from "../../src/shared/prefix_tree.ts";
 
@@ -58,15 +60,41 @@ test("the state carries the sidebar table, and none while the switch is off", as
   }
 });
 
-test("<A-o> asks the module to hold the sidebar's keys only when its hello says sidebar_once", async () => {
-  const calls: string[] = [];
-  const call = async (kind: string) => (calls.push(kind), { ok: true });
-  assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1" }), call }), false);
-  assert.equal(await arm_sidebar_once({ read_hello: async () => undefined, call }), false);
-  assert.deepEqual(calls, []);
-  assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1", sidebar_once: true }), call }), true);
-  assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1", sidebar_once: true }), call: async () => ({ ok: false }) }), false);
-  assert.deepEqual(calls, ["sidebar.normal_once"]);
+// A module channel that answers each request as the module core would: `answer` is the reply's ok and error.
+function module_answering(answer: { ok: boolean; error?: string }, status: ModuleStatus["result"] = "matched") {
+  const kinds: string[] = [];
+  const module_call = create_module_call({
+    send: async (kind, _args, on_id) => {
+      kinds.push(kind);
+      on_id?.("m1");
+      setImmediate(() => module_call.hear({ v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: "m1", ...answer }));
+      return { ok: true, id: "m1" };
+    },
+    withdraw: async () => undefined,
+    read_status: async () => ({ result: status }) as ModuleStatus,
+    later: () => () => undefined,
+  });
+  return { kinds, call: (kind: string, args: ModuleArgs) => module_call.call(kind, args) };
+}
+
+// The shortcut handler runs the page's own arm whenever arm_sidebar_once is false.
+test("<A-o> falls back to the page arm, without a word, when a module older than sidebar.normal_once refuses the kind", async (t) => {
+  const logged = [t.mock.method(console, "warn"), t.mock.method(console, "error"), t.mock.method(console, "info")];
+  const older = module_answering({ ok: false, error: "the kind is not on the allow list" });
+  assert.equal(await arm_sidebar_once(older.call), false);
+  assert.deepEqual(older.kinds, ["sidebar.normal_once"]);
+  assert.deepEqual(logged.map((spy) => spy.mock.callCount()), [0, 0, 0]);
+});
+
+test("<A-o> skips the page arm when the module armed the sidebar, and sends nothing with the module off", async () => {
+  const known = module_answering({ ok: true });
+  assert.equal(await arm_sidebar_once(known.call), true);
+  assert.deepEqual(known.kinds, ["sidebar.normal_once"]);
+  const outside = module_answering({ ok: false, error: "The focus is not in the sidebar" });
+  assert.equal(await arm_sidebar_once(outside.call), false);
+  const off = module_answering({ ok: true }, "waiting");
+  assert.equal(await arm_sidebar_once(off.call), false);
+  assert.deepEqual(off.kinds, []);
 });
 
 test("the state names the chords of mode.normal_once and the tree's forward keys that move the focus", () => {

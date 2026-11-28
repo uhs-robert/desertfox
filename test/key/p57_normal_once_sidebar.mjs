@@ -58,12 +58,12 @@ export async function run_cases(context) {
   };
   const select_first_tab = () => chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; })()`);
 
-  await setup("turn the module on, open two pages and wait for the hello's sidebar_once", async () => {
+  await setup("turn the module on, open two pages and wait for the hello", async () => {
     await steps.turn_on_module();
     await open_page("page", "p57s_a", { new_tab: false });
     await open_page("page", "p57s_b", { new_tab: true });
     on_teardown(hide_panel);
-    await poll_until("the hello to say sidebar_once and the state to carry the tree", async () => (await session_value(HELLO_KEY))?.sidebar_once === true && (await session_value(STATE_KEY))?.normal_once_keys?.includes("<A-o>"), { timeout_ms: 5000 });
+    await poll_until("the hello and the state's chord", async () => (await session_value(HELLO_KEY))?.module_version !== undefined && (await session_value(STATE_KEY))?.normal_once_keys?.includes("<A-o>"), { timeout_ms: 5000 });
   });
 
   await run_case("in the history list, Alt+O then j and 3j scroll the page, the focus stays on the row, and the next j moves the list", async () => {
