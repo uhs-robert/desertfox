@@ -43,11 +43,11 @@ attach_browser_module({
   withdraw: async () => undefined,
 });
 
-const open_url = async (args: Record<string, unknown>, from_page = false) => {
+const open_url = async (args: Record<string, unknown>, from_page = false, from_line = false) => {
   requests.length = 0;
   opened.length = 0;
   const run = registry.get("open.url")!.run as (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>;
-  await run({ tab_id: 1, window_id: 1, frame_id: 0, mode: "normal", ...(from_page && { from_page: true }) }, args);
+  await run({ tab_id: 1, window_id: 1, frame_id: 0, mode: "normal", ...(from_page && { from_page: true }), ...(from_line && { from_line: true }) }, args);
 };
 
 test(":open with the address of a :firefox page opens it through the module, here or in a tab", async () => {
@@ -58,19 +58,25 @@ test(":open with the address of a :firefox page opens it through the module, her
   assert.deepEqual(opened, []);
 });
 
-test("an about: address a page sent is mapped like a typed one", async () => {
-  await open_url({ url: "about:addons", where: "tab" }, true);
+test("typed text on a web page maps, and a link a page wrote does not", async () => {
+  await open_url({ url: "about:addons", where: "tab" }, true, true);
   assert.deepEqual(requests, [{ kind: "firefox_page.open", args: { page: "addons", where: "tab", tab_id: 1 } }]);
   assert.deepEqual(opened, []);
+  await assert.rejects(open_url({ url: "about:config", where: "tab" }, true), /DesertFox does not open about: addresses/);
+  await assert.rejects(open_url({ url: "about:config", where: "here" }, true), /DesertFox does not open about: addresses/);
+  assert.deepEqual(requests, []);
 });
 
-test("a page that sent an unlisted about: address keeps the refusal and the :firefox hint", async () => {
-  await assert.rejects(open_url({ url: "about:telemetry", where: "tab" }, true), /DesertFox does not open about: addresses\. Use :firefox to open Firefox's own pages/);
+test("a typed unlisted about: address from a page keeps the refusal and the :firefox hint", async () => {
+  await assert.rejects(open_url({ url: "about:telemetry", where: "tab" }, true, true), /DesertFox does not open about: addresses\. Use :firefox to open Firefox's own pages/);
   assert.deepEqual(requests, []);
 });
 
 test("about:logins is refused for a request from a page in every placement, and not for a typed one", async () => {
-  for (const where of ["here", "tab", "background", "window"]) await assert.rejects(open_url({ url: "about:logins", where }, true), /A page cannot open the passwords page/);
+  for (const where of ["here", "tab", "background", "window"]) {
+    await assert.rejects(open_url({ url: "about:logins", where }, true, true), /A page cannot open the passwords page/);
+    await assert.rejects(open_url({ url: "about:logins", where }, true), /DesertFox does not open about: addresses/);
+  }
   assert.deepEqual(requests, []);
   await assert.rejects(open_url({ url: "about:logins", where: "here" }), (error: unknown) => error instanceof Error && error.name === "RuntimeRefusal" && !/A page cannot/.test(error.message));
 });
@@ -79,7 +85,7 @@ test("a mapped address refuses a container, a background tab, a window, and the 
   await assert.rejects(open_url({ url: "about:config", where: "tab", container: "Work" }), /no container/);
   await assert.rejects(open_url({ url: "about:config", where: "background" }), /here or in a tab/);
   await assert.rejects(open_url({ url: "about:config", where: "window" }), /here or in a tab/);
-  await assert.rejects(open_url({ url: "about:config", where: "tab", container: "Work" }, true), /no container/);
+  await assert.rejects(open_url({ url: "about:config", where: "tab", container: "Work" }, true, true), /no container/);
   await assert.rejects(open_url({ url: "about:logins", where: "here" }), (error: unknown) => error instanceof Error && error.name === "RuntimeRefusal");
   assert.deepEqual(requests, []);
   assert.deepEqual(opened, []);

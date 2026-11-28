@@ -124,6 +124,7 @@ export const content_handlers = (deps: ContentDeps) => {
             ...(tab_id === undefined ? {} : { sender_tab_id: tab_id }),
             ...(frame_id === undefined ? {} : { frame_id }),
             ...(!deps.is_own_page(sender) && { from_page: true }),
+            ...(request.from_line === true && { from_line: true as const }),
           });
         });
       },

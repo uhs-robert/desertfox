@@ -253,3 +253,15 @@ test("a run request is marked as from a page unless an extension page sent it", 
   assert.equal(from_content?.["sender_tab_id"], 4);
   assert.equal("from_page" in (from_page ?? {}), false);
 });
+
+test("a run request carries from_line only when the sender sets it", async () => {
+  const { handlers, calls } = make_tables();
+  const send = dispatch(handlers, is_own_page);
+  const run = { type: "run", invocations: [{ id: "scroll.down", args: {} }], mode: "normal" };
+  await send(run, content_script);
+  await send({ ...run, from_line: true }, content_script);
+  const [plain, typed] = calls.filter(([name]) => name === "router.run").map(([, request]) => request as Record<string, unknown>);
+  assert.equal("from_line" in (plain ?? {}), false);
+  assert.equal(typed?.["from_line"], true);
+  assert.equal(typed?.["from_page"], true);
+});

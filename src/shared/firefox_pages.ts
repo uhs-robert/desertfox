@@ -41,7 +41,7 @@ export const has_address = (page: FirefoxPage): page is AddressedFirefoxPage => 
 // Firefox takes about:settings for about:preferences, so typed text of either form names the same page.
 const SETTINGS_ALIAS = /^about:settings(?=$|#)/;
 
-// The page whose address is exactly `text`, ignoring case and outer spaces, or undefined. Typed text and a followed link's address: an address with a query or another fragment names no page.
+// The page whose address is exactly `text`, ignoring case and outer spaces, or undefined. Typed text only: an address with a query or another fragment names no page.
 export function firefox_page_at(text: string): AddressedFirefoxPage | undefined {
   const typed = text.trim().toLowerCase().replace(SETTINGS_ALIAS, "about:preferences");
   return (Object.keys(FIREFOX_PAGE_ADDRESSES) as AddressedFirefoxPage[]).find((page) => FIREFOX_PAGE_ADDRESSES[page].toLowerCase() === typed);
