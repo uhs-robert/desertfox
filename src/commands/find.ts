@@ -47,7 +47,8 @@ define("find.prev", {
 });
 
 // Find on a page the page code does not serve (see `LOCKED_VARIANTS` in shared/browser_module_scope.ts). The text goes through the browser module to Firefox's Finder, which matches plain text: no pattern, no smart case, no incremental highlight.
-const FIND_TEXT_PATTERN = `^[^\\x00-\\x1f\\x7f-\\x9f\\xad\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2064\\ufeff]{1,${MAX_FIND_CHARS}}$`;
+// The schema's regular expression has no `u` flag, so a surrogate pair is matched whole to count code points, as the cleaning and the module do. U+2028 and U+2029 are not control or format characters, so they pass.
+export const FIND_TEXT_PATTERN = `^(?:[^\\x00-\\x1f\\x7f-\\x9f\\xad\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\ufeff\\ud800-\\udfff]|[\\ud800-\\udbff][\\udc00-\\udfff]){1,${MAX_FIND_CHARS}}$`;
 const FIND_DIRECTIONS = ["forward", "backward"] as const satisfies readonly FindDirection[];
 const SHOWN_TEXT_CHARS = 40;
 export const FIND_PRIVATE_REFUSAL = "Find is off in private tabs";

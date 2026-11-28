@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { find_reply_of, find_toast_of, make_find_page_handlers, FIND_NEEDS_NEWER_MODULE, FIND_PRIVATE_REFUSAL } from "../../src/commands/find.ts";
+import { FIND_TEXT_PATTERN, find_reply_of, find_toast_of, make_find_page_handlers, FIND_NEEDS_NEWER_MODULE, FIND_PRIVATE_REFUSAL } from "../../src/commands/find.ts";
+import { cleaned_find_text } from "../../src/shared/find_line.ts";
 import type { FindPageDeps } from "../../src/commands/find.ts";
 import type { CommandContext } from "../../src/shared/command.ts";
 
@@ -106,4 +107,19 @@ test("a reply that is not whole numbers is refused and toasts nothing", async ()
 test("a command with no tab is refused", async () => {
   const { handlers } = make();
   await assert.rejects(handlers.text({ ...CTX, tab_id: undefined }, { text: "x", direction: "forward" }), /No page to search/);
+});
+
+test("the schema counts code points and lets through what the cleaning keeps", () => {
+  const schema = new RegExp(FIND_TEXT_PATTERN);
+  assert.ok(schema.test("\u{1F600}".repeat(256)), "256 emoji are 256 characters");
+  assert.equal(schema.test("\u{1F600}".repeat(257)), false);
+  assert.ok(schema.test(`a\u2028b\u2029c`), "U+2028 and U+2029 pass, as the cleaning allows");
+  for (const bad of ["", "a\tb", "a\u200db", "a\ud800b"]) assert.equal(schema.test(bad), false, JSON.stringify(bad));
+  const cleaned = cleaned_find_text(`a\u2028b${"\u{1F600}".repeat(300)}`);
+  assert.ok(schema.test(cleaned) && [...cleaned].length === 256, "whatever the cleaning gives passes the schema");
+});
+
+test("a core with no find handler gets the install hint", async () => {
+  const { handlers } = make({ call: async () => ({ ok: false, error: "no handler for this kind" }) });
+  await assert.rejects(handlers.text(CTX, { text: "x", direction: "forward" }), new RegExp(FIND_NEEDS_NEWER_MODULE));
 });
