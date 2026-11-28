@@ -1,4 +1,4 @@
-// Drops tracking parameters from a web address before it is copied, shared by the page copy (`content/page/copy.ts`) and the hints bundle.
+// Drops tracking parameters from a web address before it is copied, shared by the page copy (`content/page/copy.ts`), the hints bundle, `copy.page` and `copy.tabs`.
 // Pure and import-free, so both bundles can use it without growing content.js.
 
 // A pattern is a parameter name, or a prefix before a final `*`. Names compare decoded and in lowercase, so `utm%5Fsource` matches `utm_*`.
