@@ -638,8 +638,10 @@ Results:
 
 ## Escape in the console input and the Inspector search box (devtools-keys)
 
-- With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. The console's editor maps Escape to nothing. Measured by `p54_browser_module_devtools_search`.
-- With DesertFox's Inspector search keys on, Escape in the Search HTML box stops in the parent, so the box keeps its text and the split console does not open. Without DesertFox, the box clears and Escape toggles the split console.
+- With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. Measured by `p54_browser_module_devtools_search`.
+- The cause: the console's editor maps Escape to nothing (`Esc: false` in `JSTerm.js`). Read from Firefox 161 code, not measured.
+- With DesertFox's Inspector search keys on, Escape in the Search HTML box stops in the parent, so the box keeps its text and the split console does not open. Measured by `p54_browser_module_devtools_search`.
+- Without DesertFox, the box clears and Escape toggles the split console (`toolbox.js`). Read from Firefox 161 code, not measured.
 
 ## Visual mode in DevTools (devtools-keys)
 
