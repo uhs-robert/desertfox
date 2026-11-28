@@ -1029,7 +1029,7 @@
         if (Object.hasOwn(changes, STATE_STORAGE_KEY) && key_taker) {
           const before = read_state_value(deserialized(changes[STATE_STORAGE_KEY].oldValue));
           const after = read_state_value(deserialized(changes[STATE_STORAGE_KEY].newValue));
-          if (after?.enabled !== true || JSON.stringify([before?.tree, before?.address_trees]) !== JSON.stringify([after.tree, after.address_trees])) key_taker.reset();
+          if (after?.enabled !== true || JSON.stringify([before?.tree, before?.address_trees ?? []]) !== JSON.stringify([after.tree, after.address_trees])) key_taker.reset();
         }
         if (!enabled_by_pref() || shut || desertfox() !== extension) return;
         for (const [key, watcher] of session_watchers) if (Object.hasOwn(changes, key)) tell_watcher(watcher, key, changes[key].newValue);
