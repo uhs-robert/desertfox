@@ -22,6 +22,7 @@ const INTERNAL_IDS: Record<BundleName, string[]> = {
   tree: [],
   item_act: [],
   next_page: [],
+  tab_visual: [],
 };
 
 const root = new URL("../", import.meta.url);
