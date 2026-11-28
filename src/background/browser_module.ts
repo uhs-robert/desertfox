@@ -8,7 +8,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, BarToast, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -19,9 +19,8 @@ import {
   bar_config_of,
   bar_fields_of,
   bar_theme_of,
-  DEVTOOLS_HINT_KEY,
+  DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_TREE_KEYS,
-  DEVTOOLS_VISUAL_KEY,
   DEVTOOLS_VISUAL_KEYS,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
@@ -33,6 +32,10 @@ import {
   MAX_CHROME_HINT_KEY_TOKENS,
   MAX_SIDEBAR_KEY_TOKENS,
   sidebar_keys_of,
+  insert_keys_of,
+  INSERT_KEY_COMMAND_IDS,
+  MAX_INSERT_KEY_ROWS,
+  MODE_KEY_COMMAND_IDS,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
   MAX_TOAST_CHARS,
@@ -59,7 +62,7 @@ import {
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS, DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
 import type { ToastKind } from "../shared/messages/tab.ts";
-import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
+import { native_allowed_by, native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { is_reply } from "../shared/browser_module_protocol.ts";
@@ -73,8 +76,9 @@ type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remo
 export type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 
 // A leaf the module may run: one step, no guard, no key to wait for, and a command from the protocol's list whose args the registry accepts. Anything else stays with the content script.
+// The mode commands stay out of the rows: a table that is capped at MAX_KEY_ROWS could push a scroll key out, and the module's own fallbacks cover them where no tree is.
 function row_of(key: string, node: TreeNode, check_args: CheckCommandArgs): KeyRow | undefined {
-  const native = node.kind === "leaf" ? native_leaf(node, check_args) : undefined;
+  const native = node.kind === "leaf" ? native_leaf(node, check_args, (id) => !(MODE_KEY_COMMAND_IDS as readonly string[]).includes(id)) : undefined;
   return native && { key, id: native.native, args: native.args };
 }
 
@@ -83,6 +87,29 @@ export function key_rows_of(keymap: CompiledKeymap | undefined, check_args: Chec
   const children = keymap?.modes.normal?.children ?? {};
   const rows = Object.entries(children).flatMap(([key, node]) => row_of(key, node, check_args) ?? []);
   return rows.sort((a, b) => (a.key < b.key ? -1 : 1)).slice(0, MAX_KEY_ROWS);
+}
+
+// `page.send_key` as the insert table takes it: a plain Escape to the focused element, with every other arg at its default.
+const sends_plain_escape = (args: Record<string, unknown>): boolean =>
+  args["key"] === "Escape" && args["key_code"] === 27 && (args["target"] === undefined || args["target"] === "") && args["times"] === 1 && ["ctrl", "shift", "alt", "meta", "keypress", "focus"].every((name) => args[name] === false);
+
+// The keymap's insert mode, as the keys the module takes in a text field: one-token keys whose leaf runs one command of the protocol's fixed list. Other rows (register paste, the external editor) stay with the page code. Undefined when there is no current keymap, so the module keeps its plain Escape.
+export function insert_rows_of(keymap: CompiledKeymap | undefined, check_args: CheckCommandArgs): InsertKeyRow[] | undefined {
+  const current = current_keymap(keymap);
+  if (current === undefined) return undefined;
+  // The compiler drops an insert mode whose keys were all unbound. The empty table says so, and the module then blurs no field and ends no insert mode on its own Escape.
+  const insert_tree = (current.modes as Record<string, TreeNode | undefined>)["insert"];
+  if (insert_tree?.kind !== "branch") return [];
+  const rows: InsertKeyRow[] = [];
+  for (const [key, node] of Object.entries(insert_tree.children)) {
+    if (node.kind !== "leaf" || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) continue;
+    const { invocation, capture, register } = node.steps[0]!;
+    if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !(INSERT_KEY_COMMAND_IDS as readonly string[]).includes(invocation.id)) continue;
+    const args = check_args(invocation.id, invocation.args);
+    if (args === undefined || (invocation.id === "page.send_key" && !sends_plain_escape(args))) continue;
+    rows.push({ key, id: invocation.id as InsertKeyCommandId });
+  }
+  return insert_keys_of(rows.sort((a, b) => (a.key < b.key ? -1 : 1)).slice(0, MAX_INSERT_KEY_ROWS)) ?? [];
 }
 
 // The sidebar mode's keys of one or two tokens (`gg`) whose leaf runs one sidebar command, in key order. The rest of the mode stays out: the module runs nothing else there.
@@ -276,6 +303,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   let hello_root_list = false;
   // Whether that hello says the bar draws toasts. An older module builds a bar that ignores the field, so its refusals stay desktop notices.
   let hello_message = false;
+  // Whether that hello says the module defines the mode commands, so the tree may carry them.
+  let hello_mode_keys = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
   // Counts each reset of `devtools_keys_sent`, so a send that a newer hello overtook does not mark the newer hello as served.
@@ -287,7 +316,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const hello = validate_module_hello(stored_hello);
     const flags = hello.ok ? hello.value : undefined;
     if (flags?.devtools_visual === true && !(await send_now("devtools.visual_keys", { keys: DEVTOOLS_VISUAL_KEYS })).ok) return false;
-    const keys = [...DEVTOOLS_TREE_KEYS, ...(flags?.devtools_hints === true ? [DEVTOOLS_HINT_KEY] : []), ...(flags?.devtools_visual === true ? [DEVTOOLS_VISUAL_KEY] : [])];
+    const keys = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys: rows }) => (flags?.[flag] === true ? rows : []))];
     return (await send_now("devtools.keys", { keys })).ok;
   };
   const bar_built = (stored_hello: unknown): boolean => {
@@ -416,7 +445,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     hello_message = hello_bar && checked_hello.ok && checked_hello.value.bar_message === true;
     const root_list_changed = hello_root_list !== root_list_built(hello);
     hello_root_list = root_list_built(hello);
-    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar) || root_list_changed) await sync_now();
+    const had_mode_keys = hello_mode_keys;
+    hello_mode_keys = checked_hello.ok && checked_hello.value.mode_keys === true;
+    const bar_changed = set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar);
+    if (bar_changed || root_list_changed || hello_mode_keys !== had_mode_keys) await sync_now();
   };
 
   const read_messages = async (): Promise<void> => {
@@ -431,6 +463,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       hello_bar = false;
       hello_root_list = false;
       hello_message = false;
+      hello_mode_keys = false;
       devtools_keys_sent = false;
       hello_generation++;
       set_bar_seen(false);
@@ -455,7 +488,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     // A tree over its cap is left out, and the module falls back to the single keys, which stay.
     // The root list keys stay with the page until the module says it shows the list and the table carries the list.
     const locked_keys = (check_args: CheckCommandArgs) => {
-      const scope = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, check_args);
+      const scope = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, check_args, native_allowed_by({ ...(hello_mode_keys && { mode_keys: true as const }) }));
       const fits = scope && validate_scope_tree(scope).ok ? scope : undefined;
       return { fits, which_key: fits && deps.find_command ? which_key_table_of_keymap(keymap, fits, deps.find_command) : undefined, check_args };
     };
@@ -465,7 +498,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const { fits, which_key } = locked;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }) });
+    const insert_keys = insert_rows_of(keymap, deps.check_args);
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }), ...(insert_keys && { insert_keys }) });
     request_hello_read();
     request_messages_read();
   };

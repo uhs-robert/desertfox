@@ -228,7 +228,7 @@ export async function run_cases(context) {
     const last_table = async () => ((await session_value("desertfox_browser_module_from_extension")) ?? []).filter((message) => message.kind === "devtools.keys").at(-1)?.args.keys.map(({ key }) => key).join("");
     try {
       await set_session_value(HELLO_KEY, Object.fromEntries(Object.entries(own_hello).filter(([name]) => name !== "devtools_visual")));
-      await poll_until("the extension to push the table without v", async () => (await last_table()) === "jkhlf", { timeout_ms: 5000 });
+      await poll_until("the extension to push the table without v", async () => (await last_table()) === "jkhlf/nN", { timeout_ms: 5000 });
       await open_tab(RULE_PAGE);
       await show_tool("inspector");
       await rule_view("flag off");
@@ -242,7 +242,7 @@ export async function run_cases(context) {
       expect(selection.text === "", `v started the mode with no v row: ${JSON.stringify(selection)}`);
     } finally {
       await set_session_value(HELLO_KEY, own_hello);
-      await poll_until("v to come back with the module's own hello", async () => (await last_table()) === "jkhlfv", { timeout_ms: 5000 });
+      await poll_until("v to come back with the module's own hello", async () => (await last_table()) === "jkhlfv/nN", { timeout_ms: 5000 });
     }
   });
 

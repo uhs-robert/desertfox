@@ -32,8 +32,8 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | --- | --- | --- | --- |
 | `h` | `scroll.pixels --dx=-50` | Scroll left | yes |
 | `l` | `scroll.pixels --dx=50` | Scroll right | yes |
-| `j` | `scroll 10` | Scroll down | yes |
-| `k` | `scroll -10` | Scroll up | yes |
+| `j` | `scroll 10` (while a list item holds the focus: `page.send_key --key=ArrowDown --key_code=40`) | Scroll down | yes |
+| `k` | `scroll -10` (while a list item holds the focus: `page.send_key --key=ArrowUp --key_code=38`) | Scroll up | yes |
 | `gg` | `scroll.to 0` | Scroll to top | yes |
 | `G` | `scroll.to 100` | Scroll to bottom | yes |
 | `$` | `scroll.to --x 100` | Scroll to right edge | yes |
@@ -143,7 +143,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `tS` | `session.open` (prompts) | Open tab session | yes |
 | `td` | `tab.duplicate` | Duplicate tab | yes |
 | `tm` | `tab.move` (prompts) | Move tab | yes |
-| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset |  |
+| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset | yes |
 | `tn` | `tab.next` | Next tab | yes |
 | `tp` | `tab.prev` | Previous tab | yes |
 | `ta` | `tab.goto_audible` | Go to audible tab | yes |
@@ -185,8 +185,8 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `yo` | `copy --org` | Copy URL | yes |
 | `ys` | `copy --short` | Copy URL | yes |
 | `yt` | `copy --title` | Copy URL | yes |
-| `yL` | `copylinks` | Copy page links |  |
-| `yl` | `copylinks --viewport` | Copy links in view |  |
+| `yL` | `copylinks` | Copy page links | yes |
+| `yl` | `copylinks --viewport` | Copy links in view | yes |
 | `yT` | `copytabs` | Copy tab links | yes |
 | `gu` | `url.parent` | Parent URL | yes |
 | `gU` | `url.root` | Root URL | yes |
@@ -196,7 +196,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `[c` | `url.increment --down` | Change URL number | yes |
 | `gi` | `page.focus_input` | Focus input |  |
 | `I` | `hint --lists ; page.item --current` | Pick a list for item mode |  |
-| `i` | `mode.insert` | Insert mode |  |
+| `i` | `mode.insert` | Insert mode | yes |
 | `pp` | `paste` | Open clipboard | yes |
 | `pt` | `paste --tab` | Open clipboard | yes |
 | `pw` | `paste --window` | Open clipboard | yes |
@@ -228,19 +228,19 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `zt` | `scroll.align --top` | Align focus |  |
 | `zz` | `scroll.align` | Align focus |  |
 | `zb` | `scroll.align --bottom` | Align focus |  |
-| `<S-Escape>` | `mode ignore` | Set mode |  |
-| `<S-Insert>` | `mode ignore` | Set mode |  |
-| `<AC-Escape>` | `mode ignore` | Set mode |  |
-| ``<AC-`>`` | `mode ignore` | Set mode |  |
+| `<S-Escape>` | `mode ignore` | Set mode | yes |
+| `<S-Insert>` | `mode ignore` | Set mode | yes |
+| `<AC-Escape>` | `mode ignore` | Set mode | yes |
+| ``<AC-`>`` | `mode ignore` | Set mode | yes |
 | `<Escape>` | `mode.escape` | Escape |  |
 | `<C-[>` | `mode.escape` | Escape |  |
-| `<C-v>` | `mode.pass_next` | Pass next key |  |
+| `<C-v>` | `mode.pass_next` | Pass next key | yes |
 | `<F1>` | `help` | Help | yes |
 | `,r` | `config.reload` | Reload config | yes |
 | `,h` | `help` | Help | yes |
 | `,s` | `help settings` | Settings page | yes |
 | `,t` | `toggle` (prompts) | Toggle a setting | yes |
-| `,i` | `mode ignore` | Set mode |  |
+| `,i` | `mode ignore` | Set mode | yes |
 | `,,` | `anything` (prompts) | Find anything | yes |
 | `,b` | `page.blur` | Blur |  |
 | `,e` | `pane.focus sidebar` | Focus the sidebar | yes |
@@ -409,10 +409,10 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `tree --left --aria` | Fold, else parent in a tree, else the item to the left |
-| `l` | `tree --child --aria` | First child in a tree or open it, else the item to the right |
-| `}` | `tree --next --aria` | Next sibling in a tree, else the next section |
-| `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |
+| `h` | `page.item --left --hover` (while the focus is inside a tree: `tree --left --aria`) | Fold, else parent in a tree, else the item to the left |
+| `l` | `page.item --right --hover` (while the focus is inside a tree: `tree --child --aria`) | First child in a tree or open it, else the item to the right |
+| `}` | `page.item --next-section --hover` (while the focus is inside a tree: `tree --next --aria`) | Next sibling in a tree, else the next section |
+| `{` | `page.item --prev-section --hover` (while the focus is inside a tree: `tree --prev --aria`) | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 

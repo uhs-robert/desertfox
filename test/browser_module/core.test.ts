@@ -50,11 +50,12 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
   assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
-  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS", "MAX_DEVTOOLS_KEY_ROWS", "MAX_DEVTOOLS_VISUAL_ROWS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS", "MAX_DEVTOOLS_KEY_ROWS", "MAX_DEVTOOLS_VISUAL_ROWS", "MAX_INSERT_KEY_ROWS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
   assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
   assert.deepEqual(plain(vm.runInNewContext(/const PANE_REGIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PANE_REGIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const DEVTOOLS_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.DEVTOOLS_ACTIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const DEVTOOLS_VISUAL_OPS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.DEVTOOLS_VISUAL_OPS);
+  assert.deepEqual(plain(vm.runInNewContext(/const INSERT_KEY_COMMAND_IDS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.INSERT_KEY_COMMAND_IDS);
   assert.deepEqual(plain(vm.runInNewContext(/const PAGE_HINT_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PAGE_HINT_ACTIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const MODULE_FIREFOX_PAGES = (\[[^\]]*\]);/.exec(source)![1]!)), MODULE_FIREFOX_PAGES);
   assert.deepEqual(plain(vm.runInNewContext(/const FIREFOX_PAGE_WHERE = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.FIREFOX_PAGE_WHERE);
@@ -67,7 +68,7 @@ test("the feature files define every command of the protocol with the protocol's
   firefox.make_window().load();
   const core = firefox.Services.desertfox_browser_module as { status(): { commands: string[] } };
   assert.deepEqual(plain(core.status().commands).sort(), Object.keys(MODULE_COMMAND_ARGS).sort());
-  const source = source_of(FEATURE_FILE);
+  const source = source_of(FEATURE_FILE) + source_of(COMMANDS_FILE);
   for (const [id, args] of Object.entries(MODULE_COMMAND_ARGS)) {
     for (const name of Object.keys(args)) assert.match(source, new RegExp(`"${id.replace(".", "\\.")}", \\{[^}]*\\b${name}:`), `${id} ${name}`);
   }
@@ -279,11 +280,11 @@ test("with the pref off the module loads no frame script and says no hello, and 
   assert.equal(firefox.hello(), undefined);
   firefox.set_pref(true);
   assert.equal(firefox.frame_scripts.length, 2);
-  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true });
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true });
   firefox.set_pref(false);
   assert.equal(firefox.hello(), undefined, "the pref turned off takes the hello back");
   firefox.set_pref(true);
-  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true }, "the pref turned on again says the hello again");
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true }, "the pref turned on again says the hello again");
   assert.equal(firefox.frame_scripts.length, 2);
 });
 
@@ -668,7 +669,7 @@ test("a DesertFox reload while the pref is off gets no hello, and the pref turne
   firefox.start_extension();
   assert.equal(firefox.hello(), undefined, "the module said its hello with the pref off");
   firefox.set_pref(true);
-  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true });
+  assert.deepEqual(firefox.hello(), { v: BROWSER_MODULE_PROTOCOL_VERSION, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true });
 });
 
 test("a handler's error text loses control and bidi characters", async () => {
@@ -739,4 +740,122 @@ test("hold_keys refuses a window another owner holds, and the owner's own second
   core.release_keys(window.win, "first");
   assert.equal(core.hold_keys(window.win, "second"), true);
   assert.equal(core.keys_held_by(window.win), "second");
+});
+
+// ---- The field guard: in_field is the one predicate, and a taker's field_key decides what a field takes.
+
+// A feature file that takes keys. `with_field_key` gives it a field_key, which takes only the `!` key. Every call goes in Services.zz_calls as [method, in_field, key].
+const taker_file = (with_field_key: boolean) => `(function (scope) {
+  const core = Services.desertfox_browser_module;
+  if (typeof core !== "object" || core === null) return;
+  if (scope.gBrowser) return core.adopt(Components.stack.filename);
+  Services.zz_calls = [];
+  const note = (method, context) => (Services.zz_insert = context?.insert_keys instanceof Map ? [...context.insert_keys] : context?.insert_keys, Services.zz_calls.push([method, context?.in_field, context?.event?.key]));
+  core.take_keys({
+    key: (context) => (note("key", context), context.event.key === "x" ? true : undefined),
+    ${with_field_key ? 'field_key: (context) => (note("field_key", context), context.event.key === "!"),' : ""}
+    reset: (win) => note("reset", { event: { key: win ? "win" : "all" } }),
+    pending: () => undefined,
+  });
+  core.watch_pending(() => Services.zz_calls.push(["pending"]));
+})(this);`;
+
+function with_taker(with_field_key: boolean, written: unknown = state()) {
+  const firefox = create_firefox({ extra_files: { "desertfox-zz-taker.js": taker_file(with_field_key) } });
+  firefox.start_extension();
+  const window = firefox.make_window();
+  window.load();
+  const { browser } = window.add_tab();
+  firefox.write_state(written);
+  const press = (key: string, patch = {}) => window.press(key_event(key, { target: browser, originalTarget: browser, ...patch }));
+  const calls = () => plain((firefox.Services as unknown as { zz_calls: unknown[][] }).zz_calls);
+  return { firefox, window, browser, press, calls };
+}
+
+test("in a field the core calls field_key, never key, with in_field true, and nothing else", () => {
+  const { window, press, calls } = with_taker(true);
+  window.win.windowUtils.IMEStatus = IME_ENABLED;
+  assert.equal(press("x").prevented, false, "a key field_key does not take goes to the page, and key is not asked");
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method !== "pending"), [["field_key", true, "x"]]);
+  const taken = press("!");
+  assert.deepEqual([taken.prevented, taken.stopped], [true, true]);
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method === "key" || method === "reset"), [], "the core does not reset the taker in a field: field_key does");
+});
+
+test("outside a field the core calls key with in_field false, and the single-key rows stay out of a field", () => {
+  const { window, press, calls } = with_taker(true);
+  assert.equal(press("x").prevented, true);
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method === "key"), [["key", false, "x"]]);
+  window.win.windowUtils.IMEStatus = IME_ENABLED;
+  press("J");
+  assert.deepEqual(window.tab_moves, [], "J is a row, and a field takes no row");
+});
+
+test("a taker with no field_key keeps today's rule: the core resets it, passes every key in a field and blurs a field on a plain Escape itself", () => {
+  const { window, press, calls, firefox, browser } = with_taker(false);
+  window.win.windowUtils.IMEStatus = IME_ENABLED;
+  assert.equal(press("x").prevented, false);
+  assert.deepEqual(calls().filter(([method]: unknown[]) => method !== "pending"), [["reset", null, "win"]]);
+  firefox.report(browser, { inner: 10, listeners: 0, field: true, text_field: true });
+  const escape = press("Escape");
+  assert.equal(escape.prevented, true);
+  assert.deepEqual(firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")).map(({ data }) => plain(data)), [{ inner: 10, escape: true }]);
+});
+
+test("a taker with a field_key owns Escape in a field: the core's own blur stays out of the way", () => {
+  const { press, firefox, browser, window } = with_taker(true);
+  window.win.windowUtils.IMEStatus = IME_ENABLED;
+  firefox.report(browser, { inner: 10, listeners: 0, field: true, text_field: true });
+  const escape = press("Escape");
+  assert.equal(escape.prevented, false);
+  assert.deepEqual(firefox.sent_to_frames.filter(({ name }) => name.endsWith(":blur")), []);
+});
+
+test("the watchers of the half-typed keys hear a field_key too, as they hear key and reset", () => {
+  const { window, press, calls } = with_taker(true);
+  window.win.windowUtils.IMEStatus = IME_ENABLED;
+  press("!");
+  assert.deepEqual(calls().map(([method]: unknown[]) => method), ["field_key", "pending"]);
+});
+
+test("a key in a field on a tab DesertFox runs in, or with the module off, reaches neither key nor field_key", () => {
+  const live = with_taker(true);
+  live.window.win.windowUtils.IMEStatus = IME_ENABLED;
+  live.firefox.report(live.browser, { inner: 10, listeners: 1, field: true });
+  live.press("!");
+  assert.deepEqual(live.calls().filter(([method]: unknown[]) => method === "key" || method === "field_key"), []);
+  const off = with_taker(true, state({ enabled: false }));
+  off.window.win.windowUtils.IMEStatus = IME_ENABLED;
+  off.press("!");
+  assert.deepEqual(off.calls().filter(([method]: unknown[]) => method === "key" || method === "field_key"), []);
+});
+
+test("blur_field and send_escape refuse a context whose key came from another tab", () => {
+  const { firefox, window, browser } = with_taker(true);
+  const core = firefox.Services.desertfox_browser_module as { blur_field(context: unknown): boolean; send_escape(context: unknown): boolean };
+  const other = window.add_tab().browser;
+  firefox.report(browser, { inner: 10, listeners: 0, field: true, text_field: true });
+  const context = { window: window.win, browser: other, event: { target: browser } };
+  assert.deepEqual([core.blur_field(context), core.send_escape(context)], [false, false]);
+  assert.deepEqual(firefox.sent_to_frames, []);
+  const own = { window: window.win, browser, event: { target: browser } };
+  assert.deepEqual([core.blur_field(own), core.send_escape(own)], [true, true]);
+});
+
+test("the insert table reaches the taker as a Map of key to command: unknown commands are skipped, and a bad table is undefined", () => {
+  const insert = (firefox: { Services: unknown }) => {
+    const seen = (firefox.Services as { zz_insert: unknown }).zz_insert;
+    return seen === undefined ? undefined : plain(seen);
+  };
+  const good = with_taker(true, state({ insert_keys: [{ key: "<Escape>", id: "mode.escape" }, { key: "<C-r>", id: "register.paste" }, { key: "<A-?>", id: "help.whichkey" }] }));
+  good.press("x");
+  assert.deepEqual(insert(good.firefox), [["<Escape>", "mode.escape"], ["<A-?>", "help.whichkey"]]);
+  for (const bad of [[{ key: "a", id: "mode.escape" }, { key: "a", id: "page.send_key" }], [{ key: "a b", id: "mode.escape" }], [{ id: "mode.escape" }], "junk", Array.from({ length: 9 }, (_, index) => ({ key: `<F${index + 1}>`, id: "mode.escape" }))]) {
+    const world = with_taker(true, state({ insert_keys: bad }));
+    world.press("x");
+    assert.equal(insert(world.firefox), undefined, JSON.stringify(bad).slice(0, 40));
+  }
+  const none = with_taker(true);
+  none.press("x");
+  assert.equal(insert(none.firefox), undefined, "an extension that sends no table");
 });
