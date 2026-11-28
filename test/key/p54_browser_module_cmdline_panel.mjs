@@ -126,6 +126,19 @@ export async function run_cases(context) {
     await close_others();
   });
 
+  await run_case("tM opens the panel with tab.move --offset= typed in, and sh opens no line", async () => {
+    await prefs_with_tab_after();
+    await press_keys("tM");
+    await panel.wait_open("tM");
+    await poll_until("the line to start with tab.move --offset=", async () => (await panel.line_text())?.startsWith("tab.move --offset=") === true);
+    await escape_until_closed();
+    // The heading list reads the page's DOM, so sh stays out and the panel does not open.
+    await press_keys("sh");
+    await sleep(NO_EFFECT_MS);
+    expect((await panel.state()).state === "none", "sh opened a panel on about:preferences");
+    await close_others();
+  });
+
   // The panel's own `search` reads @selection from the tab the line opened over, which has no content script. The query goes into a new tab's address.
   const search_tab_address = (word) => chrome(`(async () => { const w = ${W}; return w.gBrowser.tabs.map((tab) => [tab.linkedBrowser.currentURI.spec, tab.linkedBrowser.userTypedValue ?? ""].join(" ")).filter((text) => text.includes(${JSON.stringify(word)})).length; })()`);
   // The parent-process page's own window, as the module reads it: `contentWindow` of the selected browser.

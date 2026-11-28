@@ -121,7 +121,9 @@ export function module_steps({ rdp, poll_until, run_line, press_keys, sleep, on_
   // The tab switch keys need a tab to switch to, so every case starts from a DesertFox test page.
   const home = (id) => open_page("page", id, { new_tab: false });
 
-  return { chrome, session_value, set_session_value, module_status, set_pref, turn_on_module, open_tab, wait_loaded, selected_spec, in_selected_page, focus_page, page_scroll, watch_switches, switch_count, switches_one, switches_none, scrolls, close_selected_tab, home };
+  // The text in the status bar's message slot, or null while the bar is down.
+  const bar_message = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-message")?.textContent ?? null : null; })()`);
+  return { bar_message, chrome, session_value, set_session_value, module_status, set_pref, turn_on_module, open_tab, wait_loaded, selected_spec, in_selected_page, focus_page, page_scroll, watch_switches, switch_count, switches_one, switches_none, scrolls, close_selected_tab, home };
 }
 
 // The command line panel (browser_module/desertfox-cmdline-panel.js) of the most recent window, read from chrome, and its page read in its own process.
