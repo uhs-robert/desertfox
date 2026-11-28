@@ -29,7 +29,7 @@ export const CONTENT_SOURCES: Record<string, AdmissionClause> = {
   "src/content/key_flow.ts": before_first_key,
   "src/content/leaf_for_page.ts": before_first_key,
   "src/content/lib/field_text.ts": before_first_key,
-  "src/content/lib/hint_keys.ts": before_first_key,
+  "src/shared/hints/hint_keys.ts": before_first_key,
   "src/content/main.ts": before_first_key,
   "src/content/mode_report.ts": before_first_key,
   "src/content/mode_state.ts": before_first_key,

@@ -2,7 +2,8 @@
 // a permission prompt (doorhanger) and the downloads panel, and the controls of a tab's prompt, a settings sub-dialog, the Library and Page Info.
 // The module collects the targets and sends only ids and boxes. The extension makes the labels, narrows them as the user types and names the target to pick. The module draws what it is told and runs one fixed action per target kind.
 // Requests: chrome_hints.collect starts a session, chrome_hints.collect_here starts one where the user typed the binding, chrome_hints.draw shows labels, chrome_hints.pick runs a target, chrome_hints.clear ends it.
-// Pushes and calls back: chrome_hints.targets, chrome_hints.key, chrome_hints.end and chrome_hints.want.
+// Pushes and calls back: chrome_hints.targets, chrome_hints.texts, chrome_hints.key, chrome_hints.end and chrome_hints.want.
+// With an extension that runs hint mode keys (the state's `hint_mode_keys`), a session also has text mode: the module sends each target's text and every key as a token, and draws the typed text, the active label and the key line it is told.
 // It lends its label drawing (the layer, the label checks, a whole draw) to the DevTools hints through the core's `share_hint_drawing`.
 //
 // With the focus in chrome no content script hears a key, so this file takes the `hint.browser` bindings the extension lists in the state itself, and asks the extension to start.
@@ -15,6 +16,7 @@
 // It also labels a few of Firefox's own pages that run in this process (PAGE_HINT_PAGES), which no content script reaches. The key taker (desertfox-commands.js) calls the start it lends through the core's `share_page_hints` on the user's own hint key there.
 // That start makes a token as a chrome-focus start does and pushes page_hints.want. The extension names the action and answers with page_hints.collect. Draw, key, pick and clear then go on the chrome_hints kinds.
 // A pick there and on a doorhanger runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it. Those keys count only after the labels showed 300 ms.
+// In text mode the check is of the typed text: the target's own text must match it, and the last key must be Enter or a character that left that one match.
 // A page in a content process that the content hints route labels (desertfox-content-hints.js, through the core's `share_content_pages`) runs the same session. Its targets carry no element: the route's frame script holds them, and a pick goes to it.
 
 (function desertfox_browser_module_chrome_hints(scope) {
@@ -44,6 +46,11 @@
     // Two letters, the smallest alphabet hint_letters allows, give make_labels its longest labels: one letter per halving of the targets.
     const MAX_LABEL_CHARS = Math.ceil(Math.log2(MAX_TARGETS));
     const MAX_EARLY_KEYS = 16;
+    // CHROME_HINT_TEXT_CHARS and MAX_CHROME_HINT_TEXT_PARTS of the protocol. A text past the parts is left out, and text mode skips its target.
+    const MAX_TEXT_CHARS = 64;
+    const MAX_TEXT_PARTS = 6;
+    // After a character that left one match picked it, the rest of the typed word still arrives: its letters are dropped this long, as on a page.
+    const TEXT_PICK_GRACE_MS = 300;
     // The extension answers a collect with its first labels within this, or the session ends: a dead extension must not keep the keys.
     const FIRST_DRAW_MS = 2000;
     // A target that moved further than this since its label was drawn is not picked: the label no longer marks it.
@@ -106,13 +113,51 @@
       // `deep`: the bar's close button sits in its shadow root.
       { root: "notification-message", take: "button.notification-button, .notification-link, moz-button.close", deep: true },
     ];
+    // The site panels. Their navigation, back buttons and drop-downs only open a view or a menu. The tracking protection toggles, Clear cookies and site data, Remove certificate exception, the exception remove buttons and the Smartblock toggles all wait.
+    const SITE_PANEL_TAKE = "toolbarbutton, button, moz-button, moz-toggle, menulist";
+    const SITE_PANEL_AT_ONCE_IDS = new Set([
+      "trustpanel-popup-connection",
+      "trustpanel-blocker-see-all",
+      "trustpanel-privacy-link",
+      "trustpanel-clear-cookies-button",
+      "trustpanel-clear-cookie-cancel",
+      "trustpanel-siteinformation-morelink",
+      "identity-popup-security-button",
+      "identity-popup-more-info",
+      "protections-popup-info-button",
+      "protections-popup-report-broken-site-button",
+      "protections-popup-settings-button",
+      "protections-popup-show-report-button",
+    ]);
+    function site_panel_at_once(element) {
+      return element.localName === "menulist" || SITE_PANEL_AT_ONCE_IDS.has(element.id) || has_class(element, "subviewbutton-back") || has_class(element, "moz-button-subviewbutton-nav") || has_class(element, "protections-popup-category") || /^protections-popup-\w+View-settings-button$/.test(element.id);
+    }
+    // The bookmark panel's Remove bookmark button waits. Its Done button, folder and tag expanders, New Folder button and the show-for-new-bookmarks checkbox change nothing that is lost.
+    const BOOKMARK_PANEL_AT_ONCE = new Set(["editBookmarkPanelDoneButton", "editBMPanel_foldersExpander", "editBMPanel_tagsSelectorExpander", "editBMPanel_newFolderButton", "editBookmarkPanel_showForNewBookmarks"]);
+    // The tab group editor's Delete group, Ungroup tabs and Save and close group wait. The rest only add a tab, move the group, copy its links or pick a color. A swatch's radio input is hidden, so its label is the target.
+    const TAB_GROUP_AT_ONCE = new Set(["tabGroupEditor_addNewTabInGroup", "tabGroupEditor_moveGroupToNewWindow", "tabGroupEditor_copyAllLinks", "tab-group-editor-button-cancel", "tab-group-editor-button-create", "tab-group-cancel-suggestions-button", "tab-group-suggestions-load-cancel"]);
+
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
     // `layer_in`: where in the shown view the labels go, when not the view itself. Firefox reads the doorhanger panel's first child as a prompt, so its labels go inside the prompt shown.
     // `user_start_only`: only the binding typed in the panel labels it, never a request alone, because a pick there opens a downloaded file. The panel takes the focus, so no page hears the binding meanwhile.
+    // `find`: a panel with no id of its own. `view_ok`: a panel Firefox shares between views, labelled only while one of these shows.
+    // `at_once`: a panel that can grant, clear or delete. Its controls this names click at once, and every other control waits for Enter (`grants`).
     const PANELS = [
       { id: "appMenu-popup", take: "toolbarbutton, button" },
       { id: DOORHANGER_ID, take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
       { id: "downloadsPanel", take: "richlistitem, button, toolbarbutton", user_start_only: true },
+      // An extension's button runs it, which can give it access to the page (activeTab). That is the pick the nav bar's buttons already make at once.
+      { id: "unified-extensions-panel", take: "toolbarbutton, moz-button" },
+      { id: "trustpanel-popup", take: SITE_PANEL_TAKE, at_once: site_panel_at_once },
+      { id: "identity-popup", take: SITE_PANEL_TAKE, at_once: site_panel_at_once },
+      { id: "protections-popup", take: SITE_PANEL_TAKE, at_once: site_panel_at_once },
+      // The Allow menus of this panel open with a pick, and the user's own key chooses in them. Every remove button and any other control waits.
+      { id: "permission-popup", take: "toolbarbutton, button, menulist", at_once: (element) => element.localName === "menulist" },
+      // The panel opens with the name field focused, so a start waits until the user leaves the field.
+      { id: "editBookmarkPanel", take: "button, toolbarbutton, menulist, checkbox", at_once: (element) => element.localName === "menulist" || BOOKMARK_PANEL_AT_ONCE.has(element.id) },
+      { id: "tab-group-editor", find: (doc) => doc.querySelectorAll("#tab-group-editor > panel.tab-group-editor-panel")[0], take: "toolbarbutton, moz-button, button, label.tab-group-editor-swatch", at_once: (element) => has_class(element, "tab-group-editor-swatch") || TAB_GROUP_AT_ONCE.has(element.id) },
+      // The all-tabs panel is one view of Firefox's shared widget panel, which other views use too.
+      { id: "customizationui-widget-panel", take: "toolbarbutton, button", view_ok: (view) => view.id.startsWith("allTabsMenu-") },
     ];
 
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -162,6 +207,23 @@
       return false;
     }
 
+    // The text that typed hint text matches, as a page's hints read it: the shown text, else the accessible name. A field's own text is what the user typed, so a field has only its name.
+    // Cut and stripped of control and format characters before it leaves, since a bidi mark would reorder what the user sees.
+    function text_of(element, field = core.is_field(element)) {
+      const named = [element.getAttribute?.("aria-label"), element.getAttribute?.("label"), element.getAttribute?.("tooltiptext"), element.getAttribute?.("title"), element.getAttribute?.("placeholder")];
+      const own = field ? [] : [element.innerText ?? element.textContent, ["button", "submit", "reset"].includes(element.type) ? element.value : undefined];
+      for (const raw of [...own, ...named]) {
+        const text = clean_text(raw);
+        if (text !== undefined) return text;
+      }
+      return undefined;
+    }
+    function clean_text(raw) {
+      if (typeof raw !== "string") return undefined;
+      const text = [...raw.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim()].slice(0, MAX_TEXT_CHARS).join("").trim();
+      return text === "" ? undefined : text;
+    }
+
     // The fixed action of each target: a tab is selected, a menu, a drop-down or a bookmarks folder opens, a download row is chosen as a click on it would, a radio is chosen, a text field of a page takes the focus, a button runs its command or is clicked.
     function kind_of(element) {
       if (element.localName === "tab") return "tab";
@@ -208,7 +270,8 @@
       return views.at(-1) ?? panel;
     }
 
-    const open_panels = (doc) => PANELS.map((row) => ({ panel: doc.getElementById(row.id), row })).filter(({ panel }) => panel?.state === "open");
+    const panel_of = (doc, row) => row.find?.(doc) ?? doc.getElementById(row.id);
+    const open_panels = (doc) => PANELS.map((row) => ({ panel: panel_of(doc, row), row })).filter(({ panel, row }) => panel?.state === "open" && (!row.view_ok || row.view_ok(shown_view(panel))));
 
     function panel_targets(panel, row) {
       const view = shown_view(panel);
@@ -455,59 +518,120 @@
       if (tell) send("chrome_hints.end", { session: ended.tag });
     }
 
-    function push_key(key, repeat = false) {
+    // `typed` is the key's event key and its token, as the start or the session took it.
+    function push_key(typed, repeat = false) {
       session.seq++;
-      if (session.spelled_keys) note_typed(session, key, repeat);
-      send("chrome_hints.key", { session: session.tag, seq: session.seq, key });
+      session.last_token = typed.token;
+      if (session.spelled_keys) note_typed(session, typed.token, repeat);
+      send("chrome_hints.key", { session: session.tag, seq: session.seq, key: typed.key, token: typed.token });
     }
 
-    // A page session and a doorhanger session keep the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
-    // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing. On a doorhanger this also stops keys typed for a toolbar label from picking Block or Not now once a prompt takes over the hint key.
+    const is_char_token = (token) => [...token].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(token);
+    // Whether `text` matches the typed `query` as text mode ranks it (`score_text` in src/shared/hints/rank.ts): every word of the query is in the text.
+    const words_of = (text) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const matches_query = (query, text) => text !== undefined && words_of(query).every((word) => text.toLowerCase().includes(word));
+    const has_texts = (owner) => [...owner.targets.values()].some((target) => target.text !== undefined);
+    const matching = (owner, query) => [...owner.targets.values()].filter((target) => matches_query(query, target.text)).length;
+
+    // A page session and a doorhanger session keep what the user's own keys typed, by the extension's picker (src/shared/hints/pick.ts): in label mode a letter that continues a drawn label is kept and Backspace takes one back,
+    // and once `/` opened text mode (`text` is set) a character that still matches a target's text is kept, Backspace takes one back and on empty text goes back to labels. Anything else changes nothing.
+    // A pick there must name the target of that label or text (`spelled`), so an extension that names another one clicks nothing. On a doorhanger this also stops keys typed for a toolbar label from picking Block or Not now once a prompt takes over the hint key.
     // A key the user holds, or one typed before the labels showed a while, pushes that while on, so a key counts only after a pause with labels shown.
-    function note_typed(owner, key, repeat) {
+    function note_typed(owner, token, repeat) {
       if (repeat || time_now(owner.win) < owner.counts_at) {
         owner.counts_at = time_now(owner.win) + LABELS_SEEN_MS;
+        owner.counted_token = undefined;
         return;
       }
       owner.typed_at = time_now(owner.win);
-      if (key === "Backspace") {
+      owner.counted_token = token;
+      if (owner.text !== undefined) return note_text(owner, token);
+      if (token === "<Backspace>") {
         owner.typed = owner.typed.slice(0, -1);
         return;
       }
-      if ([...key].length !== 1 || /\s/u.test(key)) return;
-      const next = owner.typed + key.toLowerCase();
+      // The picker opens text mode only with texts to type against, and only an extension that runs hint mode keys has the picker.
+      if (token === "/" && owner.picker_keys && has_texts(owner)) {
+        owner.typed = "";
+        owner.text = "";
+        return;
+      }
+      if (!is_char_token(token)) return;
+      const next = owner.typed + token.toLowerCase();
       if ([...owner.labels.values()].some((label) => label.startsWith(next))) owner.typed = next;
+    }
+
+    function note_text(owner, token) {
+      // Taken at the key, so a draw that comes between Enter and the pick cannot move it.
+      if (token === "<Enter>") owner.enter_active = owner.active;
+      if (token === "<Backspace>") {
+        owner.text = owner.text === "" ? undefined : owner.text.slice(0, -1);
+        return;
+      }
+      const char = token === "<Space>" ? " " : token;
+      if (char !== " " && !is_char_token(char)) return;
+      if (matching(owner, owner.text + char) > 0) owner.text += char;
     }
 
     // The extension picks within a moment of the key that spelled the label.
     const SPELLED_MS = 2000;
     // A key counts toward a label only this long after the first labels show. A key typed before (one the extension asked to start with, or a tap meant for the page) never saw them.
     const LABELS_SEEN_MS = 300;
-    const spelled = (owner, id) => owner.typed !== "" && owner.labels?.get(id) === owner.typed && time_now(owner.win) - owner.typed_at <= SPELLED_MS;
+    const spelled = (owner, id) => (owner.text === undefined ? owner.typed !== "" && owner.labels?.get(id) === owner.typed : text_spelled(owner, id)) && time_now(owner.win) - owner.typed_at <= SPELLED_MS;
+    // In text mode: the target's text matches what was typed, and the last key was Enter while it was drawn active or a character that left it the one match. Tab moves the active match in the extension alone, so Enter is the user's say on which.
+    function text_spelled(owner, id) {
+      if (!matches_query(owner.text, owner.targets.get(id)?.text)) return false;
+      if (owner.counted_token === "<Enter>") return id === owner.enter_active;
+      return (owner.counted_token === "<Space>" || is_char_token(owner.counted_token ?? "")) && owner.text.trim() !== "" && matching(owner, owner.text) === 1;
+    }
 
     const ENDS = Symbol("ends");
+    const TAKEN = Symbol("taken");
 
-    // A key while labels hold the window: ENDS for Escape or a key with Ctrl, Alt or Meta, the key to hand on, or undefined to leave it alone.
-    // A key that is no letter and no hint key (an arrow, F5) goes on as if no labels showed.
-    function held_key(event) {
-      if (event.ctrlKey || event.altKey || event.metaKey) return ENDS;
+    // A key while labels hold the window: ENDS for Escape, a key the hint keymap binds to `mode.escape` or a key with Ctrl, Alt or Meta, TAKEN for a key it binds to `help.whichkey`, { key, token } to hand on, or undefined to leave it alone.
+    // A key that is no letter and no hint key (an arrow, F5) goes on as if no labels showed. Plain Escape ends whatever the keymap says, so a session never keeps the window's keys while the extension is gone.
+    // The which-key panel of hint mode is not drawn here yet, so its key is only taken, and the labels stay as on a page.
+    function held_key(event, win) {
+      const token = core.token_of(event);
+      const op = token === null ? undefined : core.hint_mode_keys(win)?.get(token);
       const key = [...event.key].length === 1 || NAMED_KEYS.has(event.key) ? event.key : undefined;
-      if (key === undefined && event.key !== "Escape") return undefined;
+      const ends = op === "escape" || event.key === "Escape";
+      if (op === undefined && !ends && (event.ctrlKey || event.altKey || event.metaKey)) return ENDS;
+      if (op === undefined && !ends && key === undefined) return undefined;
       event.preventDefault();
       event.stopImmediatePropagation();
-      return event.key === "Escape" ? ENDS : key;
+      if (ends) return ENDS;
+      return op === "whichkey" ? TAKEN : { key, token };
     }
 
     // While a session runs, each letter and hint key in its window is the session's. Escape ends it here, so it works with no answer from the extension.
+    // Tab and Shift-Tab in label mode turn the overlapping labels here, as on a page. In text mode they move the active match, which the extension alone knows.
     function on_key(event) {
       if (!session || !event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
       if (!core.may_act(session.win)) return end_session(false);
-      const key = held_key(event);
-      if (key === ENDS) return end_session(true);
-      if (key === undefined) return;
+      const typed = held_key(event, session.win);
+      if (typed === ENDS) return end_session(true);
+      if (typed === undefined || typed === TAKEN) return;
       if (session.drawn_gen === 0) {
-        if (session.early_keys.length < MAX_EARLY_KEYS) session.early_keys.push(key);
-      } else push_key(key, event.repeat);
+        if (session.early_keys.length < MAX_EARLY_KEYS) session.early_keys.push(typed);
+        return;
+      }
+      push_key(typed, event.repeat);
+      if ((typed.token === "<Tab>" || typed.token === "<S-Tab>") && session.query === undefined) rotate_labels(session, typed.token === "<S-Tab>");
+    }
+
+    // A character that left one match picked it while the rest of the word was still being typed: those letters are the grace's to drop.
+    let grace = null;
+    function grace_takes(win, event) {
+      if (grace?.win !== win) return false;
+      if (time_now(win) > grace.until) {
+        grace = null;
+        return false;
+      }
+      if (!event.isTrusted || event.ctrlKey || event.altKey || event.metaKey || [...event.key].length !== 1) return false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return true;
     }
 
     // ---- A start from chrome focus.
@@ -569,9 +693,9 @@
     function on_start_key(event) {
       if (!event.isTrusted || event.isComposing || MODIFIER_KEYS.has(event.key)) return;
       if (!core.may_act(starting.win)) return end_start();
-      const key = held_key(event);
-      if (key === ENDS) return end_start();
-      if (key !== undefined && starting.early_keys.length < MAX_EARLY_KEYS) starting.early_keys.push(key);
+      const typed = held_key(event, starting.win);
+      if (typed === ENDS) return end_start();
+      if (typed !== undefined && typed !== TAKEN && starting.early_keys.length < MAX_EARLY_KEYS) starting.early_keys.push(typed);
     }
 
     // A key in a window with no session or start of its own: one of a `hint.browser` binding, with the focus in a place this file labels and not in a field.
@@ -632,7 +756,8 @@
       end_confirm();
       end_session(true);
       if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, spelled_keys: Boolean(page) || panel?.panel.id === DOORHANGER_ID, typed: "", typed_at: 0, counts_at: Infinity, labels: undefined, look: { theme, panel, frame_win, page } };
+      // `picker_keys`: the extension runs hint mode keys, so `/` opens text mode. `query` is the typed text of the last draw, undefined in label mode.
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, spelled_keys: Boolean(page) || panel?.panel.id === DOORHANGER_ID, picker_keys: core.hint_mode_keys(win) !== undefined, typed: "", text: undefined, typed_at: 0, counts_at: Infinity, labels: undefined, query: undefined, look: { theme, panel, frame_win, page } };
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
         add_session_parts(win, found, theme, panel, frame_win, page);
@@ -645,7 +770,12 @@
 
     function add_session_parts(win, found, theme, panel, frame_win, page) {
       const doc = win.document;
-      for (const target of found) session.targets.set(next_target_id++, { ...target, kind: target.element ? kind_of(target.element) : "remote" });
+      for (const target of found) {
+        const kind = target.element ? kind_of(target.element) : "remote";
+        // A target in a content process brings the text its frame script read, which is foreign input here too.
+        const text = session.picker_keys ? (target.element ? text_of(target.element, kind === "field") : clean_text(target.text)) : undefined;
+        session.targets.set(next_target_id++, { ...target, kind, text });
+      }
       const window_layer = make_layer(doc, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
       doc.documentElement.append(window_layer.host);
       session.layers.window = window_layer;
@@ -691,6 +821,20 @@
       return parts;
     }
 
+    // Parts of [id, text] within PART_BYTES, at most MAX_TEXT_PARTS of them. A text past them is dropped from its target too, so the pick check reads only the texts the extension ranks.
+    function text_parts(targets) {
+      const parts = [[]];
+      for (const [id, target] of targets) {
+        if (target.text === undefined) continue;
+        const row = [id, target.text];
+        const last = parts.at(-1);
+        if (last.length === 0 || json_bytes([...last, row]) <= PART_BYTES) last.push(row);
+        else if (parts.length < MAX_TEXT_PARTS) parts.push([row]);
+        else target.text = undefined;
+      }
+      return parts[0].length === 0 ? [] : parts;
+    }
+
     // The checks every start makes of its window, after the window itself.
     function start_problem(win) {
       if (menu_open(win.document)) return "Close the menu first";
@@ -704,6 +848,8 @@
       start_session(tag, win, found.slice(0, MAX_TARGETS), places.page ? "" : theme_text(colors), places);
       const parts = target_parts(session.targets);
       parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
+      const texts = text_parts(session.targets);
+      texts.forEach((rows, part) => send("chrome_hints.texts", { session: tag, part, parts: texts.length, texts: JSON.stringify(rows) }));
       return { ok: true };
     }
 
@@ -833,20 +979,45 @@
     // A page's labels take no theme at all, so their colors are fixed values.
     const PAGE_LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: #7fa3c9; color: #0c0e13; border: 1px solid #7fa3c9; box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
     const LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+    // The active match of text mode swaps the label's two colors, as on a page.
+    const ACTIVE_STYLE = "background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-primary, #7fa3c9);";
+    const PAGE_ACTIVE_STYLE = "background: #0c0e13; color: #7fa3c9;";
+    // The typed text of text mode and the hint key line, after the hint view's `.desertfox-hint-text` and `.desertfox-hint-keys`. Both go first in the layer, so labels paint over them.
+    const QUERY_STYLE = "position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre; background: var(--desertfox-primary, #7fa3c9); color: var(--desertfox-bg-core, #0c0e13); font: bold 12px/1 monospace;";
+    const PAGE_QUERY_STYLE = "position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%); padding: 4px 10px; border-radius: 3px; white-space: pre; background: #7fa3c9; color: #0c0e13; font: bold 12px/1 monospace;";
+    // The key line sits at the right end of the window, so it clears the module's status bar by the height the bar publishes on the window.
+    const KEY_LINE_STYLE = "position: fixed; right: 16px; bottom: calc(8px + var(--desertfox-statusbar-height, 0px)); padding: 4px 8px; white-space: pre; background: var(--desertfox-bg-core, #0c0e13); color: var(--desertfox-fg-core, #f5f5dc); font: 14px system-ui, sans-serif; border-radius: 6px;";
+    const PAGE_KEY_LINE_STYLE = "position: fixed; right: 16px; bottom: calc(8px + var(--desertfox-statusbar-height, 0px)); padding: 4px 8px; white-space: pre; background: #0c0e13; color: #f5f5dc; font: 14px system-ui, sans-serif; border-radius: 6px;";
+    // The hint view's fixed words (`label_key_line` and KEY_LINE_TEXT in src/content/hints/view.ts), less the Space words: a session here has no rapid yet.
+    const KEY_LINE_LABELS = "/: type text \u00b7 Tab: turn labels";
+    const KEY_LINE_TEXT = "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels";
     // The same look as class rules, for the DevTools layers, whose labels the draw makes in many documents. DevTools adopts them in a constructed sheet, since the toolbox ignores an inline <style>. A fixed string of this file.
     const label_rules = `.desertfox-hint { ${LABEL_STYLE} } .desertfox-hint b { ${LABEL_TYPED_STYLE} }`;
 
+    // A box of fixed text with its look inline, all as text: the extension's words never become markup.
+    function text_node(doc, class_name, style, text) {
+      const node = doc.createElementNS(HTML, "div");
+      node.className = class_name;
+      node.style.cssText = style;
+      node.textContent = text;
+      return node;
+    }
+
     // Replaces every label with the rows of one complete draw. Each box is read now, so a label sits where its target is at this draw, and a pick checks against that.
-    function apply_draw(rows, typed_length) {
+    // `query` and `active` are the typed text and the active match of text mode, and `key_line` whether the key line shows.
+    function apply_draw(rows, typed_length, { query, active, key_line }) {
       const doc = session.win.document;
+      const page = Boolean(session.page);
       const by_place = { window: [], panel: [] };
+      if (key_line) by_place.window.push(text_node(doc, "desertfox-hint-keys", page ? PAGE_KEY_LINE_STYLE : KEY_LINE_STYLE, query === undefined ? KEY_LINE_LABELS : KEY_LINE_TEXT));
+      if (query !== undefined) by_place.window.push(text_node(doc, "desertfox-hint-text", page ? PAGE_QUERY_STYLE : QUERY_STYLE, `text: ${query}`));
       const origin = session.layers.panel?.host.getBoundingClientRect();
       for (const [id, text] of rows) {
         const target = session.targets.get(id);
         // A target in a content process has the box the route mapped, at its collect.
         target.drawn = target.element ? window_box(session.win, target.element) : target.box;
         const node = label_node(doc, text, typed_length);
-        node.style.cssText = session.page ? PAGE_LABEL_STYLE : LABEL_STYLE;
+        node.style.cssText = (page ? PAGE_LABEL_STYLE : LABEL_STYLE) + (id === active ? (page ? PAGE_ACTIVE_STYLE : ACTIVE_STYLE) : "");
         node.children[0].style.cssText = LABEL_TYPED_STYLE;
         if (target.place === "panel") {
           node.style.position = "absolute";
@@ -862,19 +1033,52 @@
       session.layers.panel?.box.replaceChildren(...by_place.panel);
     }
 
+    // Turns the stacking order of each set of overlapping labels by one, as the hint view's `rotate_overlaps_`: the top label goes to the bottom, or with `back` the bottom one comes to the top. The boxes are read now, so a label that moved counts where it is.
+    function rotate_labels(owner, back) {
+      for (const layer of [owner.layers.window, owner.layers.panel]) {
+        if (!layer) continue;
+        const order = [...layer.box.children];
+        const labels = order.filter((node) => node.className === "desertfox-hint");
+        const boxes = labels.map((node) => node.getBoundingClientRect());
+        for (const group of overlap_groups(boxes)) {
+          const stack = group.map((index) => labels[index]);
+          const moved = back ? stack[0] : stack.at(-1);
+          order.splice(order.indexOf(moved), 1);
+          order.splice(back ? order.indexOf(stack.at(-1)) + 1 : order.indexOf(stack[0]), 0, moved);
+        }
+        layer.box.replaceChildren(...order);
+      }
+    }
+
+    // The sets of two or more boxes that overlap, each in drawing order. Overlap is transitive: a box that overlaps any box of a set joins it.
+    function overlap_groups(boxes) {
+      const overlaps = (a, b) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+      const groups = [];
+      boxes.forEach((box, index) => {
+        const joined = groups.filter((group) => group.some((other) => overlaps(boxes[other], box)));
+        const merged = [...joined.flat(), index].sort((a, b) => a - b);
+        for (const group of joined) groups.splice(groups.indexOf(group), 1);
+        groups.push(merged);
+      });
+      return groups.filter((group) => group.length > 1);
+    }
+
     // A draw comes in parts, and only a whole draw shows: a part that never comes leaves the labels before it, and the next draw replaces them. A part of an older draw is dropped.
     // `owner` is a session with `targets`, `drawn_gen` and `pending`. Returns the rows of a whole draw once its last part is in, else undefined.
-    function whole_draw(owner, { gen, part, parts, typed, labels }) {
+    // Text mode's `query` is short text with no control or format character and `active` an id of the session, and every part of a draw carries the same.
+    function whole_draw(owner, { gen, part, parts, typed, labels, query, active, key_line }) {
       if (!Number.isInteger(gen) || gen <= owner.drawn_gen || !Number.isInteger(parts) || parts < 1 || parts > MAX_PARTS || !Number.isInteger(part) || part < 0 || part >= parts) return undefined;
       if (typeof typed !== "string" || [...typed].length > MAX_LABEL_CHARS) return undefined;
+      if (query !== undefined && (typeof query !== "string" || [...query].length > MAX_TEXT_CHARS || /[\p{Cc}\p{Cf}]/u.test(query))) return undefined;
+      if ((active !== undefined && !owner.targets.has(active)) || (key_line !== undefined && key_line !== 1)) return undefined;
       const rows = label_rows(labels, owner.targets);
       if (!rows) return undefined;
       if (owner.pending?.gen !== gen) {
         if (owner.pending && owner.pending.gen > gen) return undefined;
-        owner.pending = { gen, parts, typed, got: new Map() };
+        owner.pending = { gen, parts, typed, query, active, key_line, got: new Map() };
       }
       const pending = owner.pending;
-      if (pending.parts !== parts || pending.typed !== typed) return undefined;
+      if (pending.parts !== parts || pending.typed !== typed || pending.query !== query || pending.active !== active || pending.key_line !== key_line) return undefined;
       pending.got.set(part, rows);
       if (pending.got.size < parts) return undefined;
       owner.pending = undefined;
@@ -897,7 +1101,9 @@
         session.counts_at = time_now(session.win) + LABELS_SEEN_MS;
       }
       session.drawn_gen = args.gen;
-      apply_draw(rows_drawn, [...args.typed].length);
+      session.query = args.query;
+      session.active = args.active;
+      apply_draw(rows_drawn, [...args.typed].length, args);
       if (first) for (const key of session.early_keys.splice(0)) push_key(key);
       return { ok: true };
     }
@@ -931,9 +1137,11 @@
     const bar_of = (element) => closest_of(element, (at) => at.localName === "notification-message");
     const notification_of = (prompt) => prompt.notification ?? prompt.wrappedJSObject?.notification;
 
-    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
+    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, a notification bar, the downloads lists, the site, permission, bookmark and tab group panels, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
     function grants(win, element) {
       if (page_row(element.ownerDocument)?.grants?.(element)) return true;
+      const grant_panel = PANELS.find((row) => row.at_once && holds(panel_of(element.ownerDocument, row), element));
+      if (grant_panel) return !grant_panel.at_once(element);
       const prompt = prompt_of(element);
       if (prompt) return prompt_grants(prompt, element);
       const bar = bar_of(element);
@@ -1031,7 +1239,7 @@
         bar,
         notification: prompt ? notification_of(prompt) : undefined,
         download: in_blocked_view ? win.document.getElementById("downloadsListBox")?.selectedItem : undefined,
-        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), bar?.getAttribute("value"), row?.getAttribute("state"), row?.getAttribute("verdict")]),
+        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), bar?.getAttribute("value"), row?.getAttribute("state"), row?.getAttribute("verdict"), element.hasAttribute("pressed")]),
       };
     }
 
@@ -1166,7 +1374,9 @@
       const { win, look, keyed, page } = session;
       const named_by_keys = !session.spelled_keys || spelled(session, id);
       const remote = element ? undefined : take_remote(page);
+      const picked_by_text = session.query !== undefined && session.last_token !== "<Enter>";
       end_session(false);
+      if (picked_by_text) grace = { win, until: time_now(win) + TEXT_PICK_GRACE_MS };
       if (!named_by_keys) {
         remote?.clear();
         return { ok: false, error: "The keys typed do not name this hint" };
@@ -1266,6 +1476,7 @@
       const record = { held: [], typed: [] };
       const keydown = (event) => {
         try {
+          if (grace_takes(win, event)) return;
           if (confirming?.win === win) on_confirm_key(event);
           else if (session?.win === win) on_key(event);
           else if (starting?.win === win) on_start_key(event);
@@ -1326,6 +1537,7 @@
     // The pref off ends a session at once, so no layer or listener outlives the module.
     const on_pref = () => {
       if (enabled_by_pref()) return;
+      grace = null;
       end_start();
       end_confirm();
       end_session(false);
@@ -1364,6 +1576,7 @@
     core.register_kind("page_hints.collect", page_collect);
     core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined || content_kind(browser) !== undefined, start: start_page });
     core.set_hello_flag("page_hints", true);
+    core.set_hello_flag("hint_mode_keys", true);
     // The DevTools hints draw with these, so their label checks and layer stay one code.
     core.share_hint_drawing({ MAX_TARGETS, label_rules, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
   }

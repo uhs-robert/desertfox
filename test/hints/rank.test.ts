@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { rank_items, score_text } from "../../src/content/hints/rank.ts";
+import { rank_items, score_text } from "../../src/shared/hints/rank.ts";
 
 const order = (texts: string[], query: string) => rank_items(texts, query).map((item) => item.index);
 
