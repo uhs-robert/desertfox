@@ -115,12 +115,13 @@ export function make_tab_visual_handler(deps: TabVisualDeps, action_wait_ms = AC
     answered: (id: number, answer: Promise<unknown>): void => {
       void keep_chain(answer).then(() => noted.find((entry) => entry.id === id)?.settle());
     },
+    // The limit covers the whole wait, the queue included. Past it the action reads the selection as it is.
     idle: async (tab_id: number | undefined): Promise<void> => {
       const own = noted.filter((entry) => entry.tab_id === tab_id).map((entry) => entry.settled);
       let timer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([Promise.all(own), new Promise<void>((done) => (timer = setTimeout(done, action_wait_ms)))]);
+      const settled_moves = Promise.all(own).then(() => in_turn(async () => {}));
+      await Promise.race([settled_moves, new Promise<void>((done) => (timer = setTimeout(done, action_wait_ms)))]);
       clearTimeout(timer);
-      await in_turn(async () => {});
     },
     forget_window: (window_id: number): Promise<void> => in_turn(() => deps.remove_record(window_id)),
   };

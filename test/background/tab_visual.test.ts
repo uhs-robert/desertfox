@@ -224,6 +224,23 @@ test("a run that never answers holds its tab's action only until the wait limit"
   assert.ok(Date.now() - began < 1000);
 });
 
+test("the wait limit also covers a move stuck in the queue, and the action then goes on", async () => {
+  const deps: TabVisualDeps = {
+    // A window whose read never answers holds the queue.
+    tabs_in_window: async (window_id) => (window_id === 2 ? never.then(() => []) : five()),
+    collapsed_group_ids: async () => new Set(),
+    set_highlighted: async () => {},
+    read_record: async () => undefined,
+    write_record: async () => {},
+    remove_record: async () => {},
+  };
+  const handler = make_tab_visual_handler(deps, 20);
+  void handler.run(2, { action: "start" });
+  const began = Date.now();
+  await handler.idle(PAGE);
+  assert.ok(Date.now() - began < 1000);
+});
+
 test("forgetting a window drops its record", async () => {
   const { handler, record } = make(five(), [], { anchor: 3, cursor: 4 });
   await handler.forget_window(1);
