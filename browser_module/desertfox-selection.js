@@ -110,7 +110,8 @@
         const asked = awaiting.get(data.req);
         // Only the browser asked, for the document asked about and still shown there. A reply of any other sender or document is dropped and the wait runs on until its timer.
         if (!asked || asked.browser !== target || data.inner !== asked.inner || target.innerWindowID !== asked.inner) return;
-        if (typeof data.text !== "string" || utf8_bytes(data.text) > MAX_REPLY_BYTES) return asked.settle(undefined);
+        // A UTF-16 length never exceeds the UTF-8 byte count, so the cheap check goes first and a huge string is never encoded.
+        if (typeof data.text !== "string" || data.text.length > MAX_REPLY_BYTES || utf8_bytes(data.text) > MAX_REPLY_BYTES) return asked.settle(undefined);
         asked.settle(data.text);
       } catch (error) {
         core.log_once(`a selection reply was dropped after an error: ${error}`);
@@ -137,8 +138,9 @@
       if (browser.isRemoteBrowser !== true) return refuse(browser.currentURI?.scheme === "about" ? "This page does not run in the parent process" : "Only about: pages are read here");
       const text = await ask_frame_script(browser);
       if (text === undefined) return refuse(NO_SELECTION);
-      // The user may have switched tabs or turned the module off while the frame script answered.
-      if (!core.may_act(win) || win.gBrowser.selectedTab !== tab) return refuse("The tab that asked is no longer selected");
+      // The user may have turned the module off or switched tabs while the frame script answered.
+      if (!core.may_act(win)) return refuse("The browser module may not act in this window");
+      if (win.gBrowser.selectedTab !== tab) return refuse("The tab that asked is no longer selected");
       return { ok: true, value: cleaned(text) };
     });
   }

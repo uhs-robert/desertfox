@@ -169,7 +169,9 @@ export async function run_cases(context) {
     await poll_until("the error page", () => in_selected_page(`(win) => win.document.documentURI.startsWith("about:neterror")`));
     const picked = await in_selected_page(`(win) => {
       const doc = win.document;
-      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+      // The error page keeps its text in the open shadow root of net-error-card.
+      const root = doc.querySelector("net-error-card")?.shadowRoot ?? doc.body;
+      const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const word = /[A-Za-z]{5,}/.exec(node.textContent)?.[0];
         if (!word || !node.parentElement?.checkVisibility?.()) continue;
@@ -177,10 +179,14 @@ export async function run_cases(context) {
         range.selectNodeContents(node);
         win.getSelection().removeAllRanges();
         win.getSelection().addRange(range);
-        return { word };
+        // The page's own selection may stop at the shadow boundary, so the word is what the frame script must return.
+        return { word: win.getSelection().toString().match(/[A-Za-z]{5,}/)?.[0] ?? word };
       }
       return { problem: "no text on the page" };
     }`);
+    // Count the frame script's replies from the chrome side, so the case passes only when that path answered.
+    await chrome(`(async () => { const core = Services.desertfox_key_test_selection ??= { replies: 0 }; core.replies = 0; core.listener ??= () => core.replies++; Services.mm.addMessageListener("desertfox-browser-module:selection-text", core.listener); })()`);
+    on_teardown(() => chrome(`(async () => { const spy = Services.desertfox_key_test_selection; if (spy) Services.mm.removeMessageListener("desertfox-browser-module:selection-text", spy.listener); })()`));
     expect(picked.word?.length > 0, `nothing was selected on the error page: ${picked.problem}`);
     await focus_page();
     await press_keys(":");
@@ -189,6 +195,7 @@ export async function run_cases(context) {
     await panel.line_holds("search");
     await press_keys("-k", "Return");
     await poll_until("the search to open a tab whose address holds the selected text", async () => (await search_tab_address(encodeURIComponent(picked.word))) > 0, { timeout_ms: 10000 });
+    expect((await chrome(`(async () => Services.desertfox_key_test_selection.replies)()`)) > 0, "the frame script of the selection feature answered");
     await close_others();
   });
 

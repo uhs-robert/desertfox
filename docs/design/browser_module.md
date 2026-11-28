@@ -309,7 +309,7 @@ Status: built. The module side is `desertfox-firefox-pages.js`, the extension si
 
 ## Selection on locked pages
 
-Status: built. The module side is `desertfox-selection.js`. The extension side is `ask_selection` in `src/background/selection_ask.ts`. A parent-process about: page is read in the parent. A page in a content process (addons.mozilla.org, the PDF viewer, Reader View, error pages, about:preferences) is read by a small frame script of the same file.
+Status: built. The module side is `desertfox-selection.js`. The extension side is `ask_selection` in `src/background/selection_ask.ts`. A parent-process about: page is read in the parent. A page in a content process (addons.mozilla.org, the PDF viewer, Reader View, error pages, about:protections) is read by a small frame script of the same file.
 
 A command that reads the `@selection` source (the command line prefill, yank, search, `open` with text) asks the tab's content script. A locked page has none, so the extension asks the module instead.
 
