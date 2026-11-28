@@ -19,6 +19,7 @@ import {
   check_module_args,
   EXTENSION_TO_MODULE_KINDS,
   MAX_HELLO_BYTES,
+  HELLO_FEATURES,
   MAX_INSERT_KEY_ROWS,
   insert_keys_of,
   validate_scope_tree,
@@ -590,9 +591,9 @@ test("the hello says pane_moves only when it is true, and pane.move takes left, 
   for (const direction of ["up", "window", 1, undefined]) assert.equal(valid(direction), false, String(direction));
 });
 
-test("the hello says hint_mode_keys only when it is true, a key may carry a token, a draw may carry text mode's fields, and texts come as their own push", () => {
-  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", hint_mode_keys: true }), { ok: true, value: { v: V, module_version: "1", hint_mode_keys: true } });
-  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", hint_mode_keys: 1 }), { ok: true, value: { v: V, module_version: "1" } });
+test("the hello says hint mode keys as the code hk in f, a key may carry a token, a draw may carry text mode's fields, and texts come as their own push", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", f: "hk" }), { ok: true, value: { v: V, module_version: "1", f: "hk" } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", hint_mode_keys: true }), { ok: true, value: { v: V, module_version: "1" } }, "the long flag still read");
   const key = (args: Record<string, unknown>) => validate_message({ v: V, id: "m1", kind: "chrome_hints.key", args: { session: 1, seq: 1, key: "Tab", ...args } }, MODULE_TO_EXTENSION_KINDS);
   assert.ok(key({}).ok, "an older module's key without a token was refused");
   assert.ok(key({ token: "<S-Tab>" }).ok);
@@ -614,10 +615,19 @@ test("selection.read takes a tab id only and answers with text, so no address or
   assert.equal(EXTENSION_TO_MODULE_KINDS["selection.read"]!.reply, true);
 });
 
+test("the hello's f keeps the known codes once each, skips unknown ones and drops a value that is not short lowercase codes", () => {
+  const f_of = (f: unknown) => { const checked = validate_module_hello({ v: V, module_version: "1", f }); assert.ok(checked.ok, JSON.stringify(f)); return checked.value.f; };
+  assert.equal(f_of("hk"), "hk");
+  assert.equal(f_of("zz hk q hk"), "hk", "an unknown code or a repeat was kept");
+  assert.equal(f_of("zz q"), undefined, "a list of unknown codes left an empty f");
+  for (const bad of ["HK", "hkx", " hk", "hk ", "hk  zz", "hk,zz", "h\u202ek", "", ["hk"], 1, true, `hk ${"zz ".repeat(30)}zz`]) assert.equal(f_of(bad), undefined, JSON.stringify(bad));
+  assert.match((validate_module_hello({ v: V, module_version: "1", f: "z".repeat(400) }) as { problem: string }).problem, /^hello is \d+ bytes, over the 320 byte cap: a browser module newer than this DesertFox sends more, so update DesertFox$/);
+});
+
 test("the hello says mode_keys only when it is true, and a hello with every flag and the longest version still fits", () => {
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", mode_keys: true }), { ok: true, value: { v: V, module_version: "1", mode_keys: true } });
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", mode_keys: "true" }), { ok: true, value: { v: V, module_version: "1" } });
-  const every_flag = { v: V, module_version: "x".repeat(32), bar: true, bar_message: true, devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, page_hints: true, firefox_pages: true, pane_moves: true, which_key_root: true, mode_keys: true };
+  const every_flag = { v: V, module_version: "x".repeat(32), bar: true, bar_message: true, devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, page_hints: true, firefox_pages: true, pane_moves: true, which_key_root: true, mode_keys: true, f: Object.values(HELLO_FEATURES).join(" ") };
   assert.ok(validate_module_hello(every_flag).ok, "every flag with a 32 character version");
   assert.ok(new TextEncoder().encode(JSON.stringify(every_flag)).length <= MAX_HELLO_BYTES);
 });

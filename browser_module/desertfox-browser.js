@@ -22,7 +22,7 @@
 //   on_hello(fn)               In the sandbox: run `fn` each time the module says a new hello to a DesertFox (not a rewrite for a flag), before that DesertFox can push anything, so a feature drops what an earlier DesertFox pushed.
 //   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
-//   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
+//   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS or HELLO_FEATURES below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
 //   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), field_key(context)?, reset(win?), pending(win), take_held(win, end)?, ignores(browser)? }. ignores says the tab passes every key to the page, so a taker with no field_key leaves Escape alone there.
 //                              key gets every key the module may take on a page, after the guards, while no text field has the focus: context = { window, browser, tab, event, tree, row_runs, in_field, insert_keys }, `tree` the state's raw tree or undefined,
 //                              `row_runs` whether a single-key row would run the key, `in_field` false here, `insert_keys` the state's insert table as a Map of key token to command id, or undefined. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
@@ -341,17 +341,20 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "mode_keys", "hint_mode_keys"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "mode_keys"];
+    // A newer feature goes out as its short code in the hello's `f`, the codes joined by one space (HELLO_FEATURES in the protocol), so the hello stays small.
+    const HELLO_FEATURES = { hint_mode_keys: "hk" };
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
     function say_hello(extension, again = false) {
       if (!active || !extension || (hello_for.has(extension) && !again) || !enabled_by_pref()) return;
       hello_for.add(extension);
-      const flags = Object.fromEntries([...hello_flags].map((name) => [name, true]));
+      const flags = Object.fromEntries([...hello_flags].filter((name) => HELLO_FLAGS.includes(name)).map((name) => [name, true]));
+      const features = [...hello_flags].filter((name) => Object.hasOwn(HELLO_FEATURES, name)).map((name) => HELLO_FEATURES[name]);
       // A rewrite for a flag is no new hello: the extension sends the DevTools table once per matched hello, so a feature must keep what it has.
       if (!again) for (const fn of hello_listeners) fn();
-      write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION, ...flags });
+      write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION, ...flags, ...(features.length > 0 && { f: features.join(" ") }) });
     }
 
     function take_back_hello() {
@@ -1196,7 +1199,7 @@
       },
       log_once,
       set_hello_flag(name, on) {
-        if (!HELLO_FLAGS.includes(name) || typeof on !== "boolean") {
+        if ((!HELLO_FLAGS.includes(name) && !Object.hasOwn(HELLO_FEATURES, name)) || typeof on !== "boolean") {
           log_once(`refused the hello flag ${String(name)}`);
           return false;
         }

@@ -3,6 +3,7 @@
 # Usage: sudo browser_module/install.sh [--uninstall]
 # DESERTFOX_FIREFOX_DIR names the Firefox install folder when it is not /usr/lib/firefox.
 # A loader that reads the folder must already be in place (see docs/design/browser_module.md). This script makes no loader, never touches mozilla.cfg and never creates the folder.
+# The module needs DesertFox 1.0.3, or a beta after 1.0.2.88: an older DesertFox refuses the module's hello as too large.
 set -euo pipefail
 
 firefox_dir=${DESERTFOX_FIREFOX_DIR:-/usr/lib/firefox}
@@ -57,3 +58,4 @@ while IFS= read -r name; do
   printf '%s\n' "${wanted[@]}" | grep -qxF -- "$name" || rm -f -- "$drop_in_dir/$name"
 done < <(installed_names)
 echo "browser module installed in $drop_in_dir: ${wanted[*]}. Set desertfox.browser_module.enabled to true in about:config, turn on the setting browser_module in DesertFox, then restart Firefox."
+echo "It needs DesertFox 1.0.3, or a beta after 1.0.2.88. An older DesertFox shows the hello as too large in its browser module setting."

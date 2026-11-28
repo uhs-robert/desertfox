@@ -572,7 +572,8 @@ test("with hint mode keys each target's text goes out cut and stripped, a field 
   assert.equal(by_id.get(run.id_of(5, long)!), "x".repeat(protocol.CHROME_HINT_TEXT_CHARS));
   assert.equal(by_id.get(run.id_of(5, search)!), "Search settings", "a field's typed text left the page");
   assert.equal(by_id.has(run.id_of(5, blank)!), false);
-  assert.equal((run.firefox.hello() as { hint_mode_keys?: true }).hint_mode_keys, true);
+  assert.equal((run.firefox.hello() as { f?: string }).f, "hk");
+  assert.ok(protocol.validate_module_hello(run.firefox.hello()).ok);
 
   const older = start_on("about:preferences", build);
   older.hint_key();

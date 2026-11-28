@@ -234,8 +234,20 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list. `hint_mode_keys` says its chrome and page sessions send each key as a token and the targets' texts (`chrome_hints.texts`).
-export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true; mode_keys?: true; hint_mode_keys?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list. `f` lists the codes of HELLO_FEATURES that the module runs.
+export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true; mode_keys?: true; f?: string };
+// Each new feature says itself in the hello as a short code in `f`, the codes joined by one space, and not as a flag of its own: an extension before the 320 byte cap refuses a hello over 256 bytes, and the flags above already fill most of that.
+// `hk`: the chrome and page sessions send each key as a token and the targets' texts (`chrome_hints.texts`).
+export const HELLO_FEATURES = { hint_mode_keys: "hk" } as const;
+export const MAX_HELLO_FEATURE_CHARS = 64;
+const KNOWN_FEATURES: readonly string[] = Object.values(HELLO_FEATURES);
+
+// The known codes of a hello's `f`, joined by one space, or undefined. A value that is not codes of one or two lowercase letters is dropped whole, and a code this version does not know is skipped, so a newer module can add codes.
+function hello_features_of(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > MAX_HELLO_FEATURE_CHARS || !/^[a-z]{1,2}(?: [a-z]{1,2})*$/.test(value)) return undefined;
+  const known = [...new Set(value.split(" "))].filter((code) => KNOWN_FEATURES.includes(code));
+  return known.length > 0 ? known.join(" ") : undefined;
+}
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -523,11 +535,12 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   } catch {
     return bad("hello is not plain data");
   }
-  if (size > MAX_HELLO_BYTES) return bad("hello is too large");
+  if (size > MAX_HELLO_BYTES) return bad(`hello is ${size} bytes, over the ${MAX_HELLO_BYTES} byte cap: a browser module newer than this DesertFox sends more, so update DesertFox`);
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }), ...(value.mode_keys === true && { mode_keys: true as const }), ...(value.hint_mode_keys === true && { hint_mode_keys: true as const }) } };
+  const features = hello_features_of(value.f);
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }), ...(value.mode_keys === true && { mode_keys: true as const }), ...(features && { f: features }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
