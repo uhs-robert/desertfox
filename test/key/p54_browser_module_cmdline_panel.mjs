@@ -126,6 +126,36 @@ export async function run_cases(context) {
     await close_others();
   });
 
+  // The panel's own `search` reads @selection from the tab the line opened over, which has no content script. The query goes into a new tab's address.
+  const search_tab_address = (word) => chrome(`(async () => { const w = ${W}; return w.gBrowser.tabs.map((tab) => [tab.linkedBrowser.currentURI.spec, tab.linkedBrowser.userTypedValue ?? ""].join(" ")).filter((text) => text.includes(${JSON.stringify(word)})).length; })()`);
+  const select_on_preferences = (pick) =>
+    chrome(`(async () => { const b = ${W}.gBrowser.selectedBrowser; const doc = b.contentDocument; const selection = doc.defaultView.getSelection(); ${pick} return text; })()`);
+
+  await run_case("a bare :search typed in the panel searches the text selected on about:preferences", async () => {
+    await prefs_with_tab_after();
+    const word = await select_on_preferences(`const el = doc.querySelector("#categories .category-name, .category-name"); selection.selectAllChildren(el); const text = el.textContent.trim();`);
+    expect(word.length > 0, "nothing was selected on about:preferences");
+    await press_keys(":");
+    await panel.wait_open(":");
+    await press_keys("search");
+    await panel.line_holds("search");
+    await press_keys("-k", "Return");
+    await poll_until("the search to open a tab whose address holds the selected text", async () => (await search_tab_address(encodeURIComponent(word))) > 0, { timeout_ms: 10000 });
+    await close_others();
+  });
+
+  await run_case("a bare :search typed in the panel searches the range selected in the search box of about:preferences", async () => {
+    await prefs_with_tab_after();
+    await chrome(`(async () => { const doc = ${W}.gBrowser.selectedBrowser.contentDocument; const box = doc.getElementById("searchInput"); box.focus(); box.value = "dfzzfield word"; const input = box.inputEl ?? box; input.setSelectionRange?.(2, 7); })()`);
+    await press_keys(":");
+    await panel.wait_open(":");
+    await press_keys("search");
+    await panel.line_holds("search");
+    await press_keys("-k", "Return");
+    await poll_until("the search to open a tab whose address holds the field range", async () => (await search_tab_address("zzfie")) > 0, { timeout_ms: 10000 });
+    await close_others();
+  });
+
   await run_case("when the module refuses the panel, : opens the address bar with df", async () => {
     await prefs_with_tab_after();
     // A stray element under the panel's id: the module refuses a second panel, as it would one it cannot open.

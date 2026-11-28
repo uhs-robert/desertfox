@@ -44,23 +44,23 @@
       return win ? { win, tab } : undefined;
     }
 
-    // The document that holds the focus, found through the frames that hold it.
-    function focused_document(doc) {
+    // The focused element and its document, followed through shadow roots (the core's `deep_active`) and the frames that hold the focus. The core's `focused_element` starts from a chrome window, so it cannot take the tab's content document.
+    function focus_of(doc) {
+      let element = core.deep_active(doc);
       for (let depth = 0; depth < MAX_FRAME_DEPTH; depth++) {
-        const active = doc.activeElement;
-        const inner = active && (active.localName === "iframe" || active.localName === "frame" || active.localName === "browser") ? active.contentDocument : null;
+        const inner = element && (element.localName === "iframe" || element.localName === "frame" || element.localName === "browser") ? element.contentDocument : null;
         if (!inner) break;
         doc = inner;
+        element = core.deep_active(inner);
       }
-      return doc;
+      return { doc, element };
     }
 
     // A selected range in a text field first, then the page's own selection, as `selected_text` does on a web page.
-    function selected_text(doc) {
-      const active = doc.activeElement;
-      if (active && (active.localName === "input" || active.localName === "textarea")) {
+    function selected_text({ doc, element }) {
+      if (element && (element.localName === "input" || element.localName === "textarea")) {
         try {
-          const { selectionStart, selectionEnd, value } = active;
+          const { selectionStart, selectionEnd, value } = element;
           if (selectionStart !== null && selectionEnd !== null && selectionEnd > selectionStart) return String(value).slice(selectionStart, selectionEnd);
         } catch (_) {
           // An input type with no text selection (a checkbox) throws. The page selection then stands.
@@ -69,7 +69,8 @@
       return String(doc.defaultView?.getSelection?.() ?? "");
     }
 
-    const cleaned = (text) => [...text.replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, MAX_CHARS).join("");
+    // Line breaks and tabs become a space, so two selected lines stay two words. The extension keeps its own copy of this rule (`cleaned_line` in selection_ask.ts).
+    const cleaned = (text) => [...text.replace(/[\r\n\t]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, MAX_CHARS).join("");
 
     core.register_kind("selection.read", ({ tab_id }) => {
       const found = window_of(tab_id);
@@ -83,7 +84,7 @@
       if (browser.currentURI?.scheme !== "about") return refuse("Only about: pages are read here");
       const content = browser.contentWindow;
       if (!content?.document) return refuse("This page does not run in the parent process");
-      return { ok: true, value: cleaned(selected_text(focused_document(content.document))) };
+      return { ok: true, value: cleaned(selected_text(focus_of(content.document))) };
     });
   }
 })(this);

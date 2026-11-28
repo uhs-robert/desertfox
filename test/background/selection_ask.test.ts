@@ -59,7 +59,7 @@ test("a module that fails or refuses leaves no selection", async () => {
 });
 
 test("the module's text loses control and format characters and is cut at 1000 characters", () => {
-  assert.equal(cleaned_module_selection("a\u0000b\nc\u200Dd\u202Ee"), "abcde");
+  assert.equal(cleaned_module_selection("a\u0000b\nc\t\r\nd\u200De\u202Ef"), "ab c def");
   assert.equal(cleaned_module_selection("x".repeat(1500)).length, 1000);
   assert.equal([...cleaned_module_selection("\u{1F600}".repeat(1200))].length, 1000);
 });

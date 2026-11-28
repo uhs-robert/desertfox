@@ -7,6 +7,7 @@ import type { CmdlineOpened, PanelCmdlineOpened } from "../shared/messages/conte
 import { keep_chain } from "../shared/swallow.ts";
 import type { CallResult } from "./browser_module_call.ts";
 import type { Asker } from "./complete_items.ts";
+import { cleaned_line } from "./selection_ask.ts";
 
 // The panel is no frame of the tab. The line it opens marks this id as the tab's opener, so the opener checks of the in-page line admit the panel's page and no frame of the tab.
 export const PANEL_FRAME_ID = -1;
@@ -41,7 +42,7 @@ function panel_reply_of(value: string | undefined): { key: string; typed: string
   }
   const { key, typed } = (typeof reply === "object" && reply !== null ? reply : {}) as { key?: unknown; typed?: unknown };
   if (typeof key !== "string" || !PANEL_KEY.test(key)) return undefined;
-  return { key, typed: typeof typed === "string" ? [...typed.replace(/[\p{Cc}\p{Cf}]/gu, "")].slice(0, MAX_TYPED_CHARS).join("") : "" };
+  return { key, typed: typeof typed === "string" ? cleaned_line(typed, MAX_TYPED_CHARS) : "" };
 }
 
 const is_record = (value: unknown): value is PanelRecord => {

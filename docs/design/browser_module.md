@@ -294,7 +294,7 @@ A command that reads the `@selection` source (the command line prefill, yank, se
 - The extension asks the module only after the content script gave no answer, and only for the top frame. A module that has no such kind refuses it, and the extension reads no selection, as before. The hello has no flag for it.
 - The module refuses unless the tab is still the selected tab of its window, `may_act` allows the window and the tab shows an about: address whose page has a window in the parent process. A selected range in the focused field wins, then the page selection, found through the frames that hold the focus. A field with no selected range leaves the page selection.
 - Input fields count, as on a web page. A private tab is read when the module may act in its window, and the line records no history for it, as for any private line.
-- The module strips control and format characters and cuts the text at 1000 characters. The extension does both again on the reply, because the reply is foreign input. The text is data: it is typed into a line or a query and never run or used as an address.
+- The module turns line breaks and tabs into one space, so two selected lines stay two words, strips the other control and format characters and cuts the text at 1000 characters. The extension does the same again on the reply (`cleaned_line`, shared with the panel's typed keys), because the reply is foreign input. The text is data: it is typed into a line or used as an encoded search query, and never run or used as an address itself. The focused field is found with the core's `deep_active`, so a field inside a shadow root counts.
 
 ## Page code on locked pages
 

@@ -74,8 +74,8 @@ test("a focused frame is read through to its own document", async () => {
 
 test("control and format characters are stripped and the text is cut at 1000 characters", async () => {
   const { a, ids, ask, show } = world();
-  show(a, "about", page_document("a\u0000b\nc‍d"));
-  assert.deepEqual(await ask({ tab_id: ids.a }), { ok: true, value: "abcd" });
+  show(a, "about", page_document("a\u0000b\nc\t\r\nd\u200De"));
+  assert.deepEqual(await ask({ tab_id: ids.a }), { ok: true, value: "ab c de" });
   show(a, "about", page_document("x".repeat(1500)));
   assert.equal((await ask({ tab_id: ids.a })).value?.length, 1000);
 });
