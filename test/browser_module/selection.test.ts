@@ -181,6 +181,8 @@ test("a reply that comes after the timer is dropped", async () => {
   firefox.run_timers();
   assert.deepEqual(await asked.reply(), { ok: false, error: "No selection could be read from this page" });
   text_reply(firefox, browser, { req: requests()[0]!.data.req, inner: 10, text: "late" });
+  await asked.turns();
+  assert.deepEqual(await asked.reply(), { ok: false, error: "No selection could be read from this page" });
 });
 
 test("the tab switched away while the frame script answered is refused", async () => {
@@ -239,4 +241,25 @@ test("the frame script ignores a request with no integer id and answers nothing 
   const off = frame_child(firefox, page_document("words"), { pref: false });
   off.send({ req: 1 });
   assert.deepEqual(plain(off.sent), []);
+});
+
+test("a reply for the document asked about is dropped once the tab shows another document", async () => {
+  const { firefox, a, ids, ask_later, remote, requests } = world();
+  const browser = remote(a);
+  const asked = ask_later({ tab_id: ids.a });
+  await asked.turns();
+  // A reload: the reply still names the old document, and the tab no longer shows it.
+  (browser as { innerWindowID: number }).innerWindowID = 11;
+  text_reply(firefox, browser, { req: requests()[0]!.data.req, inner: 10, text: "old page" });
+  firefox.run_timers();
+  assert.deepEqual(await asked.reply(), { ok: false, error: "No selection could be read from this page" });
+});
+
+test("a module that shuts down ends a pending read with no selection", async () => {
+  const { firefox, a, ids, ask_later, remote } = world();
+  remote(a);
+  const asked = ask_later({ tab_id: ids.a });
+  await asked.turns();
+  (firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
+  assert.equal((await asked.reply()).value, undefined);
 });
