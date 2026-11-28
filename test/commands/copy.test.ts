@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { format_page_link } from "../../src/content/page/copy.ts";
-import type { PageLinkFacts } from "../../src/content/page/copy.ts";
+import { format_page_link } from "../../src/shared/copy/page_link.ts";
+import type { PageLinkFacts } from "../../src/shared/copy/page_link.ts";
 
 const facts: PageLinkFacts = {
   url: "https://a.com/p?x=(1)",
