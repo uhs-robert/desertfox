@@ -27,6 +27,9 @@ export type CheckCommandArgs = (id: string, args: Record<string, unknown> | unde
 // A guard asks about the page's focus or content, which a locked page cannot answer.
 const has_guard = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || leaf.when_present !== undefined || leaf.otherwise !== undefined || leaf.otherwise_page !== undefined;
 
+// A default key may guard a focused list item of a site and fall back to its plain step. A locked page has no site list to focus, so the key runs the fallback there. A guard with no fallback, or one that hands the key to the page, stays a guard.
+export const without_list_guard = (leaf: TreeLeaf): TreeLeaf => (leaf.when_present !== undefined && leaf.when_focus === undefined && leaf.otherwise !== undefined && leaf.otherwise_page === undefined ? leaf.otherwise : leaf);
+
 // A content command with a background command of the same params that does the same from what the browser lists of the tab. On a locked page the leaf runs the variant, so the keymap binds one command and the page code runs where it exists.
 // `copy.page` cannot read the page's canonical or short link, so those two formats give the address.
 export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page" };
@@ -66,6 +69,7 @@ type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; lin
 
 function prune_node(node: TreeNode, depth: number, path: readonly string[], pruning: Pruning): ScopeNode | undefined {
   if (node.kind === "leaf") {
+    node = without_list_guard(node);
     const native = native_leaf(node, pruning.check_args);
     if (native) return native;
     if (!forwards_leaf(node, pruning.allowed) && !opens_line_leaf(node)) {
@@ -134,8 +138,9 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
     const last = index === keys.length - 1;
     if (result.kind_ === "pending" && !last && result.count === undefined && result.register_keys_ === undefined && result.held_ === undefined) continue;
     if (result.kind_ !== "match" || !last || result.count !== undefined || result.held_ !== undefined || result.keys?.length !== keys.length) return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
-    if (!forwards_leaf(result.leaf, allowed) && !opens_line_leaf(result.leaf)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(result.leaf) && { hint: true as const }) };
-    return { ok: true, leaf: result.leaf, count: count === 0 ? undefined : count };
+    const leaf = without_list_guard(result.leaf);
+    if (!forwards_leaf(leaf, allowed) && !opens_line_leaf(leaf)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(leaf) && { hint: true as const }) };
+    return { ok: true, leaf, count: count === 0 ? undefined : count };
   }
   return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
 }
