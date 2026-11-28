@@ -18,8 +18,8 @@ const SEEN_MS = 300;
 type Opened = { address: string; options: { inBackground: boolean; triggeringPrincipal: unknown } };
 
 // A browser window whose selected tab shows `url` in this process, under the system principal. `build` fills the page. The page sits 80 px down, under the toolbars.
-function about_page(firefox: Firefox, url: string, build: (root: Node) => void, { remote = false, principal = { isSystemPrincipal: true } as unknown } = {}) {
-  const browser = Object.assign(new Node("browser", { box: box(0, 80, 1200, 700) }), { isRemoteBrowser: remote, innerWindowID: 10, contentDocument: undefined as unknown });
+function about_page(firefox: Firefox, url: string, build: (root: Node) => void, { remote = false, principal = { isSystemPrincipal: true } as unknown, zoom = 1, browser_box = box(0, 80, 1200, 700) } = {}) {
+  const browser = Object.assign(new Node("browser", { box: browser_box }), { isRemoteBrowser: remote, innerWindowID: 10, contentDocument: undefined as unknown });
   const opened: Opened[] = [];
   const tabs = {
     selectedTab: { userContextId: 0 } as unknown,
@@ -28,7 +28,7 @@ function about_page(firefox: Firefox, url: string, build: (root: Node) => void, 
   };
   const window = chrome_window(firefox, "navigator:browser", (root) => root.append(button("reload-button", 10), browser));
   Object.assign(window.win, { gBrowser: tabs });
-  const page_view = Object.assign(new Node("#pagewindow"), { browsingContext: { embedderElement: browser } });
+  const page_view = Object.assign(new Node("#pagewindow"), { browsingContext: { embedderElement: browser, fullZoom: zoom } });
   const page_root = new Node("html");
   build(page_root);
   const page = chrome_document(page_root, page_view, url);
@@ -472,4 +472,24 @@ test("about:downloads rows only get chosen, as in the Library, and the page's ot
   assert.equal(run.marked(), false, "a row pick waits for Enter as in the downloads panel");
   assert.equal((list as unknown as { selectedItem: unknown }).selectedItem, row);
   assert.equal(main_area.clicks, 0, "a row pick opened the file");
+});
+
+test("on a zoomed page a label sits on its link in the window's pixels, and a link the zoom pushes out of the window gets none", async () => {
+  const near = link("https://example.com/near", 100, 100);
+  const far = link("https://example.com/far", 100, 500);
+  // At 1.5 the page's 500 px is 750 px under the page's own top at 80, past the 800 px window.
+  const run = start_on("about:addons", (root) => root.append(near, far), { zoom: 1.5 });
+  assert.equal(run.hint_key(), true);
+  assert.equal((await run.collect(5))?.ok, true);
+  const [row, ...rest] = run.rows(5);
+  assert.deepEqual(rest, [], "the link past the window got a label");
+  assert.deepEqual([row![1], row![2]], [150, 230], "the label is not at the zoomed place of the link");
+});
+
+test("a page beside vertical tabs keeps its labels on the links", async () => {
+  const link_in_page = link("https://example.com/a", 100, 100);
+  const run = start_on("about:addons", (root) => root.append(link_in_page), { browser_box: box(220, 80, 980, 700) });
+  assert.equal(run.hint_key(), true);
+  assert.equal((await run.collect(5))?.ok, true);
+  assert.deepEqual(run.rows(5).map((row) => [row[1], row[2]]), [[320, 180]]);
 });
