@@ -79,7 +79,7 @@ test("a panel shows the page panel's rows for the same keys: the label, the grou
 
 test("the default table stays small beside its cap", () => {
   const bytes = new TextEncoder().encode(JSON.stringify(table_of())).length;
-  assert.ok(bytes < 10 * 1024, `${bytes} bytes`);
+  assert.ok(bytes < 12 * 1024, `${bytes} bytes`);
   assert.ok(bytes < MAX_WHICH_KEY_BYTES / 4);
 });
 

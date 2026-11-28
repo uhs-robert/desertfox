@@ -177,7 +177,7 @@ export type WhichKeyTableRow = { keys: string; command: string; more?: true };
 export type WhichKeyTablePanel = { title: string[]; rows: WhichKeyTableRow[] };
 // `root` is the panel of the keys with nothing typed, which `help.whichkey` shows on a locked page. An older module ignores it.
 export type WhichKeyTable = { delay_ms: number; skip?: string[]; border: WhichKeyBorder; panels: Record<string, WhichKeyTablePanel>; root?: WhichKeyTablePanel };
-// The default table is about 8 KB (test/background/browser_module_which_key.test.ts measures it). A table over a limit is left out, and the module draws no panel.
+// The default table is about 10 KB (test/background/browser_module_which_key.test.ts measures it). A table over a limit is left out, and the module draws no panel.
 export const MAX_WHICH_KEY_BYTES = 49_152;
 export const MAX_WHICH_KEY_PANELS = 64;
 export const MAX_WHICH_KEY_ROWS = 80;
