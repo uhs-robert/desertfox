@@ -32,8 +32,8 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | --- | --- | --- | --- |
 | `h` | `scroll.pixels --dx=-50` | Scroll left | yes |
 | `l` | `scroll.pixels --dx=50` | Scroll right | yes |
-| `j` | `scroll 10` | Scroll down | yes |
-| `k` | `scroll -10` | Scroll up | yes |
+| `j` | `scroll 10` (while a list item holds the focus: `page.send_key --key=ArrowDown --key_code=40`) | Scroll down | yes |
+| `k` | `scroll -10` (while a list item holds the focus: `page.send_key --key=ArrowUp --key_code=38`) | Scroll up | yes |
 | `gg` | `scroll.to 0` | Scroll to top | yes |
 | `G` | `scroll.to 100` | Scroll to bottom | yes |
 | `$` | `scroll.to --x 100` | Scroll to right edge | yes |
@@ -408,10 +408,10 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `tree --left --aria` | Fold, else parent in a tree, else the item to the left |
-| `l` | `tree --child --aria` | First child in a tree or open it, else the item to the right |
-| `}` | `tree --next --aria` | Next sibling in a tree, else the next section |
-| `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |
+| `h` | `page.item --left --hover` (while the focus is inside a tree: `tree --left --aria`) | Fold, else parent in a tree, else the item to the left |
+| `l` | `page.item --right --hover` (while the focus is inside a tree: `tree --child --aria`) | First child in a tree or open it, else the item to the right |
+| `}` | `page.item --next-section --hover` (while the focus is inside a tree: `tree --next --aria`) | Next sibling in a tree, else the next section |
+| `{` | `page.item --prev-section --hover` (while the focus is inside a tree: `tree --prev --aria`) | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 

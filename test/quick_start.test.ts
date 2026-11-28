@@ -13,7 +13,7 @@ import { parse_command_line } from "../src/shared/registry/command_line.ts";
 
 const all_commands = registry.list().map(command_meta);
 const any_command = { runs_in: "content" as const, label: "x", count: "ignore" as const };
-const compile = (keymap: typeof DEFAULT_KEYMAP) => compile_keymap(keymap, {}, () => any_command).compiled;
+const compile = (keymap: typeof DEFAULT_KEYMAP) => compile_keymap(keymap, {}, () => any_command, undefined, DEFAULT_KEYMAP).compiled;
 
 function codes_of(blocks: Block[]): string[] {
   const code_of = (inlines: Inline[]) => inlines.filter((inline) => (inline.kind === "code" || inline.kind === "keys")).map((inline) => inline.text);
@@ -92,7 +92,7 @@ test("quick start: a command with no command line form says it has no key, and a
   assert.ok(shown.some((text) => text.includes("No key opens it by itself")));
 });
 
-const compile_with = (settings: Record<string, unknown>) => compile_keymap(DEFAULT_KEYMAP, settings as never, () => any_command).compiled;
+const compile_with = (settings: Record<string, unknown>) => compile_keymap(DEFAULT_KEYMAP, settings as never, () => any_command, undefined, DEFAULT_KEYMAP).compiled;
 const inline_texts = (blocks: Block[]) => blocks.flatMap((block) => (block.kind === "paragraph" ? block.inlines.map((inline) => inline.text) : []));
 const which_key_paragraph = (compiled: ReturnType<typeof compile>) => inline_texts(quick_start_blocks(compiled, all_commands)).join("");
 
