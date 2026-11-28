@@ -523,6 +523,8 @@ export async function run_cases(context) {
     const bookmarked = () => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); return !!(await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} })); })()`);
     await open_panel("editBookmarkPanel", `await w.PlacesCommandHook.bookmarkPage();`);
     await poll_until("the bookmark to be made", bookmarked, { timeout_ms: 5000 });
+    // A real window gives the name field the focus. The test window may not, so the field takes it from chrome.
+    await chrome(`(async () => { ${W}.document.getElementById("editBMPanel_namePicker").focus(); })()`);
     await poll_until("the name field to have the focus", () => chrome(`(async () => Services.focus.focusedElement?.id === "editBMPanel_namePicker")()`), { timeout_ms: 5000 });
     await press_keys("g", "B");
     await sleep(500);
