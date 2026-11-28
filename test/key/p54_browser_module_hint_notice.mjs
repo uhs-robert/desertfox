@@ -26,7 +26,10 @@ export async function run_cases(context) {
   const steps = module_steps(context);
   const { chrome, session_value, open_tab, focus_page, in_selected_page, close_selected_tab, home } = steps;
   const server = createServer((_request, response) => response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(make_article().replace("</article>", `<p>The end: <a href="/target">the target link</a>.</p></article>`)));
+  const json_server = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ link: `${origin}/target`, list: [1, 2, 3] })));
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => json_server.listen(0, "127.0.0.1", resolve));
+  on_teardown(() => new Promise((resolve) => json_server.close(resolve)));
   on_teardown(() => new Promise((resolve) => server.close(resolve)));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const files_dir = mkdtempSync(join(tmpdir(), "desertfox-hint-notice-"));
@@ -93,6 +96,50 @@ export async function run_cases(context) {
       await pages_setting(false);
     });
   }
+
+  const principal_spec = () => chrome(`(async () => ${W}.gBrowser.selectedBrowser.browsingContext.currentWindowGlobal.documentPrincipal.spec)()`);
+  // No page code runs on these pages. The JSON viewer is an http address, so with the setting off it still says the setting text until it gets page code.
+  const no_code_pages = {
+    "a view-source: page": { url: `view-source:${origin}/article`, ready: async () => (await steps.selected_spec()).startsWith("view-source:"), notices: [NOT_HERE_NOTICE] },
+    "the JSON viewer": { url: `http://127.0.0.1:${json_server.address().port}/data.json`, ready: async () => (await principal_spec()) === "resource://devtools/client/jsonview/", notices: [NOT_HERE_NOTICE, PAGES_NOTICE] },
+  };
+  for (const [name, page] of Object.entries(no_code_pages)) {
+    await run_case(`on ${name} f shows the notice once and no hints`, async () => {
+      await home(`hn_${name.replace(/\W+/g, "_")}`);
+      await open_tab(page.url);
+      await poll_until(`${name} to load`, page.ready, { timeout_ms: 10000 });
+      await focus_page();
+      await clear_notices();
+      on_teardown(clear_notices);
+      const runs_before = (await hint_runs()).length;
+      await press_keys("f");
+      await poll_until(`the notice on ${name}`, async () => (await notices()).some((message) => page.notices.includes(message)), { timeout_ms: 5000 });
+      expect((await hint_labels()) === 0, `${name} showed hint labels`);
+      await clear_notices();
+      await focus_page();
+      await press_keys("f");
+      await sleep(NO_EFFECT_MS);
+      expect((await hint_runs()).length === runs_before + 1, `the module sent ${(await hint_runs()).length - runs_before} hint keys, not one`);
+      expect((await notices()).length === 0, `a second f showed ${JSON.stringify(await notices())}`);
+      await close_selected_tab();
+    });
+  }
+
+  await run_case("on a data: page f draws the content script's hints and shows no notice", async () => {
+    await home("hn_data");
+    await open_tab(`data:text/html,<a href="${origin}/target">link</a>`);
+    await poll_until("the content script on the data: page", () => in_selected_page(`(win) => win.document.documentElement?.hasAttribute("data-desertfox-tree-read-ms") ?? false`), { timeout_ms: 10000 });
+    await focus_page();
+    await clear_notices();
+    on_teardown(clear_notices);
+    const runs_before = (await hint_runs()).length;
+    await press_keys("f");
+    await poll_until("hint labels on the data: page", async () => (await hint_labels()) > 0, { timeout_ms: 5000 });
+    expect((await notices()).length === 0, `f showed ${JSON.stringify(await notices())}`);
+    expect((await hint_runs()).length === runs_before, "the module claimed f on a data: page");
+    await press_keys("-k", "Escape");
+    await close_selected_tab();
+  });
 
   await run_case("on about:support f says hints do not run there, and shows no hints", async () => {
     await home("hn_support");

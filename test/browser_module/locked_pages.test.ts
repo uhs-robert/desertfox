@@ -270,10 +270,11 @@ test("the rule it lends the key taker: the PDF viewer and Reader View need the s
     { principal: web, uri: "VIEW-SOURCE:https://a.test/", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" }, uri: "https://a.test/x.json", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" }, uri: "file:///tmp/x.json", inner: 5 },
-    { principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "data:text/html,hi", inner: 5 },
     { principal: web, uri: "blob:https://a.test/1234", inner: 5 },
   ];
   for (const page of no_hints) assert.equal(notice_on(page), "not_here", page.uri);
+  // DesertFox's content script runs on a data: page, so its hint keys go on.
+  assert.equal(notice_on({ principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "data:text/html,hi", inner: 5 }), undefined);
   // The test is exact: a page that only mentions these names has no notice.
   for (const uri of ["https://a.test/view-source:x", "https://a.test/?u=data:text/html,x"]) assert.equal(notice_on({ principal: web, uri, inner: 5 }), undefined, uri);
   assert.equal(notice_on({ principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/x" }, uri: "https://a.test/", inner: 5 }), undefined, "only the exact JSON viewer principal");

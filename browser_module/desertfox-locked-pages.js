@@ -103,7 +103,7 @@
     // The JSON viewer's own principal. A page of any address can show it, so the address is no test for it.
     const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
 
-    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on the PDF viewer and Reader View while page code is off, "not_here" on an about: page, on view-source:, the JSON viewer, data: and blob: pages and on another extension's page, where page code never runs. Undefined everywhere else, so the key goes on.
+    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on the PDF viewer and Reader View while page code is off, "not_here" on an about: page, on view-source:, the JSON viewer and blob: pages and on another extension's page, where page code never runs. Undefined everywhere else, so the key goes on.
     // "page_hints" instead on an about: page that chrome hints label themselves (their own fixed list), once the extension's state says it answers their start. The key taker then starts those hints.
     // An initial about:blank and a srcdoc frame are no page the user sees as Firefox's own. A DevTools toolbox in a tab is DevTools, whose keys stay its own. Firefox matches about: names in any case, so the test does too.
     // `win` is the browser window that shows `browser`.
@@ -118,7 +118,7 @@
       if (content_pages?.labels(browser)) return core.page_hints?.()?.handles(browser) && core.page_hints_wanted?.(win) ? "page_hints" : "not_here";
       if (page_kind_of(browser, global.innerWindowId)) return pages_on(desertfox()) ? undefined : "pages_off";
       const address = global.documentURI?.spec ?? "";
-      if (JSON_VIEWER_PRINCIPAL === principal.spec || /^(?:view-source|data|blob):/i.test(address)) return "not_here";
+      if (JSON_VIEWER_PRINCIPAL === principal.spec || /^(?:view-source|blob):/i.test(address)) return "not_here";
       if (!/^about:(?!(?:blank|srcdoc|reader)\b|devtools)/i.test(address)) return undefined;
       return core.page_hints?.()?.handles(browser) && core.page_hints_wanted?.(win) ? "page_hints" : "not_here";
     }
