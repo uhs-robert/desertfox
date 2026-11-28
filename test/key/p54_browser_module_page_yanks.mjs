@@ -1,11 +1,12 @@
 // The page yanks (yy yc ym yo ys yt) on pages where no DesertFox page code runs: about:preferences in the parent process, the PDF viewer with browser_module_pages off, and a host on the restricted list (a localhost name, offline).
 // Each key copies the tab's address or title in its own format, with the tracking parameters stripped, and nothing else changes. yL and yl, which need the page's links, still do nothing there.
 import { createServer } from "node:http";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { make_pdf, module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
+import { make_tmp_dir } from "../support/tmp_dir.ts";
+import { make_article, make_pdf, module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
 
 export const areas = ["keys"];
 
@@ -31,11 +32,12 @@ export async function run_cases(context) {
   const steps = module_steps(context);
   const { chrome, open_tab, focus_page, close_selected_tab, home, selected_spec, session_value } = steps;
 
-  const files_dir = mkdtempSync(join(tmpdir(), "desertfox-module-yanks-"));
+  const files_dir = make_tmp_dir("desertfox-module-yanks-");
+  on_teardown(() => rm(files_dir, { recursive: true, force: true }));
   writeFileSync(join(files_dir, "long.pdf"), make_pdf(2), "latin1");
   const pdf_url = pathToFileURL(join(files_dir, "long.pdf")).href;
   const server = createServer((request, response) => {
-    const body = `<!doctype html><html><head><meta charset="utf-8"><title>Yank page</title></head><body><a href="https://example.org/a">a</a></body></html>`;
+    const body = request.url?.startsWith("/article") ? make_article() : `<!doctype html><html><head><meta charset="utf-8"><title>Yank page</title></head><body><a href="https://example.org/a">a</a></body></html>`;
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(body);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -72,6 +74,8 @@ export async function run_cases(context) {
   for (const [page, open, stripped] of [
     ["about:preferences", () => open_tab("about:preferences"), undefined],
     ["the PDF viewer with browser_module_pages off", () => open_tab(pdf_url), undefined],
+    // Reader View copies its own address, as the page code does (location.href).
+    ["Reader View with browser_module_pages off", () => open_tab(`about:reader?url=${encodeURIComponent(`http://127.0.0.1:${port}/article`)}`, { loaded: (spec) => spec.startsWith("about:reader") }), undefined],
     ["a restricted host", () => open_tab(restricted_url, { loaded: (spec) => spec.includes(HOST) }), restricted_stripped],
   ]) {
     await run_case(`on ${page} each page yank copies the tab's address or title in its format`, async () => {
@@ -89,16 +93,14 @@ export async function run_cases(context) {
           await chrome(set_clipboard(SENTINEL));
           await focus_page();
           await press_keys(...keys.split(""));
-          try {
-            await poll_until(`${keys} on ${page}`, async () => (await chrome(clipboard_text)) === text, { timeout_ms: 5000 });
-          } catch (error) {
-            const notices = Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
-            throw new Error(`${error.message}: wanted ${JSON.stringify(text)}, clipboard ${JSON.stringify(await chrome(clipboard_text))}, notices ${JSON.stringify(notices)}, from module ${JSON.stringify(((await session_value("desertfox_browser_module_from_module")) ?? []).slice(-4))}, tree y ${JSON.stringify(((await session_value("desertfox_browser_module_state")) ?? {}).tree?.children?.y)}, tabs ${JSON.stringify(((await session_value("desertfox_browser_module_state")) ?? {}).tabs)}, pending ${JSON.stringify(await chrome(`(async () => Services.desertfox_browser_module.module_pending(Services.wm.getMostRecentWindow("navigator:browser")) ?? null)()`))}`);
-          }
+          await poll_until(`${keys} on ${page}`, async () => (await chrome(clipboard_text)) === text, { timeout_ms: 5000 });
+          await poll_until(`the Copied notification for ${keys} on ${page}`, async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).some((notice) => notice.message === `Copied ${text}`), { timeout_ms: 5000 });
         }
         // The link yanks need the page's links, so the module leaves them alone.
         for (const keys of ["yL", "yl"]) {
+          await clear_notices();
           await chrome(set_clipboard(SENTINEL));
+          await focus_page();
           await press_keys(...keys.split(""));
           await sleep(NO_EFFECT_MS);
           expect((await chrome(clipboard_text)) === SENTINEL, `${keys} on ${page} changed the clipboard`);
