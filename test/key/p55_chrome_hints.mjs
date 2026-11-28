@@ -40,6 +40,16 @@ export async function run_cases(context) {
   const { chrome, session_value, set_session_value, module_status, set_pref, focus_page, home } = steps;
   const labels_now = () => chrome(LABELS);
   const layers = () => chrome(LAYER_COUNT);
+  // The page's blocked pop-up count goes to Firefox's own handler as the content process would send it, so Firefox builds the popup-blocked bar and its Options menu itself. A real window.open from the test page is not blocked here: the debugger's script counts as allowed.
+  const in_selected_page_open_popups = () =>
+    chrome(`(async () => {
+      const w = ${W};
+      const browser = w.gBrowser.selectedBrowser;
+      const blocker = browser.popupAndRedirectBlocker;
+      blocker.getBlockedPopupCount = () => 2;
+      blocker.isRedirectBlocked = () => false;
+      browser.dispatchEvent(new w.CustomEvent("DOMUpdateBlockedPopups", { bubbles: true }));
+    })()`);
   const label_of = (labels, target) => labels.find((label) => label.target === target)?.text;
 
   // A group around the last tab, which a test folds through its label. Any earlier group is dissolved first, and the teardown dissolves this one.
@@ -332,5 +342,60 @@ export async function run_cases(context) {
     expect(sorted[5] < 200, `the median round trip is ${sorted[5]} ms`);
     await press_keys("-k", "Escape");
     await expect_no_layer("Escape after the timing");
+  });
+
+  // ---- Notification bars.
+
+  const BAR_BUTTON = `const bar = [...${W}.document.querySelectorAll("notification-message")].find((one) => one.getAttribute("value") === VALUE); const button = bar?.querySelector("button.notification-button");`;
+  const rect_of = (expression) => `(async () => { const r = (${expression})?.getBoundingClientRect(); return r ? { left: r.left, top: r.top } : null; })()`;
+  const remove_bars = () => chrome(`(async () => { const box = ${W}.gBrowser.getNotificationBox(); for (const bar of [...box.allNotifications]) box.removeNotification(bar, true); ${W}.document.getElementById("blockedPopupOptions")?.hidePopup(); })()`);
+  // Firefox keeps a new bar's buttons disabled for a moment.
+  const wait_bar_ready = (value) =>
+    poll_until(`the ${value} bar's button to be enabled`, () => chrome(`(async () => { const VALUE = ${JSON.stringify(value)}; ${BAR_BUTTON} return !!button && !button.disabled && button.checkVisibility() && button.getBoundingClientRect().width > 0; })()`), { timeout_ms: 8000 });
+  const label_on = (labels, spot) => labels.find((label) => Math.abs(label.left - spot.left) + Math.abs(label.top - spot.top) <= 2)?.text;
+
+  await run_case("gB labels the popup-blocked bar's Options button and its close button, and a pick of Options opens the menu at once", async () => {
+    await home("ch_bar_popup");
+    on_teardown(remove_bars);
+    on_teardown(() => chrome(`(async () => { const blocker = ${W}.gBrowser.selectedBrowser.popupAndRedirectBlocker; delete blocker.getBlockedPopupCount; delete blocker.isRedirectBlocked; })()`));
+    await in_selected_page_open_popups();
+    await poll_until("the popup-blocked bar to show", () => chrome(`(async () => { const VALUE = "popup-blocked"; ${BAR_BUTTON} return !!button; })()`), { timeout_ms: 8000 });
+    await wait_bar_ready("popup-blocked");
+    const labels = await start_hints("the popup-blocked bar");
+    const options = await chrome(rect_of(`(() => { const VALUE = "popup-blocked"; ${BAR_BUTTON} return button; })()`));
+    const close = await chrome(rect_of(`(() => { const VALUE = "popup-blocked"; ${BAR_BUTTON} return bar.openOrClosedShadowRoot.querySelector(".close"); })()`));
+    const options_label = label_on(labels, options);
+    expect(options_label !== undefined, `no label on the Options button: ${JSON.stringify({ options, labels })}`);
+    expect(label_on(labels, close) !== undefined, `no label on the bar's close button: ${JSON.stringify({ close, labels })}`);
+    await press_keys(...options_label.split(""));
+    await poll_until("the pick to open the blocked popup menu", () => chrome(`(async () => ${W}.document.getElementById("blockedPopupOptions").state === "open")()`), { timeout_ms: 5000 });
+    expect(
+      !(await chrome(`(async () => [...${W}.document.querySelectorAll(".desertfox-chrome-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`)),
+      "the Options pick waited for Enter",
+    );
+    await remove_bars();
+    await expect_no_layer("the Options pick");
+  });
+
+  await run_case("a pick of the button of another bar marks it and runs nothing until Enter", async () => {
+    await home("ch_bar_other");
+    on_teardown(remove_bars);
+    on_teardown(() => chrome(`(async () => { delete Services.desertfox_key_test_bar_ran; })()`));
+    await chrome(`(async () => {
+      const box = ${W}.gBrowser.getNotificationBox();
+      await box.appendNotification("desertfox-test-bar", { label: "A test bar", priority: box.PRIORITY_INFO_MEDIUM }, [{ label: "Do it", callback: () => { Services.desertfox_key_test_bar_ran = true; return true; } }]);
+    })()`);
+    await wait_bar_ready("desertfox-test-bar");
+    const labels = await start_hints("another bar");
+    const spot = await chrome(rect_of(`(() => { const VALUE = "desertfox-test-bar"; ${BAR_BUTTON} return button; })()`));
+    const text = label_on(labels, spot);
+    expect(text !== undefined, `no label on the bar's button: ${JSON.stringify({ spot, labels })}`);
+    await press_keys(...text.split(""));
+    await poll_until("the mark to show on the bar's button", () => chrome(`(async () => [...${W}.document.querySelectorAll(".desertfox-chrome-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`), { timeout_ms: 4000 });
+    expect(!(await chrome(`(async () => !!Services.desertfox_key_test_bar_ran)()`)), "the pick ran the bar's button");
+    await sleep(700);
+    await press_keys("-k", "Return");
+    await poll_until("Enter to run the bar's button", () => chrome(`(async () => !!Services.desertfox_key_test_bar_ran)()`), { timeout_ms: 4000 });
+    await expect_no_layer("the confirmed pick");
   });
 }
