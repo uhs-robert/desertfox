@@ -297,6 +297,8 @@ It works on Linux only and needs the native host and the bridge setup. See [host
 
 - Plain keys never work on pages where Firefox blocks extensions: `about:` pages, the PDF viewer, reader view and addons.mozilla.org. The `df` keyword in the address bar and the `Alt` chords still work there.
 - A plain key such as `J` is lost when it lands on a tab that has not started loading. [docs/firefox-behavior.md](docs/firefox-behavior.md#working-around-the-limits) has the PDF viewer setup and the tab switch detail.
+- Opening a `file://` link from DesertFox fails, because Firefox refuses `file:` addresses to extensions (`tabs.create` says "Illegal URL").
+- Pages of other extensions (`moz-extension://`) get no page features: no content script runs there, so hints, item mode and the other page keys do not work on them.
 - Keyboard drag sends synthetic input. A page that accepts only real mouse input ignores it, and a drag cannot leave its frame, tab or window.
 
 ## 💛 Support
