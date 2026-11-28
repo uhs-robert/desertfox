@@ -92,8 +92,8 @@ export function create_theme_messages(deps: ThemeMessageDeps) {
 
 const is_record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// A stored table from before `mode_item` and `mode_media` lacks those two, so they derive from the rest. Any other missing role leaves the table for the check to refuse.
-const ROLES_ADDED_LATER = ["mode_item", "mode_media"] as const;
+// A stored table from before `mode_item`, `mode_media` and `mode_command` lacks those, so they derive from the rest. Any other missing role leaves the table for the check to refuse.
+const ROLES_ADDED_LATER = ["mode_item", "mode_media", "mode_command"] as const;
 
 function with_derived_roles(theme: unknown): unknown {
   if (!is_record(theme)) return theme;

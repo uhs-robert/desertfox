@@ -128,6 +128,16 @@ test("a checked theme color reaches the bar, the one for the window's scheme", (
   assert.equal(fixture.bar()!.style_values.get("--desertfox-mode-normal"), BAR_COLORS.mode_normal);
 });
 
+test("the command role color reaches the bar only when it is a checked color, and is absent otherwise", () => {
+  const fixture = started();
+  fixture.firefox.write_state(state_with({}, BAR_CONFIG, { bar_theme: { dark: { ...BAR_COLORS, mode_command: "#7fcf78" }, light: BAR_COLORS } }));
+  fixture.run_frames();
+  assert.equal(fixture.bar()!.style_values.get("--desertfox-mode-command"), "#7fcf78");
+  fixture.firefox.write_state(state_with({}, BAR_CONFIG, { bar_theme: { dark: { ...BAR_COLORS, mode_command: "red; background:url(x)" }, light: BAR_COLORS } }));
+  fixture.run_frames();
+  assert.equal(fixture.bar()!.style_values.has("--desertfox-mode-command"), false);
+});
+
 test("a state of another version, or one that is not a table, draws nothing", () => {
   const fixture = started();
   fixture.firefox.write_state({ ...state_with({}), v: 2 });

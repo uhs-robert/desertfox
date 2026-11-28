@@ -38,6 +38,7 @@ const ROLE_VARIABLES: Record<Role, string[]> = {
   mode_visual: ["syntax-special"],
   mode_item: ["terminal-magenta"],
   mode_media: ["ui-diag-ok-fg"],
+  mode_command: ["syntax-parameter"],
   search_bg: ["ui-search-bg"],
   search_fg: ["ui-search-fg"],
   search_current_bg: ["ui-match-bg"],
