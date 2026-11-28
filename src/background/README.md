@@ -132,6 +132,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `find_worker.ts`, `regex_scan.ts`: the Worker of each regex page search (its own `find_worker.js` build entry) and the pure scan it runs.
 - `image_actions.ts`: answers `image_action` from the `hints` bundle.
 - `browser_deps.ts`: the only file that wires the router to Firefox calls.
+- `tab_visual.ts`: the tab range record, strip order and the Firefox selection behind `tab.visual`, over `TabVisualDeps`.
 - `tab_split.ts`: `focus_other_pane` and `swap_panes` (`tab.split_other`, `tab.split_swap`) over `TabSplitDeps`; a swap moves the partner onto the tab's place.
 - `browser_module_call.ts`: one call to the browser module and its reply, shared by every command that starts one.
 - `tab_model.ts`: the live tab model (rows also carry `group_id` and `split_id`, and a groups table follows the `tabGroups` events).
