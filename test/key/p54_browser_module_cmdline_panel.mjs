@@ -126,6 +126,37 @@ export async function run_cases(context) {
     await close_others();
   });
 
+  // The panel's own `search` reads @selection from the tab the line opened over, which has no content script. The query goes into a new tab's address.
+  const search_tab_address = (word) => chrome(`(async () => { const w = ${W}; return w.gBrowser.tabs.map((tab) => [tab.linkedBrowser.currentURI.spec, tab.linkedBrowser.userTypedValue ?? ""].join(" ")).filter((text) => text.includes(${JSON.stringify(word)})).length; })()`);
+  // The parent-process page's own window, as the module reads it: `contentWindow` of the selected browser.
+  const in_preferences = (body) =>
+    chrome(`(async () => { const b = ${W}.gBrowser.selectedBrowser; const win = b.contentWindow; if (!win) return { problem: JSON.stringify({ remote: b.isRemoteBrowser, spec: b.currentURI.spec }) }; const doc = win.document; ${body} })()`);
+
+  await run_case("a bare :search typed in the panel searches the text selected on about:preferences", async () => {
+    await prefs_with_tab_after();
+    const picked = await in_preferences(`
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const word = /[A-Za-z]{5,}/.exec(node.textContent)?.[0];
+        if (!word || !node.parentElement?.checkVisibility?.()) continue;
+        const range = doc.createRange();
+        range.selectNodeContents(node);
+        win.getSelection().removeAllRanges();
+        win.getSelection().addRange(range);
+        return { word };
+      }
+      return { problem: "no text on the page" };`);
+    expect(picked.word?.length > 0, `nothing was selected on about:preferences: ${picked.problem}`);
+    const word = picked.word;
+    await press_keys(":");
+    await panel.wait_open(":");
+    await press_keys("search");
+    await panel.line_holds("search");
+    await press_keys("-k", "Return");
+    await poll_until("the search to open a tab whose address holds the selected text", async () => (await search_tab_address(encodeURIComponent(word))) > 0, { timeout_ms: 10000 });
+    await close_others();
+  });
+
   await run_case("when the module refuses the panel, : opens the address bar with df", async () => {
     await prefs_with_tab_after();
     // A stray element under the panel's id: the module refuses a second panel, as it would one it cannot open.

@@ -115,6 +115,8 @@ function page_info_permissions(firefox: Firefox) {
 
 // How long a grant's mark shows before an Enter counts: Firefox's `security.notification_enable_delay` when unset.
 const DWELL_MS = 500;
+// How long the labels show before a key counts toward one.
+const LABELS_SEEN_MS = 300;
 
 // Labels every target, so a test can pick a control by its element. After the pick the user reads the mark as long as it must show, so the next key counts.
 async function labelled(run: Run, session: number) {
@@ -123,6 +125,9 @@ async function labelled(run: Run, session: number) {
   return async (element: Node) => {
     const row = rows.find(([, left, top]) => left === Math.round(element.box.left) && top === Math.round(element.box.top));
     assert.ok(row, `no label on ${element.id || element.className || element.localName}`);
+    // A doorhanger pick must name the label the user's own keys spelled, typed after the labels showed a while.
+    run.chrome.clock.now += LABELS_SEEN_MS;
+    for (const key of `a${String.fromCharCode(97 + rows.indexOf(row))}`) run.chrome.press(key);
     const reply = await run.pick(session, row[0]!);
     run.chrome.clock.now += DWELL_MS;
     return reply;
@@ -459,6 +464,72 @@ test("Firefox's own delay holds: an Enter before it ends does nothing and keeps 
   run.firefox.chrome_now = 5400;
   chrome.press("Enter");
   assert.equal(chrome.allow.clicks, 1);
+});
+
+// A doorhanger session by the page's gB (`collect`) or by gB typed in the prompt (`collect_here`, whose start keeps the keys typed meanwhile). `type_label` types the label of `name` at `when`: before the first draw, or `after_ms` after it.
+async function doorhanger_keys(via: "collect" | "collect_here", name: "block" | "close", when: "before" | number) {
+  const run = started((firefox) => {
+    const window = browser_with_doorhanger(firefox, { shown_at: 4900 });
+    if (via === "collect_here") {
+      // The focused button sits in the moz-button's shadow root.
+      const inner = new Node("button");
+      inner.ownerDocument = window.allow.ownerDocument;
+      const shadow = new Node("#shadow");
+      shadow.append(inner);
+      shadow.host = window.allow;
+      window.focus(inner);
+    }
+    return window;
+  });
+  const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+  run.firefox.chrome_now = 5000;
+  if (via === "collect") assert.equal((await collect(run, 5))?.ok, true);
+  else {
+    run.type_binding();
+    assert.equal(run.tokens().length, 1, "gB in the doorhanger was not taken");
+  }
+  const target = chrome[name];
+  const typed_label = () => {
+    const rows = run.target_rows();
+    const index = rows.findIndex(([, left, top]) => left === Math.round(target.box.left) && top === Math.round(target.box.top));
+    return { rows, label: `a${String.fromCharCode(97 + index)}`, id: rows[index]![0]! };
+  };
+  if (via === "collect") {
+    if (when === "before") for (const key of typed_label().label) chrome.press(key);
+  } else {
+    // The start holds the keys while the extension answers, so the label comes from the order of the prompt's controls.
+    const label = "ad";
+    if (when === "before") for (const key of label) chrome.press(key);
+    assert.equal((await run.collect_here(5))?.ok, true);
+  }
+  const { rows, label, id } = typed_label();
+  await run.draw(5, rows.map(([row_id], index) => [row_id!, `a${String.fromCharCode(97 + index)}`]));
+  if (when !== "before") {
+    chrome.clock.now += when;
+    for (const key of label) chrome.press(key);
+  }
+  return { reply: await run.pick(5, id), target };
+}
+
+test("keys typed before the labels show cannot pick Block or Not now on a doorhanger, whether the page's gB or one typed in the prompt started it", async () => {
+  for (const via of ["collect", "collect_here"] as const) {
+    for (const name of ["block", "close"] as const) {
+      const { reply, target } = await doorhanger_keys(via, name, "before");
+      assert.equal(reply?.error, "The keys typed do not name this hint", `${via} ${name}`);
+      assert.equal(target.clicks, 0, `${via} ${name}`);
+    }
+  }
+});
+
+test("keys typed after the draw but inside the 300 ms pause cannot pick Block, and a key at 300 ms counts", async () => {
+  for (const via of ["collect", "collect_here"] as const) {
+    const early = await doorhanger_keys(via, "block", LABELS_SEEN_MS - 1);
+    assert.equal(early.reply?.error, "The keys typed do not name this hint", `${via} at 299 ms`);
+    assert.equal(early.target.clicks, 0, via);
+    const on_time = await doorhanger_keys(via, "block", LABELS_SEEN_MS);
+    assert.equal(on_time.reply?.ok, true, `${via} at 300 ms`);
+    assert.equal(on_time.target.clicks, 1, via);
+  }
 });
 
 test("a deny pick on a doorhanger clicks at once, Block with no delay and the close button, and one still under the delay is refused", async () => {

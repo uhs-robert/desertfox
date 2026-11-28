@@ -7,8 +7,8 @@ import { RuntimeRefusal } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
 import { grant_hash, GRANTABLE_PERMISSIONS } from "../shared/permission_grant.ts";
 import type { GrantablePermission } from "../shared/permission_grant.ts";
-import { browser_module_call } from "../background/browser_module_call.ts";
-import { BROWSER_MODULE_HELLO_STORAGE_KEY, FIREFOX_PAGE_WHERE, validate_module_hello } from "../shared/browser_module_protocol.ts";
+import { browser_module_call, read_module_hello } from "../background/browser_module_call.ts";
+import { FIREFOX_PAGE_WHERE } from "../shared/browser_module_protocol.ts";
 import { FIREFOX_PAGES, MODULE_FIREFOX_PAGES } from "../shared/firefox_pages.ts";
 import { FIREFOX_PAGE_OPEN_KIND, make_open_firefox_page_handler } from "./firefox_page.ts";
 import { open_help_url } from "./help_tab.ts";
@@ -59,10 +59,7 @@ define("permissions.grant", {
 });
 
 export const open_firefox_page = make_open_firefox_page_handler({
-  module_opens_pages: async () => {
-    const hello = validate_module_hello((await browser.storage.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]);
-    return hello.ok && hello.value.firefox_pages === true;
-  },
+  module_opens_pages: async () => (await read_module_hello())?.firefox_pages === true,
   module_open: (args) => browser_module_call.call(FIREFOX_PAGE_OPEN_KIND, args),
   open_page: (page) => native_host.open_firefox_page(page),
   write_clipboard: (text) => navigator.clipboard.writeText(text),
