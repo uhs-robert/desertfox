@@ -51,6 +51,7 @@ import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { tab_visual } from "../commands/tab_visual.ts";
 import { wire_before_own_load } from "../commands/open_target.ts";
 import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_rows } from "./quality_levels.ts";
@@ -67,7 +68,7 @@ import { create_browser_module, read_bar_config, module_setting_on, stored_setti
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { has_content_script, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
+import { has_content_script, reach_bar_toasts, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_browser_module_rpc, pages_setting_on } from "./browser_module_rpc.ts";
 import { create_module_run } from "./browser_module_run.ts";
 import { create_cmdline_panel } from "./cmdline_panel.ts";
@@ -289,7 +290,10 @@ browser.windows.onFocusChanged.addListener((window_id) => {
   // Firefox closes the panel when its window loses the focus.
   void cmdline_panel.focused(window_id).catch(warn_and_go("cmdline_panel.focused"));
 });
-browser.windows.onRemoved.addListener((window_id) => void last_used_tabs.window_removed(window_id));
+browser.windows.onRemoved.addListener((window_id) => {
+  void last_used_tabs.window_removed(window_id);
+  void tab_visual.forget_window(window_id).catch(warn_and_go("tab_visual.forget_window"));
+});
 
 const inspect_relay = create_inspect_relay(browser.storage.session, Date.now);
 // Only the extension's own devtools page may register, because a content script can open a port too.
@@ -341,7 +345,11 @@ browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.stor
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   if (change.url !== undefined) browser_module_rpc.tab_url_changed(tab_id, change.url);
 }, { properties: ["url"] });
-browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
+// A locked tab has no mode record, so its close writes no storage change that would clear its bar entry and toast. The module is built further down, but a close comes after the first turn.
+browser.tabs.onRemoved.addListener((tab_id) => {
+  void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed"));
+  void browser_module.tab_changed(String(tab_id), undefined).catch(warn_and_go("browser_module.tab_removed"));
+});
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const locked_commands = locked_page_command_ids(registry.list());
 const browser_module = create_browser_module({
@@ -377,6 +385,7 @@ const browser_module = create_browser_module({
   later: (run, ms) => void setTimeout(run, ms),
 });
 attach_browser_module(browser_module);
+reach_bar_toasts(browser_module);
 browser.storage.onChanged.addListener((changes, area) => browser_module.storage_changed(changes, area));
 void get_config().then(() => browser_module.sync()).catch(warn_and_go("browser_module.sync"));
 const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_theme, host_update.bridge_ready);
@@ -498,7 +507,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
 const handlers = {
   ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
-  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab, cmdline_panel }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab, cmdline_panel, tab_visual }),
 } satisfies Handlers<keyof ToBackground>;
 browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
 // A locked page is never an extension page, whatever its message says.

@@ -38,6 +38,7 @@ import {
   validate_message_list,
   validate_module_hello,
   validate_module_state,
+  bar_fields_of,
   which_key_table_of,
   MAX_WHICH_KEY_BYTES,
   MAX_WHICH_KEY_PANELS,
@@ -290,6 +291,31 @@ test("the bar theme needs both schemes with every role as a color, else it is le
   }
 });
 
+test("the toast role colors are kept only when they are colors, and each optional role is checked alone", () => {
+  const roles = { mode_command: "#7fcf78", error: "#ffa0a0", warn: "#f0e68c", info: "red; x", ok: "#a3e39a" };
+  const checked = validate_module_state(state({ bar_theme: { dark: { ...COLORS, ...roles }, light: COLORS } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.bar_theme?.dark, { ...COLORS, mode_command: "#7fcf78", error: "#ffa0a0", warn: "#f0e68c", ok: "#a3e39a" });
+});
+
+test("a tab's toast is kept with its checked fields, an unknown kind becomes info, and a bad one is left out", () => {
+  const toast = { id: 3, text: "Copied", kind: "success", until: 1_700_000_000_000 };
+  const tab = (value: unknown) => {
+    const checked = validate_module_state(state({ tabs: { "7": { mode: "normal", live: false, toast: value } } }));
+    assert.ok(checked.ok, "a bad toast never fails the state");
+    return checked.value.tabs["7"]!.toast;
+  };
+  assert.deepEqual(tab(toast), toast);
+  assert.deepEqual(tab({ ...toast, kind: "fancy", extra: 1 }), { ...toast, kind: "info" });
+  for (const bad of [{ ...toast, text: "" }, { ...toast, text: "x".repeat(201) }, { ...toast, text: "a\nb" }, { ...toast, id: -1 }, { ...toast, id: 1.5 }, { ...toast, until: "soon" }, { ...toast, until: 0 }, "Copied", null]) {
+    assert.equal(tab(bad), undefined, JSON.stringify(bad));
+  }
+});
+
+test("a toast is never read from the fields a page reports", () => {
+  assert.deepEqual(bar_fields_of({ pending: ["g"], toast: { id: 1, text: "x", kind: "info", until: 5 } }), { pending: ["g"] });
+});
+
 test("a full bar state with the longest fields stays small beside the key rows", () => {
   const tab = { mode: "normal", live: true, pending: Array.from({ length: 8 }, () => "<C-S-Backspace>".slice(0, 16)), count: 999999, pass: true, site: "s".repeat(24), recording: "a" };
   const bytes = new TextEncoder().encode(JSON.stringify({ ...tab })).length;
@@ -449,12 +475,33 @@ test("a which-key table of known fields is kept, its unknown fields dropped, and
   assert.deepEqual(checked.value.which_key, WHICH_KEY);
 });
 
+test("a which-key root panel rides along when it is valid, and a bad one leaves the whole table out", () => {
+  const root = { title: ["keys"], rows: [{ keys: "g", command: "+Go", more: true as const }] };
+  const checked = validate_module_state(state({ which_key: { ...WHICH_KEY, root: { ...root, extra: 1 } } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.which_key, { ...WHICH_KEY, root });
+  for (const bad of [{ title: ["keys"], rows: [] }, { title: "keys", rows: root.rows }, { title: [], rows: [{ keys: "g", command: "a\u202eb" }] }, "x", null]) {
+    const refused = validate_module_state(state({ which_key: { ...WHICH_KEY, root: bad } }));
+    assert.ok(refused.ok && refused.value.which_key === undefined, JSON.stringify(bad));
+  }
+});
+
+test("a which-key table with a delay of 0 is kept, for the root list alone", () => {
+  const root = { title: ["keys"], rows: [{ keys: "g", command: "+Go", more: true as const }] };
+  assert.deepEqual(which_key_table_of({ delay_ms: 0, border: "square", panels: {}, root }), { delay_ms: 0, border: "square", panels: {}, root });
+});
+
+test("the hello keeps which_key_root only when it is true", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", which_key_root: true }), { ok: true, value: { v: V, module_version: "1", which_key_root: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", which_key_root: "yes" }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
 test("a bad which-key table is left out whole and never fails the state", () => {
   const panel = WHICH_KEY.panels.g;
   const row = panel.rows[0]!;
   const bad_tables = [
     "x",
-    { ...WHICH_KEY, delay_ms: 0 },
+    { ...WHICH_KEY, delay_ms: -1 },
     { ...WHICH_KEY, delay_ms: 1.5 },
     { ...WHICH_KEY, delay_ms: 600_000 },
     { ...WHICH_KEY, border: "dotted" },
