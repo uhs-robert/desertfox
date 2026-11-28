@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { MAX_PAGE_LINKS, MAX_PAGE_LINKS_BYTES } from "../../src/shared/browser_module_page_links.ts";
 import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
   ABSENT_TAB,
   DEVTOOLS_ACTIONS,
+  DEVTOOLS_TOOL_KEYS,
+  DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_HINT_KEY,
+  DEVTOOLS_SEARCH_KEYS,
   DEVTOOLS_TREE_KEYS,
   DEVTOOLS_VISUAL_KEY,
   DEVTOOLS_VISUAL_KEYS,
@@ -142,7 +146,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "page_links.read"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -379,12 +383,13 @@ test("the DevTools key table is a push of one-character keys with actions from t
   assert.equal(EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.reply, false);
   assert.deepEqual(push([{ key: "j", action: "tree.down", later: 1 }]), { ok: true, value: { v: V, id: "d1", kind: "devtools.keys", args: { keys: [{ key: "j", action: "tree.down" }] } } });
   assert.ok(push(DEVTOOLS_TREE_KEYS).ok);
-  const full = Array.from({ length: MAX_DEVTOOLS_KEY_ROWS }, (_, index) => ({ key: "abcdefgh"[index]!, action: "tree.collapse" }));
+  const longest_action = [...DEVTOOLS_ACTIONS].sort((a, b) => b.length - a.length)[0]!;
+  const full = Array.from({ length: MAX_DEVTOOLS_KEY_ROWS }, (_, index) => ({ key: "abcdefghijklmnop"[index]!, action: longest_action }));
   assert.ok(push(full).ok);
   const largest = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys: full }, sent_at: Number.MAX_SAFE_INTEGER };
   assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes!, "the largest table fits its kind");
   assert.ok(EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes! * 2 <= MAX_MESSAGE_LIST_BYTES);
-  for (const bad of [undefined, "j", [], [...full, { key: "i", action: "tree.up" }], [{ key: "<C-j>", action: "tree.down" }], [{ key: "Escape", action: "tree.down" }], [{ key: "\t", action: "tree.down" }], [{ key: "j", action: "eval" }], [{ key: "j", action: "tree.down" }, { key: "j", action: "tree.up" }], [null]]) {
+  for (const bad of [undefined, "j", [], [...full, { key: "q", action: "tree.up" }], [{ key: "<C-j>", action: "tree.down" }], [{ key: "Escape", action: "tree.down" }], [{ key: "\t", action: "tree.down" }], [{ key: "j", action: "eval" }], [{ key: "j", action: "tree.down" }, { key: "j", action: "tree.up" }], [null]]) {
     assert.equal(push(bad).ok, false, JSON.stringify(bad));
   }
 });
@@ -422,6 +427,45 @@ test("visual mode is one more DevTools action with a push of its own keys, and t
   }
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_visual: true }), { ok: true, value: { v: V, module_version: "1", devtools_visual: true } });
   for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_visual: flag }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+test("the search rows are three more DevTools actions behind devtools_search, and every flagged row together fits the table's cap and bytes", () => {
+  const push = (keys: unknown) => validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys } }, EXTENSION_TO_MODULE_KINDS);
+  const every_row = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ keys }) => keys)];
+  assert.deepEqual(DEVTOOLS_SEARCH_KEYS.map(({ key }) => key), ["/", "n", "N"]);
+  assert.ok(push(every_row).ok);
+  assert.ok(every_row.length <= MAX_DEVTOOLS_KEY_ROWS);
+  const largest = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys: every_row }, sent_at: Number.MAX_SAFE_INTEGER };
+  assert.ok(new TextEncoder().encode(JSON.stringify(largest)).length <= EXTENSION_TO_MODULE_KINDS["devtools.keys"]!.max_bytes!);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_search: true }), { ok: true, value: { v: V, module_version: "1", devtools_search: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_search: flag }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
+// A module from before the search keys read the table with 8 rows and 512 bytes at most and without the search actions. The flag keeps its table to rows it knows, and the newer reader still takes that older table.
+test("an older module never gets a table it refuses, and a newer module takes the table of an older extension", () => {
+  const OLDER_ROWS = 8;
+  const OLDER_BYTES = 512;
+  const older_actions: readonly string[] = DEVTOOLS_ACTIONS.filter((action) => !action.startsWith("search."));
+  const older_takes = (keys: { action: string }[]) => {
+    const message = { v: V, id: "x".repeat(32), kind: "devtools.keys", args: { keys }, sent_at: Number.MAX_SAFE_INTEGER };
+    return keys.length <= OLDER_ROWS && new TextEncoder().encode(JSON.stringify(message)).length <= OLDER_BYTES && keys.every(({ action }) => older_actions.includes(action));
+  };
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+  const older_hello = { devtools_hints: true, devtools_visual: true };
+  assert.ok(older_takes(table_for(older_hello)), "the table for an older module's hello");
+  assert.equal(older_takes(table_for({ ...older_hello, devtools_search: true })), false, "the reason for the flag");
+  assert.ok(validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys: table_for(older_hello) } }, EXTENSION_TO_MODULE_KINDS).ok);
+});
+
+test("the tool and tab rows are behind devtools_tools, so a module that knows the search rows but not these keeps a table it takes", () => {
+  assert.deepEqual(DEVTOOLS_TOOL_KEYS, [{ key: "g", action: "tool.prefix" }, { key: "J", action: "tab.next" }, { key: "K", action: "tab.prev" }]);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_tools: true }), { ok: true, value: { v: V, module_version: "1", devtools_tools: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_tools: flag }), { ok: true, value: { v: V, module_version: "1" } });
+  const with_search_only: readonly string[] = DEVTOOLS_ACTIONS.filter((action) => !["tool.prefix", "tab.next", "tab.prev"].includes(action));
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+  const search_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true };
+  assert.ok(table_for(search_hello).every(({ action }) => with_search_only.includes(action)));
+  assert.equal(table_for({ ...search_hello, devtools_tools: true }).every(({ action }) => with_search_only.includes(action)), false, "the reason for the flag");
 });
 
 test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {
@@ -478,12 +522,33 @@ test("a which-key table of known fields is kept, its unknown fields dropped, and
   assert.deepEqual(checked.value.which_key, WHICH_KEY);
 });
 
+test("a which-key root panel rides along when it is valid, and a bad one leaves the whole table out", () => {
+  const root = { title: ["keys"], rows: [{ keys: "g", command: "+Go", more: true as const }] };
+  const checked = validate_module_state(state({ which_key: { ...WHICH_KEY, root: { ...root, extra: 1 } } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.which_key, { ...WHICH_KEY, root });
+  for (const bad of [{ title: ["keys"], rows: [] }, { title: "keys", rows: root.rows }, { title: [], rows: [{ keys: "g", command: "a\u202eb" }] }, "x", null]) {
+    const refused = validate_module_state(state({ which_key: { ...WHICH_KEY, root: bad } }));
+    assert.ok(refused.ok && refused.value.which_key === undefined, JSON.stringify(bad));
+  }
+});
+
+test("a which-key table with a delay of 0 is kept, for the root list alone", () => {
+  const root = { title: ["keys"], rows: [{ keys: "g", command: "+Go", more: true as const }] };
+  assert.deepEqual(which_key_table_of({ delay_ms: 0, border: "square", panels: {}, root }), { delay_ms: 0, border: "square", panels: {}, root });
+});
+
+test("the hello keeps which_key_root only when it is true", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", which_key_root: true }), { ok: true, value: { v: V, module_version: "1", which_key_root: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", which_key_root: "yes" }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
 test("a bad which-key table is left out whole and never fails the state", () => {
   const panel = WHICH_KEY.panels.g;
   const row = panel.rows[0]!;
   const bad_tables = [
     "x",
-    { ...WHICH_KEY, delay_ms: 0 },
+    { ...WHICH_KEY, delay_ms: -1 },
     { ...WHICH_KEY, delay_ms: 1.5 },
     { ...WHICH_KEY, delay_ms: 600_000 },
     { ...WHICH_KEY, border: "dotted" },
@@ -538,7 +603,7 @@ test("selection.read takes a tab id only and answers with text, so no address or
 test("the hello says mode_keys only when it is true, and a hello with every flag and the longest version still fits", () => {
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", mode_keys: true }), { ok: true, value: { v: V, module_version: "1", mode_keys: true } });
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", mode_keys: "true" }), { ok: true, value: { v: V, module_version: "1" } });
-  const every_flag = { v: V, module_version: "x".repeat(32), bar: true, bar_message: true, devtools_hints: true, devtools_visual: true, page_hints: true, firefox_pages: true, pane_moves: true, mode_keys: true };
+  const every_flag = { v: V, module_version: "x".repeat(32), bar: true, bar_message: true, devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, page_hints: true, firefox_pages: true, pane_moves: true, which_key_root: true, mode_keys: true };
   assert.ok(validate_module_hello(every_flag).ok, "every flag with a 32 character version");
   assert.ok(new TextEncoder().encode(JSON.stringify(every_flag)).length <= MAX_HELLO_BYTES);
 });
@@ -550,10 +615,10 @@ test("mode.insert and mode.pass_next take no args, and mode.set takes ignore or 
   for (const mode of ["normal", "caret", "visual", "", undefined, 1, ["ignore"]]) assert.equal(check_module_args("mode.set", { mode }).ok, false, String(mode));
 });
 
-test("a tree with a mode leaf passes the check, and one with a mode value the module does not know fails as a whole", () => {
+test("a tree with a mode leaf passes the check, and one with a mode value the module does not know fails as a whole, while an unknown command is skipped", () => {
   assert.ok(validate_scope_tree({ children: { i: { native: "mode.insert", args: {} }, ",": { children: { i: { native: "mode.set", args: { mode: "ignore" } } } } } }).ok);
   assert.equal(validate_scope_tree({ children: { J: { native: "tab.next", args: {} }, v: { native: "mode.set", args: { mode: "caret" } } } }).ok, false);
-  assert.equal(validate_scope_tree({ children: { x: { native: "mode.escape", args: {} } } }).ok, false);
+  assert.ok(validate_scope_tree({ children: { x: { native: "mode.escape", args: {} } } }).ok, "a command the module does not know is skipped, not refused");
 });
 
 test("the insert table takes up to MAX_INSERT_KEY_ROWS key rows of the fixed commands and skips others", () => {
@@ -579,4 +644,17 @@ test("the state carries a valid insert table and drops a bad one without failing
   assert.ok(dropped.ok && dropped.value.insert_keys === undefined);
   const absent = validate_module_state(state());
   assert.ok(absent.ok && absent.value.insert_keys === undefined);
+});
+
+test("page_links.read names a tab and a scope only, and a full-size reply fits the kind", () => {
+  const read = (args: Record<string, unknown>) => validate_message({ v: V, id: "l1", kind: "page_links.read", args }, EXTENSION_TO_MODULE_KINDS);
+  assert.deepEqual(read({ tab_id: 4, scope: "page", url: "https://example.com/", selector: "a" }), { ok: true, value: { v: V, id: "l1", kind: "page_links.read", args: { tab_id: 4, scope: "page" } } });
+  assert.equal(read({ tab_id: 4 }).ok, false);
+  assert.equal(read({ scope: "page" }).ok, false);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["page_links.read"]!.args), ["tab_id", "scope"]);
+  const row = EXTENSION_TO_MODULE_KINDS["page_links.read"]!;
+  assert.equal(row.reply, true);
+  const value = JSON.stringify(Array.from({ length: MAX_PAGE_LINKS }, (_, index) => [`https://a.com/${index}`, "x".repeat(90)]));
+  assert.ok(new TextEncoder().encode(value).length <= MAX_PAGE_LINKS_BYTES);
+  assert.equal(reply_fits({ v: V, reply_to: "l1", ok: true, value }, row), true);
 });

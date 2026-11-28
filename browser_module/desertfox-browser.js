@@ -33,6 +33,9 @@
 //   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The which-key feature reads it.
 //   watch_pending(fn)          Anywhere: fn(win) after each key the taker saw and each reset, with `win` undefined for a reset of every window, so a feature can follow module_pending. Returns the call that stops it.
 //                              A listener that throws is logged and the key goes on.
+//   watch_root_list(fn)        Anywhere: fn(win, shown) when `win` should show the which-key root list (`shown` true) or hide it (false). A key that ran `help.whichkey` shows it. The core defines that command itself for the which-key feature to answer. Returns the call that stops it.
+//   show_root_list(win)        In the sandbox: show the root list in `win`, as the key does, for a feature that opens it outside the key walk (a hint session, a one-shot prefix). The next keydown in `win` closes it.
+//   hide_root_list(win)        In the sandbox: hide it again, for a caller that closes it before a key does.
 //   take_held_keys(win, end)   In the sandbox: after a key that opens the command line the taker holds the window's keys until the line has the focus. This gives the text typed meanwhile, once, and with `end` true ends the hold. "" with no hold.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
@@ -60,7 +63,7 @@
 //   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
 //   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
 //   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
-//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
+//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), links(browser, scope), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
 //   content_pages()            In the sandbox: that route, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
@@ -133,8 +136,8 @@
     const MESSAGE_ENVELOPE_BYTES = 512;
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
-    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
-    const MAX_DEVTOOLS_KEY_ROWS = 8;
+    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start", "search.focus", "search.next", "search.prev", "tool.prefix", "tab.next", "tab.prev"];
+    const MAX_DEVTOOLS_KEY_ROWS = 16;
     const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
     const MAX_DEVTOOLS_VISUAL_ROWS = 16;
     const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
@@ -159,7 +162,7 @@
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
-      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
+      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
@@ -167,6 +170,7 @@
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
       "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: 8192 },
+      "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: 65536 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -322,7 +326,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "mode_keys"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "mode_keys"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -826,6 +830,17 @@
     const session_watchers = new Map();
     // Every half-typed key change goes through the taker's `key` or `reset`, so the watchers hear it after those.
     const pending_watchers = new Set();
+    const root_list_watchers = new Set();
+    const tell_root_list = (win, shown) => {
+      for (const watcher of [...root_list_watchers]) {
+        try {
+          watcher(win, shown);
+        } catch (error) {
+          log_once(`a watcher of the root list failed: ${error}`);
+        }
+      }
+    };
+    commands.set("help.whichkey", { args: {}, run: ({ window }) => tell_root_list(window, true) });
     const after_pending = (win, result) => {
       for (const watcher of [...pending_watchers]) {
         try {
@@ -1191,6 +1206,12 @@
         pending_watchers.add(fn);
         return () => void pending_watchers.delete(fn);
       },
+      show_root_list: (win) => tell_root_list(win, true),
+      hide_root_list: (win) => tell_root_list(win, false),
+      watch_root_list(fn) {
+        root_list_watchers.add(fn);
+        return () => void root_list_watchers.delete(fn);
+      },
       module_pending(win) {
         if (typeof key_taker?.pending !== "function") return undefined;
         return key_taker.pending(win);
@@ -1254,6 +1275,7 @@
         fail_awaited("the module shut down");
         key_taker?.reset();
         pending_watchers.clear();
+        root_list_watchers.clear();
         try {
           take_back_hello();
         } catch (error) {

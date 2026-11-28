@@ -16,7 +16,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `cmdline.ts`: the `cmdline.*` commands, `list.act` and `list.select`. The code sits in the `cmdline` bundle.
 - `command.ts`: `command.repeat`, which replays the stored request through a router that `main.ts` wires in.
 - `config.ts`: `config.reload` and `debug.restart`.
-- `copy.ts`: `copy.url` and `copy.links`, and `copy.page`, the background variant of `copy.url` that a locked page runs.
+- `copy.ts`: `copy.url` and `copy.links`, `copy.page`, the background variant of `copy.url` that a locked page runs, and `copy.page_links`, the one of `copy.links`.
 - `copy_tabs.ts`: `copy.tabs` (`yT`), which lists the open web tabs in the link-list formats.
 - `engine.ts`: `engine.show`.
 - `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.
@@ -50,6 +50,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `session.ts`: `session.save`, `session.open`, `session.delete` and `session.rename`, over a `SessionDeps` object.
 - `settings.ts`: `set`, `toggle` and `unset` (ids `settings.set`, `settings.toggle`, `settings.unset`), over the planners in `src/shared/settings_plan.ts`.
 - `tab.ts`: the `tab.*` commands: next, prev, undo_close, move, duplicate, detach, goto, alternate, pin, mute and more.
+- `tab_visual.ts`, `tab_act.ts`: `tab.visual` moves the tab range of `gv`, `tab.act` acts on the selected tabs (`close`, `pin`, `mute`, `reload`, `copy`, `group`, `attach`, `bookmark`).
 - `tab_group.ts`: the `tabgroup.*` commands on the tab's native tab group, over `TabGroupDeps`.
 - `tab_split.ts`: `tab.split_other`, `tab.split_swap` and the `pane.*` calls to the browser module.
 - `text.ts`: `text.insert`, `register.paste` and `text.edit_external`. The code sits in the `text` and `editor` bundles.

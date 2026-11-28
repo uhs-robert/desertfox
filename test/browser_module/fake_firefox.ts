@@ -96,6 +96,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   const timer_delays = new Map<number, number>();
   let next_timer = 1;
   const firefox = {
+    // The window Services.wm.getMostRecentWindow gives, for a test of a DevTools window's J and K.
+    most_recent_window: null as unknown,
     extension: undefined as FakeExtension | undefined,
     fail_import: false,
     fail_tab_ids: false,
@@ -143,7 +145,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         observers.get(topic)?.delete(observer);
       },
     },
-    wm: { getEnumerator: (type: string | null) => (type === null || type === "devtools:toolbox" ? [...devtools_windows] : []) },
+    wm: { getMostRecentWindow: () => firefox.most_recent_window, getEnumerator: (type: string | null) => (type === null || type === "devtools:toolbox" ? [...devtools_windows] : []) },
     prefs: {
       getBoolPref(name: string, fallback: boolean) {
         if (!prefs.has(name)) return fallback;

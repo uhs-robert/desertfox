@@ -39,13 +39,13 @@ function same_args(args: Args, expected: Args, ignored?: string): boolean {
   return [...names].every((name) => args[name] === expected[name]);
 }
 
-// The token paths of every key that runs a matching invocation, shortest first. A `prefer` key wins when it is bound.
+// The token paths of every key that runs a matching invocation, shortest first. A guarded key counts for the step it falls back to, as the scroll keys do. A `prefer` key wins when it is bound.
 export function key_paths(compiled: CompiledKeymap | undefined, commands: CommandMeta[], binding: Binding): string[][] {
   const found: string[][] = [];
   const walk = (node: TreeNode, path: string[]): void => {
     if (node.kind === "branch") {
       for (const [token, child] of Object.entries(node.children)) if (token !== LIVE_KEY) walk(child, [...path, token]);
-    } else if (fits(commands, binding, node.steps)) {
+    } else if (fits(commands, binding, node.steps) || (node.otherwise && fits(commands, binding, node.otherwise.steps))) {
       found.push(path);
     }
   };

@@ -51,6 +51,7 @@ import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { tab_visual } from "../commands/tab_visual.ts";
 import { wire_before_own_load } from "../commands/open_target.ts";
 import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_rows } from "./quality_levels.ts";
@@ -289,7 +290,10 @@ browser.windows.onFocusChanged.addListener((window_id) => {
   // Firefox closes the panel when its window loses the focus.
   void cmdline_panel.focused(window_id).catch(warn_and_go("cmdline_panel.focused"));
 });
-browser.windows.onRemoved.addListener((window_id) => void last_used_tabs.window_removed(window_id));
+browser.windows.onRemoved.addListener((window_id) => {
+  void last_used_tabs.window_removed(window_id);
+  void tab_visual.forget_window(window_id).catch(warn_and_go("tab_visual.forget_window"));
+});
 
 const inspect_relay = create_inspect_relay(browser.storage.session, Date.now);
 // Only the extension's own devtools page may register, because a content script can open a port too.
@@ -361,9 +365,9 @@ const browser_module = create_browser_module({
   },
   locked_commands,
   find_command: (id) => registry.get(id),
-  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async () => {
+  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async (text) => {
     const tab = await router_deps.active_tab();
-    if (tab) await router_deps.open_cmdline(tab.tab_id, 0, "");
+    if (tab) await router_deps.open_cmdline(tab.tab_id, 0, text);
   }, active_url: async () => (await router_deps.active_tab())?.url, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
@@ -503,7 +507,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const is_own_page = (sender: browser.runtime.MessageSender) => is_extension_page(sender, browser.runtime.id, browser.runtime.getURL(""));
 const handlers = {
   ...page_handlers({ get_config, settings_messages, keymap_messages, engine_messages, alias_messages, theme_messages, quickmark_messages, font_names, toolbar, change_site_keys_in_file, change_site_rule_in_file, preview_config_import, import_config, read_keymap_state, read_engine_state, remove_snippet, save_config_file, choose_host_start, reload_config }),
-  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab, cmdline_panel }),
+  ...content_handlers({ get_config, get_search_engine_names, snippets, is_own_page, tab_modes, tab_insert, tab_item, media_discovery, tab_media, bridge, macro_replay, hint_frames, find_scan, external_editor, editor_ext_for, jump_step, jump_leave, global_mark_jump, cmdline, complete_items, inspect_relay, open_help, repeat_memory, frame_cue, router, router_deps, media_quality, browser_module, is_locked_tab: browser_module_rpc.is_locked_tab, cmdline_panel, tab_visual }),
 } satisfies Handlers<keyof ToBackground>;
 browser.runtime.onMessage.addListener(dispatch(handlers, is_own_page));
 // A locked page is never an extension page, whatever its message says.

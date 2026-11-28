@@ -29,7 +29,8 @@ test("while recording, q alone stops, and the reply names the register", async (
   assert.equal(reply.recording, "a");
   const matcher = create_matcher(reply.keymap);
   assert.equal(first_step(matcher.feed("normal", "q"))?.id, "macro.stop");
-  assert.equal(first_step(matcher.feed("normal", "j"))?.id, "scroll.lines");
+  const j = matcher.feed("normal", "j");
+  assert.equal(j.kind_ === "match" && j.leaf.otherwise?.steps[0]?.invocation.id, "scroll.lines", "j keeps its scroll as the fallback of the list guard");
 });
 
 test("a page that is not recording keeps the record key and sends no register", async () => {

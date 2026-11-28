@@ -6,7 +6,7 @@ import type { KeymapConfig, KeymapMode } from "../../src/shared/keymap.ts";
 import { print_command } from "../../src/shared/registry/print_command.ts";
 import { cell, code } from "./splice.ts";
 
-const MODE_ORDER: readonly KeymapMode[] = ["normal", "media", "item", "item_visual", "grab", "sidebar", "hint", "cmdline", "caret", "visual", "visual_line", "insert", "ignore", "browser"];
+const MODE_ORDER: readonly KeymapMode[] = ["normal", "media", "item", "item_visual", "tab_visual", "grab", "sidebar", "hint", "cmdline", "caret", "visual", "visual_line", "insert", "ignore", "browser"];
 
 type Lookup = { get(id: string): CommandDef | undefined };
 
@@ -15,17 +15,29 @@ type Row = { key: string; command: string; label: string; locked?: boolean };
 // Whether a normal-mode key works on a locked page through the browser module. The generator derives it from the same pruned tree the module gets.
 export type LockedKeys = (key: string) => boolean;
 
+const printed = (step: BoundInvocation, registry: Lookup): string => {
+  const command = registry.get(step.id);
+  return command ? print_command(command, step.args ?? {}, { flags: "long" }) : step.id;
+};
+
+// The phrase for each known guard selector, by a part that names it. Any other guard reads generically.
+const GUARD_PHRASES: readonly (readonly [string, string])[] = [
+  ["[role=tree]", "while the focus is inside a tree"],
+  ["[role=option]", "while a list item holds the focus"],
+];
+const guard_phrase = (selector: string): string => GUARD_PHRASES.find(([part]) => selector.includes(part))?.[1] ?? "while the page matches the key's guard";
+
 function bound_row(key: string, binding: KeyBinding, registry: Lookup): Row {
   const steps: BoundInvocation[] = [binding].flat();
-  const texts = steps.map((step) => {
-    const command = registry.get(step.id);
-    return command ? print_command(command, step.args ?? {}, { flags: "long" }) : step.id;
-  });
   const first = steps[0]!;
+  // A guarded default key reads as the step it falls back to, with its guarded step in a note.
+  const guarded = first.when_present !== undefined && first.fallback !== undefined;
+  const texts = (guarded ? [first.fallback!] : steps).map((step) => printed(step, registry));
   const prompts = steps.some((step) => step.prompt) ? " (prompts)" : "";
+  const guard_note = guarded ? ` (${guard_phrase(first.when_present!)}: ${code(printed(first, registry))})` : "";
   return {
     key,
-    command: `${code(texts.join(" ; "))}${prompts}`,
+    command: `${code(texts.join(" ; "))}${prompts}${guard_note}`,
     label: first.label ?? registry.get(first.id)?.label ?? "",
   };
 }

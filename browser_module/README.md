@@ -10,6 +10,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-cmdline-panel.js`: the command line panel. It answers `cmdline_panel.open` with DesertFox's own `cmdline.html` in a panel over the selected tab.
 - `desertfox-firefox-pages.js`: Firefox's own pages. It answers `firefox_page.open` from its own frozen page table, in the asking tab's window. Open it for the dedupe, the rate limit or the entry points.
 - `desertfox-selection.js`: the page selection of a parent-process about: page. It answers `selection.read` with the cleaned, capped text. Open it for what it reads and when it refuses.
+- `desertfox-page-links.js`: the links of a page for `yL` and `yl`. It answers `page_links.read` with capped `[address, text]` pairs, reads parent-process about: pages itself and asks the content hints route for the rest. Open it for the caps and the refusals.
 - `desertfox-locked-pages.js`: DesertFox's own page code on the page kinds of `page_kind_of`. Open it for the attach rule, the sandbox, the transport or the rule that says where hints cannot run now.
 - `desertfox-commands.js`: generated from `sources/commands.js`, never edited. Key sequences and counts on locked pages, the hint key notice and page hint start, the insert, ignore and pass-next modes, the keys a field takes (`field_key`), `page.stop` and the address bar opener.
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
@@ -18,7 +19,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
 - `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
 - `desertfox-chrome-hints.js`: hints over Firefox's UI, panels, prompts, dialogs, the Library, Page Info and the allowlisted about: pages: collect, draw, pick, a grant's Enter, `hint.browser`, and the drawing DevTools hints share.
-- `desertfox-content-hints.js`: hints on the hosts of Firefox's restricted list, in a content process: the page rule, the frame script that collects and picks there, and its transport.
+- `desertfox-content-hints.js`: hints on the hosts of Firefox's restricted list, in a content process: the page rule, the frame script that collects, picks and reads links there, and its transport.
 - `install.sh`: `sudo browser_module/install.sh [--uninstall]` copies or removes every `desertfox-*.js` file here.
 
 Rules:

@@ -35,14 +35,14 @@ test("the locked-page set: background commands that need no page, minus the deny
   // A new background command shows here in review. A command that needs a page must stay out.
   assert.deepEqual([...allowed].sort(), [
     "bookmark.add", "bookmark.edit_url", "bookmark.move", "bookmark.open", "bookmark.open_folder", "bookmark.remove", "bookmark.rename",
-    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
+    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.page_links", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
     "help.issue", "help.key", "help.open", "hint.browser", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
     "page.back", "page.forward", "page.home", "page.print", "page.reader", "page.reload", "page.save_pdf",
     "pane.close_both", "pane.equalize", "pane.focus", "pane.focus_side", "pane.move", "pane.resize", "pane.split", "pane.unsplit", "permissions.grant",
     "quickmark.add", "quickmark.delete", "quickmark.list", "quickmark.open", "register.list",
     "session.delete", "session.open", "session.rename", "session.save", "settings.set", "settings.toggle", "settings.unset",
-    "tab.alternate", "tab.alternate_any_window", "tab.attach", "tab.close", "tab.detach", "tab.duplicate", "tab.goto", "tab.goto_audible", "tab.load", "tab.move", "tab.mute", "tab.next", "tab.pin", "tab.prev", "tab.reopen_in_container", "tab.split_other", "tab.split_swap", "tab.switch", "tab.undo_close", "tab.unload",
+    "tab.act", "tab.alternate", "tab.alternate_any_window", "tab.attach", "tab.close", "tab.detach", "tab.duplicate", "tab.goto", "tab.goto_audible", "tab.load", "tab.move", "tab.mute", "tab.next", "tab.pin", "tab.prev", "tab.reopen_in_container", "tab.split_other", "tab.split_swap", "tab.switch", "tab.undo_close", "tab.unload", "tab.visual",
     "tabgroup.add", "tabgroup.close", "tabgroup.collapse", "tabgroup.color", "tabgroup.expand", "tabgroup.name", "tabgroup.next", "tabgroup.prev", "tabgroup.remove", "tabgroup.toggle",
     "url.increment", "url.parent", "url.root", "window.close", "window.new", "window.undo_close", "zoom.by", "zoom.set",
   ]);
@@ -67,16 +67,19 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.equal(node_at(DEFAULT_TREE, ["v"]), undefined, "caret mode needs the page code");
   // Hints, find, marks and the page's own Escape need DesertFox's page code.
   for (const keys of [["f"], ["/"], ["m"], [";"], ["<Esc>"], ["<Escape>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
-  // The bare command line key stays, so the background opens the line as a panel. A line with typed text (`A`, `tM`) does not.
+  // The bare command line key stays, so the background opens the line as a panel. A line with typed text stays only when its command runs with no page (`tM`), not for `A`, `sh` or `;;`.
   assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
-  for (const keys of [["A"], ["t", "M"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  assert.equal(node_at(DEFAULT_TREE, ["t", "M"]), "forward");
+  for (const keys of [["A"], ["s", "h"], [";", ";"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
 });
 
 test("the page yanks run on a locked page as their background variant, with their args and register", () => {
-  for (const keys of [["y", "y"], ["y", "c"], ["y", "m"], ["y", "o"], ["y", "s"], ["y", "t"]]) assert.equal(node_at(DEFAULT_TREE, keys), "forward", keys.join(""));
-  // The link yanks need the page's links, so they stay out of the tree.
-  for (const keys of [["y", "L"], ["y", "l"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  for (const keys of [["y", "y"], ["y", "c"], ["y", "m"], ["y", "o"], ["y", "s"], ["y", "t"], ["y", "L"], ["y", "l"]]) assert.equal(node_at(DEFAULT_TREE, keys), "forward", keys.join(""));
+  // The link yanks ask the module for the page's links, with the scope and format of the key.
+  const links = resolve_run(compiled(), "y l", 0, allowed);
+  assert.ok(links.ok);
+  assert.deepEqual(counted_steps(links.leaf.steps, undefined).map(({ id, args }) => ({ id, ...args })), [{ id: "copy.page_links", scope: "viewport", format: "markdown", register: "" }]);
   const resolved = resolve_run(compiled(), "y m", 0, allowed);
   assert.ok(resolved.ok);
   assert.deepEqual(counted_steps(resolved.leaf.steps, undefined).map(({ id, args }) => ({ id, format: args?.["format"] })), [{ id: "copy.page", format: "markdown" }]);
@@ -100,7 +103,7 @@ test("the tree names the hint keys of the user's keymap, which the module claims
 
 test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
   // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
-  for (const keys of [":", "o", "T", "w w"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of [":", "o", "T", "w w", "t M"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
   for (const keys of ["u", "x x", "g t"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
   assert.equal(DEFAULT_TREE.line_keys?.some((keys) => keys.split(" ").includes("")), false, "a path through the capture key");
   for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, line_keys: [junk] }).ok, false, JSON.stringify(junk));
@@ -159,7 +162,7 @@ test("the module's matcher walks the tree: sequences, counts and the any-key chi
 });
 
 test("the tree check refuses junk, depth, size and a native leaf the module does not run", () => {
-  for (const junk of [undefined, null, 3, "forward", [], { children: [] }, { children: { a: "run" } }, { children: { "a b": "forward" } }, { children: { a: { native: "tab.close", args: {} } } }, { children: { a: { native: "scroll.lines", args: { count: "x" } } } }, { children: { a: { native: "tab.next", args: {}, count_rule: { param: "evil" } } } }]) {
+  for (const junk of [undefined, null, 3, "forward", [], { children: [] }, { children: { a: "run" } }, { children: { "a b": "forward" } }, { children: { a: { native: "scroll.lines", args: { count: "x" } } } }, { children: { a: { native: "tab.next", args: {}, count_rule: { param: "evil" } } } }]) {
     assert.equal(validate_scope_tree(junk).ok, false, JSON.stringify(junk));
   }
   let deep: ScopeTree = { children: { a: "forward" } };
@@ -173,6 +176,15 @@ test("the tree check refuses junk, depth, size and a native leaf the module does
   assert.deepEqual(carried.ok && carried.value.tree, DEFAULT_TREE);
   assert.equal(validate_module_state({ ...state, tree: { children: { a: 1 } } }).ok, false);
   assert.ok(validate_module_state(state).ok);
+});
+
+test("a native leaf of a command the module does not know is dropped and the rest of the tree stays, so an older module keeps its other keys", () => {
+  const tree = { children: { a: "forward", b: { native: "tab.close", args: {} }, "<A-?>": { native: "help.whichkey", args: {} }, g: { children: { c: { native: "tab.next", args: {} }, d: { native: "later.command", args: {} } } } }, line_keys: ["a"] };
+  const checked = validate_scope_tree(tree);
+  assert.deepEqual(checked.ok && checked.value, { children: { a: "forward", "<A-?>": { native: "help.whichkey", args: {} }, g: { children: { c: { native: "tab.next", args: {} } } } }, line_keys: ["a"] });
+  assert.equal(validate_scope_tree({ children: { b: { native: "tab.next", args: { extra: 1 }, count_rule: { param: "evil" } } } }).ok, false, "a known command with a bad rule still fails the tree");
+  const state = validate_module_state({ v: 1, enabled: true, keys: [], tabs: {}, tree });
+  assert.ok(state.ok && state.value.tree?.children.b === undefined);
 });
 
 test("a run request's keys are matched again against the full tree", () => {
@@ -240,4 +252,11 @@ test("the mode commands are in the tree only for a hello that says mode_keys, an
   assert.deepEqual(node_at(without, ["g", "g"]), node_at(newer, ["g", "g"]));
   assert.deepEqual(scope_tree_of(compiled(), allowed, real_check), newer, "no filter is every command");
   assert.ok(validate_scope_tree(without).ok && validate_scope_tree(newer).ok);
+});
+
+test("the guarded default j and k stay on locked pages as their scroll fallback", () => {
+  for (const [key, count] of [["j", 10], ["k", -10]] as const) {
+    const node = node_at(DEFAULT_TREE, [key]);
+    assert.deepEqual(node && typeof node === "object" && "native" in node ? [node.native, (node.args as { count?: number }).count] : node, ["scroll.lines", count], key);
+  }
 });

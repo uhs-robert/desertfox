@@ -22,6 +22,8 @@ const VALID_SETTING_TEXT: Record<string, string> = { which_key_delay_ms: "500", 
 // handler that starts refusing accepted args shows up. An entry that never matches fails too.
 const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   // The stub's toggleReaderMode rejects, as Firefox does for a tab that is no article.
+  // The stub window has one tab, so a close range holds every tab.
+  "tab.act": [/holds every tab in the window/],
   "page.reader": [/cannot show this page in Reader View/],
   "help.key": [/has no normal-mode binding/],
   // The stub has no browser module, and only the module opens the shortcuts view or replaces a tab.
@@ -48,6 +50,7 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "pane.focus_side": [/Needs the browser module/],
   "pane.move": [/Needs the browser module/],
   "hint.browser": [/Needs the browser module/],
+  "copy.page_links": [/Needs the browser module/],
   // The browser module runs these in the sidebar. The extension has no focus there.
   "sidebar.down": [/Works only with focus in the sidebar/],
   "sidebar.up": [/Works only with focus in the sidebar/],

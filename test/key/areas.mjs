@@ -54,11 +54,12 @@ export const area_rules = [
   // The router times each background command and `debug.perf` reads the timings, so every key runs through the timing hook.
   { globs: ["src/background/timing_{browser,log,summary}.ts", "src/commands/perf.ts"], areas: ["keys"] },
   { globs: ["src/background/{bridge,bridge_browser,bridge_run,bridge_events}.ts"], areas: ["keys"] },
-  { globs: ["src/background/browser_module.ts", "src/commands/sidebar.ts", "src/background/browser_module_call.ts", "src/background/browser_module_run.ts", "src/shared/browser_module_protocol.ts", "src/shared/browser_module_scope.ts", "src/shared/firefox_pages.ts"], areas: ["keys", "tabs"] },
+  { globs: ["src/background/browser_module.ts", "src/commands/sidebar.ts", "src/background/browser_module_call.ts", "src/background/browser_module_run.ts", "src/shared/browser_module_protocol.ts", "src/shared/browser_module_page_links.ts", "src/shared/browser_module_scope.ts", "src/shared/firefox_pages.ts"], areas: ["keys", "tabs"] },
   // DesertFox page code on a locked page (the PDF viewer, Reader View): the keys, hints and caret mode run there.
   { globs: ["src/background/browser_module_rpc.ts", "src/content/locked_shim.ts"], areas: ["keys", "tabs", "hints", "caret"] },
   // The last search sits in register `/`, and `:registers` completes through the command line.
   { globs: ["src/commands/register.ts", "src/commands/register_param.ts", "src/background/register_store.ts", "src/shared/register_names.ts"], areas: ["find", "cmdline"] },
+  { globs: ["src/content/tab_visual/**", "src/commands/{tab_visual,tab_act}.ts", "src/background/tab_visual.ts"], areas: ["tabs", "keys", "bundles", "ui"] },
   { globs: ["src/commands/session.ts", "src/background/session_store.ts", "src/background/sessions_transfer.ts"], areas: ["cmdline", "tabs"] },
   {
     globs: ["src/cmdline/**", "src/commands/{cmdline,history,bookmark,open_target}.ts", "src/background/{cmdline_service,cmdline_panel,complete_items,history_cache,bookmark_title,completion_rank,rank_index,rank_service,rank_worker}.ts", "src/shared/{anything_ref,setting_completion,score,folder_pick,rank_port}.ts", "src/shared/completion/**"],
