@@ -55,7 +55,8 @@ export async function run_cases(context) {
 
   await setup("turn the module on, with browser_module_pages off", async () => {
     await steps.turn_on_module();
-    expect((await session_value(CONFIG_SNAPSHOT_KEY)) === null, "the setting is off, so no config snapshot is written");
+    await pages_setting(false);
+    expect((await session_value(CONFIG_SNAPSHOT_KEY)) === null, "the setting is off, so no config snapshot is kept");
   });
 
   for (const name of Object.keys(pages)) {

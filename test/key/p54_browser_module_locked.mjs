@@ -38,7 +38,11 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  await setup("turn the module on", () => steps.turn_on_module());
+  // This piece covers the module's own key path, so the page code stays off on the PDF viewer and Reader View. p54_browser_module_pages covers it on.
+  await setup("turn the module on, with browser_module_pages off", async () => {
+    await steps.turn_on_module();
+    await run_line(":set browser_module_pages false");
+  });
 
   // The list of add-ons is too short to scroll in a test profile, so the case makes it long.
   const lengthen = () => in_selected_page(`(win) => { const spacer = win.document.createElement("div"); spacer.style.height = "4000px"; (win.document.querySelector("#main") ?? win.document.body).append(spacer); return true; }`);
