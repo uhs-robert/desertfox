@@ -16,7 +16,7 @@ export function module_steps({ rdp, poll_until, run_line, press_keys, sleep, on_
     return value;
   };
   // The state with its which-key table is longer than the debugger sends whole, so the value comes back as JSON text in slices.
-  const SESSION_SLICE_CHARS = 8000;
+  const SESSION_SLICE_CHARS = 4000;
   let session_reads = 0;
   const session_value = async (key) => {
     const slot = `desertfox_key_test_session_text_${session_reads++}`;
