@@ -133,8 +133,8 @@
     const MESSAGE_ENVELOPE_BYTES = 512;
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
-    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
-    const MAX_DEVTOOLS_KEY_ROWS = 8;
+    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start", "search.focus", "search.next", "search.prev", "tool.prefix", "tab.next", "tab.prev"];
+    const MAX_DEVTOOLS_KEY_ROWS = 16;
     const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
     const MAX_DEVTOOLS_VISUAL_ROWS = 16;
     const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
@@ -159,7 +159,7 @@
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
-      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
+      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: 4096 },
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
@@ -320,7 +320,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "hint_mode_keys"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "hint_mode_keys"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.

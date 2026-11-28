@@ -1,7 +1,9 @@
-// DesertFox browser module, the DevTools feature: tree keys, hints and visual mode in docked DevTools and in DevTools windows. See docs/design/browser_module.md.
+// DesertFox browser module, the DevTools feature: tree keys, hints, visual mode, the Inspector search keys and the console's double Escape in docked DevTools and in DevTools windows. See docs/design/browser_module.md.
 // The extension pushes the key table (`devtools.keys`), a one-character key and a fixed action per row. Each tree action becomes an arrow key on the focused DevTools element, so a DevTools tree (the Inspector markup, the Debugger sources, Storage, Network rows) moves, expands and collapses as its own arrows make it.
 // The `hints.start` action asks the extension for hints (`devtools_hints.ask`). The hints work as chrome hints do: this file collects targets from a fixed table and sends only ids and boxes, the extension makes the labels and names the pick, and this file draws them and runs one fixed action per target.
 // The `visual.start` action starts visual mode in the focused text area. Its keys come in a second table (`devtools.visual_keys`), each a fixed op that moves the end of the selection or copies it. The copy stays in this process.
+// The `tool.prefix` action holds a `g` for a second key of this file's own: `t` and `T` send the toolbox's Ctrl+] and Ctrl+[ chords, so DevTools selects its next and previous tool. The `tab.` actions run the module's own tab switch, so J and K switch browser tabs from DevTools.
+// The `search.` actions focus the Inspector's search box and press its match buttons. Escape in that box and a double Escape in the console input are fixed keys of this file, as Escape in the hints and the mode is.
 // No DesertFox page code runs in DevTools: every DevTools document has the system principal, so code there runs as the browser. This file reads no DevTools internals either, only the focused element and the elements of its fixed table.
 // The core decides that the focus is in DevTools and that the module may act. This file passes a key it has no row for, a key with a modifier, a key typed in an editable field (the console input, the markup view's inline editors) and a key for a frame of another process, so DevTools keeps those.
 
@@ -23,6 +25,18 @@
   }
   const ENABLED_PREF = "desertfox.browser_module.enabled";
   const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "OS", "CapsLock", "Dead", "Unidentified", "Process"]);
+  // The DOM steps that the features share. They read and press DevTools' own elements and nothing of its internals.
+  const TOOLBOX_URL = "about:devtools-toolbox";
+  // Where `focus` lands inside an area or a field's wrapper that takes no focus itself.
+  const FOCUSABLE = "[tabindex], [contenteditable=true], input, textarea, select, button";
+  const frame_of = (doc) => doc?.defaultView?.frameElement ?? doc?.defaultView?.browsingContext?.embedderElement ?? null;
+  const box_of = (element) => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+  };
+  // A suggestion popup that shows, in the toolbox document, for the Inspector's search box and the console input. While it shows, Escape is DevTools': it hides the popup and keeps the text.
+  const OPEN_POPUP = ".tooltip-visible .devtools-autocomplete-popup";
+  const point_of = (box, area) => (area ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: box.left + Math.min(box.width / 2, 8), y: box.top + box.height / 2 });
   // In the sandbox an error goes on to the core's `adopt`, which turns the module off for the session.
   define(core);
 
@@ -53,6 +67,33 @@
     return true;
   }
 
+  // The toolbox document above the element, for the focus in the toolbox or in one of its panels.
+  function toolbox_of(element) {
+    let doc = element?.ownerDocument;
+    for (let depth = 0; doc && depth < 8; depth++) {
+      if (String(doc.documentURI).startsWith(TOOLBOX_URL)) return doc;
+      doc = frame_of(doc)?.ownerDocument;
+    }
+    return null;
+  }
+
+  function press(element) {
+    const view = element.ownerDocument.defaultView;
+    const { x, y } = point_of(box_of(element), false);
+    for (const type of ["mousedown", "mouseup", "click"]) {
+      element.dispatchEvent(new view.MouseEvent(type, { bubbles: true, cancelable: true, composed: true, view, button: 0, buttons: type === "mousedown" ? 1 : 0, detail: 1, clientX: x, clientY: y }));
+    }
+  }
+
+  function focus(element) {
+    const doc = element.ownerDocument;
+    doc.defaultView.focus();
+    const focusable = element.matches(FOCUSABLE) ? element : element.querySelector(FOCUSABLE);
+    // An area that takes no focus, such as the console output: the field that had it lets it go, so the next keys reach the area's document and not that field.
+    if (focusable) focusable.focus();
+    else doc.activeElement?.blur();
+  }
+
   function define(core) {
     const ARROWS = {
       "tree.down": { key: "ArrowDown", keyCode: 40 },
@@ -71,22 +112,30 @@
     const is_frame = (node) => node?.localName === "iframe" || node?.localName === "browser";
     const hints = define_hints(core);
     const visual = define_visual(core, in_editable);
+    const search = define_search(core);
+    const prefix_hold = define_prefix_hold(core);
+    const tools = define_tool_keys(core, prefix_hold);
+    const console_escape = define_console_escape(core);
     // A reloaded or older DesertFox gets a new hello. The tables, the hints and the mode of the one before go, so only a DesertFox that pushes its own table gets these keys.
     core.on_hello(() => {
       actions = new Map();
       hints.end();
       visual.forget();
+      search.forget();
+      console_escape.forget();
+      prefix_hold.forget();
     });
     // The pref has its own observer in each feature. The consent setting and the toolbar switch reach the module only through the state, and then no key comes to end the hints or the mode.
     core.watch_session([MODULE_STATE_KEY], (_key, state) => {
       if (state?.enabled === true) return;
       hints.end();
       visual.end();
+      prefix_hold.forget();
     });
 
     // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
     core.register_kind("devtools.keys", ({ keys }) => {
-      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START).map(({ key, action }) => [key, action]));
+      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START || search.ACTIONS.has(action) || tools.ACTIONS.has(action)).map(({ key, action }) => [key, action]));
       return { ok: true };
     });
 
@@ -95,20 +144,251 @@
       if (taken_by_hints !== undefined) return taken_by_hints;
       const taken_by_visual = visual.answer_key(win, event, token);
       if (taken_by_visual !== undefined) return taken_by_visual;
+      const target = event.originalTarget ?? event.target;
+      // Every key ends a held prefix. The one that completes it runs the second key's action.
+      const taken_by_prefix = prefix_hold.take(win, event, token);
+      if (taken_by_prefix !== undefined) return taken_by_prefix;
+      // Escape is no row, since a row is one character. Any pushed table turns on the console's double Escape, and the search rows turn on the search box's Escape. Both run before the field check, as both start in a field.
+      if (console_escape.answer_key(event, target, actions.size > 0)) return true;
+      if (search.answer_escape(event, target, [...actions.values()].some((action) => search.ACTIONS.has(action)))) return true;
       if (event.ctrlKey || event.altKey || event.metaKey) return false;
       const action = actions.get(token);
       if (!action) return false;
-      const target = event.originalTarget ?? event.target;
       // Before the field check: a code area of the mode's own table is an editor that DevTools keeps read-only. The mode refuses every other field.
       if (action === VISUAL_START) return visual.start(win, target);
       if (in_editable(target) || is_frame(target)) return false;
       if (action === HINTS_START) return hints.ask(win);
+      if (search.ACTIONS.has(action)) return search.run(action, target);
+      if (tools.ACTIONS.has(action)) return tools.start(action, win, target);
       // Chrome code makes this arrow, so Gecko marks it trusted, and it reaches the core's listener again. No row takes an arrow there, so it moves the tree once.
       const { key, keyCode } = ARROWS[action];
       const view = target.ownerDocument.defaultView;
       target.dispatchEvent(new view.KeyboardEvent("keydown", { key, code: key, keyCode, bubbles: true, cancelable: true, composed: true, repeat: event.repeat }));
       return true;
     });
+  }
+
+  // ---- A prefix key held for its second key.
+  // A table row is one character, so a two-key chord such as `gt` is a row for the prefix and a fixed set of second keys in the feature's own code. This holds the prefix: the next key goes to the handler the feature gave, which takes it or lets it go on. Every key ends the hold.
+  // The hold ends on any key, a blur of the target, a click, a page hide, a new hello, the pref going off and a timer. DesertFox's own sequences have no timer, but a hold across a pause in a toolbox the user left would run a late `t` as a tool switch.
+  function define_prefix_hold(core) {
+    const HOLD_MS = 1000;
+    let held = null;
+
+    function forget() {
+      const ended = held;
+      if (!ended) return;
+      held = null;
+      undo_all(ended);
+    }
+
+    // `on_second(token)` gets the next key's token and returns true when it took the key, or undefined to let the key go on.
+    function start(win, target, on_second) {
+      forget();
+      const view = target.ownerDocument.defaultView;
+      held = { win, target, on_second, undo: [] };
+      const timer = win.setTimeout(forget, HOLD_MS);
+      held.undo.push(() => win.clearTimeout(timer));
+      listen(held, target, "blur", forget);
+      listen(held, view, "pagehide", forget);
+      listen(held, win, "mousedown", forget);
+      return true;
+    }
+
+    // Each key of DevTools passes here before anything else reads it, and the hold ends on it. Gives the handler's answer when the key comes in the same window and element, with no modifier.
+    function take(win, event, token) {
+      const ended = held;
+      if (!ended) return undefined;
+      forget();
+      const target = event.originalTarget ?? event.target;
+      if (ended.win !== win || ended.target !== target || event.ctrlKey || event.altKey || event.metaKey) return undefined;
+      return ended.on_second(token);
+    }
+
+    const on_pref = () => enabled_by_pref() || forget();
+    Services.prefs.addObserver(ENABLED_PREF, on_pref);
+    core.on_shut_down(() => {
+      forget();
+      Services.prefs.removeObserver(ENABLED_PREF, on_pref);
+    });
+
+    return { start, take, forget };
+  }
+
+  // ---- The tool keys and the tab keys.
+  // `gt` and `gT` send the toolbox's own next and previous tool chords (Ctrl+] and Ctrl+[) to the focused element, so DevTools runs its own tool switch, overflowed tabs and wrap-around included. This file reads no toolbox object. Linux chords: on macOS the toolbox uses Cmd+[ and Cmd+], which are also Firefox's Back and Forward.
+  // `J` and `K` run the module's tab commands. A DevTools window has no tab browser, so they act on the newest browser window.
+  function define_tool_keys(core, prefix_hold) {
+    const ACTIONS = new Set(["tool.prefix", "tab.next", "tab.prev"]);
+    const CHORDS = {
+      "tool.next": { key: "]", code: "BracketRight", keyCode: 221 },
+      "tool.prev": { key: "[", code: "BracketLeft", keyCode: 219 },
+    };
+    const AFTER_G = new Map([
+      ["t", "tool.next"],
+      ["T", "tool.prev"],
+    ]);
+    // Trusted, since chrome code made it, and the core's listener sees it again. The claim passes every Ctrl chord, so it goes on to the toolbox.
+    function send_chord(second, target) {
+      const view = target.ownerDocument.defaultView;
+      target.dispatchEvent(new view.KeyboardEvent("keydown", { ...CHORDS[second], ctrlKey: true, bubbles: true, cancelable: true, composed: true }));
+      return true;
+    }
+
+    // The target is no field or frame here: the claim checked that before it called this.
+    function start(action, win, target) {
+      if (action === "tool.prefix") return prefix_hold.start(win, target, (token) => (AFTER_G.has(token) ? send_chord(AFTER_G.get(token), target) : undefined));
+      const browser_window = win.gBrowser ? win : Services.wm.getMostRecentWindow("navigator:browser");
+      return !!browser_window?.gBrowser && core.may_act(browser_window) && core.run_command(action, {}, { window: browser_window });
+    }
+
+    // Said last, so the extension sends these rows only to a module that runs them.
+    core.set_hello_flag("devtools_tools", true);
+
+    return { ACTIONS, start };
+  }
+
+  // ---- The Inspector search keys.
+  // `/` focuses the Search HTML box and keeps the markup line that was selected. `n` and `N` press the box's own next and previous match buttons, so DevTools runs its own search, as for Enter and Shift+Enter in the box.
+  // Escape in the box keeps its text, so `n` and `N` go on, and presses the kept line, which selects that node again and focuses the markup view. Without a kept line, as when a click focused the box, it presses the line selected now, which only focuses the markup view.
+  // The kept line goes when the box loses the focus, so an Escape after a later click restores nothing.
+  function define_search(core) {
+    const ACTIONS = new Set(["search.focus", "search.next", "search.prev"]);
+    const INSPECTOR_URL = "chrome://devtools/content/inspector/index.xhtml";
+    const MARKUP_URL = "chrome://devtools/content/inspector/markup/markup.html";
+    const SEARCH_BOX = "inspector-searchbox";
+    const MATCH_BUTTONS = { "search.next": "inspector-searchnavigation-button-next", "search.prev": "inspector-searchnavigation-button-prev" };
+    const SELECTED_LINE = ".tag-line > .tag-state.theme-selected";
+
+    let kept = null;
+
+    // The Inspector document that holds `node`, from the Inspector itself or from the markup view in its frame.
+    function inspector_of(node) {
+      let doc = node?.ownerDocument;
+      if (String(doc?.documentURI).startsWith(MARKUP_URL)) doc = frame_of(doc)?.ownerDocument;
+      return String(doc?.documentURI).startsWith(INSPECTOR_URL) ? doc : null;
+    }
+    function markup_of(inspector) {
+      for (const frame of inspector.querySelectorAll("iframe")) {
+        const inner = frame.contentDocument;
+        if (inner && String(inner.documentURI).startsWith(MARKUP_URL)) return inner;
+      }
+      return null;
+    }
+    const selected_line = (markup) => markup?.querySelector(SELECTED_LINE)?.parentNode ?? null;
+
+    function forget() {
+      const ended = kept;
+      if (!ended) return;
+      kept = null;
+      undo_all(ended);
+    }
+
+    function focus_box(inspector, box) {
+      forget();
+      const line = selected_line(markup_of(inspector));
+      focus(box);
+      kept = { box, line, undo: [] };
+      // A window sent to the back blurs the box too, but the box stays the document's active element, and the line stays kept.
+      listen(kept, box, "blur", () => box.ownerDocument.activeElement === box || forget());
+      listen(kept, inspector.defaultView, "pagehide", forget);
+      return true;
+    }
+
+    // A key of the table, outside any field, in the Inspector: true when it ran. Elsewhere, or with an empty box, the key goes on.
+    function run(action, target) {
+      const inspector = inspector_of(target);
+      const box = inspector?.getElementById(SEARCH_BOX);
+      if (!box) return false;
+      if (action === "search.focus") return focus_box(inspector, box);
+      // DevTools wires the match buttons on the box's first focus. Text in the box means that focus came.
+      const button = inspector.getElementById(MATCH_BUTTONS[action]);
+      if (!button || box.value === "") return false;
+      button.click();
+      return true;
+    }
+
+    // Escape in the Inspector's search box, with the search keys on: true when it took the key.
+    function answer_escape(event, target, on) {
+      if (!on || event.key !== "Escape" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return false;
+      const inspector = inspector_of(target);
+      if (!inspector || target !== inspector.getElementById(SEARCH_BOX)) return false;
+      if (toolbox_of(target)?.querySelector(OPEN_POPUP)) return false;
+      const markup = markup_of(inspector);
+      if (!markup) return false;
+      const restore = kept?.box === target && kept.line?.isConnected && kept.line.ownerDocument === markup ? kept.line : null;
+      forget();
+      const line = restore ?? selected_line(markup);
+      if (line) {
+        // The press moves the focus only within the markup document, so that document takes it first.
+        markup.defaultView.focus();
+        press(line);
+      } else focus(markup.getElementById("root") ?? markup.documentElement);
+      return true;
+    }
+
+    const on_pref = () => enabled_by_pref() || forget();
+    Services.prefs.addObserver(ENABLED_PREF, on_pref);
+    core.on_shut_down(() => {
+      forget();
+      Services.prefs.removeObserver(ENABLED_PREF, on_pref);
+    });
+    // Said last, so the extension sends the search rows only to a module that runs them.
+    core.set_hello_flag("devtools_search", true);
+
+    return { ACTIONS, run, answer_escape, forget };
+  }
+
+  // ---- A double Escape in the console input.
+  // Two Escapes in the console input, close together, move the focus to the console output, so the DevTools keys work again. A single Escape goes on to the console as before.
+  // The console's editor maps Escape to nothing, so CodeMirror's Vim keymap never gets it there (measured on Firefox 161), and the first Escape costs Vim nothing.
+  // Only in the Console tool: under another tool the split console closes on Escape. Not while the console's suggestion popup shows, which Escape hides, nor in a Vim prompt, which ends on Escape.
+  function define_console_escape(core) {
+    const CONSOLE_URL = "chrome://devtools/content/webconsole/index.html";
+    const DOUBLE_MS = 400;
+    const CONSOLE_TAB = "#toolbox-tab-webconsole";
+
+    // The first Escape: where and when. It ends on any other key, the input's blur and the console's unload, so the toolbox closing or switching tools between the two Escapes starts over.
+    let first = null;
+
+    function forget() {
+      const ended = first;
+      if (!ended) return;
+      first = null;
+      undo_all(ended);
+    }
+
+    // True when `target` is the console input of the Console tool, where an Escape may count.
+    function counts_in_console(target) {
+      const doc = target?.ownerDocument;
+      if (!String(doc?.documentURI).startsWith(CONSOLE_URL) || typeof target.closest !== "function") return false;
+      if (!target.closest(".CodeMirror")?.closest(".jsterm-input-container") || target.closest(".CodeMirror-dialog")) return false;
+      const toolbox = toolbox_of(target);
+      return !!toolbox?.querySelector(CONSOLE_TAB)?.classList.contains("selected") && !toolbox.querySelector(OPEN_POPUP);
+    }
+
+    // Each key in DevTools passes here: true to take it. Only the second Escape is taken.
+    function answer_key(event, target, on) {
+      if (MODIFIER_KEYS.has(event.key)) return false;
+      const before = first;
+      forget();
+      const plain_escape = event.key === "Escape" && !(event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.repeat);
+      if (!on || !plain_escape || !counts_in_console(target)) return false;
+      const gap = event.timeStamp - (before?.at ?? -Infinity);
+      if (before?.target === target && gap >= 0 && gap <= DOUBLE_MS) {
+        // The console output takes no focus itself, so the input lets the focus go and the console document keeps it. The hints' `focus` step is skipped on purpose: it focuses the output's first focusable child, which can scroll a long console to its top.
+        target.ownerDocument.defaultView.focus();
+        target.blur();
+        return true;
+      }
+      first = { target, at: event.timeStamp, undo: [] };
+      listen(first, target, "blur", forget);
+      listen(first, target.ownerDocument.defaultView, "pagehide", forget);
+      return false;
+    }
+
+    core.on_shut_down(forget);
+    return { answer_key, forget };
   }
 
   // ---- Hints over DevTools.
@@ -129,7 +409,6 @@
     const NAMED_KEYS = new Set(["Backspace", "Enter", "Tab"]);
     // DevTools rows are dense, so the labels drop most of their padding. A fixed rule of this file, never from a message.
     const COMPACT_LABELS = ".desertfox-hint { padding: 0 2px; }";
-    const TOOLBOX_URL = "about:devtools-toolbox";
     const DEVTOOLS_URL = "chrome://devtools/";
     // What gets a label in each DevTools document, by its address, and the fixed action of each row: `click`, `focus` (a field or an area), or `press` (a mouse press, for the markup view, which selects on mousedown).
     // An `area` row labels a whole pane at its middle, to move the focus there. A `before` row's label sits left of the target, in the markup view's indent, so it hides no tag name.
@@ -155,8 +434,6 @@
       { url: "chrome://devtools/content/storage/index.xhtml", rows: [{ take: ".tree-widget-item, .table-widget-column:first-child .table-widget-cell, .devtools-button", pick: "click" }, FIELDS] },
     ];
     const OTHER_PANEL_ROWS = [{ take: "button, [role=button], [role=tab], [role=treeitem]", pick: "click" }, FIELDS];
-    // Where `focus` lands inside an area or a field's wrapper that takes no focus itself.
-    const FOCUSABLE = "[tabindex], [contenteditable=true], input, textarea, select, button";
 
     const send = (kind, args) => {
       const sent = core.send(kind, args);
@@ -218,24 +495,8 @@
 
     // ---- Collect.
 
-    const frame_of = (doc) => doc?.defaultView?.frameElement ?? doc?.defaultView?.browsingContext?.embedderElement ?? null;
-    const box_of = (element) => {
-      const rect = element.getBoundingClientRect();
-      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-    };
     const big_enough = (box) => box.width >= MIN_SIDE_PX && box.height >= MIN_SIDE_PX;
     const usable = (element) => !element.hidden && !element.disabled && element.getAttribute?.("aria-disabled") !== "true" && element.checkVisibility();
-    const point_of = (box, area) => (area ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: box.left + Math.min(box.width / 2, 8), y: box.top + box.height / 2 });
-
-    // The toolbox document above the element, for the focus in the toolbox or in one of its panels.
-    function toolbox_of(element) {
-      let doc = element?.ownerDocument;
-      for (let depth = 0; doc && depth < 8; depth++) {
-        if (String(doc.documentURI).startsWith(TOOLBOX_URL)) return doc;
-        doc = frame_of(doc)?.ownerDocument;
-      }
-      return null;
-    }
 
     // A label marks what shows at its point: an element under a popup, scrolled out or covered by another pane gets none.
     function shows_at(doc, element, point) {
@@ -405,23 +666,6 @@
     }
 
     // ---- Pick.
-
-    function press(element) {
-      const view = element.ownerDocument.defaultView;
-      const { x, y } = point_of(box_of(element), false);
-      for (const type of ["mousedown", "mouseup", "click"]) {
-        element.dispatchEvent(new view.MouseEvent(type, { bubbles: true, cancelable: true, composed: true, view, button: 0, buttons: type === "mousedown" ? 1 : 0, detail: 1, clientX: x, clientY: y }));
-      }
-    }
-
-    function focus(element) {
-      const doc = element.ownerDocument;
-      doc.defaultView.focus();
-      const focusable = element.matches(FOCUSABLE) ? element : element.querySelector(FOCUSABLE);
-      // An area that takes no focus, such as the console output: the field that had it lets it go, so the next keys reach the area's document and not that field.
-      if (focusable) focusable.focus();
-      else doc.activeElement?.blur();
-    }
 
     function pick({ session: tag, id }) {
       if (!session) return { ok: false, error: "The hints have ended" };

@@ -19,9 +19,8 @@ import {
   bar_config_of,
   bar_fields_of,
   bar_theme_of,
-  DEVTOOLS_HINT_KEY,
+  DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_TREE_KEYS,
-  DEVTOOLS_VISUAL_KEY,
   DEVTOOLS_VISUAL_KEYS,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
@@ -305,7 +304,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const hello = validate_module_hello(stored_hello);
     const flags = hello.ok ? hello.value : undefined;
     if (flags?.devtools_visual === true && !(await send_now("devtools.visual_keys", { keys: DEVTOOLS_VISUAL_KEYS })).ok) return false;
-    const keys = [...DEVTOOLS_TREE_KEYS, ...(flags?.devtools_hints === true ? [DEVTOOLS_HINT_KEY] : []), ...(flags?.devtools_visual === true ? [DEVTOOLS_VISUAL_KEY] : [])];
+    const keys = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys: rows }) => (flags?.[flag] === true ? rows : []))];
     return (await send_now("devtools.keys", { keys })).ok;
   };
   const bar_built = (stored_hello: unknown): boolean => {
