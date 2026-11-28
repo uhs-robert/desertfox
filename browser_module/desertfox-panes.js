@@ -180,21 +180,46 @@
       return done();
     }
 
-    // A closed sidebar opens on the panel it showed last, as its toolbar button does, then takes the focus.
+    // Focus whatever the sidebar shows, in this order: the open panel, the vertical tab strip, the launcher buttons. Only a sidebar that shows nothing opens, on the panel it showed last.
     async function focus_sidebar() {
       const where = focused_window();
       if (where.problem) return refuse(where.problem);
-      const sidebar = where.win.SidebarController;
+      const { win } = where;
+      const sidebar = win.SidebarController;
       if (typeof sidebar?.isOpen !== "boolean" || !has_function(sidebar, "toggle")) return refuse(NOT_SUPPORTED);
-      if (!sidebar.isOpen) {
-        await sidebar.toggle();
-        // The panel loads before the toggle settles, and the user can switch windows meanwhile. The focus stays where they put it.
-        if (Services.focus?.activeWindow !== where.win) return refuse("The window lost the focus before the sidebar opened");
+      if (sidebar.isOpen) return focus_panel(sidebar);
+      if (sidebar.launcherVisible === true) {
+        if (win.gBrowser.tabContainer?.verticalMode === true) return focus_strip(win);
+        // A false answer means the buttons did not take the focus, so a panel opens instead.
+        if (has_function(sidebar.sidebarMain, "focusButtonGroup") && sidebar.sidebarMain.focusButtonGroup() === true) return done();
       }
-      if (!sidebar.isOpen) return refuse("The sidebar did not open");
+      return open_last_panel(win, sidebar);
+    }
+
+    function focus_panel(sidebar) {
       if (!has_function(sidebar.browser, "focus")) return refuse(NOT_SUPPORTED);
       sidebar.browser.focus();
       return done();
+    }
+
+    // The strip's own focused item is the selected tab, and the tab holds the DOM focus, which is where the sidebar key mode looks for the strip.
+    // The tab gets the focus call itself, so this does not depend on the item setter moving the DOM focus.
+    function focus_strip(win) {
+      const strip = win.gBrowser.tabContainer;
+      const tab = win.gBrowser.selectedTab;
+      if (!("ariaFocusedItem" in strip) || !has_function(tab, "focus")) return refuse(NOT_SUPPORTED);
+      strip.ariaFocusedItem = tab;
+      tab.focus();
+      return done();
+    }
+
+    // Firefox's own default for a sidebar never opened is the first panel in its table, History. Bookmarks is the plain choice.
+    async function open_last_panel(win, sidebar) {
+      await sidebar.toggle(typeof sidebar.lastOpenedId === "string" ? sidebar.lastOpenedId : "viewBookmarksSidebar");
+      // The panel loads before the toggle settles, and the user can switch windows meanwhile. The focus stays where they put it.
+      if (Services.focus?.activeWindow !== win) return refuse("The window lost the focus before the sidebar opened");
+      if (!sidebar.isOpen) return refuse("The sidebar did not open");
+      return focus_panel(sidebar);
     }
 
     // DevTools loads on first use. The shim says whether it has, so a call here never loads it: with DevTools never opened there is no toolbox to focus.
@@ -248,8 +273,11 @@
       if (toolbox?.hostType === direction) return focus_toolbox(toolbox);
       const sidebar_side = sidebar_side_of(win);
       if (sidebar_side === undefined) return refuse(NOT_SUPPORTED);
-      if (sidebar_side === direction) return focus_sidebar();
-      return refuse(`Nothing to focus on the ${direction}`);
+      if (sidebar_side !== direction) return refuse(`Nothing to focus on the ${direction}`);
+      // A sidebar that shows nothing is closed here: a move never opens it, ES does.
+      const sidebar = win.SidebarController;
+      if (typeof sidebar?.isOpen !== "boolean") return refuse(NOT_SUPPORTED);
+      return sidebar.isOpen || sidebar.launcherVisible === true ? focus_sidebar() : refuse("The sidebar is closed");
     }
 
     // The panes by where they show, so a right-to-left window needs no special case.

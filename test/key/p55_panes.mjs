@@ -139,6 +139,28 @@ export async function run_cases(context) {
     await chrome(`(async () => { const w = ${W}; w.SidebarController.hide(); w.gBrowser.selectedBrowser.focus(); })()`);
   });
 
+  await run_case("ES with vertical tabs and no panel puts the DOM focus on the strip, and j then moves the strip's focus", async () => {
+    await chrome(`(async () => { Services.prefs.setBoolPref("sidebar.verticalTabs", true); })()`);
+    on_teardown(() => chrome(`(async () => { Services.prefs.clearUserPref("sidebar.verticalTabs"); const w = ${W}; if (w.SidebarController.isOpen) w.SidebarController.hide(); w.gBrowser.selectedBrowser.focus(); })()`));
+    await poll_until("the strip to turn vertical", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === true)()`));
+    await chrome(`(async () => { const w = ${W}; if (w.SidebarController.isOpen) w.SidebarController.hide(); })()`);
+    await poll_until("the sidebar panel to be closed and the launcher to show", () => chrome(`(async () => { const s = ${W}.SidebarController; return !s.isOpen && s.launcherVisible === true; })()`));
+    await select_page("p55_a");
+    const strip = () =>
+      chrome(`(async () => { const w = ${W}; const c = w.gBrowser.tabContainer; const items = c.ariaFocusableItems; const active = w.document.commandDispatcher.focusedElement; return { focused: items.indexOf(c.ariaFocusedItem), selected: items.indexOf(w.gBrowser.selectedTab), count: items.length, dom_in_strip: !!active?.closest?.("#tabbrowser-tabs"), panel_open: w.SidebarController.isOpen }; })()`);
+    expect((await strip()).dom_in_strip === false, `the DOM focus starts in the strip: ${JSON.stringify(await strip())}`);
+    await press_keys("ES");
+    await poll_until("the DOM focus to land on the strip with no panel open", async () => {
+      const now = await strip();
+      return now.dom_in_strip && !now.panel_open;
+    });
+    const start = await strip();
+    expect(start.count >= 2 && start.focused === start.selected, `the strip focus is not on the selected tab: ${JSON.stringify(start)}`);
+    await press_keys("j");
+    await poll_until("j to move the strip's focus to the next item", async () => (await strip()).focused === start.selected + 1);
+    await press_keys("-k", "Escape");
+  });
+
   await run_case("Ex closes both tabs of the split view", async () => {
     await chrome(`(async () => { ${DEVTOOLS} for (const tab of ${W}.gBrowser.tabs) await gDevTools.closeToolboxForTab(tab); })()`);
     await select_page("p55_a");
