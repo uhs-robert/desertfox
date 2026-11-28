@@ -309,12 +309,9 @@
     const onces = new Map();
     // Per window, when a chord was last typed here.
     const chord_at = new WeakMap();
-    // The windows whose Alt chord the module stopped. Firefox reads the Alt keyup after a stopped keydown as a lone Alt and opens the menu bar, so that keyup stops here too.
+    // The windows where the module stopped a key with Alt. Firefox reads the Alt keyup after a stopped keydown as a lone Alt and opens the menu bar, so that keyup stops here too.
     const alt_up_owed = new WeakSet();
-    const took_chord = (win, event) => {
-      chord_at.set(win, Date.now());
-      if (event.altKey) alt_up_owed.add(win);
-    };
+    const owe_alt_up = (win, event) => event.altKey && alt_up_owed.add(win);
     function chord_key_up(win, event) {
       if (!alt_up_owed.has(win) || !event.isTrusted || event.key !== "Alt") return;
       alt_up_owed.delete(win);
@@ -383,8 +380,10 @@
 
     // The chord itself, with the focus in a sidebar place: the hold starts before a key typed fast behind it. The key stops here, so the shortcut does not fire too.
     function chord_key(win, token, event) {
-      if (!chords_in(win).includes(token) || !start_once(win).ok) return false;
-      took_chord(win, event);
+      // A held chord's auto-repeat would flip the hold on each keydown.
+      if (event.repeat || !chords_in(win).includes(token) || !start_once(win).ok) return false;
+      chord_at.set(win, Date.now());
+      owe_alt_up(win, event);
       event.preventDefault();
       event.stopPropagation();
       return true;
@@ -398,7 +397,10 @@
       if (!token) return;
       event.preventDefault();
       event.stopPropagation();
-      if (once.chords.includes(token)) took_chord(win, event);
+      owe_alt_up(win, event);
+      // The auto-repeat of the chord that armed the hold ends nothing.
+      if (once.chords.includes(token) && event.repeat) return;
+      if (once.chords.includes(token)) chord_at.set(win, Date.now());
       if (token === ESCAPE || once.chords.includes(token)) return end_once(win);
       // The command line opens: a key typed meanwhile runs nothing.
       if (once.waiting) return;

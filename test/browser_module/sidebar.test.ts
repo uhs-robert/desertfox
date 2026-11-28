@@ -861,7 +861,7 @@ test("the sidebar takes a tree only where validate_scope_tree takes it", async (
 });
 
 test("the Alt keyup after a chord the module took stops too, so Firefox opens no menu bar, and other Alt keyups pass", () => {
-  const { panel_doc, focus, press, root } = once_setup({ written: chord_state() });
+  const { panel_doc, focus, press, root, own, held } = once_setup({ written: chord_state() });
   const alt_up = () => {
     const event = key_event("Alt");
     root.fire("keyup", event);
@@ -873,12 +873,32 @@ test("the Alt keyup after a chord the module took stops too, so Firefox opens no
   assert.equal(alt_up(), true, "the Alt keyup after the arming chord went on");
   assert.equal(alt_up(), false, "a second Alt keyup stopped");
   press("o", alt_o);
-  press("o", alt_o);
+  assert.equal(held(), undefined);
   assert.equal(alt_up(), true, "the Alt keyup after the chord that ended the hold went on");
+  // Any Alt key the hold stops owes its keyup too, a chord the tree lacks among them.
+  press("o", alt_o);
+  alt_up();
+  assert.ok(press("p", alt_o).prevented);
+  assert.equal(alt_up(), true, "the Alt keyup after <A-p> in the hold went on");
+  // A blur drops what the window owed.
+  press("o", alt_o);
+  own.fire("blur", key_event("blur"));
+  assert.equal(alt_up(), false, "the Alt keyup after a blur stopped");
   const plain = once_setup();
   plain.focus(panel_row(plain.panel_doc));
   plain.press("o", alt_o);
   const event = key_event("Alt");
   plain.root.fire("keyup", event);
   assert.equal(event.prevented, false, "an Alt keyup stopped after a chord the module left to Firefox");
+});
+
+test("a held chord's auto-repeat neither ends the hold nor starts a new one", () => {
+  const { panel_doc, focus, press, held } = once_setup({ written: chord_state() });
+  focus(panel_row(panel_doc));
+  press("o", alt_o);
+  for (let repeat = 0; repeat < 3; repeat++) assert.ok(press("o", { ...alt_o, repeat: true }).prevented);
+  assert.equal(held(), "sidebar_once");
+  press("Escape");
+  press("o", { ...alt_o, repeat: true });
+  assert.equal(held(), undefined, "an auto-repeat started a hold");
 });
