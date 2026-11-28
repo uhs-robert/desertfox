@@ -62,3 +62,11 @@ test("a bar that is not up leaves the notification, and a page toast never touch
   assert.equal(await deliver_refusal(page, 4, refusal), "toast");
   assert.equal(await deliver_refusal({ ...down, show_in_bar: async () => assert.fail() }, undefined, refusal), "notification");
 });
+
+test("the bar shows a message only for the selected tab of a window that is not fullscreen", async () => {
+  const { bar_shows_tab } = await import("../../src/background/browser_deps.ts");
+  assert.equal(bar_shows_tab({ active: true }, "normal"), true);
+  assert.equal(bar_shows_tab({ active: false }, "normal"), false);
+  assert.equal(bar_shows_tab({ active: true }, "fullscreen"), false);
+  assert.equal(bar_shows_tab({}, undefined), false);
+});

@@ -21,13 +21,13 @@ function started(options = {}) {
 
 test("the bar rewrites the core's hello with bar true, and a hello that comes later too", () => {
   const early = started();
-  assert.deepEqual(early.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true });
+  assert.deepEqual(early.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true, bar_message: true });
 
   const late = create_bar_fixture();
   late.load();
   assert.equal(late.firefox.hello(), undefined);
   late.firefox.start_extension({ private_access: true });
-  assert.deepEqual(late.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true });
+  assert.deepEqual(late.firefox.hello(), { v: 1, module_version: "1.0.0", devtools_hints: true, devtools_visual: true, bar: true, bar_message: true });
 });
 
 test("the bar writes no hello of its own while the module is off", () => {
@@ -499,7 +499,7 @@ test("a message is drawn as text in the colour of its kind, and an unknown kind 
   assert.deepEqual(["error", "warn", "info", "ok"].map((role) => style.get(`--desertfox-${role}`)), ["#ff0000", undefined, "#0000ff", "#00ff00"]);
 });
 
-test("a malformed or ended message draws nothing, and one that claims a long life is cut to a minute", () => {
+test("a malformed or ended message draws nothing, and one that ends more than a minute ahead is not drawn", () => {
   const fixture = started();
   for (const toast of [toast_of({ until: Date.now() - 1 }), toast_of({ text: "" }), toast_of({ id: "1" }), toast_of({ until: "never" }), "Copied", null]) {
     fixture.firefox.write_state(state_with({ pending: ["g"], toast }));
@@ -508,7 +508,11 @@ test("a malformed or ended message draws nothing, and one that claims a long lif
   }
   fixture.firefox.write_state(state_with({ toast: toast_of({ until: Date.now() + 10 * 3600_000 }) }));
   fixture.run_frames();
-  assert.ok(fixture.window.timer_count() >= 1);
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL"], "a claim of ten hours is a bad state and draws nothing");
+  assert.equal(fixture.window.timer_count(), 0);
+  fixture.firefox.write_state(state_with({ toast: toast_of({ until: Date.now() + 59_000 }) }));
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL", "Copied the address"]);
   assert.deepEqual(fixture.firefox.errors, []);
 });
 

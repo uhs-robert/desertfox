@@ -265,6 +265,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   let toast_count = 0;
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
   let hello_bar = false;
+  // Whether that hello says the bar draws toasts. An older module builds a bar that ignores the field, so its refusals stay desktop notices.
+  let hello_message = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
   // Counts each reset of `devtools_keys_sent`, so a send that a newer hello overtook does not mark the newer hello as served.
@@ -397,6 +399,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     }
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
+    const checked_hello = validate_module_hello(hello);
+    hello_message = hello_bar && checked_hello.ok && checked_hello.value.bar_message === true;
     if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
   };
 
@@ -410,6 +414,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const sync_now = async (): Promise<void> => {
     if (!(await deps.is_on())) {
       hello_bar = false;
+      hello_message = false;
       devtools_keys_sent = false;
       hello_generation++;
       set_bar_seen(false);
@@ -426,6 +431,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       const id = tab_id_of_key(key);
       if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_of_record(id, record);
     }
+    // A locked page has no record, so its live toast would vanish from the rewrite.
+    for (const id of [...toasts.keys()]) if (!(id in tabs) && live_toast(id) && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_with_bar(id, undefined);
     const bar_theme = bar_theme_of(await deps.read_theme?.());
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
     const keymap = disabled ? undefined : await deps.read_keymap();
@@ -492,7 +499,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   // Puts a message in the bar's slot of the tab. Gives false when the bar is not up, the tab is private and the extension may not run there, or the state has no room, so the caller falls back to a notification.
   const toast_now = async (tab_id: string, text: string, kind: ToastKind): Promise<boolean> => {
-    if (!bar_seen) return false;
+    if (!bar_seen || !hello_message) return false;
     const state = await read_state();
     if (state === undefined || !(await deps.is_on())) return false;
     if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return false;

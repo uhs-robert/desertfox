@@ -341,7 +341,11 @@ browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.stor
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   if (change.url !== undefined) browser_module_rpc.tab_url_changed(tab_id, change.url);
 }, { properties: ["url"] });
-browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
+// A locked tab has no mode record, so its close writes no storage change that would clear its bar entry and toast. The module is built further down, but a close comes after the first turn.
+browser.tabs.onRemoved.addListener((tab_id) => {
+  void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed"));
+  void browser_module.tab_changed(String(tab_id), undefined).catch(warn_and_go("browser_module.tab_removed"));
+});
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const locked_commands = locked_page_command_ids(registry.list());
 const browser_module = create_browser_module({

@@ -47,12 +47,18 @@ export const reach_bar_toasts = (route: BarToasts): void => {
 };
 
 // A private tab's text reaches the bar only where the extension may run in private windows, as the module's own bar needs.
+// The bar draws only the selected tab, and fullscreen hides it. Customize mode is not seen here and keeps the notice off (see the design doc).
+export const bar_shows_tab = (tab: { active?: boolean | undefined }, window_state: string | undefined): boolean => tab.active === true && window_state !== "fullscreen";
+
 async function show_in_bar(tab_id: number, text: string, kind: ToastKind): Promise<boolean> {
+  return refused_as(show_in_bar_now(tab_id, text, kind), false);
+}
+async function show_in_bar_now(tab_id: number, text: string, kind: ToastKind): Promise<boolean> {
   if (!bar_toasts) return false;
   const tab = await ignore_refusal(browser.tabs.get(tab_id));
-  if (!tab) return false;
+  if (!tab || !bar_shows_tab(tab, (await ignore_refusal(browser.windows.get(tab.windowId ?? -1)))?.state)) return false;
   const is_private = tab.incognito === true;
-  return refused_as(bar_toasts.show_toast(tab_id, is_private, is_private && (await browser.extension.isAllowedIncognitoAccess()), text, kind), false);
+  return bar_toasts.show_toast(tab_id, is_private, is_private && (await browser.extension.isAllowedIncognitoAccess()), text, kind);
 }
 
 // Without a frame id the message reaches every frame, which shows a toast in each.

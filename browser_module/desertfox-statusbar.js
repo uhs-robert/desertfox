@@ -51,7 +51,7 @@
     const DROP_ORDER = ["url", "container", "scroll", "tabs", "recording", "pending"];
     const COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
     const MAX_URL_LABEL = 30;
-    // The text of a message is drawn as text, cut to the cap the extension keeps, and shown for no longer than a minute whatever `until` says.
+    // The text of a message is drawn as text, cut to the cap the extension keeps. The extension never ends one more than 30 s ahead, so a longer claim is a bad state and draws nothing.
     const MAX_TOAST_CHARS = 200;
     const MAX_TOAST_MS = 60000;
     // A narrow bar shortens the message to no fewer characters than this before it gives up the rest.
@@ -151,10 +151,10 @@
 
     // The message the extension wrote for the tab, or undefined when it is malformed or over. An unknown kind draws as info.
     function toast_view(toast, now) {
-      if (!is_record(toast) || !Number.isInteger(toast.id) || !Number.isFinite(toast.until) || toast.until <= now) return undefined;
+      if (!is_record(toast) || !Number.isInteger(toast.id) || !Number.isFinite(toast.until) || toast.until <= now || toast.until > now + MAX_TOAST_MS) return undefined;
       const text = clean(toast.text, MAX_TOAST_CHARS);
       if (text === "") return undefined;
-      return { text, kind: TOAST_KINDS.includes(toast.kind) ? toast.kind : "info", until: Math.min(toast.until, now + MAX_TOAST_MS) };
+      return { text, kind: TOAST_KINDS.includes(toast.kind) ? toast.kind : "info", until: toast.until };
     }
 
     // ---- What the window says.
@@ -681,10 +681,11 @@
       if (holder === undefined) return;
       const hello = deserialized(holder);
       if (!is_record(hello) || hello.v !== PROTOCOL_VERSION || typeof hello.module_version !== "string" || hello.module_version.length > MAX_HELLO_VERSION_CHARS) return;
-      if ((hello.bar === true) === capable) return;
+      if ((hello.bar === true) === capable && (hello.bar_message === true) === capable) return;
       const next = { ...hello };
-      if (capable) next.bar = true;
-      else delete next.bar;
+      // `bar_message` tells the extension this bar draws a tab's `toast`.
+      if (capable) (next.bar = true, next.bar_message = true);
+      else (delete next.bar, delete next.bar_message);
       extensionStorageSession.set(extension, { [HELLO_KEY]: ExtensionStorage.serialize(HELLO_KEY, HELLO_KEY, next) });
     }
 

@@ -106,8 +106,8 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
   };
   const hello_reads = () => config.gets.filter((key) => key === BROWSER_MODULE_HELLO_STORAGE_KEY).length;
   // The module says it built the bar, and the extension has read it.
-  const raise_bar = async () => {
-    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
+  const raise_bar = async (message = true) => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true, ...(message && { bar_message: true }) });
     config.now += HELLO_MIN_INTERVAL_MS + 1;
     module.read_hello();
     timers.splice(0).forEach((run) => run());
@@ -934,4 +934,32 @@ test("the bar going away takes the toasts with it", async () => {
   config.bar_setting = true;
   await raise_bar();
   assert.equal("toast" in state_of(data).tabs["3"]!, false, "the old message does not return");
+});
+
+test("a module whose hello has no bar_message gets no toast, so the notification shows", async () => {
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar(false);
+  assert.equal(await module.bar_active(), true);
+  assert.equal(await module.show_toast(3, false, false, "hello", "info"), false);
+  assert.equal("toast" in state_of(data).tabs["3"]!, false);
+  await raise_bar(true);
+  assert.equal(await module.show_toast(3, false, false, "hello", "info"), true);
+});
+
+test("a toast on a tab with no record survives a full sync and is cleared when the tab closes", async () => {
+  const { data, module, flush, raise_bar } = setup();
+  await module.sync();
+  await flush();
+  await raise_bar();
+  assert.equal(await module.show_toast(9, false, false, "no record", "info"), true);
+  await module.sync();
+  await flush();
+  assert.equal((state_of(data).tabs["9"]!.toast as { text: string }).text, "no record");
+  await module.tab_changed("9", undefined);
+  assert.equal("9" in state_of(data).tabs, false);
+  await module.sync();
+  await flush();
+  assert.equal("9" in state_of(data).tabs, false, "the map entry went with the tab");
 });
