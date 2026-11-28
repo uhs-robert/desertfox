@@ -9,7 +9,7 @@ const PAGE_INFO = `Services.wm.getMostRecentWindow("Browser:page-info")`;
 const wait = (ms) => `await new Promise((resolve) => setTimeout(resolve, ${ms}));`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, in_active_tab } = context;
   const steps = module_steps(context);
   const { chrome, set_pref, open_tab, focus_page, close_selected_tab, home, page_scroll } = steps;
 
@@ -116,41 +116,90 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  // A mouse press on the input, so the page gets the click and Firefox opens the menu from the mouse.
-  const right_click_field = async () => {
-    const [x, y] = await steps.in_selected_page(`(win) => { const box = win.document.getElementById("field").getBoundingClientRect(); return [box.left + 10, box.top + 5]; }`);
-    await chrome(`(async () => {
+  // Where a field sits in every variant below: fixed at the page's top left, so one point reaches it and a frame holding it.
+  const FIELD_POINT = [50, 35];
+  const mouse_at = (steps_of_events) =>
+    chrome(`(async () => {
       const w = ${W};
       const browser = w.gBrowser.selectedBrowser;
       const box = browser.getBoundingClientRect();
-      w.synthesizeMouseEvent("mousedown", box.left + ${x}, box.top + ${y}, { button: 2, buttons: 2, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });
-      w.synthesizeMouseEvent("contextmenu", box.left + ${x}, box.top + ${y}, { button: 2, buttons: 0, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });
+      const [x, y] = [box.left + ${FIELD_POINT[0]}, box.top + ${FIELD_POINT[1]}];
+      ${steps_of_events}
     })()`);
+  // A real press: the page gets trusted events and the field takes the focus as for a user.
+  const click_field = () =>
+    mouse_at(`for (const message of [w.windowUtils.NATIVE_MOUSE_MESSAGE_MOVE, w.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN, w.windowUtils.NATIVE_MOUSE_MESSAGE_BUTTON_UP]) {
+      w.windowUtils.sendNativeMouseEvent((w.mozInnerScreenX + x - box.left + box.left) * w.devicePixelRatio, (w.mozInnerScreenY + y) * w.devicePixelRatio, message, 0, 0, browser, null);
+      await new Promise((resolve) => w.setTimeout(resolve, 20));
+    }`);
+  // The native widget has no right button, so the menu comes from a synthesized one: a press and the contextmenu event.
+  const right_click_field = () =>
+    mouse_at(`for (const type of ["mousedown", "contextmenu"]) w.synthesizeMouseEvent(type, x, y, { button: 2, buttons: type === "mousedown" ? 2 : 0, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });`);
+  const FIELD_BOX = "position:fixed;left:20px;top:20px;width:200px;height:30px;margin:0;box-sizing:border-box;";
+  const FIELD_MARKUP = {
+    input: `<input id="field" type="text" value="helo wrld" style="${FIELD_BOX}">`,
+    textarea: `<textarea id="field" style="${FIELD_BOX}">helo wrld</textarea>`,
+    password: `<input id="field" type="password" value="helowrld" style="${FIELD_BOX}">`,
+    contenteditable: `<div id="field" contenteditable="true" style="${FIELD_BOX}border:1px solid #888">helo wrld</div>`
   };
+  const FRAME_INPUT = `<body style="margin:0"><input id="field" type="text" value="helo wrld" style="width:200px;height:30px;box-sizing:border-box">`;
 
-  await walk_case("a context menu opened over a focused text input of a page is walked by j and k, and the input gets no letter", async () => {
-    await home("pw_field_menu");
-    await focus_page();
-    await steps.in_selected_page(`(win) => { const field = win.document.createElement("input"); field.id = "field"; field.type = "text"; field.value = "helo wrld"; win.document.body.prepend(field); field.focus(); return true; }`);
-    await poll_until("the input to hold the focus", () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`));
-    await right_click_field();
-    await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
-    await sleep(300);
-    const seen = [];
-    for (let step = 0; step < 3; step++) {
-      await press_keys("j");
+  // What the field holds, read in the page process (same-origin frames included). A field in a frame of another site cannot be read from here.
+  const field_value = (where) =>
+    steps.in_selected_page(`(win) => { const doc = ${where === "same" ? `win.document.getElementById("frame").contentDocument` : "win.document"}; const field = doc.getElementById("field"); return field ? (field.value ?? field.textContent) : null; }`);
+
+  // Opens the field's context menu as a user would and checks that j and k walk it and the field takes no letter.
+  const field_menu_case = (name, { kind = "input", frame = "none", focus = "click", page_handler = false }) =>
+    walk_case(`a context menu over ${name} is walked by j and k and the field gets no letter`, async () => {
+      await home(`pw_field_${kind}_${frame}_${focus}`);
+      const frame_url = `http://localhost:${new URL(await steps.selected_spec()).port}/frame_field?id=pw_field_cross`;
+      await focus_page();
+      await steps.in_selected_page(`(win) => {
+        const doc = win.document;
+        const holder = doc.createElement("div");
+        const frame_style = "${FIELD_BOX}border:0;width:300px;height:100px;";
+        holder.innerHTML = ${JSON.stringify(frame === "none" ? FIELD_MARKUP[kind] : "")} || ${frame === "same" ? "`<iframe id=\"frame\" style=\"${frame_style}\"></iframe>`" : "`<iframe id=\"frame\" src=\"${" + JSON.stringify(frame_url) + "}\" style=\"${frame_style}\"></iframe>`"};
+        doc.body.prepend(holder);
+        if (${frame === "same"}) doc.getElementById("frame").contentDocument.body.outerHTML = ${JSON.stringify(FRAME_INPUT)};
+        ${page_handler ? `win.addEventListener("keydown", (event) => { if (event.key === "j" || event.key === "k") { event.preventDefault(); event.stopPropagation(); } }, true);` : ""}
+        return true;
+      }`);
+      await poll_until("the field to be laid out", () => steps.in_selected_page(`(win) => !!win.document.getElementById(${JSON.stringify(frame === "none" ? "field" : "frame")})?.getBoundingClientRect().width`));
+      await sleep(1200);
+      const before = frame === "cross" ? null : await field_value(frame);
+      if (focus === "click") {
+        await click_field();
+        if (frame === "cross") await sleep(600);
+        else await poll_until("the field to hold the focus", () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`));
+      }
+      await right_click_field();
+      await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
+      const editable = await chrome(`(async () => !!${W}.gContextMenu?.onEditable)()`);
+      if (frame !== "cross") expect(editable === true, "the menu is not the field's editing menu");
+      await sleep(300);
+      const seen = [];
+      for (let step = 0; step < 3; step++) {
+        await press_keys("j");
+        await sleep(150);
+        seen.push((await menu_item("#contentAreaContextMenu")).active);
+      }
+      expect(seen[0] !== null && seen[0] !== seen[1] && seen[1] !== seen[2], `j did not move through the context menu over ${name}: ${seen.join(", ")}`);
+      await press_keys("k");
       await sleep(150);
-      seen.push((await menu_item("#contentAreaContextMenu")).active);
-    }
-    expect(seen[0] !== null && seen[0] !== seen[1] && seen[1] !== seen[2], `j did not move through the context menu over a field: ${seen.join(", ")}`);
-    await press_keys("k");
-    await sleep(150);
-    expect((await menu_item("#contentAreaContextMenu")).active === seen[1], `k did not move back to ${seen[1]}`);
-    await press_keys("-k", "Escape");
-    await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
-    const typed = await steps.in_selected_page(`(win) => win.document.getElementById("field").value`);
-    expect(typed === "helo wrld", `the input took ${JSON.stringify(typed)} while the menu was open`);
-  });
+      expect((await menu_item("#contentAreaContextMenu")).active === seen[1], `k did not move back to ${seen[1]}`);
+      await press_keys("-k", "Escape");
+      await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
+      if (frame !== "cross") expect((await field_value(frame)) === before, `the field changed from ${JSON.stringify(before)} to ${JSON.stringify(await field_value(frame))} while the menu was open`);
+    });
+
+  await field_menu_case("an input clicked first", {});
+  await field_menu_case("an input that the right-click itself reaches", { focus: "none" });
+  await field_menu_case("a textarea", { kind: "textarea" });
+  await field_menu_case("a contenteditable div", { kind: "contenteditable" });
+  await field_menu_case("a password input", { kind: "password" });
+  await field_menu_case("an input in a same-origin frame", { frame: "same" });
+  await field_menu_case("an input in a cross-origin frame", { frame: "cross" });
+  await field_menu_case("an input of a page whose own handler stops j and k", { page_handler: true });
 
   await walk_case("in a menu bar menu j moves and l opens a submenu that h closes", async () => {
     await home("pw_menubar");
