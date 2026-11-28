@@ -148,7 +148,7 @@
 
     function report(record, mode) {
       const tab_id = tab_id_of(record.tab);
-      if (tab_id === undefined) return;
+      if (tab_id === undefined) return core.log_once("the visual mode was not reported: the tab has no id");
       const sent = core.send("visual.report", { tab_id, mode });
       if (!sent.ok) core.log_once(`the visual mode was not reported: ${sent.problem}`);
     }
