@@ -549,7 +549,7 @@
 
     // The start the key taker calls for a hint key on a page this file labels. True when it asked the extension.
     function start_page({ window: win, browser, event, keys, count }) {
-      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count)) return false;
+      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count) || !core.may_act(win)) return false;
       const doc = page_document(browser);
       const kind = doc ? undefined : content_kind(browser);
       if ((!doc && !kind) || tabs_of(win)?.selectedBrowser !== browser) return false;
