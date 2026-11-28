@@ -19,6 +19,7 @@ ok = "#9ccfd8"
 info = "#3e8fb0"
 mode_normal = "#c4a7e7"
 mode_insert = "#9ccfd8"
+# Not from the official palette, which has no green. Chosen to sit apart from the other badges.
 mode_command = "#a3c9a8"
 mode_ignore = "#908caa"
 mode_caret = "#f6c177"
