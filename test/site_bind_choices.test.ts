@@ -196,6 +196,7 @@ test("a user choice list whose guards all fail falls back to the keymap binding,
   const user_j = [[{ id: "tab.next", when_present: GRID }], [{ id: "tab.prev", when_present: LIST }]];
   const j = (await page_tree(compiled_with({ site_rules: [{ site: "https://www.google.com/*", bind: { j: user_j } }] }), google)).children["j"] as TreeLeaf;
   assert.deepEqual([id_of(j), id_of(j.otherwise), id_of(j.otherwise?.otherwise)], ["tab.next", "tab.prev", default_j]);
-  assert.equal(id_of(leaf_for_page(j, null, body, page_root())), default_j);
+  // The keymap's j guards a focused list item, so with none on the page its own fallback, the scroll, is what runs.
+  assert.equal(id_of(leaf_for_page(j, null, body, page_root())), (DEFAULT_KEYMAP.normal!["j"] as { fallback: { id: string } }).fallback.id);
   assert.notEqual(default_j, "page.item");
 });

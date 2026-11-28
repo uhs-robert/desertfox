@@ -32,13 +32,13 @@ function run_setup(answer: RunResponse = { ok: true }) {
   const runs: RouteRequest[] = [];
   const shown: Refusal[] = [];
   const state = { keymap: DEFAULT as CompiledKeymap | undefined, url: undefined as string | undefined, pages_on: false };
-  const lines: number[] = [];
+  const lines: string[] = [];
   const run = create_module_run({
     read_keymap: async () => state.keymap,
     locked_commands,
     run: async (request) => (runs.push(request), answer),
     show_refusal: async (_tab, refusal) => void shown.push(refusal),
-    open_line: async () => void lines.push(1),
+    open_line: async (text) => void lines.push(text),
     active_url: async () => state.url,
     pages_on: async () => state.pages_on,
   });
@@ -57,15 +57,15 @@ test("a run request runs its binding in the active tab, in normal mode, with the
   assert.deepEqual(shown, []);
 });
 
-test("a hint key says why hints do not run: the setting on the PDF viewer, Reader View, view-source: and the JSON viewer, and the page anywhere else", async () => {
+test("a hint key says why hints do not run: the setting on the PDF viewer, Reader View, view-source:, the JSON viewer and a blob: page, and the page anywhere else", async () => {
   const { run, runs, shown, state } = run_setup();
   const said = async (url: string | undefined, pages_on: boolean) => {
     Object.assign(state, { url, pages_on });
     await assert.rejects(run({ keys: "f", count: 0 }));
     return shown.at(-1)?.message;
   };
-  for (const url of ["https://example.org/paper.pdf", "file:///tmp/paper.pdf", "about:reader?url=https%3A%2F%2Fexample.org%2F", "view-source:https://example.org/", "view-source:file:///tmp/a.html", "https://example.org/data.json"]) assert.equal(await said(url, false), "Hints here need :set browser_module_pages true", url);
-  for (const url of ["about:preferences", "about:addons", "view-source:moz-extension://abc/x.json", "view-source:about:preferences", "view-source:data:text/html,x", undefined]) assert.equal(await said(url, false), "Hints do not run on this page", String(url));
+  for (const url of ["https://example.org/paper.pdf", "file:///tmp/paper.pdf", "about:reader?url=https%3A%2F%2Fexample.org%2F", "view-source:https://example.org/", "view-source:file:///tmp/a.html", "https://example.org/data.json", "blob:https://example.org/0b3c"]) assert.equal(await said(url, false), "Hints here need :set browser_module_pages true", url);
+  for (const url of ["about:preferences", "about:addons", "view-source:moz-extension://abc/x.json", "view-source:about:preferences", "view-source:data:text/html,x", "blob:null/0b3c", "blob:moz-extension://abc/0b3c", undefined]) assert.equal(await said(url, false), "Hints do not run on this page", String(url));
   for (const url of ["about:privatebrowsing", "about:home", "about:newtab", "about:home?x=1"]) assert.equal(await said(url, false), "The browser module cannot label this page yet", url);
   assert.equal(await said("about:homepage", false), "Hints do not run on this page", "a name that only starts like a start page");
   assert.equal(await said("about:reader?url=x", true), "Hints do not run on this page", "the setting is on already");
@@ -270,9 +270,19 @@ test("the panel kind takes a whole tab id and nothing else", () => {
 test("the bare command line key opens the line over the active tab and runs nothing through the router", async () => {
   const { run, runs, shown, lines } = run_setup();
   await run({ keys: ":", count: 0 });
-  assert.deepEqual(lines, [1]);
+  assert.deepEqual(lines, [""]);
   assert.deepEqual(runs, []);
   assert.deepEqual(shown, []);
+});
+
+test("a line key with text opens the line with it when its command needs no page, and refuses otherwise", async () => {
+  const { run, runs, shown, lines } = run_setup();
+  await run({ keys: "t M", count: 0 });
+  assert.deepEqual(lines, ["tab.move --offset="]);
+  assert.deepEqual(runs, []);
+  for (const keys of ["s h", "; ;", "A"]) await assert.rejects(run({ keys, count: 0 }), /not a key|needs a page/, keys);
+  assert.deepEqual(lines, ["tab.move --offset="]);
+  assert.equal(shown.length, 3);
 });
 
 test("a prompt step handed to the address bar ends the binding, so its later steps do not run", async () => {

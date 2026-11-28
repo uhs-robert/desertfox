@@ -59,7 +59,7 @@
 //   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
 //   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
 //   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
-//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
+//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), links(browser, scope), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
 //   content_pages()            In the sandbox: that route, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
@@ -130,8 +130,8 @@
     const MESSAGE_ENVELOPE_BYTES = 512;
     const MAX_RESIZE_STEPS = 20;
     const PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
-    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
-    const MAX_DEVTOOLS_KEY_ROWS = 8;
+    const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start", "search.focus", "search.next", "search.prev", "tool.prefix", "tab.next", "tab.prev"];
+    const MAX_DEVTOOLS_KEY_ROWS = 16;
     const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
     const MAX_DEVTOOLS_VISUAL_ROWS = 16;
     const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
@@ -156,7 +156,7 @@
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
-      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
+      "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
@@ -164,6 +164,7 @@
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
       "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: 8192 },
+      "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: 65536 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -305,7 +306,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "which_key_root"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
