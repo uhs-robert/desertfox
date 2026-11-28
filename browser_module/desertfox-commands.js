@@ -83,6 +83,8 @@
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;
   var MAX_TREE_BYTES = 32 * 1024;
+  var HELLO_FEATURES = { hint_mode_keys: "hk" };
+  var KNOWN_FEATURES = Object.values(HELLO_FEATURES);
   var bad = (problem) => ({ ok: false, problem });
   var is_record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var is_module_command_id = (id) => typeof id === "string" && Object.hasOwn(MODULE_COMMAND_ARGS, id);
@@ -99,6 +101,7 @@
     if (kind === "module_mode") return MODULE_MODES.some((mode) => mode === value) ? void 0 : `must be one of ${MODULE_MODES.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
+    if (kind === "optional_text") return value === void 0 || typeof value === "string" ? void 0 : "must be text";
     if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;
@@ -152,7 +155,9 @@
     if (size > MAX_TREE_BYTES) return bad("the tree is too large");
     const root = value;
     const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
-    return problem === void 0 ? { ok: true, value: kept_tree(value) } : bad(problem);
+    if (problem !== void 0) return bad(problem);
+    const { register_keys, ...rest } = kept_tree(value);
+    return { ok: true, value: { ...rest, ...register_keys === true && { register_keys } } };
   }
   var MAX_KIND_BYTES = 64 * 1024;
   function json_bytes(value) {
@@ -363,7 +368,8 @@
       else flags.delete(browser2);
       show_mode(browser2);
     }
-    function enter_mode(browser2, flags) {
+    function enter_mode(win, browser2, flags) {
+      reset_walk(win);
       for (const each of [ignored, inserted, pass_armed]) each.delete(browser2);
       set_flag(flags, browser2, true);
     }
@@ -439,11 +445,11 @@
       const parsed = JSON.parse(text);
       const tree = notice === void 0 ? parsed : with_hint_leaves(parsed, notice === PAGE_HINTS ? PAGE_HINT_LEAF : NOTICE_LEAF);
       const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
-      const fresh = { text, notice, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: void 0 };
+      const fresh = { text, notice, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, sends_register: tree.register_keys === true, pending: void 0, typed: [], held: false };
       walks.set(win, fresh);
       return fresh;
     }
-    const path_of = (result) => result.keys.slice(String(result.count ?? "").length + (result.register_keys_?.length ?? 0));
+    const REGISTER_PREFIX = '"';
     function run_native(leaf, result, context) {
       const { native, args, count_rule } = leaf;
       const count = result.count;
@@ -454,20 +460,21 @@
       }
       return true;
     }
-    function forward(result, walk, win) {
-      const keys = path_of(result).join(" ");
-      const sent = core2.send("run", { keys, count: result.count ?? 0 });
+    function forward(result, path, walk, win) {
+      const keys = path.join(" ");
+      const register_tokens = result.register_keys_ === void 0 ? [] : [REGISTER_PREFIX, ...result.register_keys_.slice(REGISTER_PREFIX.length)];
+      const sent = core2.send("run", { keys: [...register_tokens, ...path].join(" "), count: result.count ?? 0 });
       if (!sent.ok) core2.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
       else if (walk.line_keys.has(keys)) start_hold(win, walk.browser);
       return sent.ok;
     }
-    function start_page_hints(result, context) {
-      core2.page_hints?.()?.start({ window: context.window, browser: context.browser, event: context.event, keys: path_of(result).join(" "), count: result.count ?? 0 });
+    function start_page_hints(result, path, context) {
+      core2.page_hints?.()?.start({ window: context.window, browser: context.browser, event: context.event, keys: path.join(" "), count: result.count ?? 0 });
       return true;
     }
-    function notice_once(result, browser2) {
+    function notice_once(path, browser2) {
       if (noticed.get(browser2) === browser2.innerWindowID) return true;
-      const sent = core2.send("run", { keys: path_of(result).join(" "), count: 0 });
+      const sent = core2.send("run", { keys: path.join(" "), count: 0 });
       if (sent.ok) noticed.set(browser2, browser2.innerWindowID);
       else core2.log_once(`a hint key was not sent to DesertFox: ${sent.problem}`);
       return true;
@@ -525,22 +532,26 @@
       }
       if (idle && token === ADDRESS_BAR_KEY && !walk?.matcher.binds_after_("normal", [], token)) return open_address_bar(win, OMNIBOX_PREFIX).ok;
       if (!walk) return void 0;
+      if (event.repeat && walk.held && token === "<Space>") return true;
       const result = walk.matcher.feed("normal", token);
+      const path = result.kind_ !== "match" ? [] : result.held_ !== void 0 ? [...walk.typed, token] : result.keys.slice(String(result.count ?? "").length + (result.register_keys_?.length ?? 0));
       walk.pending = void 0;
-      if (result.held_ !== void 0) {
-        walk.matcher.reset();
-        return false;
+      walk.held = result.held_ !== void 0;
+      walk.typed = (result.kind_ === "pending" ? result.typed_ : result.held_) ?? [];
+      if (result.kind_ === "pending" || result.kind_ === "match" && walk.held) {
+        walk.pending = { keys: [...walk.typed], ...result.count !== void 0 && { count: result.count }, ...walk.held && { held: true } };
+        if (result.kind_ === "pending") return true;
       }
-      if (result.kind_ === "pending") {
-        walk.pending = { keys: path_of(result), ...result.count !== void 0 && { count: result.count } };
-        return true;
-      }
+      if (result.kind_ === "no_match") return result.ended_ === true;
       if (result.kind_ !== "match") return false;
       const leaf = result.leaf.scope;
-      if (result.register_keys_ !== void 0) return true;
-      if (leaf === "forward") return forward(result, walk, win);
-      if (leaf === NOTICE_LEAF) return notice_once(result, browser2);
-      if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
+      if (leaf === "forward") {
+        if (result.register_keys_ !== void 0 && !walk.sends_register) return true;
+        return forward(result, path, walk, win);
+      }
+      if (result.register_keys_ !== void 0 && (leaf === NOTICE_LEAF || leaf === PAGE_HINT_LEAF)) return true;
+      if (leaf === NOTICE_LEAF) return notice_once(path, browser2);
+      if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, path, context);
       return run_native(leaf, result, context);
     }
     function field_key(context) {
@@ -567,7 +578,7 @@
       const walk = walks.get(win);
       const browser2 = win?.gBrowser?.selectedBrowser;
       if (!walk?.pending || walk.browser !== browser2 || walk.inner !== browser2.innerWindowID) return void 0;
-      return { keys: [...walk.pending.keys], ...walk.pending.count !== void 0 && { count: walk.pending.count } };
+      return { keys: [...walk.pending.keys], ...walk.pending.count !== void 0 && { count: walk.pending.count }, ...walk.pending.held && { held: true } };
     }
     function open_address_bar(win, text) {
       const bar = win?.gURLBar;
@@ -583,9 +594,9 @@
     }
     const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
     core2.define_command("page.stop", { args: {}, run: ({ browser: browser2 }) => browser2.stop() });
-    core2.define_command("mode.insert", { args: {}, run: ({ browser: browser2 }) => enter_mode(browser2, inserted) });
-    core2.define_command("mode.pass_next", { args: {}, run: ({ browser: browser2 }) => enter_mode(browser2, pass_armed) });
-    core2.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ browser: browser2, args }) => enter_mode(browser2, args.mode === "insert" ? inserted : ignored) });
+    core2.define_command("mode.insert", { args: {}, run: ({ window: window2, browser: browser2 }) => enter_mode(window2, browser2, inserted) });
+    core2.define_command("mode.pass_next", { args: {}, run: ({ window: window2, browser: browser2 }) => enter_mode(window2, browser2, pass_armed) });
+    core2.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ window: window2, browser: browser2, args }) => enter_mode(window2, browser2, args.mode === "insert" ? inserted : ignored) });
     core2.set_hello_flag("mode_keys", true);
     core2.register_kind("address_bar.open", ({ text, tab_id }) => {
       const win = focused_window();

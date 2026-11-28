@@ -110,7 +110,7 @@ export function scope_tree_of(keymap: CompiledKeymap | undefined, allowed: Reado
   const root = current_keymap(keymap)?.modes.normal;
   const pruning: Pruning = { allowed, check_args, native_allowed, line_keys: [], hint_keys: [] };
   const children = root ? prune_children(root, 1, [], pruning) : {};
-  return { children, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }) };
+  return { children, register_keys: true, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }) };
 }
 
 // The scope tree in the shape `create_matcher` walks, for the module's bundle. A leaf keeps its scope node in `scope`, and a forward leaf has no steps.
@@ -136,7 +136,8 @@ const KEY_TOKEN = /^[^\s\p{Cc}\p{Cf}]{1,24}$/u;
 export type ResolvedRun = { ok: true; leaf: TreeLeaf; count: number | undefined } | { ok: false; problem: string; shown?: true; hint?: true };
 
 // Matches a run request's keys against the full normal tree, never the module's copy, so a stale or forged copy cannot run a key the keymap does not bind there now.
-// The keys must reach a leaf with the last token, with no count, register or hold typed among them, and the leaf must run with no page. A problem marked `shown` is one the user caused and is told about.
+// The keys must reach a leaf with the last token, with no count or hold typed among them, and the leaf must run with no page. A register (`"a`) may start the keys: the matcher checks its name and fills it into the steps that take one.
+// A problem marked `shown` is one the user caused and is told about.
 export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: string, count: number, allowed: ReadonlySet<string>): ResolvedRun {
   const keys = keys_text.split(" ");
   if (keys.length > MAX_SEQUENCE_KEYS || !keys.every((key) => KEY_TOKEN.test(key))) return { ok: false, problem: "the keys are not a key sequence" };
@@ -148,7 +149,7 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
   for (const [index, token] of keys.entries()) {
     const result = matcher.feed("normal", token);
     const last = index === keys.length - 1;
-    if (result.kind_ === "pending" && !last && result.count === undefined && result.register_keys_ === undefined && result.held_ === undefined) continue;
+    if (result.kind_ === "pending" && !last && result.count === undefined && result.held_ === undefined) continue;
     if (result.kind_ !== "match" || !last || result.count !== undefined || result.held_ !== undefined || result.keys?.length !== keys.length) return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
     const leaf = without_list_guard(result.leaf);
     if (!forwards_leaf(leaf, allowed) && !opens_line_leaf(leaf, allowed)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(leaf) && { hint: true as const }) };

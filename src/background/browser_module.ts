@@ -8,7 +8,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, HintModeKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -29,6 +29,8 @@ import {
   CHROME_HINT_COMMAND_ID,
   NORMAL_ONCE_COMMAND_ID,
   chrome_hint_keys_of,
+  hint_mode_keys_of,
+  MAX_HINT_MODE_KEYS,
   MAX_CHROME_HINT_BINDINGS,
   MAX_CHROME_HINT_KEY_TOKENS,
   MAX_SIDEBAR_KEY_TOKENS,
@@ -177,6 +179,22 @@ export function focus_keys_of_keymap(keymap: CompiledKeymap | undefined, tree: S
   };
   walk(tree, current_keymap(keymap)?.modes.normal, []);
   return focus_keys_of(paths.slice(0, MAX_FOCUS_KEYS)) ?? [];
+}
+
+// The single keys of hint mode bound to `mode.escape` or `help.whichkey`, for the module's sessions. A key the picker takes itself (a character, Tab, Shift-Tab, Enter, Space, Backspace) never reaches the keymap in a session, and plain Escape always ends one, so neither gets a row.
+const PICKER_KEYS = new Set(["<Tab>", "<S-Tab>", "<Enter>", "<Space>", "<Backspace>", "<Escape>"]);
+const HINT_MODE_OPS: Record<string, HintModeKeyRow["op"]> = { "mode.escape": "escape", "help.whichkey": "whichkey" };
+export function hint_mode_keys_of_keymap(keymap: CompiledKeymap | undefined): HintModeKeyRow[] {
+  const hint = keymap?.modes.hint;
+  if (hint?.kind !== "branch") return [];
+  const rows: HintModeKeyRow[] = [];
+  for (const [key, node] of Object.entries(hint.children).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    if ([...key].length === 1 || PICKER_KEYS.has(key) || node.kind !== "leaf" || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) continue;
+    const { invocation, capture, register } = node.steps[0]!;
+    const op = Object.hasOwn(HINT_MODE_OPS, invocation.id) ? HINT_MODE_OPS[invocation.id] : undefined;
+    if (op !== undefined && capture === undefined && register === undefined && invocation.prompt === undefined) rows.push({ key, op });
+  }
+  return hint_mode_keys_of(rows.slice(0, MAX_HINT_MODE_KEYS)) ?? [];
 }
 
 // The compiled branch cut to the keys of the scope tree, so the panels list only what the module runs on a locked page, with the labels and group names of the full tree.
@@ -531,7 +549,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const normal_once_keys = normal_once_keys_of_keymap(keymap);
     const focus_keys = fits ? focus_keys_of_keymap(keymap, fits) : [];
     const insert_keys = insert_rows_of(keymap, deps.check_args);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }), ...(insert_keys && { insert_keys }) });
+    const hint_mode_keys = hint_mode_keys_of_keymap(keymap);
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }), ...(insert_keys && { insert_keys }), hint_mode_keys });
     request_hello_read();
     request_messages_read();
   };
