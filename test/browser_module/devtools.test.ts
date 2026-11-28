@@ -221,3 +221,43 @@ test("an older core with no DevTools claim leaves the module on, logs one line a
   assert.equal(core.status().active, true);
   assert.deepEqual(JSON.parse(JSON.stringify(core.status().errors)), ["the core cannot hand DevTools keys to a feature, so the DevTools feature stays off"]);
 });
+
+// A toolbox opened as a tab (about:debugging Inspect) with the table pushed. The target is an element of the toolbox page or of a panel under it.
+async function toolbox_tab(options: { uri?: string; system?: boolean } = {}) {
+  const { window, press, ...rest } = await docked();
+  const tab_toolbox = window.devtools_tab_document(options);
+  window.select({ tab: tab_toolbox.browser } as never);
+  return { window, tab_toolbox, press, ...rest };
+}
+
+test("a toolbox opened as a tab keeps its keys: J and x x move no tab and close none, in the toolbox page and in a panel", async () => {
+  const { window, firefox, tab_toolbox, press } = await toolbox_tab();
+  firefox.write_state(state({ keys: [...KEYS, { key: "x", id: "tab.close", args: {} }] }));
+  for (const target of [tab_toolbox.toolbox_element, tab_toolbox.panel_element]) {
+    for (const key of ["J", "x", "x"]) assert.equal(press(key, {}, target).prevented, false, key);
+  }
+  assert.deepEqual(window.tab_moves, []);
+  assert.deepEqual(firefox.sent_to_frames, []);
+});
+
+test("j in a toolbox opened as a tab moves the tree like docked DevTools", async () => {
+  const { tab_toolbox, press } = await toolbox_tab();
+  const event = press("j", {}, tab_toolbox.panel_element);
+  assert.ok(event.prevented && event.stopped);
+  assert.deepEqual(tab_toolbox.dispatched, [{ type: "keydown", key: "ArrowDown", keyCode: 40, trusted: false }]);
+});
+
+test("a page that only looks like the toolbox keeps its tab keys: a web principal, or a longer about: name", async () => {
+  for (const options of [{ system: false }, { uri: "about:devtools-toolboxx" }, { uri: "about:devtools-toolbox-x" }]) {
+    const { window, tab_toolbox, press } = await toolbox_tab(options);
+    press("J", {}, tab_toolbox.toolbox_element);
+    assert.deepEqual(window.tab_moves, [1], JSON.stringify(options));
+    assert.deepEqual(tab_toolbox.dispatched, []);
+  }
+});
+
+test("the toolbox page name matches in any case", async () => {
+  const { tab_toolbox, press } = await toolbox_tab({ uri: "ABOUT:DevTools-Toolbox?type=tab&id=2" });
+  assert.equal(press("j", {}, tab_toolbox.toolbox_element).prevented, true);
+  assert.deepEqual(tab_toolbox.dispatched.map(({ key }) => key), ["ArrowDown"]);
+});

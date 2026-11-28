@@ -4,7 +4,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 
 - `desertfox-browser.js`: the core. The state, the hello, the message lists, the guards (fields, DevTools, modes, liveness, private windows), the report frame script and the surface feature files use. Start here.
 - `desertfox-tabs-scroll.js`: the tab and scroll feature. It defines `tab.next`, `tab.prev` and the four scroll commands, and holds the scroll frame script.
-- `desertfox-devtools.js`: the DevTools feature, docked or in a DevTools window: the pushed tree keys as arrow keys, hints from its own target table, and visual mode with copy.
+- `desertfox-devtools.js`: the DevTools feature, docked, in a DevTools window or in a toolbox tab: the pushed tree keys as arrow keys, hints from its own target table, and visual mode with copy.
 - `desertfox-panes.js`: the pane feature. It answers the extension's `pane.*` requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused window.
 - `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type arrow keys in open menus and panels and in the Library, Page Info and Picture-in-Picture windows.
 - `desertfox-cmdline-panel.js`: the command line panel. It answers `cmdline_panel.open` with DesertFox's own `cmdline.html` in a panel over the selected tab.
@@ -16,7 +16,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `sources/commands.js`: the source of `desertfox-commands.js`. It imports the matcher and the token from `src/shared`. Rebuild with `just browser-module`.
 - `desertfox-whichkey.js`: generated from `sources/whichkey.js`, never edited. The which-key panel on locked pages, drawn from the state's table. It runs in each window and never loads into the core's sandbox.
 - `sources/whichkey.js`: the source of `desertfox-whichkey.js`. It imports the page panel's sheet, layout, element tree and timer from `src/content/whichkey`. Rebuild with `just browser-module`.
-- `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
+- `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It reads the one sequence after `<A-o>` there. It attaches to browser windows itself.
 - `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
 - `desertfox-chrome-hints.js`: hints over Firefox's UI, panels, prompts, dialogs, the Library, Page Info and the allowlisted about: pages: collect, draw, pick, a grant's Enter, `hint.browser`, and the drawing DevTools hints share.
 - `desertfox-content-hints.js`: hints on the hosts of Firefox's restricted list, in a content process: the page rule, the frame script that collects, picks and reads links there, and its transport.

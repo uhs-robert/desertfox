@@ -87,7 +87,7 @@ export class Node {
     return selector.split(",").some((part) => {
       const one = part.trim();
       const child = one.lastIndexOf(">");
-      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child)) ?? false);
+      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child).trim()) ?? false);
       const descendant = one.lastIndexOf(" ");
       if (descendant >= 0) {
         let above = this.parentNode;
