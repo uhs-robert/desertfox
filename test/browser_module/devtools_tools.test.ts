@@ -218,3 +218,28 @@ test("the Ctrl+] the module sends comes back to the core and passes: no row take
   assert.equal(press("]", { ctrlKey: true, isTrusted: true }), false);
   assert.equal(press("[", { ctrlKey: true, isTrusted: true }), false);
 });
+
+test("J and K in a DevTools window act on the newest browser window, and not on a private window the module may not touch", async () => {
+  const { firefox } = started();
+  const devtools_window = firefox.make_window({ devtools_window: true });
+  devtools_window.open();
+  const normal = firefox.make_window();
+  normal.load();
+  normal.add_tab();
+  const private_window = firefox.make_window({ private_window: true });
+  private_window.load();
+  private_window.add_tab();
+  firefox.write_state(STATE);
+  await settle();
+  const target = devtools_window.devtools_document().element("div");
+  const in_devtools_window = (key: string) => devtools_window.press(key_event(key, { target, originalTarget: target })).prevented;
+  firefox.most_recent_window = normal.win;
+  assert.equal(in_devtools_window("J"), true);
+  assert.equal(in_devtools_window("K"), true);
+  assert.deepEqual(normal.tab_moves, [1, -1]);
+  firefox.most_recent_window = private_window.win;
+  assert.equal(in_devtools_window("J"), false, "no private access: the key stays DevTools'");
+  assert.deepEqual(private_window.tab_moves, []);
+  firefox.most_recent_window = null;
+  assert.equal(in_devtools_window("J"), false);
+});

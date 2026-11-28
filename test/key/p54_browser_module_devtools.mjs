@@ -123,9 +123,17 @@ export async function run_cases(context) {
     const scroll_before = await page_scroll();
     await markup_moves("docked");
     expect((await page_scroll()) === scroll_before, "j scrolled the page under DevTools");
-    // J and K switch browser tabs from DevTools, as on the page.
+    // J and K switch browser tabs from DevTools, as on the page. A failure says which step broke: whether the keydown arrived and with what, and whether the command itself switches from here.
+    await sleep(300);
+    await chrome(`(async () => { const w = ${W}; const seen = []; const on_key = (event) => seen.push({ key: event.key, shift: event.shiftKey, prevented: event.defaultPrevented, trusted: event.isTrusted }); w.addEventListener("keydown", on_key, true); Services.desertfox_key_test_keys = seen; Services.desertfox_key_test_keys_off = () => w.removeEventListener("keydown", on_key, true); })()`);
+    on_teardown(() => chrome(`(async () => { Services.desertfox_key_test_keys_off?.(); delete Services.desertfox_key_test_keys; delete Services.desertfox_key_test_keys_off; })()`));
     await switches_one("J in the Inspector tree").catch(async (error) => {
-      throw new Error(`${error.message} (module ${JSON.stringify((await module_status())?.errors)}, rows ${JSON.stringify(((await session_value("desertfox_browser_module_from_extension")) ?? []).filter((message) => message.kind === "devtools.keys").at(-1)?.args.keys)})`);
+      const keys = await chrome(`(async () => JSON.stringify(Services.desertfox_key_test_keys))()`);
+      await steps.watch_switches();
+      const ran = await chrome(`(async () => Services.desertfox_browser_module.run_command("tab.next", {}, { window: ${W} }))()`);
+      await sleep(500);
+      const by_command = await steps.switch_count();
+      throw new Error(`${error.message} (keydowns seen by the window: ${keys}; run_command returned ${ran} and made ${by_command} switches; module ${JSON.stringify((await module_status())?.errors)})`);
     });
     await switches_one("K in the Inspector tree", ["K"]);
     await stays(["x", "-M", "ctrl", "j", "-m", "ctrl"], markup_state, "a key with no row, and j with Ctrl");
@@ -404,7 +412,25 @@ export async function run_cases(context) {
 
   const tools_now = () => chrome(`(async () => { ${TOOLBOX} return [tb.currentToolId, tb.component.panelDefinitions.map((tool) => tool.id)]; })()`);
   // The chord the module sends for gt and gT, sent here from chrome code on the focused element, so the case measures that DevTools takes it from where the focus is.
-  const SEND_CHORD = (key, code, key_code) => `(async () => { ${TOOLBOX} const el = tb.getPanel("inspector").markup.doc.activeElement; const view = el.ownerDocument.defaultView; el.dispatchEvent(new view.KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, code: ${JSON.stringify(code)}, keyCode: ${key_code}, ctrlKey: true, bubbles: true, cancelable: true, composed: true })); return el.localName + " in " + el.ownerDocument.documentURI; })()`;
+  const SEND_CHORD = (key, code, key_code) => `(async () => { ${TOOLBOX} const el = tb.getPanel("inspector").markup.doc.querySelector(".tag-line"); const view = el.ownerDocument.defaultView; el.dispatchEvent(new view.KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, code: ${JSON.stringify(code)}, keyCode: ${key_code}, ctrlKey: true, bubbles: true, cancelable: true, composed: true })); return el.localName + " in " + el.ownerDocument.documentURI; })()`;
+  // Moves the toolbox to a window of its own for `body`, and docks it again after, also when `body` fails, so no later case opens as a window. A toolbox that is a window already is docked first, since switchHost gives null for the host it has.
+  async function in_devtools_window(body) {
+    await chrome(`(async () => { ${TOOLBOX} if (tb.hostType !== "bottom") await tb.switchHost("bottom"); })()`);
+    await show_tool("inspector");
+    await markup_on_section();
+    const windows_before = (await module_status()).windows;
+    await chrome(`(async () => { ${TOOLBOX} Services.desertfox_key_test_host = tb.switchHost("window").then(() => "window", (error) => String(error)); })()`);
+    try {
+      await poll_until("the DevTools window to get the module", async () => (await module_status()).windows === windows_before + 1, { timeout_ms: 10000 });
+      await poll_until("the Inspector in the DevTools window", () => chrome(`(async () => { ${TOOLBOX} return tb.hostType === "window" && !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 10000 });
+      await chrome(`(async () => { ${TOOLBOX} tb.win.top.focus(); })()`);
+      await markup_on_section();
+      await focus_in_devtools();
+      await body();
+    } finally {
+      await chrome(`(async () => { ${TOOLBOX} delete Services.desertfox_key_test_host; if (tb?.hostType === "window") await tb.switchHost("bottom"); })()`);
+    }
+  }
   async function chord_switches(where, tool) {
     const [before, ids] = await tools_now();
     expect(before === tool, `${where}: the tool is ${before}, not ${tool}`);
@@ -422,17 +448,7 @@ export async function run_cases(context) {
     await markup_on_section();
     await focus_in_devtools();
     await chord_switches("the markup frame", "inspector");
-    await show_tool("inspector");
-    await markup_on_section();
-    const windows_before = (await module_status()).windows;
-    await chrome(`(async () => { ${TOOLBOX} Services.desertfox_key_test_host = tb.switchHost("window").then(() => "window", (error) => String(error)); })()`);
-    on_teardown(() => chrome(`(async () => { ${TOOLBOX} delete Services.desertfox_key_test_host; if (tb?.hostType === "window") await tb.switchHost("bottom"); })()`));
-    await poll_until("the DevTools window to get the module", async () => (await module_status()).windows === windows_before + 1, { timeout_ms: 10000 });
-    await poll_until("the Inspector in the DevTools window", () => chrome(`(async () => { ${TOOLBOX} return tb.hostType === "window" && !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 10000 });
-    await chrome(`(async () => { ${TOOLBOX} tb.win.top.focus(); })()`);
-    await markup_on_section();
-    await focus_in_devtools();
-    await chord_switches("the markup frame of a DevTools window", "inspector");
+    await in_devtools_window(() => chord_switches("the markup frame of a DevTools window", "inspector"));
   });
 
   await run_case("gt and gT switch to the next and previous tool and wrap, a hold that ends or a key between sends nothing, and g types in the console input", async () => {
@@ -467,20 +483,17 @@ export async function run_cases(context) {
     await chrome(`(async () => { ${TOOLBOX} await tb.closeSplitConsole(); })()`);
   });
 
-  await run_case("gt and gT switch tools in a DevTools window too", async () => {
+  await run_case("gt, gT, J and K work in a DevTools window too", async () => {
     await home("bm_dt_tool_keys_window");
     await open_tab(TREE_PAGE);
     await show_tool("inspector");
-    const windows_before = (await module_status()).windows;
-    await chrome(`(async () => { ${TOOLBOX} Services.desertfox_key_test_host = tb.switchHost("window").then(() => "window", (error) => String(error)); })()`);
-    on_teardown(() => chrome(`(async () => { ${TOOLBOX} delete Services.desertfox_key_test_host; if (tb?.hostType === "window") await tb.switchHost("bottom"); })()`));
-    await poll_until("the DevTools window to get the module", async () => (await module_status()).windows === windows_before + 1, { timeout_ms: 10000 });
-    await poll_until("the Inspector in the DevTools window", () => chrome(`(async () => { ${TOOLBOX} return tb.hostType === "window" && !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 10000 });
-    await chrome(`(async () => { ${TOOLBOX} tb.win.top.focus(); })()`);
-    await markup_on_section();
-    await focus_in_devtools();
-    const [, ids] = await tools_now();
-    await moves(["g", "t"], async () => (await tools_now())[0], ids[1 % ids.length], "gt in a DevTools window");
-    await moves(["g", "T"], async () => (await tools_now())[0], ids[0], "gT in a DevTools window");
+    await in_devtools_window(async () => {
+      const [, ids] = await tools_now();
+      await moves(["g", "t"], async () => (await tools_now())[0], ids[1 % ids.length], "gt in a DevTools window");
+      await moves(["g", "T"], async () => (await tools_now())[0], ids[0], "gT in a DevTools window");
+      // The window has no tab browser, so J acts on the newest browser window, which then selects another tab. K comes back before the next step reads the toolbox through the selected tab.
+      await switches_one("J in a DevTools window");
+      await switches_one("K in a DevTools window", ["K"]);
+    });
   });
 }

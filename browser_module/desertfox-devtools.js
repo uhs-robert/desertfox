@@ -146,8 +146,8 @@
       if (taken_by_visual !== undefined) return taken_by_visual;
       const target = event.originalTarget ?? event.target;
       // Every key ends a held prefix. The one that completes it runs the second key's action.
-      const second = prefix_hold.take(win, event, token);
-      if (second) return tools.run(second, target);
+      const taken_by_prefix = prefix_hold.take(win, event, token);
+      if (taken_by_prefix !== undefined) return taken_by_prefix;
       // Escape is no row, since a row is one character. Any pushed table turns on the console's double Escape, and the search rows turn on the search box's Escape. Both run before the field check, as both start in a field.
       if (console_escape.answer_key(event, target, actions.size > 0)) return true;
       if (search.answer_escape(event, target, [...actions.values()].some((action) => search.ACTIONS.has(action)))) return true;
@@ -169,7 +169,7 @@
   }
 
   // ---- A prefix key held for its second key.
-  // A table row is one character, so a two-key chord such as `gt` is a row for the prefix and a fixed set of second keys in the feature's own code. This holds the prefix: a second key that comes in time takes the feature's action, and every other key ends the hold and goes on.
+  // A table row is one character, so a two-key chord such as `gt` is a row for the prefix and a fixed set of second keys in the feature's own code. This holds the prefix: the next key goes to the handler the feature gave, which takes it or lets it go on. Every key ends the hold.
   // The hold ends on any key, a blur of the target, a click, a page hide, a new hello, the pref going off and a timer. DesertFox's own sequences have no timer, but a hold across a pause in a toolbox the user left would run a late `t` as a tool switch.
   function define_prefix_hold(core) {
     const HOLD_MS = 1000;
@@ -182,11 +182,11 @@
       undo_all(ended);
     }
 
-    // `seconds` maps the key tokens that complete the prefix to the name of what each does.
-    function start(win, target, seconds) {
+    // `on_second(token)` gets the next key's token and returns true when it took the key, or undefined to let the key go on.
+    function start(win, target, on_second) {
       forget();
       const view = target.ownerDocument.defaultView;
-      held = { win, target, seconds, undo: [] };
+      held = { win, target, on_second, undo: [] };
       const timer = win.setTimeout(forget, HOLD_MS);
       held.undo.push(() => win.clearTimeout(timer));
       listen(held, target, "blur", forget);
@@ -195,14 +195,14 @@
       return true;
     }
 
-    // Each key of DevTools passes here before anything else reads it, and the hold ends on it. Gives the name of the second key's action when it completes the prefix in the same window and element, with no modifier.
+    // Each key of DevTools passes here before anything else reads it, and the hold ends on it. Gives the handler's answer when the key comes in the same window and element, with no modifier.
     function take(win, event, token) {
       const ended = held;
       if (!ended) return undefined;
       forget();
       const target = event.originalTarget ?? event.target;
       if (ended.win !== win || ended.target !== target || event.ctrlKey || event.altKey || event.metaKey) return undefined;
-      return ended.seconds.get(token);
+      return ended.on_second(token);
     }
 
     const on_pref = () => enabled_by_pref() || forget();
@@ -228,25 +228,24 @@
       ["t", "tool.next"],
       ["T", "tool.prev"],
     ]);
-
-    // The target is no field or frame here: the claim checked that before it called this.
-    function start(action, win, target) {
-      if (action === "tool.prefix") return prefix_hold.start(win, target, AFTER_G);
-      const browser_window = win.gBrowser ? win : Services.wm.getMostRecentWindow("navigator:browser");
-      return !!browser_window?.gBrowser && core.run_command(action, {}, { window: browser_window });
-    }
-
     // Trusted, since chrome code made it, and the core's listener sees it again. The claim passes every Ctrl chord, so it goes on to the toolbox.
-    function run(second, target) {
+    function send_chord(second, target) {
       const view = target.ownerDocument.defaultView;
       target.dispatchEvent(new view.KeyboardEvent("keydown", { ...CHORDS[second], ctrlKey: true, bubbles: true, cancelable: true, composed: true }));
       return true;
     }
 
+    // The target is no field or frame here: the claim checked that before it called this.
+    function start(action, win, target) {
+      if (action === "tool.prefix") return prefix_hold.start(win, target, (token) => (AFTER_G.has(token) ? send_chord(AFTER_G.get(token), target) : undefined));
+      const browser_window = win.gBrowser ? win : Services.wm.getMostRecentWindow("navigator:browser");
+      return !!browser_window?.gBrowser && core.may_act(browser_window) && core.run_command(action, {}, { window: browser_window });
+    }
+
     // Said last, so the extension sends these rows only to a module that runs them.
     core.set_hello_flag("devtools_tools", true);
 
-    return { ACTIONS, start, run };
+    return { ACTIONS, start };
   }
 
   // ---- The Inspector search keys.
