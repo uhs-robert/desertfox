@@ -4,12 +4,12 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 
 - `desertfox-browser.js`: the core. The state, the hello, the message lists, the guards (fields, DevTools, modes, liveness, private windows), the report frame script and the surface feature files use. Start here.
 - `desertfox-tabs-scroll.js`: the tab and scroll feature. It defines `tab.next`, `tab.prev` and the four scroll commands, and holds the scroll frame script.
-- `desertfox-devtools.js`: the DevTools feature, docked or in a DevTools window: the pushed tree keys as arrow keys, hints from its own target table, and visual mode with copy.
+- `desertfox-devtools.js`: the DevTools feature, docked, in a DevTools window or in a toolbox tab: the pushed tree keys as arrow keys, hints from its own target table, and visual mode with copy.
 - `desertfox-panes.js`: the pane feature. It answers the extension's `pane.*` requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused window.
 - `desertfox-popup-walk.js`: the popup walk. `j`, `k`, `h` and `l` type arrow keys in open menus and panels and in the Library, Page Info and Picture-in-Picture windows.
 - `desertfox-cmdline-panel.js`: the command line panel. It answers `cmdline_panel.open` with DesertFox's own `cmdline.html` in a panel over the selected tab.
 - `desertfox-firefox-pages.js`: Firefox's own pages. It answers `firefox_page.open` from its own frozen page table, in the asking tab's window. Open it for the dedupe, the rate limit or the entry points.
-- `desertfox-selection.js`: the page selection of a parent-process about: page. It answers `selection.read` with the cleaned, capped text. Open it for what it reads and when it refuses.
+- `desertfox-selection.js`: the page selection of a locked page, in the parent for an about: page and through its own small frame script for a page in a content process. It answers `selection.read` with the cleaned, capped text. Open it for what it reads and when it refuses.
 - `desertfox-page-links.js`: the links of a page for `yL` and `yl`. It answers `page_links.read` with capped `[address, text]` pairs, reads parent-process about: pages itself and asks the content hints route for the rest. Open it for the caps and the refusals.
 - `desertfox-locked-pages.js`: DesertFox's own page code on the page kinds of `page_kind_of`. Open it for the attach rule, the sandbox, the transport or the rule that says where hints cannot run now.
 - `desertfox-commands.js`: generated from `sources/commands.js`, never edited. Key sequences and counts on locked pages, the hint key notice and page hint start, the insert, ignore and pass-next modes, the keys a field takes (`field_key`), `page.stop` and the address bar opener.
