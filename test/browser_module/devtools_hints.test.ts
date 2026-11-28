@@ -283,7 +283,7 @@ test("a collect is refused for an unknown ask, a second collect with the same as
   await run(({ dom }) => [...dom.tabs, ...dom.lines, dom.rules, dom.search, ...dom.inspector.html.query[".devtools-button"]!].forEach((node) => (node.visible = false)), "nothing", "Nothing to hint here");
 });
 
-test("a draw puts each label in its own document's layer with the fixed sheet and the colors in a constructed sheet, and letters then go to the extension", async () => {
+test("a draw puts each label in its own document's layer with the colors and the label rules in a constructed sheet, and letters then go to the extension", async () => {
   const { press, collect, target_rows, draw, layers, labels, pushes } = started();
   await settle();
   press("f");
@@ -293,8 +293,9 @@ test("a draw puts each label in its own document's layer with the fixed sheet an
   await draw(1, 1, rows);
   assert.equal(layers().length, 3, "one layer in the toolbox, the Inspector and the markup view");
   const [host] = layers();
-  assert.equal(host!.shadow!.children[0]!.getAttribute("href"), "moz-extension://uuid/chrome_hints.css");
+  assert.equal(host!.shadow!.descendants().some((node) => node.localName === "link" || node.localName === "style"), false, "a DevTools layer loads a sheet of the extension's");
   const sheet = (host!.shadow as unknown as { adoptedStyleSheets: { text: string }[] }).adoptedStyleSheets[0]!;
+  assert.ok(sheet.text.includes(".desertfox-hint { position: fixed;") && sheet.text.includes(".desertfox-hint b {") && sheet.text.includes("padding: 0 2px"), "the label rules are not in the constructed sheet");
   assert.ok(sheet.text.includes("--desertfox-primary: #ff0000;") && !sheet.text.includes("url(x)"), sheet.text);
   assert.equal(labels().length, 8);
   // The labels sit at each box in its own document; the rule view's label sits at its middle.

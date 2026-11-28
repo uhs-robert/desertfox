@@ -1314,6 +1314,10 @@ class MailReadTest(BridgeTestCase):
              {"ok": True, "message": {"id": 4, "from": "a@b", "to": ["c@d"], "subject": "Hi", "date": "2026-11-17T08:00:00Z", "content_type": "text/html", "body": "text", "untrusted": True, "html_stripped": True, "truncated": False}}),
             ({"verb": "attachments", "id": 4}, {"id": 4}, {"ok": True, "attachments": [{"part": "1.2", "name": "a.pdf", "size": 10, "content_type": "application/pdf"}]}),
             ({"verb": "message", "id": 5}, {"id": 5}, {"ok": False, "message": "the body is encrypted"}),
+            ({"verb": "contacts", "query": "ann", "limit": 20, "path": "/etc"}, {"query": "ann", "limit": 20},
+             {"ok": True, "contacts": [{"name": "Ann", "emails": ["ann@example.org"]}], "untrusted": True, "truncated": False}),
+            ({"verb": "contacts", "query": "x" * 100}, {"query": "x" * 100}, {"ok": True, "contacts": [], "untrusted": True, "truncated": False}),
+            ({"verb": "contacts", "query": "ann"}, {"query": "ann"}, {"ok": False, "message": "contact sharing is off, set bridge_share_contacts to true"}),
         ]
         for request, fields, reply in cases:
             with self.subTest(request=request["verb"]):
@@ -1330,6 +1334,10 @@ class MailReadTest(BridgeTestCase):
             {"verb": "messages", "folder": "f1", "unread_only": "yes"},
             {"verb": "message"}, {"verb": "message", "id": "4"}, {"verb": "message", "id": True}, {"verb": "message", "id": 1.5},
             {"verb": "attachments", "id": None},
+            {"verb": "contacts"}, {"verb": "contacts", "query": ""}, {"verb": "contacts", "query": 5}, {"verb": "contacts", "query": "x" * 101},
+            {"verb": "contacts", "query": "\U0001F600" * 51}, {"verb": "contacts", "query": "an\nn"}, {"verb": "contacts", "query": "an\x00"},
+            {"verb": "contacts", "query": "ann", "limit": 0}, {"verb": "contacts", "query": "ann", "limit": 21},
+            {"verb": "contacts", "query": "ann", "limit": True}, {"verb": "contacts", "query": "ann", "limit": "5"},
         ):
             with self.subTest(request=request):
                 reply = self.ask(request, socket_path=self.bird_socket)
@@ -1340,7 +1348,7 @@ class MailReadTest(BridgeTestCase):
 
     def test_the_firefox_socket_refuses_every_read(self):
         host = self.start(argv=FIREFOX_ARGV)
-        for request in ({"verb": "folders"}, {"verb": "messages", "folder": "f1"}, {"verb": "message", "id": 4}, {"verb": "attachments", "id": 4}):
+        for request in ({"verb": "folders"}, {"verb": "messages", "folder": "f1"}, {"verb": "message", "id": 4}, {"verb": "attachments", "id": 4}, {"verb": "contacts", "query": "ann"}):
             self.assertEqual(self.ask(request), {"ok": False, "message": "mail reads need --app thunderbird"})
         with self.assertRaises(AssertionError):
             host.read_request(timeout=0.3)

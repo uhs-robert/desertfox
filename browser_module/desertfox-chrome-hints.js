@@ -14,7 +14,7 @@
 //
 // It also labels a few of Firefox's own pages that run in this process (PAGE_HINT_PAGES), which no content script reaches. The key taker (desertfox-commands.js) calls the start it lends through the core's `share_page_hints` on the user's own hint key there.
 // That start makes a token as a chrome-focus start does and pushes page_hints.want. The extension names the action and answers with page_hints.collect. Draw, key, pick and clear then go on the chrome_hints kinds.
-// A pick there runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it.
+// A pick there and on a doorhanger runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it. Those keys count only after the labels showed 300 ms.
 // A page in a content process that the content hints route labels (desertfox-content-hints.js, through the core's `share_content_pages`) runs the same session. Its targets carry no element: the route's frame script holds them, and a pick goes to it.
 
 (function desertfox_browser_module_chrome_hints(scope) {
@@ -32,12 +32,10 @@
   define(core);
 
   function define(core) {
-    const EXTENSION_ID = "desertfox@uhs-robert";
     const ENABLED_PREF = "desertfox.browser_module.enabled";
     const HTML = "http://www.w3.org/1999/xhtml";
-    // The one sheet the labels take, built from the hint view's own style (tools/build.mjs). Never a path or a sheet from a message.
-    const STYLE_FILE = "chrome_hints.css";
     const HOST_CLASS = "desertfox-chrome-hints";
+    const DOORHANGER_ID = "notification-popup";
     // Bounds so that a session's targets fit a few messages of the from-module list, which keeps only its newest 16.
     const MAX_TARGETS = 400;
     const PART_BYTES = 3000;
@@ -94,9 +92,13 @@
     const prompt_kind = (doc) => doc.getElementById("commonDialog")?.getAttribute("windowtype") ?? "";
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
+    // A tab group's label is a button: a click folds or unfolds the group.
+    const TAB_STRIP_TAKE = "tab.tabbrowser-tab, toolbarbutton, .tab-group-label";
     const WINDOW_GROUPS = [
       { root: "#nav-bar", take: "toolbarbutton" },
-      { root: "#TabsToolbar", take: "tab.tabbrowser-tab, toolbarbutton" },
+      { root: "#TabsToolbar", take: TAB_STRIP_TAKE },
+      // With `sidebar.verticalTabs` on, the strip sits here and #TabsToolbar holds no tab.
+      { root: "#vertical-tabs", take: TAB_STRIP_TAKE },
       { root: "#PersonalToolbar", take: "toolbarbutton" },
       { root: "#toolbar-menubar", take: "menubar > menu" },
       { root: "#sidebar-button", take: "" },
@@ -107,7 +109,7 @@
     // `user_start_only`: only the binding typed in the panel labels it, never a request alone, because a pick there opens a downloaded file. The panel takes the focus, so no page hears the binding meanwhile.
     const PANELS = [
       { id: "appMenu-popup", take: "toolbarbutton, button" },
-      { id: "notification-popup", take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
+      { id: DOORHANGER_ID, take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
       { id: "downloadsPanel", take: "richlistitem, button, toolbarbutton", user_start_only: true },
     ];
 
@@ -390,25 +392,17 @@
       return `:host { ${block(colors.dark)} }\n@media (prefers-color-scheme: light) { :host { ${block(colors.light)} } }`;
     }
 
-    const label_style_url = () => ExtensionParent.GlobalManager.getExtension(EXTENSION_ID).baseURI.resolve(STYLE_FILE);
-
     // ---- The layer: a host in the window document for the toolbars, and one inside the panel for its rows.
 
     // The theme goes in a constructed sheet: the DevTools toolbox and Storage documents ignore an inline style.
-    // With no `style_url` the layer takes no sheet at all, so nothing the extension ships styles what it holds.
-    function make_layer(doc, style_url, theme, fixed, host_class = HOST_CLASS) {
+    // The layer takes no sheet of the extension's, so nothing the extension ships styles what it holds.
+    function make_layer(doc, theme, fixed, host_class = HOST_CLASS) {
       const host = doc.createElementNS(HTML, "div");
       host.className = host_class;
       host.style.cssText = fixed ? "position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;" : "position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 2147483647;";
       const root = host.attachShadow({ mode: "closed" });
       const box = doc.createElementNS(HTML, "div");
       box.className = "desertfox-hints";
-      if (style_url) {
-        const sheet = doc.createElementNS(HTML, "link");
-        sheet.setAttribute("rel", "stylesheet");
-        sheet.setAttribute("href", style_url);
-        root.append(sheet);
-      }
       root.append(box);
       if (theme !== "") {
         const colors = new doc.defaultView.CSSStyleSheet();
@@ -448,12 +442,12 @@
 
     function push_key(key, repeat = false) {
       session.seq++;
-      if (session.page) note_typed(session, key, repeat);
+      if (session.spelled_keys) note_typed(session, key, repeat);
       send("chrome_hints.key", { session: session.tag, seq: session.seq, key });
     }
 
-    // A page session keeps the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
-    // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing.
+    // A page session and a doorhanger session keep the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
+    // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing. On a doorhanger this also stops keys typed for a toolbar label from picking Block or Not now once a prompt takes over the hint key.
     // A key the user holds, or one typed before the labels showed a while, pushes that while on, so a key counts only after a pause with labels shown.
     function note_typed(owner, key, repeat) {
       if (repeat || time_now(owner.win) < owner.counts_at) {
@@ -549,7 +543,7 @@
 
     // The start the key taker calls for a hint key on a page this file labels. True when it asked the extension.
     function start_page({ window: win, browser, event, keys, count }) {
-      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count)) return false;
+      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count) || !core.may_act(win)) return false;
       const doc = page_document(browser);
       const kind = doc ? undefined : content_kind(browser);
       if ((!doc && !kind) || tabs_of(win)?.selectedBrowser !== browser) return false;
@@ -617,16 +611,16 @@
     // `frame_win`: the window of the dialog the targets are in, whose close ends the session.
     // `keyed`: a key of the user's began the session, so a pick may mark a control that grants.
     // `page`: the page of Firefox's own the targets are on, and the session's action there.
-    function start_session(tag, win, found, style_url, theme, { panel, frame_win, page, early_keys = [], keyed = false } = {}) {
+    function start_session(tag, win, found, theme, { panel, frame_win, page, early_keys = [], keyed = false } = {}) {
       // A start's and a confirm's ends release the same hold a session takes, so they end first.
       end_start();
       end_confirm();
       end_session(true);
       if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, typed: "", typed_at: 0, counts_at: Infinity, labels: undefined, look: { style_url, theme, panel, frame_win, page } };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, spelled_keys: Boolean(page) || panel?.panel.id === DOORHANGER_ID, typed: "", typed_at: 0, counts_at: Infinity, labels: undefined, look: { theme, panel, frame_win, page } };
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
-        add_session_parts(win, found, style_url, theme, panel, frame_win, page);
+        add_session_parts(win, found, theme, panel, frame_win, page);
       } catch (error) {
         // A half-built session has no timer or listeners to end it, so it would swallow the window's letters until Escape.
         end_session(false);
@@ -634,15 +628,15 @@
       }
     }
 
-    function add_session_parts(win, found, style_url, theme, panel, frame_win, page) {
+    function add_session_parts(win, found, theme, panel, frame_win, page) {
       const doc = win.document;
       for (const target of found) session.targets.set(next_target_id++, { ...target, kind: target.element ? kind_of(target.element) : "remote" });
-      const window_layer = make_layer(doc, style_url, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
+      const window_layer = make_layer(doc, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
       doc.documentElement.append(window_layer.host);
       session.layers.window = window_layer;
       session.undo.push(() => window_layer.host.remove());
       if (panel) {
-        const panel_layer = make_layer(doc, style_url, theme, false);
+        const panel_layer = make_layer(doc, theme, false);
         panel.view.prepend(panel_layer.host);
         session.layers.panel = panel_layer;
         session.undo.push(() => panel_layer.host.remove());
@@ -691,9 +685,8 @@
 
     function open_session(tag, win, found, colors, places) {
       if (found.length === 0) return { ok: false, error: "Nothing to hint here" };
-      // A page's labels sit over controls that change settings, so no sheet of the extension's may move or hide them there.
-      const themed = !places.page;
-      start_session(tag, win, found.slice(0, MAX_TARGETS), themed ? label_style_url() : undefined, themed ? theme_text(colors) : "", places);
+      // The labels sit over controls that change settings, so no sheet of the extension's may move or hide them. A page's labels take no colors from it either.
+      start_session(tag, win, found.slice(0, MAX_TARGETS), places.page ? "" : theme_text(colors), places);
       const parts = target_parts(session.targets);
       parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
       return { ok: true };
@@ -814,9 +807,13 @@
       return node;
     }
 
-    // A page label's look, inline in a layer with no sheet, after the hint view's own (src/content/hints/view.ts) in its default colors.
+    // A label's look, inline in a layer with no sheet, after the hint view's own (src/content/hints/view.ts). The colors are the checked theme's custom properties, with the hint view's defaults.
+    const LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: var(--desertfox-primary, #7fa3c9); color: var(--desertfox-bg-core, #0c0e13); border: 1px solid var(--desertfox-primary, #7fa3c9); box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
+    // A page's labels take no theme at all, so their colors are fixed values.
     const PAGE_LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: #7fa3c9; color: #0c0e13; border: 1px solid #7fa3c9; box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
-    const PAGE_LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+    const LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+    // The same look as class rules, for the DevTools layers, whose labels the draw makes in many documents. DevTools adopts them in a constructed sheet, since the toolbox ignores an inline <style>. A fixed string of this file.
+    const label_rules = `.desertfox-hint { ${LABEL_STYLE} } .desertfox-hint b { ${LABEL_TYPED_STYLE} }`;
 
     // Replaces every label with the rows of one complete draw. Each box is read now, so a label sits where its target is at this draw, and a pick checks against that.
     function apply_draw(rows, typed_length) {
@@ -828,10 +825,8 @@
         // A target in a content process has the box the route mapped, at its collect.
         target.drawn = target.element ? window_box(session.win, target.element) : target.box;
         const node = label_node(doc, text, typed_length);
-        if (session.page) {
-          node.style.cssText = PAGE_LABEL_STYLE;
-          node.children[0].style.cssText = PAGE_LABEL_TYPED_STYLE;
-        }
+        node.style.cssText = session.page ? PAGE_LABEL_STYLE : LABEL_STYLE;
+        node.children[0].style.cssText = LABEL_TYPED_STYLE;
         if (target.place === "panel") {
           node.style.position = "absolute";
           node.style.left = `${Math.round(target.drawn.left - origin.left)}px`;
@@ -874,9 +869,9 @@
         end_session(true);
         return { ok: true };
       }
-      if (session.page && !keeps_labels(session, rows_drawn)) return { ok: true };
+      if (session.spelled_keys && !keeps_labels(session, rows_drawn)) return { ok: true };
       const first = session.drawn_gen === 0;
-      if (first && session.page) {
+      if (first && session.spelled_keys) {
         session.labels = new Map(rows_drawn);
         session.counts_at = time_now(session.win) + LABELS_SEEN_MS;
       }
@@ -1050,7 +1045,7 @@
     function add_confirm_parts(win, target, { panel, frame_win, page }) {
       const doc = win.document;
       const in_panel = target.place === "panel" && panel !== undefined;
-      const layer = make_layer(doc, undefined, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
+      const layer = make_layer(doc, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
       if (in_panel) panel.view.prepend(layer.host);
       else doc.documentElement.append(layer.host);
       confirming.undo.push(() => layer.host.remove());
@@ -1129,13 +1124,13 @@
     }
 
     // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
-    // On a page of Firefox's own the pick must also name the label the user's keys spelled, and a link action opens or copies the link's web address here.
+    // On a page of Firefox's own and on a doorhanger the pick must also name the label the user's keys spelled, and a link action opens or copies the link's web address here.
     function pick({ session: tag, id }) {
       const { target, error } = drawn_target(session, tag, id);
       if (error) return { ok: false, error };
       const { element, drawn } = target;
       const { win, look, keyed, page } = session;
-      const named_by_keys = !page || spelled(session, id);
+      const named_by_keys = !session.spelled_keys || spelled(session, id);
       const remote = element ? undefined : take_remote(page);
       end_session(false);
       if (!named_by_keys) {
@@ -1334,6 +1329,6 @@
     core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined || content_kind(browser) !== undefined, start: start_page });
     core.set_hello_flag("page_hints", true);
     // The DevTools hints draw with these, so their label checks and layer stay one code.
-    core.share_hint_drawing({ MAX_TARGETS, label_style_url, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
+    core.share_hint_drawing({ MAX_TARGETS, label_rules, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
   }
 })(this);

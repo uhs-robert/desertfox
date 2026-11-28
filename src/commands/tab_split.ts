@@ -1,9 +1,9 @@
 import { define } from "../shared/registry/builtin.ts";
 import { browser_tab_split_deps, focus_other_pane, swap_panes } from "../background/tab_split.ts";
-import { browser_module_call } from "../background/browser_module_call.ts";
+import { browser_module_call, read_module_hello } from "../background/browser_module_call.ts";
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import { MAX_RESIZE_STEPS, PANE_DIRECTIONS, PANE_REGIONS } from "../shared/browser_module_protocol.ts";
+import { MAX_RESIZE_STEPS, PANE_DIRECTIONS, PANE_MOVE_DIRECTIONS, PANE_REGIONS } from "../shared/browser_module_protocol.ts";
 import { require_tab_id } from "./open_target.ts";
 
 define("tab.split_other", {
@@ -90,4 +90,22 @@ define("pane.focus_side", {
   bridge: false,
   runs_in: "background",
   run: (_ctx, args) => pane_call("pane.focus_direction", { direction: args.direction }),
+});
+
+// A module from before `pane.move` does not know the kind, so the extension refuses for it with a clear reason. With no hello at all, the call gives the usual "Needs the browser module".
+async function module_moves_panes(): Promise<boolean> {
+  const hello = await read_module_hello();
+  return hello === undefined || hello.pane_moves === true;
+}
+
+define("pane.move", {
+  label: "Move pane",
+  intent: "Move what has the focus to one side. A split pane swaps sides, docked DevTools docks there and the sidebar moves there. Down docks DevTools at the bottom. Needs the browser module.",
+  params: [{ name: "direction", type: "enum", values: PANE_MOVE_DIRECTIONS, description: { left: "Move it to the left.", right: "Move it to the right.", down: "Dock DevTools at the bottom." } }],
+  bridge: false,
+  runs_in: "background",
+  run: async (_ctx, args) => {
+    if (!(await module_moves_panes())) throw new RuntimeRefusal("The browser module is too old to move panes. Rerun its install script.");
+    await pane_call("pane.move", { direction: args.direction });
+  },
 });

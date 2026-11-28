@@ -327,7 +327,7 @@
 
     function start_session(tag, win, found, colors, drawing) {
       end_session(true);
-      session = { tag, win, drawing, targets: new Map(), layers: new Map(), theme: drawing.theme_text(colors) + COMPACT_LABELS, undo: [], seq: 0, drawn_gen: 0, pending: undefined };
+      session = { tag, win, drawing, targets: new Map(), layers: new Map(), theme: drawing.theme_text(colors) + drawing.label_rules + COMPACT_LABELS, undo: [], seq: 0, drawn_gen: 0, pending: undefined };
       if (!hold(session, win, KEY_OWNER)) {
         session = null;
         return false;
@@ -398,7 +398,7 @@
     function layer_for(doc) {
       const known = session.layers.get(doc);
       if (known) return known;
-      const layer = session.drawing.make_layer(doc, session.drawing.label_style_url(), session.theme, true, HOST_CLASS);
+      const layer = session.drawing.make_layer(doc, session.theme, true, HOST_CLASS);
       doc.documentElement.append(layer.host);
       session.layers.set(doc, layer);
       return layer;
