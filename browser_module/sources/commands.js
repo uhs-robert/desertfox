@@ -327,7 +327,12 @@ function define(core) {
       set_flag(pass_armed, browser, false);
       return false;
     }
-    if (is_ignored(browser)) return false;
+    if (is_ignored(browser)) {
+      // As on a web page, the ignore leave key ends the mode in a field too.
+      if (token !== IGNORE_TOGGLE_KEY) return false;
+      set_flag(ignored, browser, false);
+      return true;
+    }
     if (is_inserted(browser)) return insert_key(context, token);
     const row = insert_row_of(context, token);
     if (row === "mode.escape") return core.blur_field(context);

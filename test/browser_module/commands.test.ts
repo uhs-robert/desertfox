@@ -766,6 +766,17 @@ test("an Escape in a field after <C-v> goes to the page, not to the blur row", (
   assert.deepEqual([press("Escape", page.target).prevented, page.field.blurs, mode_of(first.browser)], [false, 0, null]);
 });
 
+test("<S-Escape> in a field ends ignore mode, and every other key there still goes to the page", () => {
+  const { press, first } = started();
+  const page = page_with_field(first.browser);
+  press("Escape", { shiftKey: true, target: first.browser, originalTarget: first.browser });
+  assert.equal(mode_of(first.browser), "ignore");
+  assert.equal(press("a", page.target).prevented, false);
+  assert.equal(mode_of(first.browser), "ignore");
+  const left = press("Escape", { ...page.target, shiftKey: true });
+  assert.deepEqual([left.prevented, mode_of(first.browser)], [true, null]);
+});
+
 test("a shut down takes the mode attributes off every tab it marked", () => {
   const { press, first, core } = started();
   press("i");

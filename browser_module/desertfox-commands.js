@@ -540,7 +540,11 @@
         set_flag(pass_armed, browser2, false);
         return false;
       }
-      if (is_ignored(browser2)) return false;
+      if (is_ignored(browser2)) {
+        if (token !== IGNORE_TOGGLE_KEY) return false;
+        set_flag(ignored, browser2, false);
+        return true;
+      }
       if (is_inserted(browser2)) return insert_key(context, token);
       const row = insert_row_of(context, token);
       if (row === "mode.escape") return core2.blur_field(context);
