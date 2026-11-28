@@ -91,6 +91,7 @@
     if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
+    if (kind === "optional_text") return value === void 0 || typeof value === "string" ? void 0 : "must be text";
     if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;

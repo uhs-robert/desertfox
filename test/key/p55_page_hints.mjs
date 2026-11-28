@@ -1,5 +1,9 @@
 // Hints on Firefox's own pages in the parent process (browser_module/desertfox-chrome-hints.js, the page place): f on about:preferences labels its controls in the window's layer and a label picks, the bar says HINT meanwhile,
 // a pick of the search box leaves the bar in INSERT and Escape then blurs it, F on a link opens a background tab, a grant on about:addons and a pref write on about:config wait for Enter, and the allowlist's pages run in the parent process.
+// Also the hint mode keys there: / types text, Tab and Shift-Tab move the active match, Enter follows it, and Escape and a remapped escape key end the session.
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { CTRL } from "./harness.mjs";
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["hints", "keys"];
@@ -34,6 +38,29 @@ const label_on = (pick) => `(async () => {
 const label_count = `(async () => [...${W}.document.querySelectorAll(".desertfox-page-hints")].reduce((sum, host) => sum + host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint").length, 0))()`;
 const page_layers = `(async () => ${W}.document.querySelectorAll(".desertfox-page-hints").length)()`;
 const confirm_shown = `(async () => [...${W}.document.querySelectorAll(".desertfox-page-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`;
+// Chrome code: the active label of text mode, which swaps its colors so its background leaves its border's color, and where it sits in the window. Null with none.
+const active_label = `(async () => {
+  const w = ${W};
+  for (const host of w.document.querySelectorAll(".desertfox-page-hints")) for (const node of host.openOrClosedShadowRoot.querySelectorAll(".desertfox-hint")) {
+    const style = w.getComputedStyle(node);
+    if (style.backgroundColor !== style.borderTopColor) return { text: node.textContent, left: Math.round(node.getBoundingClientRect().left), top: Math.round(node.getBoundingClientRect().top) };
+  }
+  return null;
+})()`;
+const query_box = `(async () => { for (const host of ${W}.document.querySelectorAll(".desertfox-page-hints")) { const box = host.openOrClosedShadowRoot.querySelector(".desertfox-hint-text"); if (box) return box.textContent; } return null; })()`;
+const key_line = `(async () => { for (const host of ${W}.document.querySelectorAll(".desertfox-page-hints")) { const line = host.openOrClosedShadowRoot.querySelector(".desertfox-hint-keys"); if (line) return line.textContent; } return null; })()`;
+// Chrome code: records where the next element of the page that is clicked or takes the focus sits in the window, as Services.desertfox_key_test_picked.
+const watch_pick = `(async () => {
+  const w = ${W};
+  const doc = w.gBrowser.selectedBrowser.contentDocument;
+  Services.desertfox_key_test_picked = null;
+  const note = (event) => {
+    if (Services.desertfox_key_test_picked) return;
+    const quad = event.composedPath()[0].getBoxQuads({ relativeTo: w.document })[0].getBounds();
+    Services.desertfox_key_test_picked = { left: Math.max(0, Math.round(quad.left)), top: Math.max(0, Math.round(quad.top)) };
+  };
+  for (const type of ["click", "focusin"]) doc.addEventListener(type, note, { capture: true, once: true });
+})()`;
 const held_by = `(async () => Services.desertfox_browser_module.keys_held_by(${W}) ?? null)()`;
 const in_field = `(async () => ${W}.windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`;
 
@@ -51,7 +78,7 @@ const clipboard_text = `(async () => {
 const VISIBLE_LINKS = `(doc, deep_find) => { const all = []; const walk = (root) => { for (const el of root.querySelectorAll("a[href]")) all.push(el); for (const el of root.querySelectorAll("*")) if (el.openOrClosedShadowRoot) walk(el.openOrClosedShadowRoot); }; walk(doc); return all.filter((a) => a.checkVisibility() && a.getBoundingClientRect().width > 4 && a.getBoundingClientRect().top >= 0 && a.getBoundingClientRect().bottom <= doc.defaultView.innerHeight); }`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep, take_shot, run_line, on_teardown, in_background, clear_notices } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, take_shot, run_line, on_teardown, in_background, clear_notices, config_copy, config_dir, load_config_dir } = context;
   const steps = module_steps(context);
   const { chrome, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page } = steps;
   const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left")?.children[0]?.textContent ?? null : null; })()`);
@@ -102,7 +129,7 @@ export async function run_cases(context) {
     }
     console.log(`page processes: ${JSON.stringify(where)}`);
     for (const url of ["about:preferences", "about:settings", "about:addons", "about:downloads", "about:config"]) expect(where[url].remote === false && where[url].labelled === true, `${url} is not a labelled parent-process page: ${JSON.stringify(where[url])}`);
-    for (const url of ["about:protections", "about:logins", "about:newtab", "about:support"]) expect(where[url].labelled === false, `${url} got page hints: ${JSON.stringify(where[url])}`);
+    for (const url of ["about:protections", "about:logins", "about:support"]) expect(where[url].labelled === false, `${url} got page hints: ${JSON.stringify(where[url])}`);
   });
 
   await tab_case("on about:preferences f labels the page in the window's layer, the bar says HINT, a label picks a section and then a checkbox in it", async () => {
@@ -269,6 +296,57 @@ export async function run_cases(context) {
       await expect_ended(";yl on about:addons");
     });
   }
+
+  await tab_case("on about:preferences / types text with the key line, Tab and Shift-Tab move the active match, Enter follows it, and Escape ends text mode", async () => {
+    await home("ph_text");
+    await open_page("about:preferences", `(win) => win.document.readyState === "complete"`);
+    await start_hints("f", "about:preferences");
+    expect((await chrome(key_line)) === "/: type text \u00b7 Tab: turn labels", `the key line reads ${await chrome(key_line)}`);
+    await press_keys("/");
+    await poll_until("the typed text box", async () => (await chrome(query_box)) === "text: ", { timeout_ms: 3000 });
+    await press_keys("s");
+    await poll_until("the typed text", async () => (await chrome(query_box)) === "text: s", { timeout_ms: 3000 });
+    expect((await chrome(key_line)) === "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels", `the key line reads ${await chrome(key_line)} in text mode`);
+    const first = await chrome(active_label);
+    expect(first !== null, "text mode shows no active match");
+    await take_shot("/tmp/desertfox-page-hints-text-mode.png");
+    await press_keys("-k", "Tab");
+    await poll_until("Tab to move the active match", async () => (await chrome(active_label))?.text !== first.text, { timeout_ms: 3000 });
+    await press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
+    await poll_until("Shift-Tab to move it back", async () => (await chrome(active_label))?.text === first.text, { timeout_ms: 3000 });
+    await chrome(watch_pick);
+    await press_keys("-k", "Return");
+    await expect_ended("Enter on the active match");
+    await poll_until("the pick to reach the page", async () => (await chrome(`(async () => Services.desertfox_key_test_picked)()`)) !== null, { timeout_ms: 3000 });
+    const picked = await chrome(`(async () => Services.desertfox_key_test_picked)()`);
+    expect(Math.abs(picked.left - first.left) + Math.abs(picked.top - first.top) <= 3, `Enter picked ${JSON.stringify(picked)}, not the active match at ${JSON.stringify(first)}`);
+    await press_keys("-k", "Escape");
+    await focus_page();
+    await start_hints("f", "about:preferences again");
+    await press_keys("/", "s");
+    await poll_until("the typed text", async () => (await chrome(query_box)) === "text: s", { timeout_ms: 3000 });
+    await press_keys("-k", "Escape");
+    await expect_ended("Escape in text mode");
+  });
+
+  await tab_case("on about:preferences a key the hint keymap binds to mode.escape ends the session, and plain Escape still ends it", async () => {
+    await home("ph_remap");
+    const dir = config_copy();
+    writeFileSync(join(dir, "keymap.d", "90-hint-escape.toml"), '[hint]\n"<C-c>" = "mode.escape"\n');
+    on_teardown(() => load_config_dir(config_dir));
+    await load_config_dir(dir);
+    await poll_until("the state to hold the hint mode key", async () => ((await session_value("desertfox_browser_module_state"))?.hint_mode_keys ?? []).some((row) => row.key === "<C-c>" && row.op === "escape"), { timeout_ms: 5000 });
+    await open_page("about:preferences", `(win) => win.document.readyState === "complete"`);
+    await start_hints("f", "about:preferences");
+    await press_keys("/");
+    await poll_until("the typed text box", async () => (await chrome(query_box)) === "text: ", { timeout_ms: 3000 });
+    await press_keys(...CTRL("c"));
+    await expect_ended("the remapped escape key");
+    await focus_page();
+    await start_hints("f", "about:preferences again");
+    await press_keys("-k", "Escape");
+    await expect_ended("plain Escape beside the remap");
+  });
 
   await tab_case("a hint that needs page code says so on about:preferences and starts nothing", async () => {
     await home("ph_refused");

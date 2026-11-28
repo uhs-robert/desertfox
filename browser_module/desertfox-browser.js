@@ -36,6 +36,7 @@
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
 //   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
 //   chrome_hint_keys(win)      In the sandbox: the key token lists of the `hint.browser` bindings, or [] whenever may_act(win) is false.
+//   hint_mode_keys(win)        In the sandbox: a Map of the hint mode keys a session acts on itself, key token to "escape" or "whichkey". Undefined when the extension does not run hint mode keys or may_act(win) is false.
 //   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
@@ -118,6 +119,8 @@
     const MAX_SIDEBAR_KEY_TOKENS = 2;
     const MAX_CHROME_HINT_BINDINGS = 4;
     const MAX_CHROME_HINT_KEY_TOKENS = 4;
+    const HINT_MODE_KEY_OPS = ["escape", "whichkey"];
+    const MAX_HINT_MODE_KEYS = 16;
     const MAX_STATE_TABS = 1024;
     const MAX_MESSAGES = 16;
     const MAX_MESSAGE_LIST_BYTES = 4096;
@@ -149,13 +152,13 @@
       "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "chrome_hints.collect_here": { args: { session: "int", start: "int", colors: "text" }, reply: true, max_bytes: 1024 },
-      "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: 4096 },
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86400000 },
       "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
-      "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: 4096 },
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
@@ -166,7 +169,8 @@
       page_gone: { args: { tab_id: "int", document_id: "int" }, reply: false, max_bytes: 256, max_age_ms: 60000 },
       run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: 512 },
       "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: 4096 },
-      "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: 256 },
+      "chrome_hints.key": { args: { session: "int", seq: "int", key: "text", token: "optional_text" }, reply: false, max_bytes: 256 },
+      "chrome_hints.texts": { args: { session: "int", part: "int", parts: "int", texts: "text" }, reply: false, max_bytes: 4096 },
       "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: 256 },
@@ -260,7 +264,7 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, hint_mode_keys: read_hint_mode_keys(value.hint_mode_keys) };
     }
 
     // chrome_hint_keys_of: a bad list leaves chrome focus without the hint start and the rest of the state alone.
@@ -270,6 +274,17 @@
       const joined = value.map((keys) => keys.join(" "));
       if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return [];
       return value.map((keys) => [...keys]);
+    }
+
+    // hint_mode_keys_of: a bad table leaves sessions to labels and plain Escape, and the rest of the state alone.
+    function read_hint_mode_keys(value) {
+      if (!Array.isArray(value) || value.length > MAX_HINT_MODE_KEYS) return undefined;
+      const rows = new Map();
+      for (const row of value) {
+        if (!is_record(row) || typeof row.key !== "string" || !KEY_TOKEN.test(row.key) || !HINT_MODE_KEY_OPS.includes(row.op) || rows.has(row.key)) return undefined;
+        rows.set(row.key, row.op);
+      }
+      return rows;
     }
 
     // sidebar_keys_of: a bad table leaves the sidebar without keys and the rest of the state alone. Each row's key prefix maps to { prefix: true }.
@@ -301,7 +316,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves", "hint_mode_keys"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -785,6 +800,7 @@
       if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.includes(value);
       if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.includes(value);
       if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.includes(value);
+      if (kind === "optional_text") return value === undefined || typeof value === "string";
       if (kind === "optional_int" && value === undefined) return true;
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
       return typeof value === "number" && Number.isFinite(value) && (kind === "number" || Number.isInteger(value));
@@ -1126,6 +1142,7 @@
       may_act: (win) => state_for(win) !== undefined,
       sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),
       chrome_hint_keys: (win) => state_for(win)?.chrome_hint_keys ?? [],
+      hint_mode_keys: (win) => state_for(win)?.hint_mode_keys,
       token_of,
       is_field,
       deep_active,

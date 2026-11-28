@@ -1,11 +1,13 @@
-// Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window, or of one of Firefox's own pages, and sends their ids and boxes (`browser_module/desertfox-chrome-hints.js`, and `desertfox-devtools.js` for DevTools). This file makes the labels, narrows them as the module reports each typed key, and names the target to pick.
+// Hints over Firefox's own UI, the extension's half. The browser module collects the targets of a window, or of one of Firefox's own pages, and sends their ids, boxes and texts (`browser_module/desertfox-chrome-hints.js`, and `desertfox-devtools.js` for DevTools). This file makes the labels, runs each typed key through the page's hint picker (`src/shared/hints/pick.ts`), and names the target to pick.
 // The session lives in `storage.session`, so a restarted background still narrows and picks. Every message carries the session number, so a message of an older session finds nothing.
+// The picker is a closure, so the session keeps the keys that changed what shows and replays them into a fresh picker at each key, rather than a copy of the picker's state.
 
-import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, json_bytes } from "../shared/browser_module_protocol.ts";
+import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, CHROME_HINT_TEXT_CHARS, MAX_CHROME_HINT_TEXT_PARTS, json_bytes } from "../shared/browser_module_protocol.ts";
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
 import type { PageHintChoice } from "../shared/browser_module_scope.ts";
 import { CHROME_HINTS_STORAGE_KEY } from "../shared/config/storage_keys.ts";
-import { make_labels, narrow } from "../shared/hints/labels.ts";
+import { make_labels } from "../shared/hints/labels.ts";
+import { create_picker } from "../shared/hints/pick.ts";
 import { keep_chain } from "../shared/swallow.ts";
 
 type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remove">;
@@ -13,6 +15,7 @@ type SessionStorage = Pick<typeof browser.storage.session, "get" | "set" | "remo
 // [id, left, top, width, height] in CSS pixels of the window.
 export type TargetRow = [number, number, number, number, number];
 export type LabelRow = [number, string];
+export type TextRow = [number, string];
 
 export type ChromeHintSession = {
   session: number;
@@ -24,7 +27,14 @@ export type ChromeHintSession = {
   parts?: number;
   targets: Record<string, TargetRow[]>;
   labels?: LabelRow[];
-  typed: string;
+  // Each part of the texts as it came, then all of them once every part is in. A session whose texts never came keeps to labels.
+  text_parts?: number;
+  texts_in?: Record<string, TextRow[]>;
+  texts?: TextRow[];
+  // The keys that changed what shows, in order.
+  tokens: string[];
+  // The `hint_key_line` setting at the first draw.
+  key_line?: true;
   // The last key handled and the last draw sent.
   seq: number;
   gen: number;
@@ -44,6 +54,8 @@ export type ChromeHintDeps = {
   new_session: () => number;
   // The action of the hint key the module matched on one of Firefox's own pages, from the stored keymap.
   page_action: (keys: string) => Promise<PageHintChoice>;
+  // The `hint_key_line` setting.
+  key_line: () => Promise<boolean>;
 };
 
 // Room beside a part's rows for the rest of the message.
@@ -58,17 +70,26 @@ const kind_of = (session: ChromeHintSession, verb: "draw" | "pick" | "clear"): s
 const is_whole = (value: unknown): value is number => Number.isSafeInteger(value);
 const is_part_of = (part: unknown, parts: unknown): boolean => is_whole(parts) && parts >= 1 && parts <= CHROME_HINT_MAX_PARTS && is_whole(part) && part >= 0 && part < parts;
 
-// The module's targets are foreign input: rows of five whole numbers, the id above zero. A part with any other row is dropped whole.
-export function target_rows(text: string): TargetRow[] | undefined {
-  let rows: unknown;
+const parsed_rows = (text: string): unknown[] | undefined => {
   try {
-    rows = JSON.parse(text);
+    const rows: unknown = JSON.parse(text);
+    return Array.isArray(rows) && rows.length <= MAX_ROWS ? rows : undefined;
   } catch {
     return undefined;
   }
-  if (!Array.isArray(rows) || rows.length > MAX_ROWS) return undefined;
-  const fits = rows.every((row) => Array.isArray(row) && row.length === 5 && row.every(is_whole) && (row[0] as number) > 0);
-  return fits ? (rows as TargetRow[]) : undefined;
+};
+
+// The module's targets are foreign input: rows of five whole numbers, the id above zero. A part with any other row is dropped whole.
+export function target_rows(text: string): TargetRow[] | undefined {
+  const rows = parsed_rows(text);
+  return rows?.every((row) => Array.isArray(row) && row.length === 5 && row.every(is_whole) && (row[0] as number) > 0) ? (rows as TargetRow[]) : undefined;
+}
+
+// The module's texts are foreign input too: rows of an id and a short text with no control or format character. A part with any other row is dropped whole.
+const is_hint_text = (text: unknown): text is string => typeof text === "string" && text !== "" && [...text].length <= CHROME_HINT_TEXT_CHARS && !/[\p{Cc}\p{Cf}]/u.test(text);
+export function text_rows(text: string): TextRow[] | undefined {
+  const rows = parsed_rows(text);
+  return rows?.every((row) => Array.isArray(row) && row.length === 2 && is_whole(row[0]) && row[0] > 0 && is_hint_text(row[1])) ? (rows as TextRow[]) : undefined;
 }
 
 // Reading order: by row, then left to right. Boxes whose tops are within a few pixels share a row.
@@ -86,17 +107,52 @@ export function label_parts(rows: readonly LabelRow[]): LabelRow[][] {
   return parts;
 }
 
-export type KeyStep = { typed: string } | { pick: number } | undefined;
+// What the module shows: the labels that still match, and in text mode the typed text and the id Enter picks.
+export type HintView = { typed: string; ids: number[]; query?: string; active?: number };
+export type KeyStep = { view: HintView; tokens: string[] } | { pick: number } | undefined;
 
-// What a typed key does, by the same rules as hints on a page: a letter that continues no label is dropped, Backspace takes one letter back, and the last letter of a label picks it. Undefined: nothing changes.
-export function key_step(labels: readonly LabelRow[], typed: string, key: string): KeyStep {
-  if (key === "Backspace") return typed === "" ? undefined : { typed: typed.slice(0, -1) };
-  if ([...key].length !== 1 || /\s/.test(key)) return undefined;
-  const next = typed + key.toLowerCase();
-  const { still_possible_, complete } = narrow(labels.map(([, label]) => label), next);
-  if (still_possible_.length === 0) return undefined;
-  return complete === undefined ? { typed: next } : { pick: labels[complete]![0] };
+// The keys the picker takes besides one character. Tab and Space turn labels and rapid on a page, which a session leaves to the module or to a later change, so only text mode reads them here.
+const PICKER_TOKENS = new Set(["<Tab>", "<S-Tab>", "<Enter>", "<Space>", "<Backspace>"]);
+const OLDER_MODULE_KEYS: Record<string, string> = { Backspace: "<Backspace>", Enter: "<Enter>", Tab: "<Tab>", " ": "<Space>" };
+const MAX_TOKENS = 64;
+const is_char_token = (token: string): boolean => [...token].length === 1 && !/[\s\p{Cc}\p{Cf}]/u.test(token);
+
+// The key token of a `chrome_hints.key`: its `token`, or for an older module that sends only the event's key, the token of that key. Undefined for a key the picker never takes.
+export function token_of_key(args: ModuleArgs): string | undefined {
+  const token = typeof args.token === "string" ? args.token : typeof args.key === "string" ? (OLDER_MODULE_KEYS[args.key] ?? args.key) : undefined;
+  return token !== undefined && (is_char_token(token) || PICKER_TOKENS.has(token)) ? token : undefined;
 }
+
+// What a typed key does, by the rules of hints on a page: the earlier `tokens` replay into a fresh picker, then `token` goes in. `texts` holds the text of each label's target, by the label's index.
+// Undefined: nothing changes, so the key is not kept. `/` with no text to type against is such a key, as is any key once the session kept MAX_TOKENS.
+export function key_step(labels: readonly LabelRow[], texts: readonly (string | undefined)[], tokens: readonly string[], token: string): KeyStep {
+  if (tokens.length >= MAX_TOKENS) return undefined;
+  const picker = create_picker(labels.map(([, label]) => label), () => texts);
+  const id_of = (index: number): number => labels[index]![0];
+  let before: HintView = { typed: "", ids: labels.map(([id]) => id) };
+  const view_after = (kept: string): HintView | number | undefined => {
+    const outcome = picker.on_token_(kept);
+    if (outcome.kind !== "handled") return undefined;
+    if (outcome.picked !== undefined) return id_of(outcome.picked);
+    const ids = outcome.still_possible_.map(id_of);
+    return outcome.text === undefined ? { typed: outcome.typed, ids } : { typed: "", ids, query: outcome.text, ...(outcome.active !== undefined && { active: id_of(outcome.active) }) };
+  };
+  for (const kept of tokens) {
+    const view = view_after(kept);
+    if (typeof view === "object") before = view;
+  }
+  if (token === "/" && !picker.in_text_mode_() && !texts.some((text) => text !== undefined)) return undefined;
+  const after = view_after(token);
+  if (typeof after === "number") return { pick: after };
+  if (after === undefined || JSON.stringify(after) === JSON.stringify(before)) return undefined;
+  return { view: after, tokens: [...tokens, token] };
+}
+
+// The texts by label, once every part came. A target with no text is undefined, which text mode skips.
+const texts_by_label = (session: ChromeHintSession): (string | undefined)[] => {
+  const by_id = new Map(session.texts ?? []);
+  return session.labels!.map(([id]) => by_id.get(id));
+};
 
 export function create_chrome_hints(deps: ChromeHintDeps) {
   let chain: Promise<unknown> = Promise.resolve();
@@ -113,11 +169,12 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
     return session !== undefined && session.session === number ? session : undefined;
   };
 
-  // One whole draw: the labels that still match what was typed.
-  async function send_draw(session: ChromeHintSession): Promise<void> {
-    const shown = session.labels!.filter(([, label]) => label.startsWith(session.typed));
-    const parts = label_parts(shown);
-    for (const [part, rows] of parts.entries()) await deps.push(kind_of(session, "draw"), { session: session.session, gen: session.gen, part, parts: parts.length, typed: session.typed, labels: JSON.stringify(rows) });
+  // One whole draw: the labels that still match what was typed. A DevTools session has no text mode and no key line yet, so its draw carries neither.
+  async function send_draw(session: ChromeHintSession, view: HintView): Promise<void> {
+    const by_id = new Map(session.labels!);
+    const parts = label_parts(view.ids.map((id) => [id, by_id.get(id)!]));
+    const text_fields = session.surface === "devtools" ? {} : { ...(view.query !== undefined && { query: view.query }), ...(view.active !== undefined && { active: view.active }), ...(session.key_line && { key_line: 1 }) };
+    for (const [part, rows] of parts.entries()) await deps.push(kind_of(session, "draw"), { session: session.session, gen: session.gen, part, parts: parts.length, typed: view.typed, labels: JSON.stringify(rows), ...text_fields });
   }
 
   async function pick(session: ChromeHintSession, id: number): Promise<void> {
@@ -130,7 +187,7 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
 
   async function begin(fields: { window_id?: number; surface?: "devtools" }, collect: (session: number, colors: string) => Promise<{ ok: true } | { ok: false; error: string }>): Promise<{ ok: true } | { ok: false; error: string }> {
     starts++;
-    const session: ChromeHintSession = { session: deps.new_session(), ...fields, targets: {}, typed: "", seq: 0, gen: 0 };
+    const session: ChromeHintSession = { session: deps.new_session(), ...fields, targets: {}, tokens: [], seq: 0, gen: 0 };
     const previous = await in_turn(async () => {
       const replaced = await read();
       await write(session);
@@ -172,15 +229,35 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
         session.labels = ordered.map(([id], index) => [id, labels[index]!]);
         session.targets = {};
         session.gen = 1;
+        if (await deps.key_line()) session.key_line = true;
         await write(session);
-        await send_draw(session);
+        await send_draw(session, { typed: "", ids: session.labels.map(([id]) => id) });
+      }),
+    // Once every part is in, text mode can rank the targets. A part read twice only sets the same rows again.
+    "chrome_hints.texts": (args: ModuleArgs): Promise<void> =>
+      in_turn(async () => {
+        const session = await current(args.session);
+        const rows = typeof args.texts === "string" ? text_rows(args.texts) : undefined;
+        if (!session || session.texts || !rows || !is_part_of(args.part, args.parts) || (args.parts as number) > MAX_CHROME_HINT_TEXT_PARTS) return;
+        if (session.text_parts !== undefined && session.text_parts !== args.parts) return;
+        session.text_parts = args.parts as number;
+        const texts_in = { ...session.texts_in, [String(args.part)]: rows };
+        const all = Array.from({ length: session.text_parts }, (_, part) => texts_in[String(part)]);
+        if (all.some((part) => part === undefined)) session.texts_in = texts_in;
+        else {
+          session.texts = all.flat() as TextRow[];
+          delete session.texts_in;
+        }
+        await write(session);
       }),
     "chrome_hints.key": (args: ModuleArgs): Promise<void> =>
       in_turn(async () => {
         const session = await current(args.session);
-        if (!session?.labels || !is_whole(args.seq) || (args.seq as number) <= session.seq || typeof args.key !== "string") return;
+        if (!session?.labels || !is_whole(args.seq) || (args.seq as number) <= session.seq) return;
         session.seq = args.seq as number;
-        const step = key_step(session.labels, session.typed, args.key);
+        const token = token_of_key(args);
+        // A session stored by a build before hint mode keys has no `tokens`.
+        const step = token === undefined ? undefined : key_step(session.labels, texts_by_label(session), session.tokens ?? [], token);
         if (step === undefined) return void (await write(session));
         if ("pick" in step) {
           await drop();
@@ -188,10 +265,10 @@ export function create_chrome_hints(deps: ChromeHintDeps) {
           void pick(session, step.pick);
           return;
         }
-        session.typed = step.typed;
+        session.tokens = step.tokens;
         session.gen++;
         await write(session);
-        await send_draw(session);
+        await send_draw(session, step.view);
       }),
     "chrome_hints.end": (args: ModuleArgs): Promise<void> =>
       in_turn(async () => {

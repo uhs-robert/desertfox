@@ -7,7 +7,7 @@ import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree
 import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, HintModeKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -28,6 +28,8 @@ import {
   is_sidebar_command_id,
   CHROME_HINT_COMMAND_ID,
   chrome_hint_keys_of,
+  hint_mode_keys_of,
+  MAX_HINT_MODE_KEYS,
   MAX_CHROME_HINT_BINDINGS,
   MAX_CHROME_HINT_KEY_TOKENS,
   MAX_SIDEBAR_KEY_TOKENS,
@@ -116,6 +118,22 @@ export function chrome_hint_keys_of_keymap(keymap: CompiledKeymap | undefined): 
   walk(keymap?.modes.normal, []);
   const sorted = bindings.sort((a, b) => (a.join(" ") < b.join(" ") ? -1 : 1)).slice(0, MAX_CHROME_HINT_BINDINGS);
   return chrome_hint_keys_of(sorted) ?? [];
+}
+
+// The single keys of hint mode bound to `mode.escape` or `help.whichkey`, for the module's sessions. A key the picker takes itself (a character, Tab, Shift-Tab, Enter, Space, Backspace) never reaches the keymap in a session, and plain Escape always ends one, so neither gets a row.
+const PICKER_KEYS = new Set(["<Tab>", "<S-Tab>", "<Enter>", "<Space>", "<Backspace>", "<Escape>"]);
+const HINT_MODE_OPS: Record<string, HintModeKeyRow["op"]> = { "mode.escape": "escape", "help.whichkey": "whichkey" };
+export function hint_mode_keys_of_keymap(keymap: CompiledKeymap | undefined): HintModeKeyRow[] {
+  const hint = keymap?.modes.hint;
+  if (hint?.kind !== "branch") return [];
+  const rows: HintModeKeyRow[] = [];
+  for (const [key, node] of Object.entries(hint.children).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    if ([...key].length === 1 || PICKER_KEYS.has(key) || node.kind !== "leaf" || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) continue;
+    const { invocation, capture, register } = node.steps[0]!;
+    const op = Object.hasOwn(HINT_MODE_OPS, invocation.id) ? HINT_MODE_OPS[invocation.id] : undefined;
+    if (op !== undefined && capture === undefined && register === undefined && invocation.prompt === undefined) rows.push({ key, op });
+  }
+  return hint_mode_keys_of(rows.slice(0, MAX_HINT_MODE_KEYS)) ?? [];
 }
 
 // The compiled branch cut to the keys of the scope tree, so the panels list only what the module runs on a locked page, with the labels and group names of the full tree.
@@ -421,7 +439,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const which_key = fits && deps.find_command ? which_key_table_of_keymap(keymap, tree, deps.find_command) : undefined;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
+    const hint_mode_keys = hint_mode_keys_of_keymap(keymap);
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }), hint_mode_keys });
     request_hello_read();
     request_messages_read();
   };

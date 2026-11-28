@@ -52,8 +52,8 @@ const field = (left: number, top: number) => {
 
 type Page = ReturnType<typeof about_page>;
 
-function start_on(url: string, build: (root: Node) => void, options: Parameters<typeof about_page>[3] = {}) {
-  const run = started((firefox) => about_page(firefox, url, build, options), { state: { v: 1, enabled: true, keys: [], tabs: {}, page_hints: true } });
+function start_on(url: string, build: (root: Node) => void, options: Parameters<typeof about_page>[3] = {}, more_state: Record<string, unknown> = {}) {
+  const run = started((firefox) => about_page(firefox, url, build, options), { state: { v: 1, enabled: true, keys: [], tabs: {}, page_hints: true, ...more_state } });
   const chrome = run.chrome as unknown as Page;
   const copied: string[] = [];
   run.firefox.Components.classes["@mozilla.org/widget/clipboardhelper;1"] = { getService: () => ({ copyString: (text: string) => copied.push(text) }) };
@@ -523,4 +523,198 @@ test("a link whose text sits in a slot of its host's shadow root is labelled, as
   assert.equal(run.hint_key(), true);
   assert.equal((await run.collect(5))?.ok, true);
   assert.equal(run.rows(5).length, 1, "the nav link got no label");
+});
+
+// ---- Hint mode keys: text mode (`/`), Tab, Enter, the key line and the remapped keys, with an extension whose state says it runs them.
+
+const PICKER_STATE = { hint_mode_keys: [] as unknown[] };
+const GRACE_MS = 300;
+
+// Four controls with texts: "Dark mode", "Privacy", "Print" and "Learn more".
+function texted() {
+  const parts = { dark: el("moz-toggle", 20, 20, { text: "Dark mode" }), privacy: link("about:preferences#privacy", 200, 20), print: el("button", 400, 20, { text: "Print" }), learn: link("https://support.mozilla.org/kb/x", 20, 100) };
+  parts.privacy.text = "Privacy";
+  parts.learn.text = "Learn more";
+  return { parts, build: (root: Node) => root.append(...Object.values(parts)) };
+}
+
+async function text_mode_run(more_state: Record<string, unknown> = PICKER_STATE) {
+  const { parts, build } = texted();
+  const run = start_on("about:preferences", build, {}, more_state);
+  const { labels, pick } = await labelled_session(run, 5);
+  const type = (...keys: string[]) => keys.forEach((key) => run.chrome.press(key));
+  const pick_id = (element: Node) => run.pick(5, run.id_of(5, element)!);
+  const layer_box = () => run.page_layers()[0]!.shadow!.children[0]!;
+  // A draw of `shown`, each with its label of the first draw.
+  const draw_text = async (gen: number, shown: Node[], fields: Record<string, unknown>) => {
+    const rows = shown.map((element) => [run.id_of(5, element)!, labels.get(run.id_of(5, element)!)!]);
+    run.send("chrome_hints.draw", { session: 5, gen, part: 0, parts: 1, typed: "", labels: JSON.stringify(rows), ...fields });
+    await settle();
+  };
+  return { ...run, parts, labels, pick, type, pick_id, layer_box, draw_text };
+}
+
+test("with hint mode keys each target's text goes out cut and stripped, a field gives its name only, and an extension without them gets no texts", async () => {
+  const save = el("button", 20, 20, { text: "  Save\u202e   changes\n" });
+  const long = el("button", 200, 20, { text: "x".repeat(100) });
+  const search = Object.assign(field(400, 20), { value: "my secret" });
+  search.setAttribute("placeholder", "Search settings");
+  const blank = el("moz-toggle", 20, 100);
+  const build = (root: Node) => root.append(save, long, search, blank);
+  const run = start_on("about:preferences", build, {}, PICKER_STATE);
+  run.hint_key();
+  await run.collect(5);
+  const texts = run.pushes("chrome_hints.texts");
+  assert.ok(protocol.validate_message_list(run.from_module(), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
+  assert.deepEqual(texts.map(({ part, parts }) => [part, parts]), [[0, 1]]);
+  const by_id = new Map(JSON.parse(texts[0]!.texts as string) as [number, string][]);
+  assert.equal(by_id.get(run.id_of(5, save)!), "Save changes");
+  assert.equal(by_id.get(run.id_of(5, long)!), "x".repeat(protocol.CHROME_HINT_TEXT_CHARS));
+  assert.equal(by_id.get(run.id_of(5, search)!), "Search settings", "a field's typed text left the page");
+  assert.equal(by_id.has(run.id_of(5, blank)!), false);
+  assert.equal((run.firefox.hello() as { hint_mode_keys?: true }).hint_mode_keys, true);
+
+  const older = start_on("about:preferences", build);
+  older.hint_key();
+  await older.collect(5);
+  assert.deepEqual(older.pushes("chrome_hints.texts"), [], "texts went to an extension that does not run text mode");
+});
+
+test("Shift-Tab goes out as its own token beside the event's key, and Space as <Space>", async () => {
+  const run = await text_mode_run();
+  run.chrome.press("Tab", { shiftKey: true });
+  run.chrome.press(" ");
+  assert.deepEqual(run.pushes("chrome_hints.key").map(({ key, token }) => [key, token]), [["Tab", "<S-Tab>"], [" ", "<Space>"]]);
+});
+
+test("a text mode pick runs only on a target whose own text matches the typed text, after Enter or a character that left it the one match", async () => {
+  const enter = await text_mode_run();
+  enter.type("/", "p", "r", "Enter");
+  assert.equal((await enter.pick_id(enter.parts.print))?.ok, true);
+  assert.equal(enter.parts.print.clicks, 1, "Enter on a match did not pick it");
+
+  const no_enter = await text_mode_run();
+  no_enter.type("/", "p", "r");
+  assert.equal((await no_enter.pick_id(no_enter.parts.print))?.error, "The keys typed do not name this hint", "a pick of one of two matches ran with no Enter");
+  assert.equal(no_enter.parts.print.clicks, 0);
+
+  const unique = await text_mode_run();
+  unique.type("/", "p", "r", "i", "n");
+  assert.equal((await unique.pick_id(unique.parts.print))?.ok, true);
+
+  const other = await text_mode_run();
+  other.type("/", "p", "r", "i", "n");
+  assert.equal((await other.pick_id(other.parts.dark))?.error, "The keys typed do not name this hint", "a target the typed text does not match was clicked");
+  assert.equal(other.parts.dark.clicks, 0);
+
+  const wrong_enter = await text_mode_run();
+  wrong_enter.type("/", "p", "r", "Enter");
+  assert.equal((await wrong_enter.pick_id(wrong_enter.parts.learn))?.error, "The keys typed do not name this hint");
+
+  const back = await text_mode_run();
+  back.type("/", "Backspace");
+  const label = back.labels.get(back.id_of(5, back.parts.print)!)!;
+  back.type(label);
+  assert.equal((await back.pick_id(back.parts.print))?.ok, true, "Backspace on empty text did not go back to labels");
+
+  const no_table = await text_mode_run({});
+  no_table.type("/", "p", "r", "i", "n");
+  assert.equal((await no_table.pick_id(no_table.parts.print))?.error, "The keys typed do not name this hint", "an older extension's label pick after / was taken as text");
+});
+
+test("a text mode pick of a control that grants still waits for the user's Enter", async () => {
+  const permission = el("moz-toggle", 20, 20, { text: "History" });
+  permission.setAttribute("permission-key", "history");
+  const other = el("moz-toggle", 200, 20, { text: "Other" });
+  const run = start_on("about:addons", (root) => root.append(permission, other), {}, PICKER_STATE);
+  await labelled_session(run, 5);
+  for (const key of ["/", "h", "i"]) run.chrome.press(key);
+  assert.equal((await run.pick(5, run.id_of(5, permission)!))?.ok, true);
+  assert.equal(permission.clicks, 0, "a unique text match granted with no Enter");
+  assert.ok(run.marked());
+  run.chrome.clock.now += DWELL_MS;
+  run.chrome.press("Enter");
+  assert.equal(permission.clicks, 1);
+});
+
+test("letters right after a character's pick are dropped for a moment, and none after an Enter pick", async () => {
+  const run = await text_mode_run();
+  run.type("/");
+  await run.draw_text(2, [run.parts.print], { query: "" });
+  run.type("p", "r", "i", "n");
+  await run.pick_id(run.parts.print);
+  assert.ok(run.chrome.press("t").prevented, "the rest of the word went to the page");
+  assert.equal(run.chrome.press("t", { ctrlKey: true }).prevented, false, "a chord was dropped");
+  run.chrome.clock.now += GRACE_MS + 1;
+  assert.equal(run.chrome.press("j").prevented, false, "the grace outlived its time");
+
+  const enter = await text_mode_run();
+  enter.type("/");
+  await enter.draw_text(2, [enter.parts.print], { query: "" });
+  enter.type("p", "r", "Enter");
+  await enter.pick_id(enter.parts.print);
+  assert.equal(enter.chrome.press("j").prevented, false, "an Enter pick dropped the next key");
+});
+
+test("a text mode draw shows the typed text, swaps the active label's colors and shows the key line, all inline and as text", async () => {
+  const run = await text_mode_run();
+  const print = run.id_of(5, run.parts.print)!;
+  await run.draw_text(2, [run.parts.print, run.parts.privacy], { query: "<b>pr", active: print, key_line: 1 });
+  const nodes = run.layer_box().children;
+  const query = nodes.find((node) => node.className === "desertfox-hint-text")!;
+  assert.equal(query.textContent, "text: <b>pr");
+  assert.equal(query.children.length, 0, "the typed text became markup");
+  assert.equal(nodes.find((node) => node.className === "desertfox-hint-keys")!.textContent, "Enter: pick \u00b7 Tab: next \u00b7 Backspace: labels");
+  const labels = nodes.filter((node) => node.className === "desertfox-hint");
+  assert.match(String(labels[0]!.style.cssText), /background: #0c0e13; color: #7fa3c9;$/);
+  assert.doesNotMatch(String(labels[1]!.style.cssText), /background: #0c0e13/);
+  for (const node of nodes) assert.equal(String(node.style.cssText).includes("var("), false, "a page's text mode reads a theme variable");
+  await run.draw_text(3, [run.parts.print, run.parts.privacy], { key_line: 1 });
+  assert.equal(run.layer_box().children.find((node) => node.className === "desertfox-hint-keys")!.textContent, "/: type text \u00b7 Tab: turn labels");
+  assert.equal(run.layer_box().children.some((node) => node.className === "desertfox-hint-text"), false);
+  for (const [fields, why] of [[{ query: "a\u202eb" }, "a format character"], [{ query: "q".repeat(65) }, "a long query"], [{ active: 999999 }, "an active id of no target"], [{ key_line: 2 }, "a key line value"]] as const) {
+    await run.draw_text(4, [run.parts.print], fields);
+    assert.equal(run.layer_box().children.filter((node) => node.className === "desertfox-hint").length, 2, `a draw with ${why} showed`);
+  }
+});
+
+test("Tab in label mode turns overlapping labels here, Shift-Tab back, and in text mode Tab only goes to the extension", async () => {
+  const run = await text_mode_run();
+  const labels = () => run.layer_box().children.filter((node) => node.className === "desertfox-hint");
+  const [first, second, third] = labels();
+  for (const node of [first!, second!]) node.box = box(10, 10, 20, 14);
+  third!.box = box(300, 10, 20, 14);
+  run.chrome.press("Tab");
+  assert.deepEqual(labels().slice(0, 3), [second, first, third]);
+  run.chrome.press("Tab", { shiftKey: true });
+  assert.deepEqual(labels().slice(0, 3), [first, second, third]);
+  assert.equal(run.pushes("chrome_hints.key").length, 2, "Tab did not also go to the extension");
+  run.type("/");
+  await run.draw_text(2, [run.parts.dark, run.parts.privacy], { query: "" });
+  const order = labels();
+  for (const node of order) node.box = box(10, 10, 20, 14);
+  run.chrome.press("Tab");
+  assert.deepEqual(labels(), order, "Tab in text mode turned labels");
+});
+
+test("a key the hint keymap binds to mode.escape ends the session, one bound to help.whichkey is taken, an unbound chord ends it and goes on, and plain Escape always ends", async () => {
+  const state = { hint_mode_keys: [{ key: "<C-c>", op: "escape" }, { key: "<F1>", op: "whichkey" }] };
+  const remapped = await text_mode_run(state);
+  const f1 = remapped.chrome.press("F1");
+  assert.ok(f1.prevented && f1.stopped, "the which-key key went on");
+  assert.equal(remapped.page_layers().length, 1, "the which-key key ended the session");
+  assert.deepEqual(remapped.pushes("chrome_hints.key"), [], "the which-key key went to the extension as a hint key");
+  const escape = remapped.chrome.press("c", { ctrlKey: true });
+  assert.ok(escape.prevented, "the remapped Escape went on");
+  assert.equal(remapped.page_layers().length, 0);
+  assert.deepEqual(remapped.pushes("chrome_hints.end"), [{ session: 5 }]);
+  assert.equal(remapped.held(), undefined);
+
+  const chord = await text_mode_run(state);
+  assert.equal(chord.chrome.press("x", { ctrlKey: true }).prevented, false, "an unbound chord was taken");
+  assert.equal(chord.page_layers().length, 0);
+
+  const plain_escape = await text_mode_run({ hint_mode_keys: [] });
+  assert.ok(plain_escape.chrome.press("Escape").prevented);
+  assert.equal(plain_escape.page_layers().length, 0, "plain Escape left the session with no Escape row");
 });

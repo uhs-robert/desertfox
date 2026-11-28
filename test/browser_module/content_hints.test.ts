@@ -129,7 +129,7 @@ function frame_child(firefox: Firefox, chrome: Chrome, { remote_type = "privileg
   return { sent, tamper, fire, listening, ask, pump, timers, kill: () => void (alive = false), received: () => chrome.to_child };
 }
 
-function start_on(options: Options = {}, build = listing().build, { state_hints = true, files = [] as string[] } = {}) {
+function start_on(options: Options = {}, build = listing().build, { state_hints = true, files = [] as string[], more_state = {} as Record<string, unknown> } = {}) {
   let chrome!: Chrome;
   const run = started(
     (firefox) => {
@@ -137,7 +137,7 @@ function start_on(options: Options = {}, build = listing().build, { state_hints 
       chrome = restricted_window(firefox, options, build);
       return chrome;
     },
-    { state: { v: 1, enabled: true, keys: [], tabs: {}, ...(state_hints && { page_hints: true }) }, files: [FILE, ...files] },
+    { state: { v: 1, enabled: true, keys: [], tabs: {}, ...(state_hints && { page_hints: true }), ...more_state }, files: [FILE, ...files] },
   );
   run.firefox.extension!.privateBrowsingAllowed = options.private_access === true;
   const copied: string[] = [];
@@ -392,8 +392,8 @@ test("the frame script in a page that is not on the list answers not_here and ke
 });
 
 // A reply the parent hears in place of the frame script's own.
-async function tampered(change: (data: Record<string, unknown>) => Record<string, unknown> | undefined, options: Options = {}) {
-  const run = start_on(options);
+async function tampered(change: (data: Record<string, unknown>) => Record<string, unknown> | undefined, options: Options = {}, more_state: Record<string, unknown> = {}) {
+  const run = start_on(options, listing().build, { more_state });
   run.child.tamper.with = (message) => {
     if (message.name !== `${PREFIX}targets`) return message;
     const data = change(message.data);
@@ -872,4 +872,51 @@ test("the search handoff button gets one label: the invisible input inside it ge
   const at_box = rows.filter((row) => row[1] === parts.handoff.box.left && row[2] === parts.handoff.box.top);
   assert.equal(at_box.length, 1, `${at_box.length} targets on the search box`);
   assert.equal(rows.length, Object.keys(parts).length, "a target for the nested input");
+});
+
+// ---- Text mode: the frame script reads each target's text, and chrome hints check a text pick against it.
+
+const PICKER_STATE = { hint_mode_keys: [] as unknown[] };
+const sent_texts = (run: Run) => new Map(run.pushes("chrome_hints.texts").flatMap((args) => JSON.parse(args.texts as string) as [number, string][]));
+
+test("the frame script sends each target's shown text or name, cut and stripped, and a field's name, never what was typed in it", async () => {
+  const { parts, build } = listing();
+  parts.other.text = "Other\u202e  add-on\n";
+  parts.rating.text = "r".repeat(100);
+  Object.assign(parts.search, { value: "my secret" });
+  parts.search.setAttribute("aria-label", "Search add-ons");
+  const run = start_on({}, build, { more_state: PICKER_STATE });
+  run.hint_key();
+  assert.equal((await run.collect(5))?.ok, true);
+  const texts = sent_texts(run);
+  assert.equal(texts.get(run.id_of(5, parts.other)!), "Other add-on");
+  assert.equal(texts.get(run.id_of(5, parts.rating)!), "r".repeat(64));
+  assert.equal(texts.get(run.id_of(5, parts.search)!), "Search add-ons", "a field's typed text left the page");
+  assert.equal(texts.has(run.id_of(5, parts.report)!), false);
+});
+
+test("chrome cleans the frame script's texts again and drops a list that does not fit the rows", async () => {
+  const long = await tampered((data) => ({ ...data, texts: (data.rows as unknown[]).map(() => "\u0000x\u202e".repeat(80)) }), {}, PICKER_STATE);
+  assert.equal(long.result?.ok, true);
+  assert.ok([...sent_texts(long.run).values()].every((text) => text === "x ".repeat(32).trim()), "a control or format character, or a text past its length, reached the extension");
+  const short = await tampered((data) => ({ ...data, texts: ["one"] }), {}, PICKER_STATE);
+  assert.equal(short.result?.ok, true);
+  assert.deepEqual(short.run.pushes("chrome_hints.texts"), [], "texts that fit no rows were taken");
+});
+
+test("a text pick on a restricted host goes to the frame script only for a target whose text the typed text matches", async () => {
+  const { parts, build } = listing();
+  parts.other.text = "Other add-on";
+  parts.rating.text = "Rate it";
+  const run = start_on({}, build, { more_state: PICKER_STATE });
+  await labelled(run, 5);
+  for (const key of ["/", "o", "t"]) run.chrome.press(key);
+  assert.equal((await run.pick(5, run.id_of(5, parts.rating)!))?.error, "The keys typed do not name this hint");
+  assert.deepEqual(run.child_picks(), []);
+
+  const again = start_on({}, build, { more_state: PICKER_STATE });
+  await labelled(again, 6);
+  for (const key of ["/", "o", "t"]) again.chrome.press(key);
+  assert.equal((await again.pick(6, again.id_of(6, parts.other)!))?.ok, true);
+  assert.equal(parts.other.clicks, 1);
 });

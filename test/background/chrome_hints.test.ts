@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_chrome_hints, key_step, label_parts, reading_order, target_rows } from "../../src/background/chrome_hints.ts";
+import { create_chrome_hints, key_step, label_parts, reading_order, target_rows, text_rows, token_of_key } from "../../src/background/chrome_hints.ts";
 import type { ChromeHintDeps, LabelRow, TargetRow } from "../../src/background/chrome_hints.ts";
-import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, EXTENSION_TO_MODULE_KINDS, MODULE_TO_EXTENSION_KINDS, json_bytes, validate_message } from "../../src/shared/browser_module_protocol.ts";
+import { CHROME_HINT_MAX_PARTS, CHROME_HINT_PART_BYTES, CHROME_HINT_TEXT_CHARS, MAX_CHROME_HINT_TEXT_PARTS, EXTENSION_TO_MODULE_KINDS, MODULE_TO_EXTENSION_KINDS, json_bytes, validate_message } from "../../src/shared/browser_module_protocol.ts";
 import { CHROME_HINTS_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { DEFAULT_HINT_LETTERS, make_labels } from "../../src/shared/hints/labels.ts";
 
@@ -10,7 +10,7 @@ type Sent = { kind: string; args: Record<string, number | string> };
 
 const page_action_of: ChromeHintDeps["page_action"] = async (keys) => (keys === "f" ? { ok: true, action: "follow" } : keys === "; y l" ? { ok: true, action: "yank" } : { ok: false, problem: "This hint does not run on this page" });
 
-function make({ collect = { ok: true } as { ok: true } | { ok: false; error: string }, pick = { ok: true } as { ok: true } | { ok: false; error: string }, colors = async () => "", page_action = page_action_of } = {}) {
+function make({ collect = { ok: true } as { ok: true } | { ok: false; error: string }, pick = { ok: true } as { ok: true } | { ok: false; error: string }, colors = async () => "", page_action = page_action_of, key_line = false } = {}) {
   const bucket = new Map<string, unknown>();
   const pushed: Sent[] = [];
   const called: Sent[] = [];
@@ -36,12 +36,13 @@ function make({ collect = { ok: true } as { ok: true } | { ok: false; error: str
     notify: async (_window_id, message) => void notes.push(message),
     new_session: () => next++,
     page_action,
+    key_line: async () => key_line,
   };
   const hints = create_chrome_hints(deps);
-  const session = () => bucket.get(CHROME_HINTS_STORAGE_KEY) as { session: number; labels?: LabelRow[]; typed: string } | undefined;
+  const session = () => bucket.get(CHROME_HINTS_STORAGE_KEY) as { session: number; labels?: LabelRow[]; tokens: string[] } | undefined;
   const draws = () => pushed.filter((sent) => sent.kind === "chrome_hints.draw");
   const shown = (gen: number) => draws().filter((draw) => draw.args.gen === gen).flatMap((draw) => JSON.parse(draw.args.labels as string) as LabelRow[]);
-  return { hints, bucket, pushed, called, notes, session, draws, shown };
+  return { hints, deps, bucket, pushed, called, notes, session, draws, shown };
 }
 
 const row = (id: number, left: number, top: number): TargetRow => [id, left, top, 24, 24];
@@ -70,15 +71,15 @@ test("labels go in reading order: by row, then left to right", () => {
 
 test("a key narrows, drops a letter that continues no label, takes one back on Backspace and picks on the last letter", () => {
   const labels: LabelRow[] = [[11, "a"], [12, "sa"], [13, "ss"]];
-  assert.deepEqual(key_step(labels, "", "s"), { typed: "s" });
-  assert.deepEqual(key_step(labels, "", "S"), { typed: "s" });
-  assert.deepEqual(key_step(labels, "s", "s"), { pick: 13 });
-  assert.deepEqual(key_step(labels, "", "a"), { pick: 11 });
-  assert.equal(key_step(labels, "s", "q"), undefined);
-  assert.deepEqual(key_step(labels, "s", "Backspace"), { typed: "" });
-  assert.equal(key_step(labels, "", "Backspace"), undefined);
-  assert.equal(key_step(labels, "", "Enter"), undefined);
-  assert.equal(key_step(labels, "", " "), undefined);
+  const none: undefined[] = [];
+  assert.deepEqual(key_step(labels, none, [], "s"), { view: { typed: "s", ids: [12, 13] }, tokens: ["s"] });
+  assert.deepEqual(key_step(labels, none, [], "S"), { view: { typed: "s", ids: [12, 13] }, tokens: ["S"] });
+  assert.deepEqual(key_step(labels, none, ["s"], "s"), { pick: 13 });
+  assert.deepEqual(key_step(labels, none, [], "a"), { pick: 11 });
+  assert.equal(key_step(labels, none, ["s"], "q"), undefined);
+  assert.deepEqual(key_step(labels, none, ["s"], "<Backspace>"), { view: { typed: "", ids: [11, 12, 13] }, tokens: ["s", "<Backspace>"] });
+  for (const token of ["<Backspace>", "<Enter>", "<Space>", "<Tab>", "<S-Tab>"]) assert.equal(key_step(labels, none, [], token), undefined, token);
+  assert.equal(key_step(labels, none, [], "/"), undefined, "text mode opened with no text to type against");
 });
 
 test("a start sends one collect, and the labels go out once every part of the targets is in, in any order", async () => {
@@ -121,11 +122,11 @@ test("keys narrow in order once, a key read twice or out of order is skipped, an
   const labels = session()!.labels!;
   const long = labels.find(([, label]) => label.length === 2)!;
   await hints.handlers["chrome_hints.key"]({ session: number, seq: 1, key: long[1][0]! });
-  assert.equal(session()!.typed, long[1][0]);
+  assert.deepEqual(session()!.tokens, [long[1][0]]);
   assert.ok(shown(2).every(([, label]) => label.startsWith(long[1][0]!)) && shown(2).length === 2);
   await hints.handlers["chrome_hints.key"]({ session: number, seq: 1, key: "Backspace" });
   await hints.handlers["chrome_hints.key"]({ session: number + 1, seq: 2, key: "Backspace" });
-  assert.equal(session()!.typed, long[1][0], "a key read twice or of another session ran");
+  assert.deepEqual(session()!.tokens, [long[1][0]], "a key read twice or of another session ran");
   await hints.handlers["chrome_hints.key"]({ session: number, seq: 2, key: long[1][1]! });
   await flush();
   assert.equal(session(), undefined, "the session outlived its pick");
@@ -177,7 +178,7 @@ test("a part count above the protocol's limit and a part index outside the count
   for (const [part, parts] of [[0, 2 ** 40], [0, CHROME_HINT_MAX_PARTS + 1], [0, 0], [-1, 2], [2, 2], [5, 2]]) {
     await hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0)], part, parts));
   }
-  assert.deepEqual(session(), { session: number, window_id: 7, targets: {}, typed: "", seq: 0, gen: 0 });
+  assert.deepEqual(session(), { session: number, window_id: 7, targets: {}, tokens: [], seq: 0, gen: 0 });
   await hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0)], 0, 1));
   assert.equal(draws().length, 1, "a bad part blocked a good one");
 });
@@ -311,4 +312,117 @@ test("a page start whose action loads after a newer start began sends nothing, s
   assert.deepEqual(slow.called.map((sent) => sent.args.start), [81], "the older start still asked the module to collect");
   assert.equal(slow.session()?.session, newer, "the older start replaced the newer session");
   assert.deepEqual(slow.pushed.filter((sent) => sent.kind === "chrome_hints.clear"), [], "the older start cleared the newer session");
+});
+
+// ---- Text mode: `/`, Tab, Shift-Tab, Enter and Backspace, run by the page's picker over the texts the module sent.
+
+const texts = (session: number, rows: [number, string][], part = 0, parts = 1) => ({ session, part, parts, texts: JSON.stringify(rows) });
+
+// A started session of four targets in a row with their texts in, keyed in order from `seq` 1 on.
+async function text_session(options: Parameters<typeof make>[0] = {}) {
+  const run = make(options);
+  await run.hints.start(7);
+  const number = run.session()!.session;
+  await run.hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0), row(2, 40, 0), row(3, 80, 0), row(4, 120, 0)]));
+  await run.hints.handlers["chrome_hints.texts"](texts(number, [[1, "Reload"], [2, "Settings"], [3, "Search settings"], [4, "Bookmarks"]]));
+  let seq = 0;
+  const key = (token: string, key = token) => run.hints.handlers["chrome_hints.key"]({ session: number, seq: ++seq, key, token });
+  const last = () => run.draws().at(-1)!.args;
+  const last_ids = () => (JSON.parse(last().labels as string) as LabelRow[]).map(([id]) => id);
+  const picks = () => run.called.filter((call) => call.kind === "chrome_hints.pick").map((call) => call.args.id);
+  return { ...run, number, key, last, last_ids, picks };
+}
+
+test("a key's token comes from the module, or from an older module's key, and only a key the picker takes has one", () => {
+  assert.equal(token_of_key({ key: "Tab", token: "<S-Tab>" }), "<S-Tab>");
+  for (const [key, token] of [["Tab", "<Tab>"], ["Enter", "<Enter>"], ["Backspace", "<Backspace>"], [" ", "<Space>"], ["/", "/"], ["A", "A"]] as const) assert.equal(token_of_key({ key }), token, key);
+  for (const token of ["<C-c>", "<F1>", "<Escape>", "ab", "\u0007", "\u202e"]) assert.equal(token_of_key({ key: "x", token }), undefined, token);
+  assert.equal(token_of_key({ key: "ArrowDown" }), undefined);
+});
+
+test("the module's texts are foreign input: a part with any row that is not an id and a short plain text is dropped whole", () => {
+  assert.deepEqual(text_rows('[[1,"Reload"]]'), [[1, "Reload"]]);
+  for (const bad of ["", "{}", '[[0,"a"]]', '[[1,""]]', "[[1,2]]", '[[1,"a","b"]]', JSON.stringify([[1, "x".repeat(CHROME_HINT_TEXT_CHARS + 1)]]), JSON.stringify([[1, "a\u0000b"]]), JSON.stringify([[1, "a\u202eb"]])]) assert.equal(text_rows(bad), undefined, bad);
+});
+
+test("/ shows every target with a text, typed text narrows and ranks them, and Tab and Shift-Tab move the active one, which Enter picks", async () => {
+  const run = await text_session();
+  await run.key("/");
+  assert.deepEqual(run.last_ids(), [1, 2, 3, 4]);
+  assert.equal(run.last().query, "");
+  assert.equal(run.last().active, 1);
+  assert.equal(run.last().typed, "");
+  for (const char of "se") await run.key(char);
+  assert.equal(run.last().query, "se");
+  assert.deepEqual(run.last_ids(), [2, 3], "the ranking does not put the whole first word first");
+  assert.equal(run.last().active, 2);
+  await run.key("<Tab>", "Tab");
+  assert.equal(run.last().active, 3);
+  await run.key("<S-Tab>", "Tab");
+  await run.key("<S-Tab>", "Tab");
+  assert.equal(run.last().active, 3, "Shift-Tab did not go back round");
+  const drawn = run.draws().length;
+  await run.key("q");
+  assert.equal(run.draws().length, drawn, "a key that matches nothing drew again");
+  await run.key("<Enter>", "Enter");
+  await flush();
+  assert.deepEqual(run.picks(), [3]);
+  assert.equal(run.session(), undefined);
+});
+
+test("text that leaves one match picks it at once, and Backspace on empty text goes back to the labels", async () => {
+  const run = await text_session();
+  await run.key("/");
+  await run.key("<Backspace>", "Backspace");
+  assert.equal(run.last().query, undefined);
+  assert.deepEqual(run.last_ids(), [1, 2, 3, 4]);
+  await run.key("<Tab>", "Tab");
+  await run.key("<Space>", " ");
+  assert.equal(run.last().query, undefined, "Tab or Space in label mode drew");
+  await run.key("/");
+  for (const char of "boo") await run.key(char);
+  await flush();
+  assert.deepEqual(run.picks(), [4]);
+});
+
+test("a background that restarts in text mode replays the kept keys and goes on where it was", async () => {
+  const run = await text_session();
+  await run.key("/");
+  await run.key("s");
+  await run.key("<Tab>", "Tab");
+  const restarted = create_chrome_hints(run.deps);
+  await restarted.handlers["chrome_hints.key"]({ session: run.number, seq: 10, key: "Enter", token: "<Enter>" });
+  await flush();
+  assert.deepEqual(run.picks(), [3]);
+});
+
+test("texts come in parts in any order, a bad part or one past the cap is dropped, and with no texts / stays a dropped key", async () => {
+  const run = make();
+  await run.hints.start(7);
+  const number = run.session()!.session;
+  await run.hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0), row(2, 40, 0)]));
+  await run.hints.handlers["chrome_hints.texts"](texts(number, [[2, "Two"]], 1, 2));
+  await run.hints.handlers["chrome_hints.texts"](texts(number, [[1, "bad\u0000"]], 0, 2));
+  await run.hints.handlers["chrome_hints.texts"](texts(number, [[1, "One"]], 0, MAX_CHROME_HINT_TEXT_PARTS + 1));
+  await run.hints.handlers["chrome_hints.key"]({ session: number, seq: 1, key: "/", token: "/" });
+  assert.equal(run.draws().length, 1, "text mode opened before every part of the texts came");
+  await run.hints.handlers["chrome_hints.texts"](texts(number, [[1, "One"]], 0, 2));
+  await run.hints.handlers["chrome_hints.key"]({ session: number, seq: 2, key: "/", token: "/" });
+  assert.equal(run.draws().at(-1)!.args.query, "");
+  await run.hints.handlers["chrome_hints.key"]({ session: number, seq: 3, key: "t" });
+  await flush();
+  assert.deepEqual(run.called.at(-1), { kind: "chrome_hints.pick", args: { session: number, id: 2 } }, "an older module's key did not type text");
+});
+
+test("the draws carry the key line while the setting is on, and a DevTools draw carries no text mode field", async () => {
+  const on = await text_session({ key_line: true });
+  assert.ok(on.draws().every((draw) => draw.args.key_line === 1));
+  const off = await text_session();
+  assert.ok(off.draws().every((draw) => draw.args.key_line === undefined));
+  const devtools = make({ key_line: true });
+  await devtools.hints.handlers["devtools_hints.ask"]({ ask: 5 });
+  const number = devtools.session()!.session;
+  await devtools.hints.handlers["chrome_hints.targets"](targets(number, [row(1, 0, 0), row(2, 40, 0)]));
+  const [draw] = devtools.pushed.filter((sent) => sent.kind === "devtools_hints.draw");
+  assert.deepEqual(Object.keys(draw!.args).sort(), ["gen", "labels", "part", "parts", "session", "typed"]);
 });

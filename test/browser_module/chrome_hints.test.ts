@@ -108,11 +108,11 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
   return { session_listeners, id, win, nav, tab_list, rows, panel, downloads_panel, view, press, layers, labels, fire_timers, timers, window_root, document_element, focus, finish_load };
 }
 
-function started({ pref = true as boolean | null, private_access = false, buttons = 3, private_window = false } = {}) {
+function started({ pref = true as boolean | null, private_access = false, buttons = 3, private_window = false, more_state = {} as Record<string, unknown> } = {}) {
   const firefox = create_firefox({ pref, extra_files: { [FILE]: source_of(FILE) } });
   const extension = firefox.start_extension({ private_access });
   Object.assign(extension, { baseURI: { resolve: (path: string) => `moz-extension://uuid/${path}` } });
-  firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {} });
+  firefox.write_state({ v: 1, enabled: true, keys: [], tabs: {}, ...more_state });
   const chrome = chrome_window(firefox, { buttons, private_window });
   const watchers = new Set<{ observe(subject: unknown, topic: string): void }>();
   Object.assign(firefox.Services, {
@@ -246,11 +246,11 @@ test("keys before the first draw wait, then go out in order; Escape ends the ses
   assert.ok(early.prevented && early.stopped, "a key of the session reached the page");
   assert.deepEqual(pushes("chrome_hints.key"), []);
   await draw(1, 1, target_ids().map((id, index) => [id, "asdfg"[index]!]));
-  assert.deepEqual(pushes("chrome_hints.key"), [{ session: 1, seq: 1, key: "s" }]);
+  assert.deepEqual(pushes("chrome_hints.key"), [{ session: 1, seq: 1, key: "s", token: "s" }]);
   chrome.press("Backspace");
   assert.ok(!chrome.press("ArrowDown").prevented, "an arrow was taken from the page");
   chrome.press("Shift");
-  assert.deepEqual(pushes("chrome_hints.key").map((args) => args.key), ["s", "Backspace"]);
+  assert.deepEqual(pushes("chrome_hints.key").map((args) => [args.key, args.token]), [["s", "s"], ["Backspace", "<Backspace>"]]);
   const escape = chrome.press("Escape");
   assert.ok(escape.prevented, "Escape reached the page");
   assert.deepEqual(pushes("chrome_hints.end"), [{ session: 1 }]);
@@ -526,4 +526,26 @@ test("in a window opened after startup the popup walk, whose watcher Firefox cal
   assert.deepEqual(typed, ["ArrowDown"], "the walk moved the menu on a session's j");
   const keys = (plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)) as { kind?: string; args?: { key: string } }[]).filter((message) => message.kind === "chrome_hints.key");
   assert.deepEqual(keys.map((message) => message.args!.key), ["j"]);
+});
+
+test("with hint mode keys a toolbar session sends its buttons' names as texts, in parts that stay within the cap, and draws the active label in the theme's swapped colors", async () => {
+  const { chrome, collect, pushes, target_ids, send, from_module } = started({ buttons: 400, more_state: { hint_mode_keys: [] } });
+  chrome.nav.query.toolbarbutton!.forEach((node, index) => node.setAttribute("label", `Button ${index} with a name long enough to fill the parts`));
+  chrome.nav.query.toolbarbutton![0]!.setAttribute("label", "");
+  chrome.nav.query.toolbarbutton![0]!.setAttribute("tooltiptext", "Back");
+  await collect(1);
+  const parts = pushes("chrome_hints.texts");
+  assert.equal(parts.length, protocol.MAX_CHROME_HINT_TEXT_PARTS, "texts past the cap went out, or the cap was not reached");
+  assert.ok(protocol.validate_message_list(from_module(), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
+  const rows = parts.flatMap((args) => JSON.parse(args.texts as string) as [number, string][]);
+  assert.deepEqual(rows[0], [target_ids()[0], "Back"]);
+  assert.ok(rows.length < 400);
+  const [first, second] = target_ids();
+  send("chrome_hints.draw", { session: 1, gen: 1, part: 0, parts: 1, typed: "", labels: JSON.stringify([[first, "a"], [second, "s"]]), query: "ba", active: first });
+  await settle();
+  const box = chrome.layers()[0]!.shadow!.children.find((child) => child.className === "desertfox-hints")!;
+  const [active, other] = box.children.filter((node) => node.className === "desertfox-hint");
+  assert.match(String(active!.style.cssText), /background: var\(--desertfox-bg-core, #0c0e13\); color: var\(--desertfox-primary, #7fa3c9\);$/);
+  assert.doesNotMatch(String(other!.style.cssText), /background: var\(--desertfox-bg-core/);
+  assert.equal(box.children.find((node) => node.className === "desertfox-hint-text")?.textContent, "text: ba");
 });

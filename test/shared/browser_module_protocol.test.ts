@@ -137,7 +137,7 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.texts", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
   assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
@@ -494,4 +494,18 @@ test("the hello says pane_moves only when it is true, and pane.move takes left, 
   const valid = (direction: unknown) => validate_message({ v: V, id: "m1", kind: "pane.move", args: { direction } }, EXTENSION_TO_MODULE_KINDS).ok;
   for (const direction of ["left", "right", "down"]) assert.equal(valid(direction), true, direction);
   for (const direction of ["up", "window", 1, undefined]) assert.equal(valid(direction), false, String(direction));
+});
+
+test("the hello says hint_mode_keys only when it is true, a key may carry a token, a draw may carry text mode's fields, and texts come as their own push", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", hint_mode_keys: true }), { ok: true, value: { v: V, module_version: "1", hint_mode_keys: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", hint_mode_keys: 1 }), { ok: true, value: { v: V, module_version: "1" } });
+  const key = (args: Record<string, unknown>) => validate_message({ v: V, id: "m1", kind: "chrome_hints.key", args: { session: 1, seq: 1, key: "Tab", ...args } }, MODULE_TO_EXTENSION_KINDS);
+  assert.ok(key({}).ok, "an older module's key without a token was refused");
+  assert.ok(key({ token: "<S-Tab>" }).ok);
+  assert.equal(key({ token: 9 }).ok, false);
+  const draw = (args: Record<string, unknown>) => validate_message({ v: V, id: "m1", kind: "chrome_hints.draw", args: { session: 1, gen: 1, part: 0, parts: 1, typed: "", labels: "[]", ...args } }, EXTENSION_TO_MODULE_KINDS);
+  assert.ok(draw({}).ok);
+  assert.ok(draw({ query: "se", active: 4, key_line: 1 }).ok);
+  for (const bad of [{ query: 1 }, { active: "4" }, { key_line: 1.5 }]) assert.equal(draw(bad).ok, false, JSON.stringify(bad));
+  assert.ok(validate_message({ v: V, id: "m1", kind: "chrome_hints.texts", args: { session: 1, part: 0, parts: 1, texts: '[[1,"Reload"]]' } }, MODULE_TO_EXTENSION_KINDS).ok);
 });

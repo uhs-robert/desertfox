@@ -1,5 +1,6 @@
 // Hints over Firefox's own UI (browser_module/desertfox-chrome-hints.js, src/background/chrome_hints.ts): gB labels the toolbar buttons, the tabs, the bookmarks toolbar and the menu bar, a label picks, and an open app menu gets labels inside it.
 // Also the lifecycle: Escape, a window switch, the pref off and a newer session each take the layer and the key listener away, a target that moved is not picked, and an id of an older session picks nothing. It reports the round trip of one typed key.
+// And text mode: / types text against the buttons' names, Tab and Shift-Tab move the active match and Enter picks it.
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["hints", "toolbar"];
@@ -27,11 +28,14 @@ const LABELS = `(async () => {
         const distance = Math.abs(r.left - box.left) + Math.abs(r.top - box.top);
         if (distance < best_distance) [best, best_distance] = [el, distance];
       }
-      out.push({ text: node.textContent, typed: node.querySelector("b")?.textContent ?? "", left: box.left, top: box.top, target: best ? describe(best) : "", off: best_distance, panel: !!host.closest("panel"), styled: w.getComputedStyle(node).borderRadius === "3px" });
+      // Text mode's active label swaps its colors, so its background leaves its border's color.
+      const style = w.getComputedStyle(node);
+      out.push({ text: node.textContent, typed: node.querySelector("b")?.textContent ?? "", left: box.left, top: box.top, target: best ? describe(best) : "", off: best_distance, panel: !!host.closest("panel"), styled: style.borderRadius === "3px", active: style.backgroundColor !== style.borderTopColor });
     }
   }
   return out;
 })()`;
+const QUERY_BOX = `(async () => { for (const host of ${W}.document.querySelectorAll(".desertfox-chrome-hints")) { const box = host.openOrClosedShadowRoot.querySelector(".desertfox-hint-text"); if (box) return box.textContent; } return null; })()`;
 const LAYER_COUNT = `(async () => ${W}.document.querySelectorAll(".desertfox-chrome-hints").length)()`;
 
 export async function run_cases(context) {
@@ -109,6 +113,32 @@ export async function run_cases(context) {
     await press_keys("-k", "Escape");
     await expect_no_layer("Escape");
     await keys_reach_page("after Escape");
+  });
+
+  await run_case("gB with / types text against the buttons' names, Tab and Shift-Tab move the active match, and Enter picks it", async () => {
+    await home("ch_text");
+    const reloads = () => chrome(`(async () => ${W}.gBrowser.selectedBrowser.innerWindowID)()`);
+    const before = await reloads();
+    await start_hints("text mode");
+    await press_keys("/", "r", "e");
+    await poll_until("the typed text", async () => (await chrome(QUERY_BOX)) === "text: re", { timeout_ms: 3000 });
+    const active = async () => (await labels_now()).find((label) => label.active)?.target;
+    expect((await active()) !== undefined, "text mode shows no active match");
+    let previous = await active();
+    for (let tabs = 0; tabs < 12 && previous !== "reload-button"; tabs++) {
+      await press_keys("-k", "Tab");
+      await poll_until("Tab to move the active match", async () => (await active()) !== previous, { timeout_ms: 3000 });
+      previous = await active();
+    }
+    expect(previous === "reload-button", `Tab never reached Reload, the match of "re": ${previous}`);
+    await press_keys("-k", "Tab");
+    await poll_until("Tab to leave Reload", async () => (await active()) !== "reload-button", { timeout_ms: 3000 });
+    await take_shot("/tmp/desertfox-chrome-hints-text-mode.png");
+    await press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
+    await poll_until("Shift-Tab to come back to Reload", async () => (await active()) === "reload-button", { timeout_ms: 3000 });
+    await press_keys("-k", "Return");
+    await poll_until("Enter to reload the page", async () => (await reloads()) !== before, { timeout_ms: 5000 });
+    await expect_no_layer("Enter in text mode");
   });
 
   await run_case("a label picks: reload, a tab, a bookmarks folder and a menu bar menu", async () => {
