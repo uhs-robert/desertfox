@@ -27,12 +27,17 @@ import {
   MESSAGE_MIN_GAP_MS,
   is_sidebar_command_id,
   CHROME_HINT_COMMAND_ID,
+  NORMAL_ONCE_COMMAND_ID,
   chrome_hint_keys_of,
   MAX_CHROME_HINT_BINDINGS,
   MAX_CHROME_HINT_KEY_TOKENS,
   MAX_SIDEBAR_KEY_TOKENS,
   sidebar_keys_of,
   SIDEBAR_ONCE_KIND,
+  normal_once_keys_of,
+  focus_keys_of,
+  MAX_NORMAL_ONCE_KEYS,
+  MAX_FOCUS_KEYS,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
   status_of_hello,
@@ -117,6 +122,30 @@ export function chrome_hint_keys_of_keymap(keymap: CompiledKeymap | undefined): 
   walk(keymap?.modes.normal, []);
   const sorted = bindings.sort((a, b) => (a.join(" ") < b.join(" ") ? -1 : 1)).slice(0, MAX_CHROME_HINT_BINDINGS);
   return chrome_hint_keys_of(sorted) ?? [];
+}
+
+// The `browser` chords bound to `mode.normal_once` alone, in key order.
+export function normal_once_keys_of_keymap(keymap: CompiledKeymap | undefined): string[] {
+  const chords = Object.entries(current_keymap(keymap)?.modes.browser?.children ?? {}).flatMap(([key, node]) => (node.kind === "leaf" && node.steps.length === 1 && node.steps[0]!.invocation.id === NORMAL_ONCE_COMMAND_ID ? [key] : []));
+  return normal_once_keys_of(chords.sort().slice(0, MAX_NORMAL_ONCE_KEYS)) ?? [];
+}
+
+// The commands that move the focus on purpose. A leaf with one of them leaves the focus where it went, so the sidebar's one-shot prefix does not pull it back.
+export const FOCUS_COMMAND_IDS: readonly string[] = ["pane.focus", "pane.focus_side", "browser.focus_page"];
+
+// The key paths of the scope tree's forward leaves that run a focus command, found on the compiled normal tree.
+export function focus_keys_of_keymap(keymap: CompiledKeymap | undefined, tree: ScopeTree): string[] {
+  const paths: string[] = [];
+  const walk = (scope: ScopeTree, node: TreeNode | undefined, path: string[]): void => {
+    for (const [token, child] of Object.entries(scope.children)) {
+      const compiled = node?.kind === "branch" ? node.children[token] : undefined;
+      if (child === "forward") {
+        if (compiled?.kind === "leaf" && compiled.steps.some((step) => FOCUS_COMMAND_IDS.includes(step.invocation.id))) paths.push([...path, token].join(" "));
+      } else if (!("native" in child)) walk(child, compiled, [...path, token]);
+    }
+  };
+  walk(tree, current_keymap(keymap)?.modes.normal, []);
+  return focus_keys_of(paths.slice(0, MAX_FOCUS_KEYS)) ?? [];
 }
 
 // The compiled branch cut to the keys of the scope tree, so the panels list only what the module runs on a locked page, with the labels and group names of the full tree.
@@ -422,7 +451,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const which_key = fits && deps.find_command ? which_key_table_of_keymap(keymap, tree, deps.find_command) : undefined;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
+    const normal_once_keys = normal_once_keys_of_keymap(keymap);
+    const focus_keys = fits ? focus_keys_of_keymap(keymap, tree) : [];
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
     request_hello_read();
     request_messages_read();
   };

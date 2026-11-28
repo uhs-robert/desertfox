@@ -62,6 +62,7 @@ import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { attach_browser_module, browser_module_call, read_module_hello } from "./browser_module_call.ts";
+import { NORMAL_ONCE_COMMAND_ID } from "../shared/browser_module_protocol.ts";
 import { chrome_hints } from "../commands/hint_browser.ts";
 import { arm_sidebar_once, create_browser_module, read_bar_config, module_setting_on, stored_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -425,8 +426,8 @@ browser.commands.onCommand.addListener((slot_name: string) => void (async () => 
   const stored = await browser.storage.local.get(SLOT_TABLE_STORAGE_KEY);
   const invocations: BoundInvocation[] | undefined = (stored[SLOT_TABLE_STORAGE_KEY] as SlotTable | undefined)?.[slot_name];
   if (!invocations) return;
-  // Before the tab query, so the module holds the sidebar's keys before a fast next key. The page arms only with the focus, so at most one of them takes the sequence.
-  if (invocations.some((invocation) => invocation.id === "mode.normal_once")) void arm_sidebar_once({ read_hello: read_module_hello, call: (kind, args) => browser_module_call.call(kind, args) }).catch(warn_and_go("arm_sidebar_once"));
+  // The module takes the prefix with the focus in the sidebar, where the page's own arm would only refuse for want of a page.
+  if (invocations.some((invocation) => invocation.id === NORMAL_ONCE_COMMAND_ID) && (await arm_sidebar_once({ read_hello: read_module_hello, call: (kind, args) => browser_module_call.call(kind, args) }).catch(warn_and_go("arm_sidebar_once", false)))) return;
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   const mode = active?.id === undefined ? "normal" : await tab_modes.recall(active.id);
   if (shortcut_allowed(mode, invocations, (id) => registry.get(id), await read_disabled())) await router.run({ invocations, mode, may_prompt: true });

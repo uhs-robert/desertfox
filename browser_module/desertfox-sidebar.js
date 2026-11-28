@@ -31,7 +31,7 @@
     }
 
     // An older core lacks the calls of the one-shot prefix: the sidebar keys stay, and the prefix stays off.
-    const once_missing = ["register_kind", "set_hello_flag", "on_hello", "hold_keys", "release_keys", "scope_tree", "send", "run_command", "ime_in_field"].find((name) => typeof core[name] !== "function");
+    const once_missing = ["register_kind", "set_hello_flag", "on_hello", "hold_keys", "release_keys", "scope_tree", "normal_once_keys", "focus_keys", "send", "run_command", "ime_in_field"].find((name) => typeof core[name] !== "function");
     if (once_missing) core.log_once(`the core has no ${once_missing}, so <A-o> stays off in the sidebar`);
 
     const BROWSER = "navigator:browser";
@@ -266,20 +266,50 @@
     // ---- The one-shot normal prefix. The tree is the extension's, read here as data: a child counts only as an own key, a leaf only as "forward" or a native command, which the core checks again.
 
     const ONCE_OWNER = "sidebar_once";
+    // The chord that ends a hold armed by `sidebar.normal_once` from an extension whose state names no chord.
     const ONCE_KEY = "<A-o>";
     // The hold eats every key of the window, so it must end on its own: this long after the prefix and after each key of the sequence.
     const ONCE_IDLE_MS = 3000;
-    // MAX_SEQUENCE_KEYS of the protocol, and the count digits of the extension's matcher, which keep a count within MAX_COUNT.
+    // Firefox fires the shortcut for the chord's own keydown, so a `sidebar.normal_once` this soon after a chord typed here only confirms it. Else a second chord that ended the hold would start it again.
+    const ONCE_CONFIRM_MS = 1000;
+    // MAX_SEQUENCE_KEYS and MAX_TREE_BYTES of the protocol, and the count digits of the extension's matcher, which keep a count within MAX_COUNT.
     const MAX_ONCE_KEYS = 8;
+    const MAX_TREE_BYTES = 32 * 1024;
     const MAX_COUNT_DIGITS = 6;
     // A count repeats a native command at most this often, as on a locked page.
     const MAX_NATIVE_REPEAT = 100;
+    const TREE_TOKEN = /^[^\s\p{Cc}\p{Cf}]{1,24}$/u;
     const is_record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
     const child_of = (node, token) => (is_record(node?.children) && Object.hasOwn(node.children, token) ? node.children[token] : undefined);
-    const is_native = (leaf) => is_record(leaf) && typeof leaf.native === "string" && is_record(leaf.args);
+    const is_native = (leaf) => is_record(leaf) && "native" in leaf;
 
-    // Per window: { tree, node, keys, digits, element, timer }, the walk of the one sequence and the element that had the focus.
+    // validate_scope_tree in src/shared/browser_module_protocol.ts, except that a native leaf's command and args are left to the core, which checks them against the command's own spec before it runs one. test/browser_module/sidebar.test.ts keeps the two in step.
+    function tree_fits(tree) {
+      let size;
+      try {
+        size = new TextEncoder().encode(JSON.stringify(tree)).length;
+      } catch (_) {
+        return false;
+      }
+      const is_path = (path) => typeof path === "string" && path.split(" ").length <= MAX_ONCE_KEYS && path.split(" ").every((key) => TREE_TOKEN.test(key));
+      const paths_fit = (paths) => paths === undefined || (Array.isArray(paths) && paths.every(is_path));
+      const native_fits = ({ native, args, count_rule }) => typeof native === "string" && is_record(args) && (count_rule === undefined || count_rule === "repeat" || (is_record(count_rule) && typeof count_rule.param === "string" && Object.hasOwn(args, count_rule.param)));
+      const node_fits = (node, depth) =>
+        is_record(node) && is_record(node.children) && depth < MAX_ONCE_KEYS && Object.entries(node.children).every(([token, child]) => (token === "" || TREE_TOKEN.test(token)) && (child === "forward" || (is_native(child) ? native_fits(child) : node_fits(child, depth + 1))));
+      return size !== undefined && size <= MAX_TREE_BYTES && node_fits(tree, 0) && paths_fit(tree.line_keys) && paths_fit(tree.hint_keys);
+    }
+    const tree_checks = new WeakMap();
+    const checked_tree = (tree) => {
+      if (!is_record(tree)) return undefined;
+      if (!tree_checks.has(tree)) tree_checks.set(tree, tree_fits(tree));
+      return tree_checks.get(tree) ? tree : undefined;
+    };
+
+    // Per window: the walk of the one sequence, the element that had the focus and the chords that end it. `waiting` marks the hold after a key that opens the command line.
     const onces = new Map();
+    // Per window, when a chord was last typed here.
+    const chord_at = new WeakMap();
+    const chords_in = (win) => (once_missing ? [] : core.normal_once_keys(win));
     // The panel document, or "strip", or null outside the sidebar.
     const place_key = (win, element) => {
       const place = place_of(win, element);
@@ -303,9 +333,11 @@
       return {};
     }
 
+    // Each timer knows its turn, so an older one that a later key replaced ends nothing.
     const once_timer = (win, once) => {
       win.clearTimeout?.(once.timer);
-      once.timer = win.setTimeout(() => onces.get(win) === once && end_once(win), ONCE_IDLE_MS);
+      const turn = (once.turn = (once.turn ?? 0) + 1);
+      once.timer = win.setTimeout(() => onces.get(win) === once && once.turn === turn && end_once(win), ONCE_IDLE_MS);
     };
 
     function end_once(win) {
@@ -316,18 +348,34 @@
       core.release_keys(win, ONCE_OWNER);
     }
 
-    function arm_once() {
-      const win = Services.focus?.activeWindow;
-      if (!win || win.closed || !attached.has(win) || !core.may_act(win)) return { ok: false, error: "No Firefox window has the focus" };
+    function start_once(win) {
       const element = core.focused_element(win);
       if (!place_of(win, element)) return { ok: false, error: "The focus is not in the sidebar" };
-      const tree = core.scope_tree(win);
-      if (!is_record(tree) || !is_record(tree.children)) return { ok: false, error: "DesertFox sent no keys for here" };
+      const tree = checked_tree(core.scope_tree(win));
+      if (!tree) return { ok: false, error: "DesertFox sent no keys for here" };
       if (popup_owns_keys(win) || !core.hold_keys(win, ONCE_OWNER)) return { ok: false, error: "Another feature holds the keys" };
-      const once = { tree, node: tree, keys: [], digits: "", element };
+      const chords = chords_in(win);
+      const once = { tree, node: tree, keys: [], digits: "", element, chords: chords.length > 0 ? chords : [ONCE_KEY], waiting: false };
       onces.set(win, once);
       once_timer(win, once);
       return { ok: true };
+    }
+
+    // The extension's ask after the shortcut fired, for an older module path or a chord the keydown did not reach.
+    function arm_once() {
+      const win = Services.focus?.activeWindow;
+      if (!win || win.closed || !attached.has(win) || !core.may_act(win)) return { ok: false, error: "No Firefox window has the focus" };
+      if (Date.now() - (chord_at.get(win) ?? Number.NEGATIVE_INFINITY) < ONCE_CONFIRM_MS) return { ok: true };
+      return start_once(win);
+    }
+
+    // The chord itself, with the focus in a sidebar place: the hold starts before a key typed fast behind it. The key stops here, so the shortcut does not fire too.
+    function chord_key(win, token, event) {
+      if (!chords_in(win).includes(token) || !start_once(win).ok) return false;
+      chord_at.set(win, Date.now());
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
     }
 
     // Every key goes nowhere but the sequence. A key that binds nothing ends it, as in a page, so it never types into a search box.
@@ -338,30 +386,47 @@
       if (!token) return;
       event.preventDefault();
       event.stopPropagation();
-      if (token === ESCAPE || token === ONCE_KEY) return end_once(win);
+      if (once.chords.includes(token)) chord_at.set(win, Date.now());
+      if (token === ESCAPE || once.chords.includes(token)) return end_once(win);
+      // The command line opens: a key typed meanwhile runs nothing.
+      if (once.waiting) return;
       const step = once_step(once, token);
       if (step.pending) return once_timer(win, once);
+      if (step.leaf) return run_once(win, once, step, event.repeat === true);
       end_once(win);
-      if (step.leaf) run_once(win, once, step, event.repeat === true);
+      // A key the tree lacks, a hint key or one that needs page code among them, goes out as a `run`, so the extension says why it does not run here.
+      const refused = core.send("run", { keys: once.keys.join(" "), count: 0 });
+      if (!refused.ok) core.log_once(`a key was not sent to DesertFox: ${refused.problem}`);
     }
 
     function run_once(win, once, { leaf, keys, count }, repeat) {
       const path = keys.join(" ");
       if (leaf === "forward") {
+        // After a key that opens the line, the hold goes on until the extension answers or the focus leaves, so a key typed fast never runs in the sidebar.
         const opens_line = Array.isArray(once.tree.line_keys) && once.tree.line_keys.includes(path);
-        const sent = core.send("run", { keys: path, count: count ?? 0 }, () => opens_line || win.setTimeout(() => focus_back(win, once.element), 0));
-        if (!sent.ok) core.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
+        const moves_focus = opens_line || core.focus_keys(win).includes(path);
+        if (opens_line) once.waiting = true;
+        else end_once(win);
+        const sent = core.send("run", { keys: path, count: count ?? 0 }, () => {
+          if (onces.get(win) === once) end_once(win);
+          if (!moves_focus) win.setTimeout(() => focus_back(win, once.element), 0);
+        });
+        if (!sent.ok) {
+          core.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
+          if (onces.get(win) === once) end_once(win);
+        }
         return;
       }
+      end_once(win);
       const { native, args, count_rule } = leaf;
-      const counted = count !== undefined && is_record(count_rule) && typeof count_rule.param === "string" ? { ...args, [count_rule.param]: count } : args;
+      const counted = count !== undefined && is_record(count_rule) ? { ...args, [count_rule.param]: count } : args;
       const times = count !== undefined && count_rule === "repeat" ? Math.min(count, MAX_NATIVE_REPEAT) : 1;
       const context = { window: win, browser: win.gBrowser.selectedBrowser, tab: win.gBrowser.selectedTab, repeat };
       for (let time = 0; time < times && core.run_command(native, counted, context); time++);
       win.setTimeout(() => focus_back(win, once.element), 0);
     }
 
-    // After the command the focus goes back to the sidebar element that had it, unless the command put it in a text field (the command line, the address bar) or the user left the window.
+    // After the command the focus goes back to the sidebar element that had it, unless the command put it in a text field or the user left the window.
     function focus_back(win, element) {
       if (!element?.isConnected || win.closed || Services.focus?.activeWindow !== win || !core.may_act(win)) return;
       const now = core.focused_element(win);
@@ -388,6 +453,7 @@
       if (core.keys_held_by(win) !== undefined || popup_owns_keys(win) || !core.may_act(win)) return;
       const token = core.token_of(event);
       if (!token) return;
+      if (chord_key(win, token, event)) return;
       const choice = decide(place, token, record.pending, (keys) => core.sidebar_row(win, keys));
       record.pending = choice.pending;
       if (!choice.take) return;

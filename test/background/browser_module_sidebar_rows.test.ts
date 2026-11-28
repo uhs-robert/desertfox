@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { arm_sidebar_once, create_browser_module, sidebar_rows_of } from "../../src/background/browser_module.ts";
+import { arm_sidebar_once, create_browser_module, focus_keys_of_keymap, normal_once_keys_of_keymap, sidebar_rows_of } from "../../src/background/browser_module.ts";
 import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
-import { BROWSER_MODULE_STATE_STORAGE_KEY, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_STATE_STORAGE_KEY, focus_keys_of, MAX_KEY_ROWS, normal_once_keys_of } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
 import type { CompiledKeymap, TreeLeaf, TreeNode } from "../../src/shared/prefix_tree.ts";
 
@@ -67,4 +67,14 @@ test("<A-o> asks the module to hold the sidebar's keys only when its hello says 
   assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1", sidebar_once: true }), call }), true);
   assert.equal(await arm_sidebar_once({ read_hello: async () => ({ v: 1, module_version: "1", sidebar_once: true }), call: async () => ({ ok: false }) }), false);
   assert.deepEqual(calls, ["sidebar.normal_once"]);
+});
+
+test("the state names the chords of mode.normal_once and the tree's forward keys that move the focus", () => {
+  const compiled = { format_version: COMPILED_KEYMAP_VERSION, modes: { normal: branch({ g: branch({ t: leaf("tab.goto"), p: leaf("pane.focus") }), "<C-w>": leaf("browser.focus_page") }), browser: branch({ "<A-o>": leaf("mode.normal_once"), "<A-j>": leaf("tab.next"), "<A-p>": leaf("mode.normal_once") }) }, mode_indicator: "always", which_key_delay_ms: 0, toast_ms: 1, toast_error_ms: 1 } as unknown as CompiledKeymap;
+  assert.deepEqual(normal_once_keys_of_keymap(compiled), ["<A-o>", "<A-p>"]);
+  assert.deepEqual(normal_once_keys_of_keymap(undefined), []);
+  const tree = { children: { g: { children: { t: "forward", p: "forward" } }, "<C-w>": "forward" } } as const;
+  assert.deepEqual(focus_keys_of_keymap(compiled, tree), ["g p", "<C-w>"]);
+  assert.deepEqual(normal_once_keys_of(["<A-o>", "two words"]), undefined);
+  assert.deepEqual(focus_keys_of(["g p", 3]), undefined);
 });

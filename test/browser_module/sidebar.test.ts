@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BROWSER_MODULE_PROTOCOL_VERSION, SIDEBAR_ONCE_KIND, sidebar_keys_of } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION, SIDEBAR_ONCE_KIND, sidebar_keys_of, validate_scope_tree } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { create_firefox, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
@@ -645,22 +645,23 @@ test("a key that opens the command line leaves the focus where the line put it",
   assert.equal(row.focused, 0);
 });
 
-test("Escape, <A-o> again and a key that binds nothing end the hold, are eaten, and run nothing", async () => {
+test("Escape and <A-o> again end the hold and run nothing, and a key the tree lacks goes out as a run, so the extension says why", async () => {
   const { panel_doc, focus, press, arm, runs, scrolls, held, typed, run_timers } = once_setup();
   focus(panel_row(panel_doc));
-  for (const ender of [["<Escape>"], ["o", { altKey: true }], ["x"], ["g", "x"]] as [string, Partial<FakeEvent>?][]) {
+  for (const keys of [["f"], ["g", "x"], ["2", "y"]]) {
     await arm();
-    if (ender.length === 2 && typeof ender[1] === "string") {
-      press(ender[0]);
-      assert.ok(press(ender[1] as string).prevented);
-    } else {
-      const [key, patch] = ender as [string, Partial<FakeEvent>?];
-      assert.ok(press(key === "<Escape>" ? "Escape" : key, patch).prevented, key);
-    }
-    assert.equal(held(), undefined, JSON.stringify(ender));
+    for (const key of keys) assert.ok(press(key).prevented, key);
+    assert.equal(held(), undefined, keys.join(""));
+  }
+  assert.deepEqual(runs(), [{ keys: "f", count: 0 }, { keys: "g x", count: 0 }, { keys: "y", count: 0 }]);
+  // The chord last: a request this soon after it only confirms.
+  for (const [key, patch] of [["Escape"], ["o", { altKey: true }]] as [string, Partial<FakeEvent>?][]) {
+    await arm();
+    assert.ok(press(key, patch).prevented, key);
+    assert.equal(held(), undefined, key);
   }
   run_timers();
-  assert.deepEqual([runs(), scrolls(), typed], [[], [], []]);
+  assert.deepEqual([runs().length, scrolls(), typed], [3, [], []]);
 });
 
 test("the hold ends after the idle time, on a focus move out of the place, a window blur, the window closing and the module shutting down", async () => {
@@ -735,4 +736,126 @@ test("a core without the prefix calls keeps the sidebar keys and says no sidebar
   assert.ok(press("j").prevented);
   assert.equal((firefox.hello() as { sidebar_once?: boolean }).sidebar_once, undefined);
   assert.ok(firefox.errors.some((line) => line.includes("<A-o> stays off")));
+});
+
+const chord_state = (patch: Record<string, unknown> = {}) => state({ tree: ONCE_TREE, normal_once_keys: ["<A-o>"], ...patch });
+const alt_o: Partial<FakeEvent> = { altKey: true };
+
+test("the chord's own keydown holds the keys, so a j typed at once scrolls the page, and the shortcut's late ask only confirms", async () => {
+  const { panel_doc, focus, press, arm, scrolls, held, typed, run_timers } = once_setup({ written: chord_state() });
+  focus(panel_row(panel_doc));
+  assert.ok(press("o", alt_o).prevented, "the chord went on to Firefox");
+  assert.equal(held(), "sidebar_once");
+  assert.ok(press("j").prevented);
+  assert.deepEqual(scrolls().map(({ id }) => id), ["scroll.lines"]);
+  assert.equal((await arm())?.ok, true);
+  assert.equal(held(), undefined, "the late ask started a second hold");
+  run_timers();
+  assert.deepEqual(typed, []);
+});
+
+test("a double chord ends the hold, and the shortcut's ask for either press starts none", async () => {
+  const { panel_doc, focus, press, arm, held } = once_setup({ written: chord_state() });
+  focus(panel_row(panel_doc));
+  press("o", alt_o);
+  press("o", alt_o);
+  assert.equal(held(), undefined);
+  assert.equal((await arm())?.ok, true);
+  assert.equal((await arm())?.ok, true);
+  assert.equal(held(), undefined);
+});
+
+test("without the state's chord list the keydown is left to the shortcut", () => {
+  const { panel_doc, focus, press, held } = once_setup();
+  focus(panel_row(panel_doc));
+  assert.equal(press("o", alt_o).prevented, false);
+  assert.equal(held(), undefined);
+});
+
+test("in the vertical strip the chord holds, j scrolls the page and leaves the strip's focus, and d closes no tab", async () => {
+  const { strip_tabs, tab_container, removed, focus, press, scrolls, runs, held } = once_setup({ written: chord_state(), vertical: true });
+  focus(strip_tabs[0]!);
+  tab_container.ariaFocusedItem = strip_tabs[0]!;
+  assert.ok(press("o", alt_o).prevented);
+  press("j");
+  assert.deepEqual(scrolls().map(({ id }) => id), ["scroll.lines"]);
+  assert.equal(tab_container.ariaFocusedItem, strip_tabs[0]);
+  press("o", alt_o);
+  assert.ok(press("d").prevented);
+  assert.deepEqual([removed, runs(), held()], [[], [{ keys: "d", count: 0 }], undefined]);
+});
+
+test("after a key that opens the line the hold eats the keys typed fast until the extension answers or the focus leaves", async () => {
+  const { strip_tabs, removed, focus, press, runs, held, answer_runs, page } = once_setup({ written: chord_state(), vertical: true });
+  focus(strip_tabs[0]!);
+  press("o", alt_o);
+  press(":");
+  for (const key of ["b", "d"]) assert.ok(press(key).prevented, key);
+  assert.equal(held(), "sidebar_once");
+  assert.deepEqual([removed, runs()], [[], [{ keys: ":", count: 0 }]]);
+  answer_runs();
+  await settle();
+  assert.equal(held(), undefined, "the answer did not end the hold");
+  press("o", alt_o);
+  press(":");
+  focus(page);
+  assert.equal(held(), undefined, "the focus move did not end the hold");
+});
+
+test("each key restarts the idle time, a focus move inside the place keeps the hold, and a second ask starts a fresh walk", async () => {
+  const { panel_doc, focus, press, arm, held, timers, runs } = once_setup();
+  const row = panel_row(panel_doc);
+  focus(row);
+  await arm();
+  press("g");
+  // The timer the arm set is stale once g restarted it.
+  timers.shift()!();
+  assert.equal(held(), "sidebar_once", "a key did not restart the idle time");
+  focus(panel_row(panel_doc));
+  assert.equal(held(), "sidebar_once", "a focus move inside the panel ended the hold");
+  await settle();
+  // A request with no chord typed here, from a module path or an older extension, starts the walk again.
+  await arm();
+  press("t");
+  assert.deepEqual(runs(), [{ keys: "t", count: 0 }]);
+  assert.equal(held(), undefined);
+  while (timers.length > 0) timers.shift()!();
+  assert.equal(held(), undefined);
+});
+
+test("a leaf that moves the focus on purpose keeps it where it went", async () => {
+  const { page, panel_doc, focus, press, runs, answer_runs, run_timers } = once_setup({ written: chord_state({ focus_keys: ["g t"] }) });
+  const row = panel_row(panel_doc);
+  focus(row);
+  press("o", alt_o);
+  press("g");
+  press("t");
+  assert.deepEqual(runs(), [{ keys: "g t", count: 0 }]);
+  focus(page);
+  answer_runs();
+  await settle();
+  run_timers();
+  assert.equal(row.focused, 0);
+});
+
+test("the sidebar takes a tree only where validate_scope_tree takes it", async () => {
+  const trees: unknown[] = [
+    ONCE_TREE,
+    { children: {} },
+    { children: { j: "back" } },
+    { children: { "two words": "forward" } },
+    { children: { j: { native: "scroll.lines", args: { count: 1 }, count_rule: { param: "count" } } } },
+    { children: { j: { native: "scroll.lines", args: { count: 1 }, count_rule: { param: "nope" } } } },
+    { children: { j: "forward" }, line_keys: ["j k l m n o p q r"] },
+    { children: { j: "forward" }, hint_keys: "f" },
+    { children: { "": "forward" } },
+    { children: { a: { children: { b: { children: { c: { children: { d: { children: { e: { children: { f: { children: { g: { children: { h: { children: { i: "forward" } } } } } } } } } } } } } } } } } },
+    { children: { a: { children: { b: { children: { c: { children: { d: { children: { e: { children: { f: { children: { g: { children: { h: "forward" } } } } } } } } } } } } } } } },
+    { children: { x: "forward", y: "z".repeat(40_000) } },
+  ];
+  for (const tree of trees) {
+    const { panel_doc, focus, arm } = once_setup({ written: state({ tree }) });
+    focus(panel_row(panel_doc));
+    assert.equal((await arm())?.ok, validate_scope_tree(tree).ok, JSON.stringify(tree).slice(0, 80));
+  }
 });
