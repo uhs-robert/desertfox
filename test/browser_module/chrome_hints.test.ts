@@ -67,6 +67,14 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
     elementFromPoint: (x: number, y: number) => all_targets().find((node) => !node.attrs.has("covered") && x >= node.box.left && x <= node.box.left + node.box.width && y >= node.box.top && y <= node.box.top + node.box.height) ?? null,
   };
   for (const target of all_targets()) target.ownerDocument = document;
+  const window_view: { CSSStyleSheet?: unknown } = {};
+  Object.assign(document, { defaultView: window_view });
+  window_view.CSSStyleSheet = class {
+    text = "";
+    replaceSync(text: string) {
+      this.text = text;
+    }
+  };
   const timers: { run: () => void; ms: number; live: boolean }[] = [];
   const window_root = new Node("#windowroot");
   const win = Object.assign(new Node("#window"), {
@@ -124,8 +132,8 @@ function started({ pref = true as boolean | null, private_access = false, button
   const reply = (id: string) => from_module().find((message) => message.reply_to === id);
   const pushes = (kind: string) => from_module().filter((message) => message.kind === kind).map((message) => message.args!);
   const target_ids = (): number[] => pushes("chrome_hints.targets").flatMap((args) => (JSON.parse(args.targets as string) as number[][]).map(([id]) => id!));
-  const collect = async (session = 1, window_id = chrome.id) => {
-    const id = send("chrome_hints.collect", { session, window_id, colors: "" });
+  const collect = async (session = 1, window_id = chrome.id, colors = "") => {
+    const id = send("chrome_hints.collect", { session, window_id, colors });
     await settle();
     return reply(id);
   };
@@ -148,7 +156,7 @@ test("the module's kind rows are the protocol's, so a collect is answered and it
   assert.ok(protocol.validate_message_list(from_module(), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
 });
 
-test("a collect sends each target's id and box, ids count up across sessions, and the layer goes in a closed shadow root with the fixed sheet", async () => {
+test("a collect sends each target's id and box, ids count up across sessions, and the layer goes in a closed shadow root with no sheet of the extension's", async () => {
   const { collect, pushes, chrome, target_ids } = started();
   await collect(1);
   const [part] = pushes("chrome_hints.targets");
@@ -156,13 +164,26 @@ test("a collect sends each target's id and box, ids count up across sessions, an
   const rows = JSON.parse(part!.targets as string) as number[][];
   assert.deepEqual(rows.map((row) => row.slice(1)), [[10, 100, 24, 24], [40, 100, 24, 24], [70, 100, 24, 24], [200, 50, 90, 30], [300, 50, 90, 30]]);
   const [host] = chrome.layers();
-  assert.equal(host!.shadow!.children[0]!.getAttribute("href"), "moz-extension://uuid/chrome_hints.css");
+  assert.deepEqual(host!.shadow!.children.map((child) => child.localName), ["div"], "the layer took a sheet or link of the extension's");
   assert.equal(host!.style.cssText!.includes("pointer-events: none"), true);
   const first_ids = target_ids();
   await collect(2);
   const second_ids = target_ids().slice(first_ids.length);
   assert.ok(Math.min(...second_ids) > Math.max(...first_ids), "a newer session reused an older session's ids");
   assert.equal(chrome.layers().length, 1, "the older session's layer is left");
+});
+
+test("window and panel labels carry their look inline, so no sheet of the extension's can restyle them or the layer", async () => {
+  const { collect, draw, chrome, target_ids } = started();
+  await collect(1, chrome.id, JSON.stringify({ dark: { primary: "#ff0000", bg_core: "url(x)" }, light: {} }));
+  await draw(1, 1, target_ids().map((id, index) => [id, "asdfg"[index]!]));
+  const [host] = chrome.layers();
+  assert.equal(host!.shadow!.descendants().some((node) => node.localName === "link" || node.localName === "style"), false, "the layer loads a sheet");
+  const [label] = host!.shadow!.children[0]!.children;
+  assert.match(label!.style.cssText!, /background: var\(--desertfox-primary, #7fa3c9\)/);
+  assert.match(label!.style.cssText!, /position: fixed/);
+  const theme = (host!.shadow as unknown as { adoptedStyleSheets: { text: string }[] }).adoptedStyleSheets[0]!.text;
+  assert.ok(theme.includes("--desertfox-primary: #ff0000;") && !theme.includes("url(x)"), theme);
 });
 
 test("a collect is refused for a window that is not in front, a private window without access, an open menu, nothing to hint and the pref off", async () => {

@@ -6,6 +6,8 @@ export const areas = ["hints", "toolbar"];
 
 const W = `Services.wm.getMostRecentWindow("navigator:browser")`;
 const SESSION_KEY = "desertfox_chrome_hints";
+// LABELS_SEEN_MS of the module, with a margin. A doorhanger pick counts only for keys typed after the labels showed this long.
+const LABELS_SEEN_MS = 400;
 const GEO_PROMPT = `${W}.document.getElementById("geolocation-notification")`;
 const BLOCKED_URL_STATE = "Uncommon";
 
@@ -96,6 +98,7 @@ export async function run_cases(context) {
     await press_keys("g", "B");
     const labels = await wait_labels(PROMPT_TARGETS, ["allow", "block"], "the prompt");
     await take_shot("/tmp/desertfox-grant-hints-prompt.png");
+    await sleep(LABELS_SEEN_MS);
     await press_keys(...label_for(labels, "block").split(""));
     await poll_until("the page to be denied", async () => (await geo_answer()) === "geo:denied", { timeout_ms: 5000 });
     expect(!(await chrome(confirm_shown)), "a Block pick waited for Enter");
@@ -106,6 +109,7 @@ export async function run_cases(context) {
     await ask_for_location("gh_geo_allow");
     await press_keys("g", "B");
     const labels = await wait_labels(PROMPT_TARGETS, ["allow"], "the prompt");
+    await sleep(LABELS_SEEN_MS);
     await press_keys(...label_for(labels, "allow").split(""));
     await poll_until("the confirm mark to show", () => chrome(confirm_shown), { timeout_ms: 3000 });
     await take_shot("/tmp/desertfox-grant-hints-allow-mark.png");
@@ -122,6 +126,7 @@ export async function run_cases(context) {
     await ask_for_location("gh_geo_cancel");
     await press_keys("g", "B");
     const labels = await wait_labels(PROMPT_TARGETS, ["allow"], "the prompt");
+    await sleep(LABELS_SEEN_MS);
     await press_keys(...label_for(labels, "allow").split(""));
     await poll_until("the confirm mark to show", () => chrome(confirm_shown), { timeout_ms: 3000 });
     await press_keys("-k", "Escape");

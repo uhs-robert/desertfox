@@ -115,6 +115,8 @@ function page_info_permissions(firefox: Firefox) {
 
 // How long a grant's mark shows before an Enter counts: Firefox's `security.notification_enable_delay` when unset.
 const DWELL_MS = 500;
+// How long the labels show before a key counts toward one.
+const LABELS_SEEN_MS = 300;
 
 // Labels every target, so a test can pick a control by its element. After the pick the user reads the mark as long as it must show, so the next key counts.
 async function labelled(run: Run, session: number) {
@@ -123,6 +125,9 @@ async function labelled(run: Run, session: number) {
   return async (element: Node) => {
     const row = rows.find(([, left, top]) => left === Math.round(element.box.left) && top === Math.round(element.box.top));
     assert.ok(row, `no label on ${element.id || element.className || element.localName}`);
+    // A doorhanger pick must name the label the user's own keys spelled, typed after the labels showed a while.
+    run.chrome.clock.now += LABELS_SEEN_MS;
+    for (const key of `a${String.fromCharCode(97 + rows.indexOf(row))}`) run.chrome.press(key);
     const reply = await run.pick(session, row[0]!);
     run.chrome.clock.now += DWELL_MS;
     return reply;
@@ -459,6 +464,25 @@ test("Firefox's own delay holds: an Enter before it ends does nothing and keeps 
   run.firefox.chrome_now = 5400;
   chrome.press("Enter");
   assert.equal(chrome.allow.clicks, 1);
+});
+
+test("keys typed before the labels show cannot pick Block or Not now on a doorhanger that took over the hint key", async () => {
+  for (const name of ["block", "close"] as const) {
+    const run = started((firefox) => browser_with_doorhanger(firefox, { shown_at: 4900 }));
+    const chrome = run.chrome as unknown as ReturnType<typeof browser_with_doorhanger>;
+    run.firefox.chrome_now = 5000;
+    assert.equal((await collect(run, 5))?.ok, true);
+    // The user meant a toolbar label and typed it before the prompt's labels showed.
+    chrome.press("a");
+    chrome.press("a");
+    const rows = run.pushes("chrome_hints.targets").flatMap((args) => JSON.parse(args.targets as string) as number[][]);
+    await run.draw(5, rows.map(([id], index) => [id!, `a${String.fromCharCode(97 + index)}`]));
+    assert.equal(run.pushes("chrome_hints.key").length, 2, "the early keys did not reach the extension");
+    const target = chrome[name];
+    const id = rows.find(([, left, top]) => left === Math.round(target.box.left) && top === Math.round(target.box.top))![0]!;
+    assert.equal((await run.pick(5, id))?.error, "The keys typed do not name this hint", name);
+    assert.equal(target.clicks, 0, name);
+  }
 });
 
 test("a deny pick on a doorhanger clicks at once, Block with no delay and the close button, and one still under the delay is refused", async () => {
