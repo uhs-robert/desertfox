@@ -96,6 +96,8 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
   const timer_delays = new Map<number, number>();
   let next_timer = 1;
   const firefox = {
+    // The window Services.wm.getMostRecentWindow gives, for a test of a DevTools window's J and K.
+    most_recent_window: null as unknown,
     extension: undefined as FakeExtension | undefined,
     fail_import: false,
     fail_tab_ids: false,
@@ -143,7 +145,7 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         observers.get(topic)?.delete(observer);
       },
     },
-    wm: { getEnumerator: (type: string | null) => (type === null || type === "devtools:toolbox" ? [...devtools_windows] : []) },
+    wm: { getMostRecentWindow: () => firefox.most_recent_window, getEnumerator: (type: string | null) => (type === null || type === "devtools:toolbox" ? [...devtools_windows] : []) },
     prefs: {
       getBoolPref(name: string, fallback: boolean) {
         if (!prefs.has(name)) return fallback;
@@ -361,7 +363,19 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       }
     };
     const add_tab = () => {
-      const browser = { localName: "browser", innerWindowID: 10, browserId: ++next_browser_id, stops: 0, stop: () => void browser.stops++, messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) } };
+      const attributes = new Map<string, string>();
+      const browser = {
+        localName: "browser",
+        innerWindowID: 10,
+        browserId: ++next_browser_id,
+        stops: 0,
+        stop: () => void browser.stops++,
+        attributes,
+        setAttribute: (name: string, value: string) => void attributes.set(name, value),
+        getAttribute: (name: string) => attributes.get(name) ?? null,
+        removeAttribute: (name: string) => void attributes.delete(name),
+        messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) },
+      };
       const tab = { browser, linkedBrowser: browser };
       tabs.set(tab, tab);
       tab_of_browser.set(browser, tab);

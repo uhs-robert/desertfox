@@ -6,7 +6,7 @@ import type { CheckCommandArgs } from "../../src/background/browser_module.ts";
 import { create_module_call } from "../../src/background/browser_module_call.ts";
 import { apply_mode_report, create_tab_modes } from "../../src/background/tab_modes.ts";
 import type { TabModeRecord } from "../../src/background/tab_modes.ts";
-import { DEVTOOLS_HINT_KEY, DEVTOOLS_TREE_KEYS, DEVTOOLS_VISUAL_KEY, DEVTOOLS_VISUAL_KEYS, EXTENSION_TO_MODULE_KINDS, MESSAGE_MIN_GAP_MS, MODULE_TO_EXTENSION_KINDS, validate_message } from "../../src/shared/browser_module_protocol.ts";
+import { DEVTOOLS_HINT_KEY, DEVTOOLS_SEARCH_KEYS, DEVTOOLS_TOOL_KEYS, DEVTOOLS_TREE_KEYS, DEVTOOLS_VISUAL_KEY, DEVTOOLS_VISUAL_KEYS, EXTENSION_TO_MODULE_KINDS, MESSAGE_MIN_GAP_MS, MODULE_TO_EXTENSION_KINDS, validate_message } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, BROWSER_MODULE_FROM_MODULE_STORAGE_KEY, BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, DEFAULT_MAX_AGE_MS, HELLO_MIN_INTERVAL_MS, MAX_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import type { KindTable } from "../../src/shared/browser_module_protocol.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, COMPILED_KEYMAP_VERSION } from "../../src/shared/prefix_tree.ts";
@@ -121,7 +121,7 @@ test("sync writes the state while the setting is on and removes it when off", as
   const { data, config, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true }, [`${TAB_MODE_STORAGE_PREFIX}insert_3`]: true as never } });
   await module.sync();
   await flush();
-  assert.deepEqual(data.get(BROWSER_MODULE_STATE_STORAGE_KEY), { v: 1, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: { "3": { mode: "normal", live: true } }, bar: BAR_CONFIG, page_hints: true });
+  assert.deepEqual(data.get(BROWSER_MODULE_STATE_STORAGE_KEY), { v: 1, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], insert_keys: [], tabs: { "3": { mode: "normal", live: true } }, bar: BAR_CONFIG, page_hints: true });
   assert.deepEqual(data.get(BROWSER_MODULE_STATUS_STORAGE_KEY), { result: "waiting" });
   config.on = false;
   await module.sync();
@@ -851,6 +851,46 @@ test("the v row and the mode's keys go only to a module whose hello says devtool
   assert.deepEqual(visual!.args, { keys: DEVTOOLS_VISUAL_KEYS });
   assert.deepEqual(keys!.args, { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY, DEVTOOLS_VISUAL_KEY] });
   for (const message of [visual, keys]) assert.ok(validate_message(message, EXTENSION_TO_MODULE_KINDS).ok);
+});
+
+test("the search rows go only to a module whose hello says devtools_search, so a module before them keeps its table", async () => {
+  const { data, config, module, flush, timers } = setup({ kinds: { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS } });
+  const pushes = () => outbox_of(data).filter((message) => message.kind === "devtools.keys");
+  const hello = async (value: unknown) => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, value);
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: value } }, "session");
+    await flush();
+    timers.splice(0).forEach((run) => run());
+    await flush();
+  };
+  await module.sync();
+  await hello({ v: 1, module_version: "1", devtools_hints: true, devtools_visual: true });
+  assert.deepEqual(pushes().at(-1)!.args, { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY, DEVTOOLS_VISUAL_KEY] }, "an older module gets the 6 rows it knows");
+  await hello({ v: 1, module_version: "1", devtools_search: "yes" });
+  assert.deepEqual(pushes().at(-1)!.args, { keys: DEVTOOLS_TREE_KEYS }, "a flag that is not true is no flag");
+  await hello({ v: 1, module_version: "1", devtools_hints: true, devtools_visual: true, devtools_search: true });
+  assert.deepEqual(pushes().at(-1)!.args, { keys: [...DEVTOOLS_TREE_KEYS, DEVTOOLS_HINT_KEY, DEVTOOLS_VISUAL_KEY, ...DEVTOOLS_SEARCH_KEYS] });
+  assert.ok(validate_message(pushes().at(-1), EXTENSION_TO_MODULE_KINDS).ok);
+});
+
+test("the tool and tab rows go only to a module whose hello says devtools_tools", async () => {
+  const { data, config, module, flush, timers } = setup({ kinds: { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS } });
+  const pushes = () => outbox_of(data).filter((message) => message.kind === "devtools.keys");
+  const hello = async (value: unknown) => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, value);
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    module.storage_changed({ [BROWSER_MODULE_HELLO_STORAGE_KEY]: { newValue: value } }, "session");
+    await flush();
+    timers.splice(0).forEach((run) => run());
+    await flush();
+  };
+  await module.sync();
+  await hello({ v: 1, module_version: "1", devtools_search: true });
+  assert.deepEqual(pushes().at(-1)!.args, { keys: [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_SEARCH_KEYS] });
+  await hello({ v: 1, module_version: "1", devtools_search: true, devtools_tools: true });
+  assert.deepEqual(pushes().at(-1)!.args, { keys: [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_SEARCH_KEYS, ...DEVTOOLS_TOOL_KEYS] });
+  assert.ok(validate_message(pushes().at(-1), EXTENSION_TO_MODULE_KINDS).ok);
 });
 
 test("a hello that changes while the DevTools table is on its way still gets its own table", async () => {
