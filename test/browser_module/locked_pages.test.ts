@@ -27,6 +27,18 @@ const KEYMAP = { v: V, value: { format_version: 1, modes: {} } };
 
 type Principal = typeof PDF_PRINCIPAL;
 type Page = { principal: Principal; uri: string; inner: number };
+
+const JSON_VIEWER = { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" };
+const source_of_page = (uri: string): Page => ({ principal: { ...PDF_PRINCIPAL, spec: uri }, uri, inner: 5 });
+// The page kinds past the PDF viewer and Reader View, as Firefox shows them: view-source: under a principal whose spec is the view-source: address, and the JSON viewer under its own principal on the response's address.
+const PAGE_CODE_KINDS: Page[] = [
+  source_of_page("view-source:https://a.test/"),
+  source_of_page("view-source:http://a.test/x.json"),
+  source_of_page("view-source:file:///tmp/a.html"),
+  { principal: JSON_VIEWER, uri: "https://a.test/x.json", inner: 5 },
+  { principal: JSON_VIEWER, uri: "http://a.test/x.json", inner: 5 },
+  { principal: JSON_VIEWER, uri: "file:///tmp/x.json", inner: 5 },
+];
 type FakeSandbox = { Promise: PromiseConstructor; desertfox_locked_transport?: Transport };
 type Transport = {
   extension_id: string;
@@ -146,7 +158,7 @@ function locked({ config = ON_CONFIG as unknown, keymap = KEYMAP as unknown, pag
 const gone_of = (list: Record<string, unknown>[]) => list.filter((message) => message.kind === "page_gone").map((message) => message.args);
 const push_request = (id: string, tab_id: number, message: string, document_id = 1) => ({ v: V, id, kind: "page_push", args: { tab_id, document_id, message }, sent_at: Date.now() });
 
-test("the feature's copies of the snapshot keys, the version and the bundle names equal src/shared, and its two halves name the same messages", () => {
+test("the feature's copies of the snapshot keys, the version and the bundle names equal src/shared, and its two halves name the same messages and page kinds", () => {
   const keys = new Function(`return ${/const SNAPSHOT_KEYS = (\{[^}]*\});/.exec(source)![1]}`)();
   assert.deepEqual(keys, { keymap: BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, config: BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, theme: BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, which_key: BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY });
   assert.match(source, new RegExp(`const PROTOCOL_VERSION = ${V};`));
@@ -154,6 +166,11 @@ test("the feature's copies of the snapshot keys, the version and the bundle name
   const message_tables = [...source.matchAll(/const MESSAGE = (\{[^}]*\});/g)].map((match) => plain(vm.runInNewContext(`(${match[1]})`)));
   assert.equal(message_tables.length, 2);
   assert.deepEqual(message_tables[0], message_tables[1]);
+  for (const name of ["JSON_VIEWER_PRINCIPAL", "VIEW_SOURCE_OF_PAGE", "JSON_VIEWER_DOCUMENT"]) {
+    const copies = [...source.matchAll(new RegExp(`const ${name} = (.+);`, "g"))].map((match) => match[1]);
+    assert.equal(copies.length, 2, name);
+    assert.equal(copies[0], copies[1], `the two halves' ${name}`);
+  }
 });
 
 test("chrome code never reads the page's messages: the feature has no parser, no eval and loads no file but its fixed names", () => {
@@ -214,6 +231,86 @@ test("Reader View gets page code, and no other page does: about: pages, extensio
   assert.equal(lying.frame.sandboxes.length, 0, "chrome checks the page itself");
 });
 
+test("view-source: of a web or file page and the JSON viewer on a web or file document get the sandbox [page, extension], and the frame and chrome agree on every case", async () => {
+  for (const page of PAGE_CODE_KINDS) {
+    const { frame, load, extension } = locked({ page });
+    await load();
+    assert.equal(frame.sandboxes.length, 1, page.uri);
+    const [{ principal }] = frame.sandboxes as unknown as [{ principal: unknown[] }];
+    // The JSON viewer's sandbox holds its resource://devtools principal, because only that principal reaches the viewer's DOM. Page code loads nothing by address, so the reach to devtools files stays unused. A change here is a change to what page code can reach.
+    assert.equal(principal.length, 2, page.uri);
+    assert.equal(principal[0], page.principal, `${page.uri}: the page's own principal, no other`);
+    assert.deepEqual(plain(principal[1]), { extension: extension.baseURI.spec }, page.uri);
+    assert.deepEqual(frame.loaded, [`${extension.baseURI.spec}locked_shim.js`, `${extension.baseURI.spec}content.js`], page.uri);
+  }
+  const other_extension = { ...JSON_VIEWER, addonId: "other@example" };
+  const refused: Page[] = [
+    { principal: JSON_VIEWER, uri: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json", inner: 5 },
+    { principal: JSON_VIEWER, uri: "data:application/json,{}", inner: 5 },
+    { principal: JSON_VIEWER, uri: "about:blank", inner: 5 },
+    { principal: { ...JSON_VIEWER, spec: "resource://devtools/client/jsonview/x" }, uri: "https://a.test/x.json", inner: 5 },
+    { principal: { ...JSON_VIEWER, spec: "resource://devtools/" }, uri: "https://a.test/x.json", inner: 5 },
+    { principal: { ...JSON_VIEWER, isSystemPrincipal: true }, uri: "https://a.test/x.json", inner: 5 },
+    { principal: other_extension, uri: "https://a.test/x.json", inner: 5 },
+    // view-source: of another extension's page carries no addonId, so the source's scheme keeps it out.
+    source_of_page("view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json"),
+    source_of_page("view-source:about:preferences"),
+    source_of_page("view-source:data:text/html,hi"),
+    source_of_page("view-source:view-source:https://a.test/"),
+    { principal: SYSTEM_PRINCIPAL, uri: "view-source:https://a.test/", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "view-source:https://a.test/", addonId: "other@example" }, uri: "view-source:https://a.test/", inner: 5 },
+    // A web page that only names view-source:, and a view-source: address under a principal that is not its own.
+    { principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "view-source:https://a.test/", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "view-source:https://a.test/" }, uri: "https://a.test/", inner: 5 },
+  ];
+  for (const page of refused) {
+    const each = locked({ page });
+    await each.load();
+    assert.equal(each.frame.sandboxes.length, 0, `${page.principal.spec} on ${page.uri}`);
+    assert.deepEqual(each.frame.sent, [], `the frame asks nothing for ${page.principal.spec} on ${page.uri}`);
+  }
+  // Chrome checks the kind again when the frame asks.
+  for (const page of refused) {
+    const each = locked({ page: PAGE_CODE_KINDS[0]! });
+    Object.assign(each.browser, { browsingContext: { currentWindowGlobal: { innerWindowId: 5, documentPrincipal: page.principal, documentURI: { spec: page.uri } } } });
+    await each.load();
+    assert.equal(each.frame.sandboxes.length, 0, `chrome refuses ${page.principal.spec} on ${page.uri}`);
+  }
+});
+
+test("a reload of the JSON viewer and a move between a web page and view-source: and back leave one sandbox each time, and no observer once the tab shows a web page", async () => {
+  const json = PAGE_CODE_KINDS.find((page) => page.principal === JSON_VIEWER)!;
+  const { frame, set_page, load, from_module } = locked({ page: json });
+  await load();
+  assert.equal(frame.sandboxes.length, 1);
+  // The reload: the old document hides for good, then the new one loads under a new inner window.
+  frame.fire("pagehide");
+  set_page({ ...json, inner: 6 });
+  await load();
+  assert.equal(frame.sandboxes.length, 2);
+  assert.deepEqual(frame.nuked, [frame.sandboxes[0]!.global], "the old document's sandbox goes");
+  assert.equal(frame.observers.size, 1, "one observer for the shown page");
+  // A second load event for the same document starts nothing.
+  await load();
+  assert.equal(frame.sandboxes.length, 2, "a second ask for the same document");
+  // Away to a web page, which gets nothing, then to its source, then back to the web page.
+  frame.fire("pagehide");
+  set_page({ principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "https://a.test/", inner: 7 });
+  await load();
+  assert.equal(frame.sandboxes.length, 2, "the web page gets no sandbox");
+  assert.equal(frame.observers.size, 0, "no observer while no page code runs");
+  set_page({ ...source_of_page("view-source:https://a.test/"), inner: 8 });
+  await load();
+  assert.equal(frame.sandboxes.length, 3, "view-source: attaches");
+  frame.fire("pagehide");
+  set_page({ principal: { ...PDF_PRINCIPAL, spec: "https://a.test/" }, uri: "https://a.test/", inner: 9 });
+  await load();
+  assert.equal(frame.sandboxes.length, 3);
+  assert.equal(frame.nuked.length, 3, "every sandbox is cut off");
+  assert.equal(frame.observers.size, 0);
+  assert.deepEqual(gone_of(from_module()).map((args) => (args as { document_id: number }).document_id), [1, 2, 3], "each attach ends once");
+});
+
 test("with the setting off, the pref off, another protocol version or a private window without access, nothing loads", async () => {
   const cases = {
     "setting off": locked({ config: null }),
@@ -236,7 +333,7 @@ test("with the setting off, the pref off, another protocol version or a private 
   assert.deepEqual(pref_off.frame.sent, [], "the frame asks nothing with the pref off");
 });
 
-test("the rule it lends the key taker: the PDF viewer and Reader View need the setting while it is off, an about: page never runs hints, and every other page gets no notice", () => {
+test("the rule it lends the key taker: the page kinds that get page code need the setting while it is off, an about: page never runs hints, and every other page gets no notice", () => {
   const OFF_CONFIG = { v: V, value: { settings: { browser_module: true, browser_module_pages: false } } };
   const reader = { principal: { ...PDF_PRINCIPAL, spec: "about:reader?url=http%3A%2F%2Fa.test%2F" }, uri: "about:reader?url=http%3A%2F%2Fa.test%2F", inner: 5 };
   const { firefox, browser, set_page } = locked({ config: OFF_CONFIG, keymap: null });
@@ -269,11 +366,17 @@ test("the rule it lends the key taker: the PDF viewer and Reader View need the s
   const no_hints: Page[] = [
     { principal: web, uri: "view-source:https://a.test/", inner: 5 },
     { principal: web, uri: "VIEW-SOURCE:https://a.test/", inner: 5 },
-    { principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" }, uri: "https://a.test/x.json", inner: 5 },
-    { principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" }, uri: "file:///tmp/x.json", inner: 5 },
+    // The JSON viewer on a document that is no web or file page.
+    { principal: JSON_VIEWER, uri: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json", inner: 5 },
+    // view-source: of a page whose source is no web or file page.
+    { principal: { ...PDF_PRINCIPAL, spec: "view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json" }, uri: "view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/x.json", inner: 5 },
+    { principal: SYSTEM_PRINCIPAL, uri: "view-source:about:preferences", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "view-source:data:text/html,hi", inner: 5 },
     { principal: web, uri: "blob:https://a.test/1234", inner: 5 },
   ];
   for (const page of no_hints) assert.equal(notice_on(page), "not_here", page.uri);
+  // view-source: of a web or file page and the JSON viewer get page code, so with the setting off they say to turn it on.
+  for (const page of PAGE_CODE_KINDS) assert.equal(notice_on(page), "pages_off", page.uri);
   // DesertFox's content script runs on a data: page, so its hint keys go on.
   assert.equal(notice_on({ principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "data:text/html,hi", inner: 5 }), undefined);
   // The test is exact: a page that only mentions these names has no notice.
@@ -284,6 +387,7 @@ test("the rule it lends the key taker: the PDF viewer and Reader View need the s
   firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);
   assert.equal(notice_on({ principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 5 }), undefined);
   assert.equal(notice_on(reader), undefined);
+  for (const page of PAGE_CODE_KINDS) assert.equal(notice_on(page), undefined, page.uri);
   assert.equal(notice_on({ principal: SYSTEM_PRINCIPAL, uri: "about:preferences", inner: 5 }), "not_here");
 });
 

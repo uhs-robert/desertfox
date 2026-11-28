@@ -1,4 +1,4 @@
-// DesertFox browser module, the locked pages feature: DesertFox's own page code (`content.js` and the bundles) in the PDF viewer and Reader View, where no content script runs. See docs/design/browser_module.md.
+// DesertFox browser module, the locked pages feature: DesertFox's own page code (`content.js` and the bundles) in the PDF viewer, Reader View, view-source: and the JSON viewer, where no content script runs. See docs/design/browser_module.md.
 // Chrome only carries the page code's messages. It hands the JSON text of each one on as it came and never parses it, so no message can pick an action, an address or a selector for chrome code.
 // The code runs in a sandbox under the expanded principal [page, extension], as Firefox runs a content script, never under the system principal. Every other page, about:addons and about:preferences included, gets nothing. Chrome hints label a few of those themselves.
 //
@@ -90,20 +90,28 @@
       return is_record(settings) && settings.browser_module === true && settings.browser_module_pages === true && session_value(extension, SNAPSHOT_KEYS.keymap)?.v === PROTOCOL_VERSION;
     }
 
+    // The JSON viewer's own principal. A page of any address can show it, so the address is no test for it.
+    const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
+    // view-source: of a web or file page carries that page's origin. view-source: of another extension's page has an empty addonId, so only these sources count.
+    const VIEW_SOURCE_OF_PAGE = /^view-source:(?:https?|file):/;
+    // The JSON viewer also renders file: JSON. Any other document under its principal stays out.
+    const JSON_VIEWER_DOCUMENT = /^(?:https?|file):/;
+
     // The page kinds that get page code, read from the document chrome sees, never from the frame's word. A principal that is the system's or an extension's is never one of them.
+    // The JSON viewer's sandbox holds the viewer's resource://devtools principal, the one principal that reaches its DOM. That reach also loads devtools files, which page code never does: it makes no fetch and loads nothing by address.
     function page_kind_of(browser, inner) {
       const global = browser.browsingContext?.currentWindowGlobal;
       const principal = global?.documentPrincipal;
       if (!principal || global.innerWindowId !== inner || principal.isSystemPrincipal || principal.addonId) return undefined;
+      const address = global.documentURI?.spec ?? "";
       if (principal.spec.startsWith("resource://pdf.js/")) return "pdf";
-      if (principal.spec.startsWith("about:reader?") && global.documentURI?.spec.startsWith("about:reader?")) return "reader";
+      if (principal.spec.startsWith("about:reader?") && address.startsWith("about:reader?")) return "reader";
+      if (VIEW_SOURCE_OF_PAGE.test(principal.spec) && VIEW_SOURCE_OF_PAGE.test(address)) return "source";
+      if (principal.spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address)) return "json";
       return undefined;
     }
 
-    // The JSON viewer's own principal. A page of any address can show it, so the address is no test for it.
-    const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
-
-    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on the PDF viewer and Reader View while page code is off, "not_here" on an about: page, on view-source:, the JSON viewer and blob: pages, where page code never runs. Undefined everywhere else, so the key goes on.
+    // Why a hint key cannot run on the tab's shown page now, for desertfox-commands.js, which claims the key and has the extension say so: "pages_off" on a page kind that gets page code (`page_kind_of`) while page code is off, "not_here" on an about: page, on the view-source: and JSON viewer pages that are no such kind, and on blob: pages, where page code never runs. Undefined everywhere else, so the key goes on.
     // "page_hints" instead on an about: page that chrome hints label themselves (their own fixed list), once the extension's state says it answers their start. The key taker then starts those hints.
     // An initial about:blank and a srcdoc frame are no page the user sees as Firefox's own. A DevTools toolbox in a tab is DevTools, whose keys stay its own. Firefox matches about: names in any case, so the test does too.
     // `win` is the browser window that shows `browser`.
@@ -324,6 +332,10 @@
     const SNAPSHOT_PARTS = ["keymap", "config", "theme", "which_key"];
     const BASE_URL = /^moz-extension:\/\/[0-9a-f-]{36}\/$/;
     const WENT_AWAY = "the page went away";
+    // Copies of the chrome half's page kind tables, which test/browser_module/locked_pages.test.ts keeps equal.
+    const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
+    const VIEW_SOURCE_OF_PAGE = /^view-source:(?:https?|file):/;
+    const JSON_VIEWER_DOCUMENT = /^(?:https?|file):/;
 
     // The page code of each document of this tab, by inner window id: the shown one, and any in the back-forward cache (`suspended`), which Back brings back under a new attach.
     const pages = new Map();
@@ -338,11 +350,18 @@
         return false;
       }
     };
-    // The same rule chrome checks again: the PDF viewer and Reader View only, never a page under the system principal or an extension's.
+    // The same rule chrome checks again (`page_kind_of`): the PDF viewer, Reader View, view-source: of a web or file page and the JSON viewer on a web or file document, never a page under the system principal or an extension's.
     function is_locked_page(doc) {
       const principal = doc?.nodePrincipal;
       if (!principal || principal.isSystemPrincipal || principal.addonId) return false;
-      return principal.spec.startsWith("resource://pdf.js/") || (principal.spec.startsWith("about:reader?") && doc.documentURI.startsWith("about:reader?"));
+      const { spec } = principal;
+      const address = doc.documentURI;
+      return (
+        spec.startsWith("resource://pdf.js/") ||
+        (spec.startsWith("about:reader?") && address.startsWith("about:reader?")) ||
+        (VIEW_SOURCE_OF_PAGE.test(spec) && VIEW_SOURCE_OF_PAGE.test(address)) ||
+        (spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address))
+      );
     }
     const inner_of = (win) => win?.windowGlobalChild?.innerWindowId;
     const is_top_document = (event) => !!content && event.target === content.document;
