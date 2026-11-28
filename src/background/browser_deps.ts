@@ -24,7 +24,7 @@ import type { ReinjectDeps } from "./reload.ts";
 import { BUNDLE_LOADS_STORAGE_KEY, DISABLED_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 import { deliver_refusal, deliver_toast } from "./refusal.ts";
 import type { RouterDeps } from "./router.ts";
-import { ask_page_bundle, ask_selection } from "./selection_ask.ts";
+import { ask_page_bundle, ask_selection, cleaned_module_selection } from "./selection_ask.ts";
 import type { SelectionAskDeps } from "./selection_ask.ts";
 import { browser_jump_store } from "./jump_store.ts";
 import type { SnippetDeps } from "./snippets.ts";
@@ -234,6 +234,10 @@ const selection_ask_deps: SelectionAskDeps = {
   load_page_bundle: async (tab_id, frame_id) => {
     const in_extension_page = is_own_page({ id: browser.runtime.id, url: (await browser.tabs.get(tab_id)).url, frameId: frame_id });
     return bundle_loader.load({ tab_id, frame_id, document_id: "", in_extension_page }, "page");
+  },
+  read_from_module: async (tab_id) => {
+    const read = await browser_module_call.call("selection.read", { tab_id });
+    return read.ok ? cleaned_module_selection(read.value ?? "") : undefined;
   },
 };
 
