@@ -3,9 +3,12 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
-import { MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
+import { site_rules_view } from "../src/shared/site/site_rules_view.ts";
+import { page_keymap_of } from "../src/shared/site/page_keymap_resolve.ts";
+import { site_columns_for } from "../src/shared/site/site_columns.ts";
+import { MAX_ADDRESS_TREES, MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
-import { counted_steps, locked_page_command_ids, matcher_keymap_of, native_allowed_by, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
+import { address_entry_of, address_trees_of_keymap, counted_steps, keymap_for_page, locked_page_command_ids, matcher_keymap_of, native_allowed_by, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
@@ -249,6 +252,139 @@ test("a hint key on one of Firefox's own pages maps to the page action of its bi
   assert.equal(page_hint_action_of(undefined, "f").ok, false);
 });
 
+const with_rules = (site_rules: unknown[]): CompiledKeymap => compile_config({ config: { ...empty_config(), settings: { site_rules } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: [], get_command: (id) => registry.get(id), enum_sources: {} }).compiled;
+const published = (keymap: CompiledKeymap) => address_trees_of_keymap(keymap, allowed, real_check);
+const address_trees = (site_rules: unknown[]) => address_trees_of_keymap(with_rules(site_rules), allowed, real_check);
+const tree_of_site = (site_rules: unknown[], site: string) => address_trees(site_rules).find((entry) => entry.sites.includes(site));
+
+test("an about: rule gives its pages a tree: a bind, a freed key and the other leaves as the global tree has them", () => {
+  const entry = tree_of_site([{ site: "about:preferences*", bind: { Q: { id: "page.reload" }, T: { id: "tab.next" } }, pass: "H" }], "about:preferences*")!;
+  assert.equal(node_at(entry.tree, ["Q"]), "forward");
+  assert.deepEqual(node_at(entry.tree, ["T"]), { native: "tab.next", args: {}, count_rule: "repeat" });
+  assert.equal(node_at(entry.tree, ["H"]), undefined);
+  // The same leaf pass as the global tree: every other key is as there.
+  assert.equal(node_at(entry.tree, ["x", "x"]), "forward");
+  assert.deepEqual(node_at(entry.tree, ["g", "g"]), node_at(DEFAULT_TREE, ["g", "g"]));
+  assert.equal(entry.off, undefined);
+  assert.ok(validate_scope_tree(entry.tree).ok);
+});
+
+test("a bind with a focus or element guard is dropped, and a site mode and another keymap mode do not reach the tree", () => {
+  const entry = tree_of_site([{ site: "about:config", bind: { Q: [{ run: "page.reload", when_present: "#a" }], R: { id: "page.reload" } }, keymap: { visual: { c: { id: "tab.next" } } }, modes: { m: { label: "M", bind: { e: { id: "tab.next" } } } } }], "about:config")!;
+  assert.equal(node_at(entry.tree, ["Q"]), undefined);
+  assert.equal(node_at(entry.tree, ["R"]), "forward");
+  assert.equal(node_at(entry.tree, ["e"]), undefined);
+  assert.equal(node_at(entry.tree, ["c"]), undefined);
+});
+
+test("an off rule gives an empty tree marked off", () => {
+  const off = tree_of_site([{ site: "about:config", off: true }], "about:config")!;
+  assert.deepEqual(off, { sites: ["about:config"], tree: { children: {} }, off: true });
+});
+
+test("rules merge on an address as on a web page: the first row that sets a key decides, and a shorter prefix rule reaches the longer address", () => {
+  const rules = [{ site: "about:config*", bind: { Q: { id: "page.reload" } } }, { site: "about:conf*", bind: { Q: { id: "tab.next" }, W: { id: "page.reload" } } }];
+  const trees = address_trees(rules);
+  const long = trees.find((entry) => entry.sites.includes("about:config*"))!;
+  const short = trees.find((entry) => entry.sites.includes("about:conf*"))!;
+  assert.equal(node_at(long.tree, ["Q"]), "forward");
+  assert.equal(node_at(long.tree, ["W"]), "forward");
+  assert.deepEqual(node_at(short.tree, ["Q"]), { native: "tab.next", args: {}, count_rule: "repeat" });
+});
+
+test("rules that give the same tree share one entry, and past the cap the later patterns keep the global tree", () => {
+  const same = address_trees([{ site: "about:config", pass: "H" }, { site: "about:support", pass: "H" }]);
+  assert.deepEqual(same.map((entry) => entry.sites), [["about:config", "about:support"]]);
+  const many = address_trees(Array.from({ length: MAX_ADDRESS_TREES + 3 }, (_, index) => ({ site: `about:p${index}`, pass: `${"abcdefghijk"[index]}` })));
+  assert.equal(many.length, MAX_ADDRESS_TREES);
+  assert.ok(many.every((entry) => validate_module_state({ v: 1, enabled: true, keys: [], tabs: {}, address_trees: [entry] }).ok));
+});
+
+test("a web rule makes no entry, and a keymap with no about: rule gives none", () => {
+  assert.deepEqual(address_trees([{ site: "https://a.test/*", bind: { Q: { id: "page.reload" } } }]), []);
+  assert.deepEqual(address_trees([]), []);
+  assert.deepEqual(address_trees_of_keymap(undefined, allowed, real_check), []);
+});
+
+test("a run request on an about: page matches against the tree of its address, and a private tab or a web page keeps the full tree", () => {
+  const keymap = with_rules([{ site: "about:config", bind: { Q: { id: "page.reload" } }, pass: "H" }, { site: "about:support", off: true }]);
+  const run = (keys: string, url: string, incognito = false) => resolve_run(keymap_for_page(keymap, { url, incognito }, published(keymap)), keys, 0, allowed).ok;
+  assert.equal(run("Q", "about:config"), true);
+  assert.equal(run("Q", "about:config#x"), true);
+  assert.equal(run("H", "about:config"), false);
+  assert.equal(run("x x", "about:config"), true);
+  assert.equal(run("x x", "about:support"), false);
+  assert.equal(run("Q", "about:config", true), false);
+  assert.equal(run("H", "about:config", true), true);
+  assert.equal(run("Q", "https://a.test/"), false);
+  assert.equal(run("H", "about:addons"), true);
+  assert.equal(keymap_for_page(keymap, undefined, published(keymap)), keymap);
+});
+
+test("the state keeps the address trees, drops a bad entry and the extra ones, and a state without them is unchanged", () => {
+  const entry = { sites: ["about:config"], tree: { children: { Q: "forward" } } };
+  const checked = (address_trees: unknown) => {
+    const state = validate_module_state({ v: 1, enabled: true, keys: [], tabs: {}, address_trees });
+    assert.ok(state.ok);
+    return state.ok ? state.value.address_trees : undefined;
+  };
+  assert.deepEqual(checked([entry, { ...entry, off: true }]), [entry, { ...entry, off: true }]);
+  assert.deepEqual(checked([{ sites: ["about:*"], tree: entry.tree }, { sites: ["https://a.test/*"], tree: entry.tree }, { sites: [], tree: entry.tree }, { sites: ["about:config"], tree: { children: { "not a key": "forward" } } }, { sites: ["about:config"] }, entry]), [entry]);
+  assert.equal(checked([{ sites: ["about:*"], tree: entry.tree }]), undefined);
+  assert.equal(checked("junk"), undefined);
+  assert.equal(checked(undefined), undefined);
+  assert.equal(checked(Array(MAX_ADDRESS_TREES + 4).fill(entry))?.length, MAX_ADDRESS_TREES);
+});
+
+test("an about: rule changes nothing for a web page, its blank frames or Reader View under the shim", () => {
+  const rules = [{ site: "about:blank", off: true }, { site: "about:b*", off: true }, { site: "about:srcdoc", pass: "H" }, { site: "about:reader*", off: true, zoom: 2 }];
+  const [plain, ruled] = [with_rules([]), with_rules(rules)];
+  for (const addresses of [["https://a.test/"], ["about:blank", "https://a.test/"], ["about:srcdoc", "https://a.test/"], ["about:reader?url=https%3A%2F%2Fa.test%2F"]]) {
+    assert.deepEqual(site_columns_for(ruled, addresses), site_columns_for(plain, addresses), addresses.join(" "));
+    assert.deepEqual(page_keymap_of(ruled, addresses)?.all_off, page_keymap_of(plain, addresses)?.all_off, addresses.join(" "));
+  }
+  assert.equal(site_columns_for(ruled, ["about:blank"]).off, undefined);
+  assert.deepEqual(site_columns_for(ruled, ["about:reader?url=x"]).values, {});
+});
+
+test("an exact rule and a prefix rule on one base get their own trees, and an address with a query takes the prefix one", () => {
+  const rules = [{ site: "about:reader", off: true }, { site: "about:reader*", bind: { Q: { id: "page.reload" } } }];
+  const keymap = with_rules(rules);
+  const entries = address_trees_of_keymap(keymap, allowed, real_check);
+  assert.equal(entries.length, 2);
+  assert.equal(address_entry_of(entries, "about:reader")?.off, true);
+  assert.equal(address_entry_of(entries, "about:reader#x")?.off, true);
+  const query = address_entry_of(entries, "about:reader?url=x")!;
+  assert.equal(query.off, undefined);
+  assert.equal(node_at(query.tree, ["Q"]), "forward");
+  const run = (url: string) => resolve_run(keymap_for_page(keymap, { url, incognito: false }, published(keymap)), "Q", 0, allowed).ok;
+  assert.equal(run("about:reader?url=x"), true);
+  assert.equal(run("about:reader"), false);
+  // An exact rule that binds a key does not reach the address with a query.
+  const bound = with_rules([{ site: "about:config", pass: "H" }, { site: "about:config*", bind: { Q: { id: "page.reload" } } }]);
+  const [exact, prefix] = address_trees_of_keymap(bound, allowed, real_check);
+  assert.equal(node_at(exact!.tree, ["H"]), undefined);
+  assert.equal(node_at(prefix!.tree, ["H"]), "forward");
+});
+
+test("past the cap the run check and the module both keep the global tree for the dropped address", () => {
+  const rules = Array.from({ length: MAX_ADDRESS_TREES }, (_, index) => ({ site: `about:p${index}`, pass: ["H", "L", "u", "o", "J", "K", "T", "D"][index] }));
+  rules.push({ site: "about:late", bind: { Q: { id: "tab.close" } } } as never);
+  const keymap = with_rules(rules);
+  assert.equal(address_entry_of(address_trees_of_keymap(keymap, allowed, real_check), "about:late"), undefined);
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, published(keymap)), "L", 0, allowed).ok, true);
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, published(keymap)), "Q", 0, allowed).ok, false);
+});
+
+test("two about: rules do not warn about each other's binds, and the Site Rules view lists the rules that cover an about: page", () => {
+  const rules = [{ site: "about:config", bind: { Q: { id: "page.reload" } } }, { site: "about:support", bind: { QW: { id: "page.reload" } } }];
+  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: rules } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: [], get_command: (id) => registry.get(id), enum_sources: {} });
+  assert.deepEqual(warnings.filter((warning) => warning.includes("skipped bind")), []);
+  assert.deepEqual(site_rules_view(compiled, "about:config#x").rows.map((row) => row.site), ["about:config"]);
+  assert.deepEqual(site_rules_view(compiled, "about:addons").rows, []);
+  assert.deepEqual(site_rules_view(compiled, "https://a.test/").rows, []);
+});
+
 test("the mode commands are in the tree only for a hello that says mode_keys, and every other native leaf stays", () => {
   const without = scope_tree_of(compiled(), allowed, real_check, native_allowed_by(undefined));
   const older = scope_tree_of(compiled(), allowed, real_check, native_allowed_by({}));
@@ -269,4 +405,32 @@ test("the guarded default j and k stay on locked pages as their scroll fallback"
     const node = node_at(DEFAULT_TREE, [key]);
     assert.deepEqual(node && typeof node === "object" && "native" in node ? [node.native, (node.args as { count?: number }).count] : node, ["scroll.lines", count], key);
   }
+});
+
+test("the list guard fallback and the copy.url variant reach an about: page's tree through the same leaf pass", () => {
+  const entry = tree_of_site([{ site: "about:config", pass: "H" }], "about:config")!;
+  for (const keys of [["j"], ["k"], ["y", "y"]]) {
+    assert.notEqual(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+    assert.deepEqual(node_at(entry.tree, keys), node_at(DEFAULT_TREE, keys), keys.join(""));
+  }
+});
+
+test("a mode key leaf reaches an about: page's tree only where the hello allows mode keys", () => {
+  const keymap = with_rules([{ site: "about:config", pass: "H" }]);
+  const has_mode_leaf = (tree: ScopeTree) => JSON.stringify(tree.children).includes('"native":"mode.');
+  for (const [hello, expected] of [[undefined, false], [{}, false], [{ mode_keys: true as const }, true]] as const) {
+    const gate = native_allowed_by(hello);
+    assert.equal(has_mode_leaf(scope_tree_of(keymap, allowed, real_check, gate)), expected, "global");
+    assert.equal(has_mode_leaf(address_trees_of_keymap(keymap, allowed, real_check, gate)[0]!.tree), expected, "about:config");
+  }
+});
+
+test("the run check follows the trees published to the module: eight mode-key rules and a ninth that binds Q still run Q", () => {
+  const gate = native_allowed_by({});
+  const rules = [...Array.from({ length: MAX_ADDRESS_TREES }, (_, index) => ({ site: `about:a${index}`, bind: { [`${"abcdefgh"[index]}`]: { id: "mode.pass_next" } } })), { site: "about:zz", bind: { Q: { id: "page.reload" } } }];
+  const keymap = with_rules(rules);
+  const published_gated = address_trees_of_keymap(keymap, allowed, real_check, gate);
+  assert.equal(address_entry_of(address_trees_of_keymap(keymap, allowed, real_check), "about:zz"), undefined, "an ungated list would cut about:zz at the cap");
+  assert.ok(address_entry_of(published_gated, "about:zz"), "the module has a tree for about:zz");
+  assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:zz", incognito: false }, published_gated), "Q", 0, allowed).ok, true);
 });

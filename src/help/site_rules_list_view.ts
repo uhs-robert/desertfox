@@ -14,12 +14,16 @@ function site_rule_row(row: SiteRuleRowView): HTMLElement {
   return el("section", "desertfox-help-command", el("h3", undefined, source, " ", el("code", "desertfox-help-muted", row.site)), row.columns.length > 0 ? columns_table(row.columns) : el("p", "desertfox-help-muted", "This rule sets no option."), row.changes.length > 0 ? changes_table(row.changes) : "");
 }
 
+// Site rules reach Firefox's own pages only through the browser module, which cannot ask a page about its focus or its content.
+const about_note = (): HTMLElement => el("p", "desertfox-help-muted", "A rule can name a Firefox page, as ", el("code", undefined, "about:config"), " or ", el("code", undefined, "about:preferences*"), " (every address that starts so). It works only with the browser module on, never in a private tab. There a rule can turn keys off, free keys and bind keys, but a bind with a focus or element guard (", el("code", undefined, "when_focus"), ", ", el("code", undefined, "when_present"), "), a bind for another keymap mode and a site mode do not apply.");
+
 // The list is for the tab's own address. A frame of another site resolves its rows against its own address, so it can differ.
 export function site_rules_page(model: HelpModel, address: string | undefined): HTMLElement[] {
-  if (address === undefined) return [el("p", undefined, "Site rules change how DesertFox works on certain sites, for example by turning keys off. Open a web page, then run ", el("code", undefined, ":help site_rules"), " to see the rules that apply to it.")];
+  if (address === undefined) return [el("p", undefined, "Site rules change how DesertFox works on certain sites, for example by turning keys off. Open a web page, then run ", el("code", undefined, ":help site_rules"), " to see the rules that apply to it."), about_note()];
   const { rows } = model.site_rules_for(address);
   return [
     el("p", undefined, "These rules apply to ", el("code", undefined, address), ". If two rules set the same option, the first one wins. A key rule wins key by key. Frames from other sites follow the rules for their own address, so this list is for the tab's address only."),
     ...(rows.length === 0 ? [el("p", undefined, "No rule applies to this address.")] : rows.map(site_rule_row)),
+    about_note(),
   ];
 }

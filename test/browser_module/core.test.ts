@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
+import { ABOUT_PATTERN } from "../../src/shared/match_pattern.ts";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_PROTOCOL_VERSION, MODULE_COMMAND_ARGS } from "../../src/shared/browser_module_protocol.ts";
 import {
@@ -50,7 +51,7 @@ test("the module's copy of the key names, the version, the limits and the kind l
   assert.equal(constant_in(source, "FROM_EXTENSION_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY));
   assert.equal(constant_in(source, "FROM_MODULE_STORAGE_KEY"), JSON.stringify(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY));
   assert.equal(constant_in(source, "PROTOCOL_VERSION"), String(BROWSER_MODULE_PROTOCOL_VERSION));
-  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS", "MAX_DEVTOOLS_KEY_ROWS", "MAX_DEVTOOLS_VISUAL_ROWS", "MAX_NORMAL_ONCE_KEYS", "MAX_FOCUS_KEYS", "MAX_SEQUENCE_KEYS", "MAX_INSERT_KEY_ROWS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
+  for (const name of ["MAX_KEY_ROWS", "MAX_STATE_TABS", "MAX_ADDRESS_TREES", "MAX_ADDRESS_TREE_SITES", "MAX_MESSAGES", "MAX_MESSAGE_LIST_BYTES", "MAX_ERROR_CHARS", "DEFAULT_MAX_AGE_MS", "MAX_KIND_BYTES", "MESSAGE_ENVELOPE_BYTES", "MAX_RESIZE_STEPS", "MAX_SIDEBAR_KEY_TOKENS", "MAX_DEVTOOLS_KEY_ROWS", "MAX_DEVTOOLS_VISUAL_ROWS", "MAX_NORMAL_ONCE_KEYS", "MAX_FOCUS_KEYS", "MAX_SEQUENCE_KEYS", "MAX_INSERT_KEY_ROWS"] as const) assert.equal(constant_in(source, name), String(protocol[name]), name);
   assert.match(source, new RegExp(`\\{1,${protocol.MAX_MESSAGE_ID_CHARS}\\}`), "the message id pattern takes MAX_MESSAGE_ID_CHARS");
   assert.deepEqual(plain(vm.runInNewContext(/const PANE_REGIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.PANE_REGIONS);
   assert.deepEqual(plain(vm.runInNewContext(/const DEVTOOLS_ACTIONS = (\[[^\]]*\]);/.exec(source)![1]!)), protocol.DEVTOOLS_ACTIONS);
@@ -740,6 +741,12 @@ test("hold_keys refuses a window another owner holds, and the owner's own second
   core.release_keys(window.win, "first");
   assert.equal(core.hold_keys(window.win, "second"), true);
   assert.equal(core.keys_held_by(window.win), "second");
+});
+
+test("the module's about: site check is the pattern of src/shared/match_pattern.ts", () => {
+  const source = source_of(CORE_FILE);
+  const copy = /const ABOUT_SITE = \/(.*)\/;/.exec(source)?.[1];
+  assert.equal(copy, ABOUT_PATTERN.source);
 });
 
 // ---- The field guard: in_field is the one predicate, and a taker's field_key decides what a field takes.

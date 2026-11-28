@@ -2,7 +2,8 @@
 // A run request is foreign input from chrome code. Its keys are matched again against the stored keymap, and only a leaf of the locked-page set runs, in the active tab.
 
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
-import { counted_steps, line_text_of, resolve_run } from "../shared/browser_module_scope.ts";
+import { counted_steps, keymap_for_page, line_text_of, resolve_run } from "../shared/browser_module_scope.ts";
+import type { AddressTree } from "../shared/browser_module_protocol.ts";
 import type { Outcome, Refusal, RunResponse } from "../shared/messages/index.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import type { RouteRequest } from "./router.ts";
@@ -21,6 +22,10 @@ export type ModuleRunDeps = {
   // The active tab's address and whether `browser_module_pages` is on, for the reason a hint key gives.
   active_url: () => Promise<string | undefined>;
   pages_on: () => Promise<boolean>;
+  // The active tab's address and privacy, for the site rules of an about: page. Without it no site rule applies.
+  active_page?: () => Promise<{ tab_id: number; url: string | undefined; incognito: boolean } | undefined>;
+  // The trees last written to the module's state, so the run check and the module agree on which about: pages have site rules. Without it no site rule applies.
+  published_address_trees?: () => Promise<readonly AddressTree[]>;
 };
 
 // Firefox's start pages get hints from the module, so a refusal there means this module cannot label the page.
@@ -44,7 +49,10 @@ export function create_module_run(deps: ModuleRunDeps) {
   return async (args: ModuleArgs): Promise<void> => {
     // The kind row checked the shapes: `keys` is text and `count` a whole number.
     const { keys, count } = args as { keys: string; count: number };
-    const resolved = resolve_run(await deps.read_keymap(), keys, count, deps.locked_commands);
+    // The tab the rules were read for runs the binding, even when the focus moves on before the router reads the active tab.
+    const page = await deps.active_page?.();
+    const keymap = await deps.read_keymap();
+    const resolved = resolve_run(deps.published_address_trees ? keymap_for_page(keymap, page, await deps.published_address_trees()) : keymap, keys, count, deps.locked_commands);
     if (!resolved.ok && resolved.hint) return refuse(hint_refusal_text(await deps.active_url(), await deps.pages_on()), true);
     if (!resolved.ok) return refuse(resolved.problem, resolved.shown === true);
     const line_text = line_text_of(resolved.leaf, deps.locked_commands);
@@ -52,8 +60,8 @@ export function create_module_run(deps: ModuleRunDeps) {
       await deps.open_line(line_text);
       return;
     }
-    // No sender tab: the router runs the binding in the active tab, so a module cannot aim it at another one. The router shows its own refusals, a count over a step's `repeat_limit` among them.
-    const response = await deps.run({ invocations: counted_steps(resolved.leaf.steps, resolved.count), mode: "normal", may_prompt: true });
+    // The tab is the one the background found active, never one the module names, so a module cannot aim the binding at another tab. The router shows its own refusals, a count over a step's `repeat_limit` among them.
+    const response = await deps.run({ invocations: counted_steps(resolved.leaf.steps, resolved.count), mode: "normal", may_prompt: true, ...(page && { sender_tab_id: page.tab_id }) });
     if (!response.ok) throw new Error(response.refusal.message);
   };
 }

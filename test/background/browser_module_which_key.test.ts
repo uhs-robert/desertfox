@@ -210,3 +210,16 @@ test("a hello that gains the flag rewrites the state with the leaf, and one that
     assert.deepEqual(root_leaf_keys(state()), leaf_keys);
   }
 });
+
+test("the help.whichkey leaf follows the hello flag on an about: page's tree too", async () => {
+  const keymap = compile_config({ config: { ...empty_config(), settings: { site_rules: [{ site: "about:config", bind: { Q: { id: "page.reload" } } }] } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: [], get_command: (id) => registry.get(id), enum_sources: {} }).compiled;
+  const root_leaves = (state: ModuleState | undefined) => Object.entries(state?.address_trees?.[0]?.tree.children ?? {}).filter(([, node]) => typeof node === "object" && "native" in node && node.native === "help.whichkey").map(([token]) => token);
+  for (const [hello, expected] of [[{ v: 1, module_version: "1", which_key_root: true }, ["<A-?>"]], [{ v: 1, module_version: "1" }, []]] as const) {
+    const { module, state, config } = setup({ hello: { ...hello } });
+    config.keymap = { ...keymap, which_key_delay_ms: 500 };
+    await module.sync();
+    assert.ok(state()?.address_trees?.[0]?.tree.children["Q"], "the about: tree is there");
+    assert.deepEqual(root_leaves(state()), expected);
+    assert.deepEqual(root_leaf_keys(state()), expected);
+  }
+});

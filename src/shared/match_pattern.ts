@@ -8,6 +8,24 @@ const PATTERN_PARTS = /^(\*|https?|file|ftp):\/\/([^/]*)(\/.*)$/;
 
 const escape_regex = (text: string) => text.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
 
+// A site pattern for one of Firefox's own pages: `about:name` for that page (a fragment allowed), or `about:name*` for every address that starts so. There is no `about:*`: a rule may never reach every page of Firefox.
+export const ABOUT_PATTERN = /^about:([a-z0-9][a-z0-9._-]*)(\*?)$/;
+
+const NEVER_MATCHES = "(?!)";
+
+export type AboutPattern = { base: string; prefix: boolean };
+
+export function about_pattern_of(pattern: string): AboutPattern | undefined {
+  const parts = ABOUT_PATTERN.exec(pattern);
+  return parts ? { base: `about:${parts[1]}`, prefix: parts[2] === "*" } : undefined;
+}
+
+// Whether an about: pattern covers an address: the page itself with a fragment, or for a prefix pattern every address that starts so.
+export function matches_about_pattern(pattern: string, address: string): boolean {
+  const about = about_pattern_of(pattern);
+  return about !== undefined && (about.prefix ? address.startsWith(about.base) : address === about.base || address.startsWith(`${about.base}#`));
+}
+
 export function matches_pattern(pattern: string, url: string): boolean {
   if (pattern === "<all_urls>") return /^(https?|file|ftp):/.test(url);
   const parts = PATTERN_PARTS.exec(pattern);
@@ -45,6 +63,12 @@ export function match_regex_source(patterns: readonly string[]): string | undefi
       alternatives.push("(?:https?|file|ftp):.*");
       continue;
     }
+    const about = about_pattern_of(pattern);
+    // The regex stands for a rule that no content frame or page shim may match: about:blank and srcdoc frames and Reader View would otherwise take it. The module path matches by `matches_about_pattern`.
+    if (about) {
+      alternatives.push(NEVER_MATCHES);
+      continue;
+    }
     const parts = PATTERN_PARTS.exec(pattern);
     if (!parts) continue;
     const [, scheme, host, path] = parts as unknown as [string, string, string, string];
@@ -61,8 +85,15 @@ export function match_regex_source(patterns: readonly string[]): string | undefi
   return alternatives.length > 0 ? `^(?:${alternatives.join("|")})$` : undefined;
 }
 
+const abouts_overlap = (left: AboutPattern, right: AboutPattern): boolean =>
+  left.prefix && right.prefix ? left.base.startsWith(right.base) || right.base.startsWith(left.base) : left.prefix ? right.base.startsWith(left.base) : right.prefix ? left.base.startsWith(right.base) : left.base === right.base;
+
 // True only when no URL can match both patterns, judged by host alone. Anything unparsable or `<all_urls>` counts as overlapping, so a caller that warns errs toward warning.
 export function hosts_disjoint(left: string, right: string): boolean {
+  const [left_about, right_about] = [about_pattern_of(left), about_pattern_of(right)];
+  if (left_about && right_about) return !abouts_overlap(left_about, right_about);
+  // A web pattern, `<all_urls>` included, never names an about: address.
+  if (left_about || right_about) return PATTERN_PARTS.test(left_about ? right : left) || (left_about ? right : left) === "<all_urls>";
   const left_parts = PATTERN_PARTS.exec(left);
   const right_parts = PATTERN_PARTS.exec(right);
   if (!left_parts || !right_parts) return false;
