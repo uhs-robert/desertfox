@@ -287,7 +287,7 @@
 
     // The links of the tab's page as raw [address, text] pairs, for the page links feature, which caps and checks them again. A page the route never labels, and that is no PDF or Reader View page, gives an error the user reads.
     async function links(browser, scope) {
-      const kind = labels(browser) ?? viewer_kind(browser);
+      const kind = viewer_kind(browser) ?? labels(browser);
       if (kind === undefined) return { ok: false, error: LINKS_NOT_HERE };
       const inner = browser.innerWindowID;
       const { reply } = ask(browser, inner, "links", { kind, scope }, "linked");

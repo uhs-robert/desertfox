@@ -1099,6 +1099,13 @@ test("Reader View gives the links of the article, absolute, without the ones to 
   assert.deepEqual(await run.pairs("page"), [["https://a.example/post", "a.example"], ["https://a.example/more?x=1", "More"]]);
 });
 
+test("a PDF whose browser the restricted list labels still gives its links", async () => {
+  const run = links_world({ host: "addons.mozilla.org" }, (root) => root.append(text_link("https://a.example/", "A", 20, 20)));
+  Object.assign(run.chrome.browser, { documentContentType: "application/pdf", currentURI: { scheme: "https", spec: "https://addons.mozilla.org/a.pdf" } });
+  Object.assign(run.chrome.page, { nodePrincipal: viewer_principal("resource://pdf.js/web/viewer.html") });
+  assert.deepEqual(await run.pairs("page"), [], "the frame script found no annotation layer, so no links, and no notice");
+});
+
 test("a page that only claims to be the PDF viewer or Reader View gives the notice", async () => {
   const build = (root: Node) => root.append(text_link("https://a.example/", "A", 20, 20));
   const web_pdf = viewer_world("pdf", build, { principal: web_principal("example.com") });
