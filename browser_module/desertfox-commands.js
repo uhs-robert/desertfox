@@ -83,6 +83,8 @@
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;
   var MAX_TREE_BYTES = 32 * 1024;
+  var HELLO_FEATURES = { hint_mode_keys: "hk" };
+  var KNOWN_FEATURES = Object.values(HELLO_FEATURES);
   var bad = (problem) => ({ ok: false, problem });
   var is_record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var is_module_command_id = (id) => typeof id === "string" && Object.hasOwn(MODULE_COMMAND_ARGS, id);
@@ -99,6 +101,7 @@
     if (kind === "module_mode") return MODULE_MODES.some((mode) => mode === value) ? void 0 : `must be one of ${MODULE_MODES.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
+    if (kind === "optional_text") return value === void 0 || typeof value === "string" ? void 0 : "must be text";
     if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";
     if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS ? void 0 : `must be a whole number of 1 to ${MAX_RESIZE_STEPS} steps, either way`;

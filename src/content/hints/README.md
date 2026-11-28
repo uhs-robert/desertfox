@@ -5,8 +5,6 @@ The `hints` bundle (`hints.js`). The background injects it into a frame on the f
 - `main.ts`: registers the `hint` sink and the `hint.run` handler: finds candidates, draws labels, runs the pick, and owns the keyboard of a `--all-frames` run.
 - `prompt_line.ts`: the `prompt` action (`;:`): opens the command line with the pick's address, quoted (`quote_for_line`).
 - `collect_copy.ts`: rapid `copy` and `copy_text`: `collect_pick` keeps the session's list of copied texts.
-- `pick.ts`: the typing rules, label mode and text mode (`/`). Pure. The label generator is `src/shared/hints/labels.ts`.
-- `rank.ts`: the text ranking of text mode (`score_text`, `rank_items`). Pure.
 - `inspect.ts`: the `inspect` action (`;o`): `hand_to_devtools` exposes the pick to the devtools page. `main.ts` wires its send to the `inspect_pick` message.
 - `view.ts`: the labels in a closed shadow root, the key line, and the Tab rotation of overlapping labels.
 - `focus_fields.ts`: the pick of `page.focus_field` (`]i`, `[i`) and `page.focus_link` (`]l`, `[l`).
