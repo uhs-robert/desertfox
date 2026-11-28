@@ -28,14 +28,14 @@ const clipboard_text = `(async () => {
 })()`;
 const set_clipboard = (text) => `(async () => { Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(${JSON.stringify(text)}); })()`;
 
-// Known links: a tracked one, its duplicate, a relative one, a mail link, a fragment of the page itself, an empty-text image link, and one far below the first screen.
+// Known links: a tracked one, its duplicate, a relative one, a mail link, a fragment of the page itself, a link with no text but a box, and one far below the first screen.
 const links_page = (port) => `<!doctype html><html><head><meta charset="utf-8"><title>Link page</title></head><body>
 <p><a href="https://example.org/first?utm_source=news&k=1">First</a></p>
 <p><a href="https://example.org/first?k=1&utm_medium=mail">First again</a></p>
 <p><a href="/relative/path">Relative</a></p>
 <p><a href="mailto:someone@example.org">Mail</a></p>
 <p><a href="#top">Top of this page</a></p>
-<p><a href="https://example.org/bare"></a></p>
+<p><a href="https://example.org/bare" style="display: inline-block; width: 40px; height: 10px"></a></p>
 <div style="height: 4000px"></div>
 <p><a href="https://example.org/far-below">Far below</a></p>
 </body></html>`;
