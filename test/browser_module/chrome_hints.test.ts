@@ -13,6 +13,7 @@ const FILE = "desertfox-chrome-hints.js";
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+const TAB_STRIP_TAKE = "tab.tabbrowser-tab, toolbarbutton, .tab-group-label";
 const button = (id: string, left: number, props: Partial<Node> = {}) => new Node("toolbarbutton", { id, box: { left, top: 10, width: 24, height: 24 }, ...props });
 
 // A browser window: a nav bar with buttons, a tab strip with tabs, and an app menu panel that is closed until a test opens it.
@@ -23,11 +24,13 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
   root.append(document_element);
   const nav = new Node("toolbar", { id: "nav-bar" });
   const tabs_bar = new Node("toolbar", { id: "TabsToolbar" });
-  document_element.append(nav, tabs_bar);
+  // The vertical strip: empty until a test fills it, as Firefox keeps #TabsToolbar empty while it shows.
+  const vertical_tabs = new Node("box", { id: "vertical-tabs" });
+  document_element.append(nav, tabs_bar, vertical_tabs);
   nav.query.toolbarbutton = Array.from({ length: buttons }, (_, index) => button(`b${index}`, 10 + (index % 30) * 30, { box: { left: 10 + (index % 30) * 30, top: 100 + Math.floor(index / 30) * 30, width: 24, height: 24 } }));
   nav.append(...nav.query.toolbarbutton);
   const tab_list = [0, 1].map((index) => new Node("tab", { box: { left: 200 + index * 100, top: 50, width: 90, height: 30 } }));
-  tabs_bar.query["tab.tabbrowser-tab, toolbarbutton"] = tab_list;
+  tabs_bar.query[TAB_STRIP_TAKE] = tab_list;
   tabs_bar.append(...tab_list);
   const view = new Node("panelview", { box: { left: 500, top: 60, width: 200, height: 300 } });
   const rows = [0, 1].map((index) => new Node("toolbarbutton", { id: `row${index}`, box: { left: 510, top: 70 + index * 30, width: 180, height: 24 } }));
@@ -49,8 +52,8 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
   downloads_panel.query.panelview = [downloads_view];
   downloads_panel.append(downloads_view);
   document_element.append(panel, downloads_panel);
-  const by_id: Record<string, Node> = { "nav-bar": nav, TabsToolbar: tabs_bar, "appMenu-popup": panel, downloadsPanel: downloads_panel, "cmd:go": new Node("command"), "cmd:off": new Node("command", { attrs: new Map([["disabled", "true"]]) }) };
-  const all_targets = () => [...nav.query.toolbarbutton!, ...tab_list, ...rows];
+  const by_id: Record<string, Node> = { "nav-bar": nav, TabsToolbar: tabs_bar, "vertical-tabs": vertical_tabs, "appMenu-popup": panel, downloadsPanel: downloads_panel, "cmd:go": new Node("command"), "cmd:off": new Node("command", { attrs: new Map([["disabled", "true"]]) }) };
+  const all_targets = () => [...nav.query.toolbarbutton!, ...tab_list, ...rows, ...(vertical_tabs.query[TAB_STRIP_TAKE] ?? [])];
   let focused: Node | undefined;
   const document = {
     readyState: loaded ? "complete" : "uninitialized",
@@ -67,6 +70,14 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
     elementFromPoint: (x: number, y: number) => all_targets().find((node) => !node.attrs.has("covered") && x >= node.box.left && x <= node.box.left + node.box.width && y >= node.box.top && y <= node.box.top + node.box.height) ?? null,
   };
   for (const target of all_targets()) target.ownerDocument = document;
+  const window_view: { CSSStyleSheet?: unknown } = {};
+  Object.assign(document, { defaultView: window_view });
+  window_view.CSSStyleSheet = class {
+    text = "";
+    replaceSync(text: string) {
+      this.text = text;
+    }
+  };
   const timers: { run: () => void; ms: number; live: boolean }[] = [];
   const window_root = new Node("#windowroot");
   const win = Object.assign(new Node("#window"), {
@@ -97,7 +108,7 @@ function chrome_window(firefox: ReturnType<typeof create_firefox>, { buttons = 3
     document.readyState = "complete";
     win.fire("load");
   };
-  return { session_listeners, id, win, nav, tab_list, rows, panel, downloads_panel, view, press, layers, labels, fire_timers, timers, window_root, document_element, focus, finish_load };
+  return { session_listeners, id, win, nav, tab_list, vertical_tabs, tabs_bar, rows, panel, downloads_panel, view, press, layers, labels, fire_timers, timers, window_root, document_element, focus, finish_load };
 }
 
 function started({ pref = true as boolean | null, private_access = false, buttons = 3, private_window = false } = {}) {
@@ -124,8 +135,8 @@ function started({ pref = true as boolean | null, private_access = false, button
   const reply = (id: string) => from_module().find((message) => message.reply_to === id);
   const pushes = (kind: string) => from_module().filter((message) => message.kind === kind).map((message) => message.args!);
   const target_ids = (): number[] => pushes("chrome_hints.targets").flatMap((args) => (JSON.parse(args.targets as string) as number[][]).map(([id]) => id!));
-  const collect = async (session = 1, window_id = chrome.id) => {
-    const id = send("chrome_hints.collect", { session, window_id, colors: "" });
+  const collect = async (session = 1, window_id = chrome.id, colors = "") => {
+    const id = send("chrome_hints.collect", { session, window_id, colors });
     await settle();
     return reply(id);
   };
@@ -148,7 +159,7 @@ test("the module's kind rows are the protocol's, so a collect is answered and it
   assert.ok(protocol.validate_message_list(from_module(), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
 });
 
-test("a collect sends each target's id and box, ids count up across sessions, and the layer goes in a closed shadow root with the fixed sheet", async () => {
+test("a collect sends each target's id and box, ids count up across sessions, and the layer goes in a closed shadow root with no sheet of the extension's", async () => {
   const { collect, pushes, chrome, target_ids } = started();
   await collect(1);
   const [part] = pushes("chrome_hints.targets");
@@ -156,13 +167,26 @@ test("a collect sends each target's id and box, ids count up across sessions, an
   const rows = JSON.parse(part!.targets as string) as number[][];
   assert.deepEqual(rows.map((row) => row.slice(1)), [[10, 100, 24, 24], [40, 100, 24, 24], [70, 100, 24, 24], [200, 50, 90, 30], [300, 50, 90, 30]]);
   const [host] = chrome.layers();
-  assert.equal(host!.shadow!.children[0]!.getAttribute("href"), "moz-extension://uuid/chrome_hints.css");
+  assert.deepEqual(host!.shadow!.children.map((child) => child.localName), ["div"], "the layer took a sheet or link of the extension's");
   assert.equal(host!.style.cssText!.includes("pointer-events: none"), true);
   const first_ids = target_ids();
   await collect(2);
   const second_ids = target_ids().slice(first_ids.length);
   assert.ok(Math.min(...second_ids) > Math.max(...first_ids), "a newer session reused an older session's ids");
   assert.equal(chrome.layers().length, 1, "the older session's layer is left");
+});
+
+test("window and panel labels carry their look inline, so no sheet of the extension's can restyle them or the layer", async () => {
+  const { collect, draw, chrome, target_ids } = started();
+  await collect(1, chrome.id, JSON.stringify({ dark: { primary: "#ff0000", bg_core: "url(x)" }, light: {} }));
+  await draw(1, 1, target_ids().map((id, index) => [id, "asdfg"[index]!]));
+  const [host] = chrome.layers();
+  assert.equal(host!.shadow!.descendants().some((node) => node.localName === "link" || node.localName === "style"), false, "the layer loads a sheet");
+  const [label] = host!.shadow!.children[0]!.children;
+  assert.match(label!.style.cssText!, /background: var\(--desertfox-primary, #7fa3c9\)/);
+  assert.match(label!.style.cssText!, /position: fixed/);
+  const theme = (host!.shadow as unknown as { adoptedStyleSheets: { text: string }[] }).adoptedStyleSheets[0]!.text;
+  assert.ok(theme.includes("--desertfox-primary: #ff0000;") && !theme.includes("url(x)"), theme);
 });
 
 test("a collect is refused for a window that is not in front, a private window without access, an open menu, nothing to hint and the pref off", async () => {
@@ -312,6 +336,48 @@ test("a pick runs the target's fixed action once, and refuses another session, a
   assert.equal((await pick(6, ids.at(-1)!))?.ok, true);
   assert.equal(chrome.win.gBrowser.selectedTab, chrome.tab_list[1], "a tab pick did not select the tab");
   assert.equal(chrome.tab_list[1]!.clicks, 0);
+});
+
+test("with vertical tabs the strip's tabs and tab group labels get labels, and a pick selects the tab or clicks the label", async () => {
+  const { collect, draw, pick, chrome, target_ids } = started({ buttons: 0 });
+  // Firefox empties #TabsToolbar while the strip is vertical.
+  chrome.tabs_bar.query[TAB_STRIP_TAKE] = [];
+  const strip_tab = new Node("tab", { box: { left: 10, top: 200, width: 120, height: 30 } });
+  const group_label = new Node("label", { box: { left: 10, top: 240, width: 120, height: 24 } });
+  group_label.className = "tab-group-label";
+  const grouped_tab = new Node("tab", { box: { left: 20, top: 270, width: 110, height: 30 } });
+  const in_strip = [strip_tab, group_label, grouped_tab];
+  chrome.vertical_tabs.query[TAB_STRIP_TAKE] = in_strip;
+  chrome.vertical_tabs.append(...in_strip);
+  for (const node of in_strip) node.ownerDocument = chrome.win.document;
+  await collect(1);
+  const ids = target_ids();
+  assert.equal(ids.length, 3, "the vertical strip's tabs and group label were not all labelled");
+  await draw(1, 1, ids.map((id, index) => [id, "asd"[index]!]));
+  assert.equal((await pick(1, ids[0]!))?.ok, true);
+  assert.equal(chrome.win.gBrowser.selectedTab, strip_tab, "a vertical tab pick did not select the tab");
+
+  await collect(2);
+  const again = target_ids().slice(-3);
+  await draw(2, 1, again.map((id, index) => [id, "asd"[index]!]));
+  assert.equal((await pick(2, again[1]!))?.ok, true);
+  assert.equal(group_label.clicks, 1, "a group label pick did not click the label");
+  assert.equal(chrome.win.gBrowser.selectedTab, strip_tab, "a group label pick selected a tab");
+});
+
+test("a tab group label in the horizontal strip gets a label and its pick clicks it", async () => {
+  const { collect, draw, pick, chrome, target_ids } = started({ buttons: 0 });
+  const group_label = new Node("label", { box: { left: 400, top: 50, width: 60, height: 24 } });
+  group_label.className = "tab-group-label";
+  group_label.ownerDocument = chrome.win.document;
+  chrome.tab_list.push(group_label);
+  chrome.tabs_bar.append(group_label);
+  await collect(1);
+  const ids = target_ids();
+  assert.equal(ids.length, 3);
+  await draw(1, 1, ids.map((id, index) => [id, "asd"[index]!]));
+  assert.equal((await pick(1, ids[2]!))?.ok, true);
+  assert.equal(group_label.clicks, 1);
 });
 
 test("with the app menu open the rows of its shown view are the targets, and their labels sit inside the panel", async () => {

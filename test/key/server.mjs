@@ -270,7 +270,9 @@ export function start_server() {
     if (url.pathname === "/controls") {
       // A text field and a checkbox up top, a control in a disabled fieldset that ]i skips, and a text field far below. The page reports each focus.
       const controls = '<input id="first"><input type="checkbox" id="box"><fieldset disabled><input id="off"></fieldset>' + tall_filler + '<input id="last">';
-      return response.end(page(`controls ${id}`, controls, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
+      // A `_boxfocus` id has the page focus the checkbox as it parses, so a load window opens on a focus that is no field and takes none for its focus_on_load target.
+      const self_focus = id.includes("_boxfocus") ? "<script>document.getElementById('box').focus()</script>" : "";
+      return response.end(page(`controls ${id}`, controls + self_focus, "<script>addEventListener('focusin', (event) => send('focused', { id: event.target.id }))</script>"));
     }
     if (url.pathname === "/item_covered") {
       // Ten rows of a link each, 100 px high, or a quarter of the window in the `_bar` page so that it scrolls at any window size. A `_scroll` id puts them in a 300 px box with its own scroll above a text block, so the lower rows are inside the window but clipped by the box edge. A `_bar` id puts them in the page under a fixed bar that covers the top 45% of the window.

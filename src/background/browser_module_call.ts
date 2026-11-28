@@ -1,7 +1,7 @@
 // One call from the extension to the browser module and its answer. `send` writes the request and returns its id. The module's reply comes back later through `hear`. Every command the extension starts on the module goes through `call`.
-import type { ModuleArgs, ModuleReply, ModuleStatus } from "../shared/browser_module_protocol.ts";
+import type { ModuleArgs, ModuleHello, ModuleReply, ModuleStatus } from "../shared/browser_module_protocol.ts";
 import { refused_as } from "../shared/swallow.ts";
-import { BROWSER_MODULE_STATUS_STORAGE_KEY, EXTENSION_TO_MODULE_KINDS } from "../shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATUS_STORAGE_KEY, EXTENSION_TO_MODULE_KINDS, validate_module_hello } from "../shared/browser_module_protocol.ts";
 
 export const NEEDS_MODULE = "Needs the browser module";
 export const MODULE_ANSWER_MS = 2000;
@@ -92,3 +92,9 @@ export const browser_module_call = create_module_call({
     return () => clearTimeout(timer);
   },
 });
+
+// The module's last hello, so a command can ask which features it runs. Undefined when there is none or it is not valid.
+export async function read_module_hello(): Promise<ModuleHello | undefined> {
+  const hello = validate_module_hello((await browser.storage.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]);
+  return hello.ok ? hello.value : undefined;
+}
