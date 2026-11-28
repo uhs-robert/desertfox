@@ -5,6 +5,7 @@
 import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
 import type { ContentRequests } from "./messages/map.ts";
+import type { ToastKind } from "./messages/tab.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
 import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 import { MODULE_FIREFOX_PAGES } from "./firefox_pages.ts";
@@ -138,14 +139,18 @@ export type ModuleArgs = Record<string, number | string | DevtoolsKeyRow[] | Dev
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 // What the status bar shows of a tab beyond its mode, all optional. `pending` holds the keys of a half-typed sequence (a held group included), `count` a typed count, `pass` that pass-next is armed, `site` the label of a site mode and `recording` the register a macro records into. A private tab never has `site`.
 export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
-export type TabState = { mode: Mode; live: boolean } & BarFields;
+// A message in the bar's slot for the tab: `until` is epoch milliseconds, and the module stops drawing it then. `id` counts up, so a repeat of the same text draws again. The extension writes it, and a page never reports one.
+export type BarToast = { id: number; text: string; kind: ToastKind; until: number };
+export type TabState = { mode: Mode; live: boolean; toast?: BarToast } & BarFields;
+export const MAX_TOAST_CHARS = 200;
+const TOAST_KINDS: readonly string[] = ["error", "warning", "info", "success"] satisfies ToastKind[];
 // The roles the bar's mode badge takes from the theme, for the dark and the light scheme.
 // The which-key panel takes `bg_core`, `fg_core`, `primary` and `secondary`. An older module reads only the roles it knows.
 export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "fg_core", "primary", "secondary"] as const;
-// `mode_command` is optional so a state from an older extension still validates. The module falls back to the normal color without it.
-export const BAR_OPTIONAL_ROLES = ["mode_command"] as const;
+// Each optional role is dropped unless it is a color, so a state from an older extension still validates. Without `mode_command` the module uses the normal color, and without a toast role it uses the color of the page's toast.
+export const BAR_OPTIONAL_ROLES = ["mode_command", "error", "warn", "info", "ok"] as const;
 export type BarRole = (typeof BAR_ROLES)[number];
-export type BarColors = Record<BarRole, string> & { mode_command?: string };
+export type BarColors = Record<BarRole, string> & Partial<Record<(typeof BAR_OPTIONAL_ROLES)[number], string>>;
 export type BarTheme = { dark: BarColors; light: BarColors };
 // What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
@@ -283,6 +288,16 @@ export function bar_fields_of(value: Record<string, unknown>): BarFields {
   return fields;
 }
 
+// The toast a tab carries, or undefined for anything of the wrong shape. A kind this version does not know is drawn as info.
+export function bar_toast_of(value: unknown): BarToast | undefined {
+  if (!is_record(value)) return undefined;
+  const { id, text, kind, until } = value;
+  if (typeof id !== "number" || !Number.isInteger(id) || id < 0 || id > Number.MAX_SAFE_INTEGER) return undefined;
+  if (typeof text !== "string" || text.length === 0 || text.length > MAX_TOAST_CHARS || /[\p{Cc}\p{Cf}]/u.test(text)) return undefined;
+  if (typeof until !== "number" || !Number.isInteger(until) || until <= 0) return undefined;
+  return { id, text, kind: (TOAST_KINDS.includes(kind as string) ? kind : "info") as ToastKind, until };
+}
+
 function bar_colors_of(value: unknown): BarColors | undefined {
   if (!is_record(value) || !BAR_ROLES.every((role) => is_color(value[role]))) return undefined;
   return Object.fromEntries([...BAR_ROLES, ...BAR_OPTIONAL_ROLES.filter((role) => is_color(value[role]))].map((role) => [role, value[role]])) as BarColors;
@@ -389,7 +404,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
     const tab = given_tabs[id];
     if (!/^\d{1,10}$/.test(id)) return bad("a tab id must be a number");
     if (!is_record(tab) || typeof tab.live !== "boolean" || !(MODES as readonly unknown[]).includes(tab.mode)) return bad("a tab needs a mode and a live mark");
-    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab) };
+    const toast = bar_toast_of(tab.toast);
+    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab), ...(toast && { toast }) };
   }
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);

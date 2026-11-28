@@ -38,6 +38,7 @@ import {
   validate_message_list,
   validate_module_hello,
   validate_module_state,
+  bar_fields_of,
   which_key_table_of,
   MAX_WHICH_KEY_BYTES,
   MAX_WHICH_KEY_PANELS,
@@ -288,6 +289,31 @@ test("the bar theme needs both schemes with every role as a color, else it is le
     const checked = validate_module_state(state({ bar_theme }));
     assert.ok(checked.ok && checked.value.bar_theme === undefined, JSON.stringify(bar_theme));
   }
+});
+
+test("the toast role colors are kept only when they are colors, and each optional role is checked alone", () => {
+  const roles = { mode_command: "#7fcf78", error: "#ffa0a0", warn: "#f0e68c", info: "red; x", ok: "#a3e39a" };
+  const checked = validate_module_state(state({ bar_theme: { dark: { ...COLORS, ...roles }, light: COLORS } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.bar_theme?.dark, { ...COLORS, mode_command: "#7fcf78", error: "#ffa0a0", warn: "#f0e68c", ok: "#a3e39a" });
+});
+
+test("a tab's toast is kept with its checked fields, an unknown kind becomes info, and a bad one is left out", () => {
+  const toast = { id: 3, text: "Copied", kind: "success", until: 1_700_000_000_000 };
+  const tab = (value: unknown) => {
+    const checked = validate_module_state(state({ tabs: { "7": { mode: "normal", live: false, toast: value } } }));
+    assert.ok(checked.ok, "a bad toast never fails the state");
+    return checked.value.tabs["7"]!.toast;
+  };
+  assert.deepEqual(tab(toast), toast);
+  assert.deepEqual(tab({ ...toast, kind: "fancy", extra: 1 }), { ...toast, kind: "info" });
+  for (const bad of [{ ...toast, text: "" }, { ...toast, text: "x".repeat(201) }, { ...toast, text: "a\nb" }, { ...toast, id: -1 }, { ...toast, id: 1.5 }, { ...toast, until: "soon" }, { ...toast, until: 0 }, "Copied", null]) {
+    assert.equal(tab(bad), undefined, JSON.stringify(bad));
+  }
+});
+
+test("a toast is never read from the fields a page reports", () => {
+  assert.deepEqual(bar_fields_of({ pending: ["g"], toast: { id: 1, text: "x", kind: "info", until: 5 } }), { pending: ["g"] });
 });
 
 test("a full bar state with the longest fields stays small beside the key rows", () => {

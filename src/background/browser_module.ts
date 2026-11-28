@@ -7,7 +7,7 @@ import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree
 import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, BarToast, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -34,6 +34,7 @@ import {
   sidebar_keys_of,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
+  MAX_TOAST_CHARS,
   status_of_hello,
   EXTENSION_TO_MODULE_KINDS,
   message_list_bytes,
@@ -54,7 +55,8 @@ import {
   MAX_WHICH_KEY_TITLE_PARTS,
   which_key_table_of,
 } from "../shared/browser_module_protocol.ts";
-import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
+import { DEFAULT_SETTINGS, DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -258,6 +260,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const frame_keys = new Map<string, Map<number, Pick<BarFields, "pending" | "count">>>();
   // Whether the bar is up: the settings are on and the module said in its hello that it built the bar. Pages ask on their first key, so they get this copy and no storage read.
   let bar_seen = false;
+  // The message each tab shows in the bar, in memory only like `bars`. The module hides it at `until`, and a tab entry drops it once `until` has passed.
+  const toasts = new Map<string, BarToast>();
+  let toast_count = 0;
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
   let hello_bar = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
@@ -284,6 +289,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     bar_seen = now;
     if (!now) {
       bars.clear();
+      toasts.clear();
       child_keys.clear();
       frame_keys.clear();
     }
@@ -293,10 +299,18 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   // The tabs whose record says a load began and no page has taken over yet.
   const loading = new Set<string>();
+  const live_toast = (id: string): BarToast | undefined => {
+    const toast = toasts.get(id);
+    if (toast && toast.until <= deps.now()) toasts.delete(id);
+    return toasts.get(id);
+  };
+  // A load hides the page's own fields but not the toast, which the page never reported.
   const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
-    if (loading.has(id)) return { mode: tab?.mode ?? "normal", live: tab?.live ?? false };
+    const toast = live_toast(id);
+    const base = { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(toast && { toast }) };
+    if (loading.has(id)) return base;
     const { pending: _, count: __, ...top } = bars.get(id) ?? {};
-    return { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
+    return { ...base, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
   };
   // A tab that began a load shows no bar fields, from a record change or from a report. A load that leaves the old page in place brings them back at its end, because the page's own report is kept and its content script has nothing new to send.
   const tab_of_record = (id: string, record: TabModeRecord): TabState => {
@@ -433,7 +447,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     if (state === undefined) return;
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
-    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
+    if (record === undefined) (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
     else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });
@@ -476,6 +490,22 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, { mode: state.tabs[tab_id]?.mode ?? "normal", live: state.tabs[tab_id]?.live ?? false }) } });
   };
 
+  // Puts a message in the bar's slot of the tab. Gives false when the bar is not up, the tab is private and the extension may not run there, or the state has no room, so the caller falls back to a notification.
+  const toast_now = async (tab_id: string, text: string, kind: ToastKind): Promise<boolean> => {
+    if (!bar_seen) return false;
+    const state = await read_state();
+    if (state === undefined || !(await deps.is_on())) return false;
+    if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return false;
+    const keymap = await deps.read_keymap();
+    const ms = (kind === "error" ? keymap?.toast_error_ms : keymap?.toast_ms) || (kind === "error" ? DEFAULT_TOAST_ERROR_MS : DEFAULT_TOAST_MS);
+    // One line: a message with a line break or a control character would draw as a gap or not at all.
+    const line = text.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim().slice(0, MAX_TOAST_CHARS);
+    if (line === "") return false;
+    toasts.set(tab_id, { id: toast_count++, text: line, kind, until: deps.now() + ms });
+    await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, state.tabs[tab_id]) } });
+    return true;
+  };
+
   // A child frame took the focus: its own half-typed keys, which the top frame's report may have dropped, show again. The frame's mode report says it, so it sends no second one.
   const bar_focus_now = async (tab_id: string, frame_id: number): Promise<void> => {
     if (!bar_seen || frame_id === 0) return;
@@ -512,6 +542,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
     bar_focus: (tab_id: number, frame_id: number) => enqueue(() => bar_focus_now(String(tab_id), frame_id)),
     bar_active: (): Promise<boolean> => Promise.resolve(bar_seen),
+    // `allow_private` is whether the extension may run in private windows, the same gate the module's bar has.
+    show_toast: (tab_id: number, is_private: boolean, allow_private: boolean, text: string, kind: ToastKind) => (is_private && !allow_private ? Promise.resolve(false) : enqueue(() => toast_now(String(tab_id), text, kind))),
     send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => boolean | void) => enqueue(() => send_now(kind, args, on_id)),
     withdraw: (id: string) => enqueue(() => withdraw_now(id)),
     // Ask for a read. Each has its own limiter, which decides when it runs.

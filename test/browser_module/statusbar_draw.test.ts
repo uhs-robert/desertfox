@@ -455,3 +455,91 @@ test("the live region is clipped, not hidden, so a screen reader hears it", () =
   assert.doesNotMatch(rule("dfx-live"), /visibility/);
   assert.match(rule("dfx-probe"), /visibility: hidden/);
 });
+
+const toast_of = (patch: Record<string, unknown> = {}) => ({ id: 1, text: "Copied the address", kind: "success", until: Date.now() + 5000, ...patch });
+
+test("a message takes the place of the pending keys and the macro register and never of the mode", () => {
+  const fixture = started();
+  fixture.firefox.write_state(state_with({ pending: ["g"], count: 3, recording: "q", toast: toast_of() }));
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL", "Copied the address"]);
+  const node = fixture.bar()!.find((each) => each.className === "dfx-widget dfx-message")!;
+  assert.equal(node.getAttribute("data-kind"), "success");
+  fixture.firefox.write_state(state_with({ pending: ["g"], count: 3, recording: "q" }));
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL", "3g", "recording @q"]);
+});
+
+test("a message takes the first slot of the pending and recording widgets, on either side, and follows the mode with neither set", () => {
+  const fixture = started();
+  const bars = [
+    [{ ...BAR_CONFIG, left: ["mode"], right: ["recording", "tabs"] }, ["NORMAL"], ["Copied the address", "[1/1]"]],
+    [{ ...BAR_CONFIG, left: ["recording", "mode", "pending"], right: [] }, ["Copied the address", "NORMAL"], []],
+    [{ ...BAR_CONFIG, left: ["mode", "tabs"], right: [] }, ["NORMAL", "Copied the address", "[1/1]"], []],
+  ] as const;
+  for (const [bar, left, right] of bars) {
+    fixture.firefox.write_state(state_with({ recording: "q", toast: toast_of() }, bar as never));
+    fixture.run_frames();
+    assert.deepEqual([fixture.widgets("left"), fixture.widgets("right")], [left, right], JSON.stringify(bar));
+  }
+});
+
+test("a message is drawn as text in the colour of its kind, and an unknown kind is info", () => {
+  const fixture = started();
+  const markup = '<img src=x onerror="alert(1)">';
+  fixture.firefox.write_state(state_with({ toast: toast_of({ text: markup + "\u0007".repeat(3), kind: "evil; x" }) }));
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL", markup]);
+  assert.deepEqual([...new Set(fixture.bar()!.all().map((node) => node.tag))].sort(), ["div", "span"]);
+  assert.equal(fixture.bar()!.find((each) => each.className === "dfx-widget dfx-message")!.getAttribute("data-kind"), "info");
+  fixture.firefox.write_state(state_with({ toast: toast_of({ text: "y".repeat(500) }) }, BAR_CONFIG, { bar_theme: { dark: { ...BAR_COLORS, error: "#ff0000", warn: "red; x", info: "#0000ff", ok: "#00ff00" }, light: BAR_COLORS } }));
+  fixture.run_frames();
+  assert.equal(fixture.widgets("left")[1]!.length, 200);
+  const style = fixture.bar()!.style_values;
+  assert.deepEqual(["error", "warn", "info", "ok"].map((role) => style.get(`--desertfox-${role}`)), ["#ff0000", undefined, "#0000ff", "#00ff00"]);
+});
+
+test("a malformed or ended message draws nothing, and one that claims a long life is cut to a minute", () => {
+  const fixture = started();
+  for (const toast of [toast_of({ until: Date.now() - 1 }), toast_of({ text: "" }), toast_of({ id: "1" }), toast_of({ until: "never" }), "Copied", null]) {
+    fixture.firefox.write_state(state_with({ pending: ["g"], toast }));
+    fixture.run_frames();
+    assert.deepEqual(fixture.widgets("left"), ["NORMAL", "g"], JSON.stringify(toast));
+  }
+  fixture.firefox.write_state(state_with({ toast: toast_of({ until: Date.now() + 10 * 3600_000 }) }));
+  fixture.run_frames();
+  assert.ok(fixture.window.timer_count() >= 1);
+  assert.deepEqual(fixture.firefox.errors, []);
+});
+
+test("the module hides the message at its end with its own timer, and puts the pending keys back", async () => {
+  const fixture = started();
+  fixture.firefox.write_state(state_with({ pending: ["g"], toast: toast_of({ until: Date.now() + 40 }) }));
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL", "Copied the address"]);
+  assert.equal(fixture.window.timer_count(), 1);
+  await new Promise((done) => setTimeout(done, 80));
+  fixture.window.run_timers();
+  fixture.run_frames();
+  assert.deepEqual(fixture.widgets("left"), ["NORMAL", "g"]);
+  assert.equal(fixture.window.timer_count(), 0);
+});
+
+test("a narrow bar drops every other widget before it shortens the message, and shortens it before it drops it", () => {
+  const fixture = started({ tab_count: 2 });
+  fixture.firefox.write_state(state_with({ toast: toast_of({ text: "A long message that does not fit" }) }, { ...BAR_CONFIG, right: ["tabs", "url"] }));
+  fixture.navigate(0, "https://example.com/a");
+  fixture.run_frames();
+  fixture.resize(2000);
+  fixture.run_frames();
+  assert.deepEqual([fixture.widgets("left"), fixture.widgets("right")], [["NORMAL", "A long message that does not fit"], ["[1/2]", "example.com/a"]]);
+  fixture.resize(8 * 52);
+  fixture.run_frames();
+  assert.deepEqual([fixture.widgets("left"), fixture.widgets("right")], [["NORMAL", "A long message that does not fit"], []]);
+  fixture.resize(8 * 24);
+  fixture.run_frames();
+  const [mode, message] = fixture.widgets("left");
+  assert.equal(mode, "NORMAL");
+  assert.ok(message!.endsWith("…") && message!.length < 32);
+  assert.equal(fixture.bar()!.find((each) => each.className === "dfx-widget dfx-message")!.getAttribute("title"), "A long message that does not fit");
+});

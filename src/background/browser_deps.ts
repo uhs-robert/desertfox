@@ -39,6 +39,22 @@ export const reach_locked_tabs = (route: LockedTabs): void => {
   locked_tabs = route;
 };
 
+// The status bar's message slot, which the browser module owns. Unset while the module is not wired.
+type BarToasts = { show_toast: (tab_id: number, is_private: boolean, allow_private: boolean, text: string, kind: ToastKind) => Promise<boolean> };
+let bar_toasts: BarToasts | undefined;
+export const reach_bar_toasts = (route: BarToasts): void => {
+  bar_toasts = route;
+};
+
+// A private tab's text reaches the bar only where the extension may run in private windows, as the module's own bar needs.
+async function show_in_bar(tab_id: number, text: string, kind: ToastKind): Promise<boolean> {
+  if (!bar_toasts) return false;
+  const tab = await ignore_refusal(browser.tabs.get(tab_id));
+  if (!tab) return false;
+  const is_private = tab.incognito === true;
+  return refused_as(bar_toasts.show_toast(tab_id, is_private, is_private && (await browser.extension.isAllowedIncognitoAccess()), text, kind), false);
+}
+
 // Without a frame id the message reaches every frame, which shows a toast in each.
 export async function send_to_tab<R extends BackgroundToContent>(tab_id: number, message: R, frame_id?: number): Promise<TabAnswer<R>> {
   try {
@@ -51,7 +67,7 @@ export async function send_to_tab<R extends BackgroundToContent>(tab_id: number,
 
 // A warning, info or success toast on the command's tab, with the notification fallback a refusal has.
 export async function show_toast_on_tab(ctx: { tab_id?: number | undefined; frame_id?: number | undefined }, id: string, message: string, kind: ToastKind): Promise<void> {
-  await deliver_toast({ send_to_tab, notify }, ctx.tab_id, { id, message }, kind, ctx.frame_id);
+  await deliver_toast({ send_to_tab, show_in_bar, notify }, ctx.tab_id, { id, message }, kind, ctx.frame_id);
 }
 
 // A tab with no content script rejects the send, so a ping settles the question without content's help.
@@ -137,7 +153,7 @@ export function create_enum_sources(search_engines: () => Promise<string[]>, con
 
 // `open_panel`: the command line in a panel over a tab with no content script (`cmdline_panel.ts`). Only the background's own router opens one.
 export function make_router_deps(get_config: () => Promise<MergedConfig>, repeat_memory: RepeatMemory, open_panel: (tab_id: number, text: string) => Promise<boolean> = async () => false): RouterDeps {
-  const channels = { send_to_tab, notify };
+  const channels = { send_to_tab, show_in_bar, notify };
   return {
     get_command: (command_id) => registry.get(command_id),
     get_enum_sources: create_enum_sources(async () => Object.keys((await get_config()).search_engines), container_names),

@@ -2,13 +2,15 @@ import type { Refusal, BackgroundToContent, ToastKind } from "../shared/messages
 
 export type RefusalChannels = {
   send_to_tab: (tab_id: number, message: BackgroundToContent, frame_id?: number) => Promise<unknown>;
+  // Puts the message in the status bar's slot for the tab. Gives false when no bar shows it.
+  show_in_bar?: (tab_id: number, text: string, kind: ToastKind) => Promise<boolean>;
   notify: (refusal: Refusal) => Promise<unknown>;
 };
 
-export type RefusalPath = "toast" | "notification";
+export type RefusalPath = "toast" | "bar" | "notification";
 
 // A toast needs a content script in the tab. Without one the send rejects,
-// which covers about: pages, the PDF viewer and AMO, so a notification takes over.
+// which covers about: pages, the PDF viewer and AMO, so the status bar takes over, and a notification when no bar shows.
 export async function deliver_toast(
   channels: RefusalChannels,
   tab_id: number | undefined,
@@ -22,8 +24,9 @@ export async function deliver_toast(
       await channels.send_to_tab(tab_id, kind === "error" ? { type: "refusal", refusal } : { type: "refusal", refusal, kind }, frame_id);
       return "toast";
     } catch {
-      // Falls through to the notification.
+      // Falls through to the bar.
     }
+    if (await channels.show_in_bar?.(tab_id, refusal.message, kind)) return "bar";
   }
   await channels.notify(refusal);
   return "notification";

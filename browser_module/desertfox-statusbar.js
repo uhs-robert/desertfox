@@ -41,7 +41,8 @@
     // Copies of the lists in src/shared/browser_module_protocol.ts and src/shared/settings_table.ts. A name that is not here is not drawn.
     const WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"];
     const BORDERS = ["none", "auto", "square", "round", "chamfer"];
-    const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "mode_command"];
+    const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "mode_command", "error", "warn", "info", "ok"];
+    const TOAST_KINDS = ["error", "warning", "info", "success"];
     // The label of each mode, as src/shared/ui/mode_label.ts has it. Hint and command line mode get a label here because the bar overlaps nothing.
     const MODE_LABELS = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE", media: "MEDIA", grab: "GRAB", item: "ITEM", item_visual: "VISUAL", hint: "HINT", cmdline: "COMMAND" };
     const MODE_ROLES = { normal: "normal", insert: "insert", ignore: "ignore", caret: "caret", visual: "visual", visual_line: "visual", media: "media", grab: "normal", item: "item", item_visual: "item", hint: "normal", cmdline: "command", pass: "ignore", site: "visual" };
@@ -50,6 +51,11 @@
     const DROP_ORDER = ["url", "container", "scroll", "tabs", "recording", "pending"];
     const COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
     const MAX_URL_LABEL = 30;
+    // The text of a message is drawn as text, cut to the cap the extension keeps, and shown for no longer than a minute whatever `until` says.
+    const MAX_TOAST_CHARS = 200;
+    const MAX_TOAST_MS = 60000;
+    // A narrow bar shortens the message to no fewer characters than this before it gives up the rest.
+    const MIN_MESSAGE_CHARS = 8;
     // Columns between two widgets of a side, and between the sides, counted in characters of the probe.
     const GAP_CHARS = 3;
 
@@ -130,8 +136,8 @@
     }
 
     // What one tab reported, with every field checked again here.
-    function tab_view(record) {
-      const view = { mode: "normal", pending: [], count: undefined, pass: false, site: "", recording: "" };
+    function tab_view(record, now) {
+      const view = { mode: "normal", pending: [], count: undefined, pass: false, site: "", recording: "", toast: undefined };
       if (!is_record(record)) return view;
       if (typeof record.mode === "string" && Object.hasOwn(MODE_LABELS, record.mode)) view.mode = record.mode;
       if (Array.isArray(record.pending)) view.pending = record.pending.filter((key) => typeof key === "string").slice(-8).map((key) => clean(key, 16));
@@ -139,7 +145,16 @@
       view.pass = record.pass === true;
       view.site = clean(record.site, 24);
       view.recording = typeof record.recording === "string" && /^[\p{L}\p{N}"]$/u.test(record.recording) ? record.recording : "";
+      view.toast = toast_view(record.toast, now);
       return view;
+    }
+
+    // The message the extension wrote for the tab, or undefined when it is malformed or over. An unknown kind draws as info.
+    function toast_view(toast, now) {
+      if (!is_record(toast) || !Number.isInteger(toast.id) || !Number.isFinite(toast.until) || toast.until <= now) return undefined;
+      const text = clean(toast.text, MAX_TOAST_CHARS);
+      if (text === "") return undefined;
+      return { text, kind: TOAST_KINDS.includes(toast.kind) ? toast.kind : "info", until: Math.min(toast.until, now + MAX_TOAST_MS) };
     }
 
     // ---- What the window says.
@@ -285,6 +300,7 @@
         const text = (view.count ?? "") + view.pending.join("");
         return text === "" ? undefined : { name, text };
       }
+      if (name === "message") return view.toast === undefined || facts.now >= view.toast.until ? undefined : { name, text: view.toast.text, kind: view.toast.kind };
       if (name === "recording") return view.recording === "" ? undefined : { name, text: `recording @${view.recording}` };
       if (name === "container") return facts.container && facts.container.text !== "" ? { name, text: facts.container.text, color: facts.container.color } : undefined;
       if (name === "scroll") return facts.scroll ? { name, text: scroll_label(facts.scroll.top, facts.scroll.max) } : undefined;
@@ -313,7 +329,25 @@
 
     const widget_chars = (widget) => [...widget.text].length + (widget.name === "container" ? 2 : widget.name === "mode" ? 2 : 0);
 
-    // Drops the widgets of the lowest priority until the two sides fit `columns` characters. `columns` is undefined before the bar has a width.
+    // While a message shows it takes the place of the pending keys and the macro register, on the side the settings give the first of them. With neither set it follows the mode badge. It never takes the mode's place.
+    function names_with_message(left, right) {
+      const holds = (name) => name === "pending" || name === "recording";
+      if (![...left, ...right].some(holds)) {
+        const at = left.indexOf("mode") + 1;
+        return [[...left.slice(0, at), "message", ...left.slice(at)], right];
+      }
+      let placed = false;
+      const swap = (side) =>
+        side.flatMap((name) => {
+          if (!holds(name)) return [name];
+          if (placed) return [];
+          placed = true;
+          return ["message"];
+        });
+      return [swap(left), swap(right)];
+    }
+
+    // Drops the widgets of the lowest priority until the two sides fit `columns` characters, then shortens the message, which is the last to go. `columns` is undefined before the bar has a width.
     function fit(left, right, columns) {
       if (columns === undefined) return [left, right];
       const chars = (side) => side.reduce((sum, widget) => sum + widget_chars(widget) + GAP_CHARS, 0);
@@ -322,7 +356,14 @@
         if (chars(kept[0]) + chars(kept[1]) <= columns) break;
         kept = kept.map((side) => side.filter((widget) => widget.name !== name));
       }
+      const over = chars(kept[0]) + chars(kept[1]) - columns;
+      if (over > 0) kept = kept.map((side) => side.map((widget) => (widget.name === "message" ? shortened(widget, over) : widget)));
       return kept;
+    }
+    function shortened(widget, over) {
+      const letters = [...widget.text];
+      const keep = Math.max(MIN_MESSAGE_CHARS, letters.length - over);
+      return keep >= letters.length ? widget : { ...widget, text: `${letters.slice(0, keep - 1).join("")}…`, title: widget.text };
     }
 
     // ---- The look.
@@ -339,6 +380,7 @@
   font-family: var(--tf-font-family, system-ui); font-size: var(--tf-font-size, 13px);
   --desertfox-bg-core: #0c0e13; --desertfox-mode-normal: #7fa3c9; --desertfox-mode-insert: #ffa0a0; --desertfox-mode-ignore: #717a84;
   --desertfox-mode-caret: #f0e68c; --desertfox-mode-visual: #ffba75; --desertfox-mode-item: #c695ff; --desertfox-mode-media: #a3e39a;
+  --desertfox-error: #ffa0a0; --desertfox-warn: #f0e68c; --desertfox-info: #81c0ff; --desertfox-ok: #a3e39a;
 }
 #${BAR_ID}[data-textfox] {
   margin: 0 var(--dfx-gap) var(--dfx-gap); padding: 4px 8px; background: var(--tf-bg, -moz-dialog);
@@ -381,6 +423,10 @@
 #${BAR_ID} .dfx-mode[data-role="item"] { background: var(--desertfox-mode-item); }
 #${BAR_ID} .dfx-mode[data-role="media"] { background: var(--desertfox-mode-media); }
 #${BAR_ID} .dfx-mode[data-role="command"] { background: var(--desertfox-mode-command, var(--desertfox-mode-normal)); }
+#${BAR_ID} .dfx-message[data-kind="error"] { color: var(--desertfox-error); }
+#${BAR_ID} .dfx-message[data-kind="warning"] { color: var(--desertfox-warn); }
+#${BAR_ID} .dfx-message[data-kind="info"] { color: var(--desertfox-info); }
+#${BAR_ID} .dfx-message[data-kind="success"] { color: var(--desertfox-ok); }
 #${BAR_ID} .dfx-recording { color: var(--desertfox-mode-insert); }
 #${BAR_ID} .dfx-url[data-security="ok"] { color: var(--desertfox-mode-media); }
 #${BAR_ID} .dfx-url[data-security="warn"] { color: var(--desertfox-mode-visual); }
@@ -460,12 +506,14 @@
       const id = tab_id_of(tab);
       const record = id !== undefined && Object.hasOwn(view_state.tabs, id) ? view_state.tabs[id] : undefined;
       const scroll = scrolls.get(browser);
-      const view = tab_view(record);
+      const now = Date.now();
+      const view = tab_view(record, now);
       if (view.mode === "normal" && page_hints_shown()) view.mode = "hint";
       else if (view.mode === "normal" && field_has_focus(browser, record)) view.mode = "insert";
       return {
         enabled: view_state.enabled,
         view,
+        now,
         container: container_of(tab),
         scroll: scroll && scroll.inner === browser.innerWindowID ? scroll : undefined,
         place: tab_place(tab),
@@ -521,6 +569,7 @@
       const node = el("span", `dfx-widget dfx-${widget.name}`);
       if (widget.role) node.setAttribute("data-role", widget.role);
       if (widget.security) node.setAttribute("data-security", widget.security);
+      if (widget.kind) node.setAttribute("data-kind", widget.kind);
       if (widget.title) node.setAttribute("title", widget.title);
       if (widget.name === "container") {
         const dot = el("span", "dfx-dot");
@@ -546,7 +595,9 @@
         apply_theme(state.theme);
         apply_look(state.border);
         const facts = facts_of(state);
-        const [left, right] = fit(widgets_for(state.left, facts), widgets_for(state.right, facts), columns);
+        const [left_names, right_names] = facts.view.toast === undefined ? [state.left, state.right] : names_with_message(state.left, state.right);
+        const [left, right] = fit(widgets_for(left_names, facts), widgets_for(right_names, facts), columns);
+        arm_expiry(facts.view.toast, facts.now);
         const model = JSON.stringify([left, right]);
         bar.setAttribute("data-on", "");
         if (model !== last_model) {
@@ -555,7 +606,7 @@
           right_side.replaceChildren(...right.map(draw_widget));
         }
         // The live region speaks a change of the mode and of the macro register only, not every key.
-        const spoken = [left, right].flat().filter((widget) => widget.name === "mode" || widget.name === "recording").map((widget) => widget.text).join(" ");
+        const spoken = [left, right].flat().filter((widget) => widget.name === "mode" || widget.name === "recording" || widget.name === "message").map((widget) => widget.text).join(" ");
         if (spoken !== announced) {
           announced = spoken;
           live.textContent = spoken;
@@ -572,6 +623,23 @@
         }
       }
     }
+
+    // The module hides a message at its end, so the extension needs no timer and a state that outlives a restart shows nothing stale.
+    let expiry_timer = 0;
+    let expiry_at = 0;
+    function arm_expiry(toast, now) {
+      if (toast?.until === expiry_at) return;
+      if (expiry_timer) win.clearTimeout(expiry_timer);
+      expiry_timer = 0;
+      expiry_at = toast === undefined ? 0 : toast.until;
+      if (toast === undefined) return;
+      expiry_timer = win.setTimeout(() => {
+        expiry_timer = 0;
+        expiry_at = 0;
+        schedule();
+      }, Math.max(0, toast.until - now) + 5);
+    }
+    undo.push(() => win.clearTimeout(expiry_timer));
 
     function schedule() {
       if (frame_pending || closed) return;

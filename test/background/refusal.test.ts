@@ -39,3 +39,26 @@ test("a warning with no content script falls back to a notification", async () =
   const path = await deliver_toast({ send_to_tab: async () => Promise.reject(new Error("none")), notify: async () => void notified++ }, 4, refusal, "warning");
   assert.deepEqual([path, notified], ["notification", 1]);
 });
+
+test("a tab with no content script shows the toast in the bar when one is up, and the bar is tried before a notification", async () => {
+  const shown: unknown[] = [];
+  const channels = {
+    send_to_tab: async () => Promise.reject(new Error("none")),
+    show_in_bar: async (tab_id: number, text: string, kind: string) => (shown.push([tab_id, text, kind]), true),
+    notify: async () => assert.fail(),
+  };
+  assert.equal(await deliver_toast(channels, 4, refusal, "success"), "bar");
+  assert.equal(await deliver_refusal(channels, 4, refusal), "bar");
+  assert.deepEqual(shown, [[4, "no", "success"], [4, "no", "error"]]);
+});
+
+test("a bar that is not up leaves the notification, and a page toast never touches the bar", async () => {
+  let notified = 0;
+  const down = { send_to_tab: async () => Promise.reject(new Error("none")), show_in_bar: async () => false, notify: async () => void notified++ };
+  assert.equal(await deliver_refusal(down, 4, refusal), "notification");
+  assert.equal(await deliver_refusal({ send_to_tab: down.send_to_tab, notify: down.notify }, 4, refusal), "notification");
+  assert.equal(notified, 2);
+  const page = { send_to_tab: async () => undefined, show_in_bar: async () => assert.fail(), notify: async () => assert.fail() };
+  assert.equal(await deliver_refusal(page, 4, refusal), "toast");
+  assert.equal(await deliver_refusal({ ...down, show_in_bar: async () => assert.fail() }, undefined, refusal), "notification");
+});
