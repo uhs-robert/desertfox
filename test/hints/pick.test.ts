@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_picker, is_text_key } from "../../src/content/hints/pick.ts";
+import { create_picker, is_text_key } from "../../src/shared/hints/pick.ts";
 
 const labels = ["a", "sa", "ss", "sd"];
 
