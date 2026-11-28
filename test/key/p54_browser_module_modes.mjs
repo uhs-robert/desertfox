@@ -27,7 +27,7 @@ export async function run_cases(context) {
     })()`);
   const field_focused = () => chrome(`(async () => ${W}.windowUtils.IMEStatus === Components.interfaces.nsIDOMWindowUtils.IME_STATUS_ENABLED)()`);
   // The keys the page's own listener sees, as "key:trusted", so a key the module took shows nothing.
-  const watch_page_keys = () => in_selected_page(`(win) => { win.document.documentElement.dataset.seen = ""; win.addEventListener("keydown", (event) => { win.document.documentElement.dataset.seen += event.key + ":" + event.isTrusted + " "; }, true); return true; }`);
+  const watch_page_keys = () => in_selected_page(`(win) => { win.document.documentElement.dataset.seen = ""; win.addEventListener("keydown", (event) => { win.document.documentElement.dataset.seen += event.key + ":" + event.isTrusted + ":" + event.altKey + " "; }, true); return true; }`);
   const seen_keys = () => in_selected_page(`(win) => win.document.documentElement.dataset.seen`);
   const focus_search_box = async (selector) => {
     await in_selected_page(`(win) => { win.document.querySelector(${JSON.stringify(selector)})?.focus(); return true; }`);
@@ -93,7 +93,8 @@ export async function run_cases(context) {
     const escapes_seen = async () => ((await seen_keys()).match(/Escape:/g) ?? []).length;
     await poll_until("the page to get the sent Escape", async () => (await escapes_seen()) >= 1);
     await sleep(300);
-    expect((await escapes_seen()) === 1, `the page saw more than the one sent Escape: ${await seen_keys()}`);
+    // The entry is key:trusted:alt. The sent Escape has no Alt, so an Alt one is the user's own key leaking through.
+    expect((await escapes_seen()) === 1 && (await seen_keys()).includes("Escape:true:false"), `the page did not see exactly the one Escape the module sent: ${await seen_keys()}`);
     expect(await field_focused(), "<A-Escape> blurred the field");
     await close_selected_tab();
   });
