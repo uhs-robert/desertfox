@@ -650,7 +650,7 @@ export async function run_cases(context) {
         return true;
       })()`),
     { timeout_ms: 10000 });
-    await focus_in_devtools();
+    await poll_until("the focus to be in the toolbox tab", async () => /^(about:devtools-toolbox|chrome:\/\/devtools\/)/.test(await chrome(`(async () => String(Services.focus.focusedWindow?.location?.href ?? ""))()`)), { timeout_ms: 5000 });
     await with_cmdline_hello(async () => {
       await press_keys(":");
       await poll_until(": in the toolbox tab to open the command line panel", async () => {
