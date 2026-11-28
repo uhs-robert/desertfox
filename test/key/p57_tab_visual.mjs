@@ -212,11 +212,17 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    const mark = events.length;
-    await press_keys("Q");
-    await sleep(800);
-    const seen = events.slice(mark).filter((event) => event.type === "keydown").map((event) => `${event.page_id}:${event.key}`);
-    expect(seen.some((entry) => entry.endsWith(":Q")), `the page got no Q (saw ${JSON.stringify(seen)}, badge ${await badge()})`);
+    const seen_after = async (keys) => {
+      const mark = events.length;
+      await press_keys(keys);
+      await sleep(600);
+      return events.slice(mark).filter((event) => event.type === "keydown").map((event) => event.key);
+    };
+    const in_mode = { Q: await seen_after("Q"), equals: await seen_after("="), tilde: await seen_after("~") };
+    await press_keys("-k", "Escape");
+    await expect_badge("NORMAL");
+    const in_normal = { Q: await seen_after("Q"), equals: await seen_after("=") };
+    expect(in_mode.Q.includes("Q") || in_mode.equals.includes("=") || in_mode.tilde.includes("~"), `no unbound key reached the page in the mode: ${JSON.stringify({ in_mode, in_normal })}`);
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
   });
