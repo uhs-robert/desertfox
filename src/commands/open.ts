@@ -28,7 +28,7 @@ async function open_url_target(ctx: CommandContext, text: string): Promise<strin
 const FIREFOX_PAGE_COMMAND = "browser.open_firefox_page";
 const FIREFOX_PAGE_HINT = "Use :firefox to open Firefox's own pages";
 
-// Typed text that equals the address of a page `:firefox` opens runs that command, here or in a tab. A request from a page maps only when the command line submitted it, so a link a page wrote never does. A page never reaches about:logins. The bridge refuses every about: address before the handler runs.
+// Typed text that equals the address of a page `:firefox` opens runs that command, here or in a tab. A request from a page maps only when the command line submitted it, so a link a page wrote never does. Text read from a source such as @clipboard never maps, because the user did not type it. A page never reaches about:logins. The bridge refuses every about: address before the handler runs.
 async function open_typed_firefox_page(ctx: CommandContext, page: NonNullable<ReturnType<typeof firefox_page_at>>, where: Where, container: string | undefined): Promise<void> {
   // about:logins lists saved sites, so it opens only from a request no page sent.
   if (page === "logins" && ctx.from_page) throw new RuntimeRefusal("A page cannot open the passwords page");
@@ -60,7 +60,8 @@ define("open.url", {
   bridge: true,
   runs_in: "background",
   run: async (ctx, args) => {
-    const page = ctx.from_page && !ctx.from_line ? undefined : firefox_page_at(args.url);
+    const typed = !ctx.from_source && (!ctx.from_page || ctx.from_line);
+    const page = typed ? firefox_page_at(args.url) : undefined;
     if (page !== undefined) return open_typed_firefox_page(ctx, page, args.where, container_of(args));
     await open_in(ctx, await open_url_target(ctx, args.url), args.where, container_of(args));
   },

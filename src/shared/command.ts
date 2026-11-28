@@ -108,6 +108,8 @@ export type CommandContext = {
   from_page?: true;
   // The command line submitted the request, so the text is what the user typed. The content script that hosts the line sets it, and the page cannot send a message of its own.
   from_line?: true;
+  // An arg of this step was read from a context source (@clipboard, @selection, the page address), so it is not text the user typed even when the line submitted it.
+  from_source?: true;
 };
 
 // What a handler throws for a failure that depends on the state of the browser or the config, such as a tab that is gone or a search engine the config lacks. A bad argument value is never one of these: the param schema rules it out before the handler runs.

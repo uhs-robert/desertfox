@@ -170,9 +170,11 @@ export function browser_with_dialog(firefox: Firefox, { nested = false, url = PR
   return { ...window, press, frame, dialog_view, field, accept, cancel, dialog_doc };
 }
 
-export function started(make: (firefox: Firefox) => ReturnType<typeof chrome_window> & Record<string, unknown>, { walk = false, state = STATE as unknown } = {}) {
+// `files`: more feature files to load beside chrome hints, by name.
+export function started(make: (firefox: Firefox) => ReturnType<typeof chrome_window> & Record<string, unknown>, { walk = false, state = STATE as unknown, files = [] as string[] } = {}) {
   const extra_files: Record<string, string> = { [FILE]: source_of(FILE) };
   if (walk) extra_files[WALK_FILE] = source_of(WALK_FILE);
+  for (const name of files) extra_files[name] = source_of(name);
   const firefox = create_firefox({ extra_files });
   const extension = firefox.start_extension();
   Object.assign(extension, { baseURI: { resolve: (path: string) => `moz-extension://uuid/${path}` } });

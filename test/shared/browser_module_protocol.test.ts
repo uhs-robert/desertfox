@@ -139,7 +139,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -512,4 +512,22 @@ test("a __proto__ panel path stays a plain key and sets no prototype", () => {
   assert.ok(table);
   assert.equal(Object.getPrototypeOf(table.panels), Object.prototype);
   assert.deepEqual(Object.keys(table.panels), ["__proto__"]);
+});
+
+test("the hello says pane_moves only when it is true, and pane.move takes left, right or down only", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", pane_moves: true }), { ok: true, value: { v: V, module_version: "1", pane_moves: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", pane_moves: "true" }), { ok: true, value: { v: V, module_version: "1" } });
+  const valid = (direction: unknown) => validate_message({ v: V, id: "m1", kind: "pane.move", args: { direction } }, EXTENSION_TO_MODULE_KINDS).ok;
+  for (const direction of ["left", "right", "down"]) assert.equal(valid(direction), true, direction);
+  for (const direction of ["up", "window", 1, undefined]) assert.equal(valid(direction), false, String(direction));
+});
+
+test("selection.read takes a tab id only and answers with text, so no address or selector crosses", () => {
+  const read = (args: Record<string, unknown>) => validate_message({ v: V, id: "s1", kind: "selection.read", args }, EXTENSION_TO_MODULE_KINDS);
+  assert.deepEqual(read({ tab_id: 4 }), { ok: true, value: { v: V, id: "s1", kind: "selection.read", args: { tab_id: 4 } } });
+  assert.deepEqual(read({ tab_id: 4, selector: "body", url: "https://example.com/" }), { ok: true, value: { v: V, id: "s1", kind: "selection.read", args: { tab_id: 4 } } });
+  assert.equal(read({}).ok, false);
+  assert.equal(read({ tab_id: "4" }).ok, false);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["selection.read"]!.args), ["tab_id"]);
+  assert.equal(EXTENSION_TO_MODULE_KINDS["selection.read"]!.reply, true);
 });

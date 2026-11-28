@@ -469,12 +469,14 @@ Measured in Firefox 161.0 in the key test (`p55_panes`), through the pane keys, 
 | Focus the sidebar | Whatever shows, in this order. An open panel (`SidebarController.isOpen`): `SidebarController.browser.focus()`. Else, with `SidebarController.launcherVisible` and `gBrowser.tabContainer.verticalMode`, the strip: `tabContainer.ariaFocusedItem` set to the selected tab and `focus()` called on that tab (measured: the DOM focus lands in `#tabbrowser-tabs`, where the sidebar keys take `j` and `k`). Else, with the launcher visible, `SidebarController.sidebarMain.focusButtonGroup()`. Else `toggle(lastOpenedId ?? "viewBookmarksSidebar")`, because `toggle()` with no id opens the first panel in Firefox's table, History, when no panel was ever opened. |
 | Focus DevTools | `DevToolsShim` from `chrome://devtools-startup/content/DevToolsShim.sys.mjs`: `isInitialized()` says whether DevTools loaded, so the call never loads it, then `getToolboxForTab(tab)`. `toolbox.hostType` is `bottom`, `left` or `right` when docked and `window` when detached. `toolbox.focusTool(toolbox.currentToolId)` focuses the current tool's frame. |
 | Equal widths | The first panel's width set to half of the two panels' `getBoundingClientRect().width` together, written as for a resize, then `resetRightPanelWidth()`. |
+| Move a pane, DevTools or the sidebar | The focus place comes from the core's `focused_element(win)`: under a frame of class `devtools-toolbox-iframe` is DevTools, the sidebar `<browser>`'s document, `sidebar-main` (its buttons sit in its shadow root), `#sidebar-box` or, with vertical tabs, `#tabbrowser-tabs` is the sidebar. A pane swap is `tab.splitview.reverseTabs()`, which moves the second tab before the first and shows the panels again without changing the selected tab. Then `tab.linkedBrowser.focus()`. A DevTools move is `toolbox.switchHost(host)`, which blurs the tool, asks the host manager for the switch and settles on DevTools' `host-changed` event. It returns null for the host it is on or a toolbox that is not of a local tab. A sidebar move is `SidebarController.reversePosition()`, which sets `sidebar.position_start` to the other value at once. |
 | Focus left or right | The panes compare the left edges of `document.getElementById(tab.linkedPanel)`. DevTools counts when `toolbox.hostType` is that side. The sidebar counts only while it shows something (a panel, the strip or the launcher), and a move never opens it. The sidebar is on the left when `sidebar.position_start` differs from the window global `RTL_UI`, as `SidebarController` labels its own move button. |
 
 - One `E>` widened the first panel by 5 percent of the panel area, within 2 px, and `E<` narrowed it back. A widen of 20 steps stopped the first panel at the area minus its `min-width`.
 - After `ED` with the console docked at the bottom, the window's focused window was the toolbox's.
 - `E=` after a widen made the two panels equal within 2 px. `E<Space><<<` narrowed the first panel three steps of 5 percent. `El` and `Eh` moved between the panes of a split.
-- Not measured: the sidebar focus, DevTools docked left or right, and a split in a private window.
+- `EL` from the left pane of a split moved it to the right, and the pane kept the selection and the window's focused element. `EL` again was refused with "This pane is already on the right", and `EH` moved it back. `E<Space>LH` did the same inside the hold.
+- Not measured: the sidebar focus, DevTools docked left or right, a split in a private window, and the DevTools and sidebar moves, which no key reaches yet. `switchHost` and `reversePosition` are read from the 161.0 source only.
 
 ## Sidebar keys (sidebar-keys)
 
@@ -597,7 +599,16 @@ Not measured: the real `storage.session` channel, a dark theme, scanned, large o
 
 Firefox 161, the key-test copy, read from each tab's `<browser>` (key piece `test/key/p55_page_hints.mjs`):
 - In the parent process (`isRemoteBrowser` false, no `remoteType`): about:preferences, about:settings, about:addons, about:downloads, about:config and about:support. Chrome code reads their DOM directly.
-- In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there would need a collector in a frame script.
+- In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there run through the module's frame script (#1045). It labels about:privatebrowsing, about:home and about:newtab, and still skips about:protections and about:logins.
+
+## Restricted hosts (restricted-domain-hints)
+
+Firefox 161, the key-test copy, offline (key piece `test/key/p55_content_hints.mjs`, a test host added to `extensions.webextensions.restrictedDomains` and pointed at a local server with `network.dns.localDomains`):
+- `network.dns.localDomains` resolves the test host to the local server with no restart.
+- A host added to `extensions.webextensions.restrictedDomains` at run time counts at once: `WebExtensionPolicy.isRestrictedURI` matches it on http, and DesertFox's content script does not run on a page loaded after the change.
+- The pref reads the same in the content process, and the module's `data:` frame script runs in the web content process of that page.
+- The parent's `preventDefault` on a keydown in the browser window keeps the key from the remote page: the page saw no Enter that confirmed a mark.
+- Read from the default prefs, not measured: `browser.tabs.remote.separatedMozillaDomains` lists addons.mozilla.org and accounts.firefox.com, and `browser.tabs.remote.separatePrivilegedMozillaWebContentProcess` is true, so those hosts load in the `privilegedmozilla` process.
 
 ## Keys in DevTools (devtools-keys)
 

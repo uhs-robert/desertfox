@@ -1058,3 +1058,13 @@ test("a dep that rejects fails its repeat and leaves the chain alive for the nex
   assert.equal(second.status, "fulfilled");
   assert.equal(state.calls, 1);
 });
+
+test("a step with an arg read from a context source runs with from_source set, and a typed arg does not", async () => {
+  const seen: unknown[] = [];
+  const commands = { "page.name": { label: "Name", intent: "x", params: [{ name: "name", type: "string", main: true }], runs_in: "background", run: (ctx: { from_source?: true }) => void seen.push(ctx.from_source) } } as const;
+  const { deps } = make_fake(commands, { read_clipboard: async () => "about:addons" });
+  const router = create_router(deps);
+  await router.run({ invocations: [{ id: "page.name", args: { name: { from: "clipboard" } } }], mode: "normal" });
+  await router.run({ invocations: [{ id: "page.name", args: { name: "typed" } }], mode: "normal" });
+  assert.deepEqual(seen, [true, undefined]);
+});

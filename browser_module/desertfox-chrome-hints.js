@@ -14,7 +14,8 @@
 //
 // It also labels a few of Firefox's own pages that run in this process (PAGE_HINT_PAGES), which no content script reaches. The key taker (desertfox-commands.js) calls the start it lends through the core's `share_page_hints` on the user's own hint key there.
 // That start makes a token as a chrome-focus start does and pushes page_hints.want. The extension names the action and answers with page_hints.collect. Draw, key, pick and clear then go on the chrome_hints kinds.
-// A pick there runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it.
+// A pick there and on a doorhanger runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it. Those keys count only after the labels showed 300 ms.
+// A page in a content process that the content hints route labels (desertfox-content-hints.js, through the core's `share_content_pages`) runs the same session. Its targets carry no element: the route's frame script holds them, and a pick goes to it.
 
 (function desertfox_browser_module_chrome_hints(scope) {
   "use strict";
@@ -31,12 +32,10 @@
   define(core);
 
   function define(core) {
-    const EXTENSION_ID = "desertfox@uhs-robert";
     const ENABLED_PREF = "desertfox.browser_module.enabled";
     const HTML = "http://www.w3.org/1999/xhtml";
-    // The one sheet the labels take, built from the hint view's own style (tools/build.mjs). Never a path or a sheet from a message.
-    const STYLE_FILE = "chrome_hints.css";
     const HOST_CLASS = "desertfox-chrome-hints";
+    const DOORHANGER_ID = "notification-popup";
     // Bounds so that a session's targets fit a few messages of the from-module list, which keeps only its newest 16.
     const MAX_TARGETS = 400;
     const PART_BYTES = 3000;
@@ -93,9 +92,13 @@
     const prompt_kind = (doc) => doc.getElementById("commonDialog")?.getAttribute("windowtype") ?? "";
 
     // Where the targets of the window sit. Each row is a root and what to take under it. A root missing in this Firefox is skipped.
+    // A tab group's label is a button: a click folds or unfolds the group.
+    const TAB_STRIP_TAKE = "tab.tabbrowser-tab, toolbarbutton, .tab-group-label";
     const WINDOW_GROUPS = [
       { root: "#nav-bar", take: "toolbarbutton" },
-      { root: "#TabsToolbar", take: "tab.tabbrowser-tab, toolbarbutton" },
+      { root: "#TabsToolbar", take: TAB_STRIP_TAKE },
+      // With `sidebar.verticalTabs` on, the strip sits here and #TabsToolbar holds no tab.
+      { root: "#vertical-tabs", take: TAB_STRIP_TAKE },
       { root: "#PersonalToolbar", take: "toolbarbutton" },
       { root: "#toolbar-menubar", take: "menubar > menu" },
       { root: "#sidebar-button", take: "" },
@@ -106,7 +109,7 @@
     // `user_start_only`: only the binding typed in the panel labels it, never a request alone, because a pick there opens a downloaded file. The panel takes the focus, so no page hears the binding meanwhile.
     const PANELS = [
       { id: "appMenu-popup", take: "toolbarbutton, button" },
-      { id: "notification-popup", take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
+      { id: DOORHANGER_ID, take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
       { id: "downloadsPanel", take: "richlistitem, button, toolbarbutton", user_start_only: true },
     ];
 
@@ -304,6 +307,15 @@
       return page_row(doc) ? doc : undefined;
     }
 
+    // The kind of the tab's page in a content process, when the content hints route labels it.
+    const content_kind = (browser) => (browser?.isRemoteBrowser === true ? core.content_pages?.()?.labels(browser) : undefined);
+    // Takes the route's session out of a page, so the end of the session or the mark that held it no longer clears it.
+    function take_remote(page) {
+      const remote = page?.remote;
+      if (page) page.remote = undefined;
+      return remote;
+    }
+
     // Beside the dialog controls: a page's links and its newer link and button rows. Text fields too, which a pick focuses. The custom fields (moz-input-search, moz-select) are not matched, so their own input or select inside gets the label.
     const PAGE_CONTROLS = `${CONTROLS}, a[href], moz-box-button, moz-box-link`;
     const PAGE_FIELDS = "input, textarea, select";
@@ -380,25 +392,17 @@
       return `:host { ${block(colors.dark)} }\n@media (prefers-color-scheme: light) { :host { ${block(colors.light)} } }`;
     }
 
-    const label_style_url = () => ExtensionParent.GlobalManager.getExtension(EXTENSION_ID).baseURI.resolve(STYLE_FILE);
-
     // ---- The layer: a host in the window document for the toolbars, and one inside the panel for its rows.
 
     // The theme goes in a constructed sheet: the DevTools toolbox and Storage documents ignore an inline style.
-    // With no `style_url` the layer takes no sheet at all, so nothing the extension ships styles what it holds.
-    function make_layer(doc, style_url, theme, fixed, host_class = HOST_CLASS) {
+    // The layer takes no sheet of the extension's, so nothing the extension ships styles what it holds.
+    function make_layer(doc, theme, fixed, host_class = HOST_CLASS) {
       const host = doc.createElementNS(HTML, "div");
       host.className = host_class;
       host.style.cssText = fixed ? "position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;" : "position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 2147483647;";
       const root = host.attachShadow({ mode: "closed" });
       const box = doc.createElementNS(HTML, "div");
       box.className = "desertfox-hints";
-      if (style_url) {
-        const sheet = doc.createElementNS(HTML, "link");
-        sheet.setAttribute("rel", "stylesheet");
-        sheet.setAttribute("href", style_url);
-        root.append(sheet);
-      }
       root.append(box);
       if (theme !== "") {
         const colors = new doc.defaultView.CSSStyleSheet();
@@ -438,12 +442,12 @@
 
     function push_key(key, repeat = false) {
       session.seq++;
-      if (session.page) note_typed(session, key, repeat);
+      if (session.spelled_keys) note_typed(session, key, repeat);
       send("chrome_hints.key", { session: session.tag, seq: session.seq, key });
     }
 
-    // A page session keeps the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
-    // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing.
+    // A page session and a doorhanger session keep the label the user's own keys spell, by the extension's rule (`key_step` in src/background/chrome_hints.ts): a letter that continues a drawn label is kept, Backspace takes one back, anything else changes nothing.
+    // A pick there must name the target of that label (`spelled`), so an extension that names another one clicks nothing. On a doorhanger this also stops keys typed for a toolbar label from picking Block or Not now once a prompt takes over the hint key.
     // A key the user holds, or one typed before the labels showed a while, pushes that while on, so a key counts only after a pause with labels shown.
     function note_typed(owner, key, repeat) {
       if (repeat || time_now(owner.win) < owner.counts_at) {
@@ -528,10 +532,8 @@
       starting.undo.push(() => core.release_keys(win, KEY_OWNER));
       for (const type of ["mousedown", "deactivate", "unload"]) listen(starting, win, type, end_start);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(starting, frame_win, type, end_start);
-      if (page) {
-        listen(starting, win, "TabSelect", end_start);
-        for (const type of ["mousedown", "pagehide"]) listen(starting, page.doc.defaultView, type, end_start);
-      }
+      if (page) listen(starting, win, "TabSelect", end_start);
+      if (page?.doc) for (const type of ["mousedown", "pagehide"]) listen(starting, page.doc.defaultView, type, end_start);
       const timer = win.setTimeout(end_start, START_TOKEN_MS);
       starting.undo.push(() => win.clearTimeout(timer));
       const refused = (reply) => !reply.ok && starting?.token === token && end_start();
@@ -541,10 +543,11 @@
 
     // The start the key taker calls for a hint key on a page this file labels. True when it asked the extension.
     function start_page({ window: win, browser, event, keys, count }) {
-      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count)) return false;
+      if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count) || !core.may_act(win)) return false;
       const doc = page_document(browser);
-      if (!doc || tabs_of(win)?.selectedBrowser !== browser) return false;
-      begin_start(win, { page: { browser, inner: browser.innerWindowID, doc, keys, count } });
+      const kind = doc ? undefined : content_kind(browser);
+      if ((!doc && !kind) || tabs_of(win)?.selectedBrowser !== browser) return false;
+      begin_start(win, { page: { browser, inner: browser.innerWindowID, doc, kind, keys, count } });
       return starting?.win === win;
     }
 
@@ -608,16 +611,16 @@
     // `frame_win`: the window of the dialog the targets are in, whose close ends the session.
     // `keyed`: a key of the user's began the session, so a pick may mark a control that grants.
     // `page`: the page of Firefox's own the targets are on, and the session's action there.
-    function start_session(tag, win, found, style_url, theme, { panel, frame_win, page, early_keys = [], keyed = false } = {}) {
+    function start_session(tag, win, found, theme, { panel, frame_win, page, early_keys = [], keyed = false } = {}) {
       // A start's and a confirm's ends release the same hold a session takes, so they end first.
       end_start();
       end_confirm();
       end_session(true);
       if (!core.hold_keys(win, KEY_OWNER)) throw new Error("another feature holds the window's keys");
-      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, typed: "", typed_at: 0, counts_at: Infinity, labels: undefined, look: { style_url, theme, panel, frame_win, page } };
+      session = { tag, win, targets: new Map(), layers: {}, undo: [], seq: 0, drawn_gen: 0, pending: undefined, early_keys, keyed, page, spelled_keys: Boolean(page) || panel?.panel.id === DOORHANGER_ID, typed: "", typed_at: 0, counts_at: Infinity, labels: undefined, look: { theme, panel, frame_win, page } };
       session.undo.push(() => core.release_keys(win, KEY_OWNER));
       try {
-        add_session_parts(win, found, style_url, theme, panel, frame_win, page);
+        add_session_parts(win, found, theme, panel, frame_win, page);
       } catch (error) {
         // A half-built session has no timer or listeners to end it, so it would swallow the window's letters until Escape.
         end_session(false);
@@ -625,15 +628,15 @@
       }
     }
 
-    function add_session_parts(win, found, style_url, theme, panel, frame_win, page) {
+    function add_session_parts(win, found, theme, panel, frame_win, page) {
       const doc = win.document;
-      for (const target of found) session.targets.set(next_target_id++, { ...target, kind: kind_of(target.element) });
-      const window_layer = make_layer(doc, style_url, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
+      for (const target of found) session.targets.set(next_target_id++, { ...target, kind: target.element ? kind_of(target.element) : "remote" });
+      const window_layer = make_layer(doc, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
       doc.documentElement.append(window_layer.host);
       session.layers.window = window_layer;
       session.undo.push(() => window_layer.host.remove());
       if (panel) {
-        const panel_layer = make_layer(doc, style_url, theme, false);
+        const panel_layer = make_layer(doc, theme, false);
         panel.view.prepend(panel_layer.host);
         session.layers.panel = panel_layer;
         session.undo.push(() => panel_layer.host.remove());
@@ -646,9 +649,12 @@
         listen(session, frame_win, "mousedown", end_told);
         listen(session, win, "TabSelect", end_told);
       }
-      if (page) {
-        listen(session, win, "TabSelect", end_told);
-        for (const type of ["mousedown", "pagehide"]) listen(session, page.doc.defaultView, type, end_told);
+      if (page) listen(session, win, "TabSelect", end_told);
+      if (page?.doc) for (const type of ["mousedown", "pagehide"]) listen(session, page.doc.defaultView, type, end_told);
+      // A click, a scroll or a load in a page of another process reaches chrome only as the route's word that the page went.
+      if (page?.remote) {
+        session.undo.push(page.remote.on_gone(end_told));
+        session.undo.push(() => take_remote(page)?.clear());
       }
       listen(session, win, "mousedown", end_told);
       listen(session, win, "deactivate", end_told);
@@ -679,9 +685,8 @@
 
     function open_session(tag, win, found, colors, places) {
       if (found.length === 0) return { ok: false, error: "Nothing to hint here" };
-      // A page's labels sit over controls that change settings, so no sheet of the extension's may move or hide them there.
-      const themed = !places.page;
-      start_session(tag, win, found.slice(0, MAX_TARGETS), themed ? label_style_url() : undefined, themed ? theme_text(colors) : "", places);
+      // The labels sit over controls that change settings, so no sheet of the extension's may move or hide them. A page's labels take no colors from it either.
+      start_session(tag, win, found.slice(0, MAX_TARGETS), places.page ? "" : theme_text(colors), places);
       const parts = target_parts(session.targets);
       parts.forEach((rows, part) => send("chrome_hints.targets", { session: tag, part, parts: parts.length, targets: JSON.stringify(rows) }));
       return { ok: true };
@@ -739,7 +744,8 @@
     // A start the user's hint key asked for on a page of Firefox's own. As with collect_here, the token is spent whatever the answer, and it opens only on the page it was typed on, still shown in its tab.
     function page_collect({ session: tag, start, action, colors }) {
       const asked = starting;
-      if (!asked || asked.token !== start) return { ok: false, error: "The hint key is stale" };
+      if (!asked || asked.token !== start || asked.collecting) return { ok: false, error: "The hint key is stale" };
+      if (asked.page?.kind) return content_page_collect(asked, tag, action, colors);
       end_start();
       if (!asked.page) return { ok: false, error: "The hint key is stale" };
       const refused = asked_problem(asked);
@@ -748,6 +754,34 @@
       const { browser, inner, doc } = asked.page;
       if (tabs_of(win)?.selectedBrowser !== browser || browser.innerWindowID !== inner || page_document(browser) !== doc) return { ok: false, error: "The page changed" };
       return open_session(tag, win, page_targets(win, doc, action), colors, { page: { doc, action }, early_keys: asked.early_keys, keyed: true });
+    }
+
+    // The same start on a page in a content process. The start keeps the window's keys while the page answers, so a key typed meanwhile reaches neither the page nor another feature. Its token is spent at once.
+    async function content_page_collect(asked, tag, action, colors) {
+      asked.collecting = true;
+      const { win } = asked;
+      const { browser, inner, kind } = asked.page;
+      const changed = () => (tabs_of(win)?.selectedBrowser !== browser || browser.innerWindowID !== inner || content_kind(browser) !== kind ? "The page changed" : undefined);
+      const refused = asked_problem(asked) ?? changed();
+      if (refused) {
+        end_start();
+        return { ok: false, error: refused };
+      }
+      const collected = await core.content_pages().collect(win, browser, action);
+      // A click, a tab switch or the token's time ended the start meanwhile.
+      const still_asked = starting === asked;
+      if (still_asked) end_start();
+      const problem = still_asked ? (collected.error ?? asked_problem(asked) ?? changed()) : "The hint key is stale";
+      if (problem) {
+        collected.remote?.clear();
+        return { ok: false, error: problem };
+      }
+      try {
+        return open_session(tag, win, collected.targets, colors, { page: { action, browser, inner, remote: collected.remote }, early_keys: asked.early_keys, keyed: true });
+      } catch (error) {
+        collected.remote.clear();
+        throw error;
+      }
     }
 
     // ---- Draw.
@@ -773,9 +807,13 @@
       return node;
     }
 
-    // A page label's look, inline in a layer with no sheet, after the hint view's own (src/content/hints/view.ts) in its default colors.
+    // A label's look, inline in a layer with no sheet, after the hint view's own (src/content/hints/view.ts). The colors are the checked theme's custom properties, with the hint view's defaults.
+    const LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: var(--desertfox-primary, #7fa3c9); color: var(--desertfox-bg-core, #0c0e13); border: 1px solid var(--desertfox-primary, #7fa3c9); box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
+    // A page's labels take no theme at all, so their colors are fixed values.
     const PAGE_LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: #7fa3c9; color: #0c0e13; border: 1px solid #7fa3c9; box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
-    const PAGE_LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+    const LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+    // The same look as class rules, for the DevTools layers, whose labels the draw makes in many documents. DevTools adopts them in a constructed sheet, since the toolbox ignores an inline <style>. A fixed string of this file.
+    const label_rules = `.desertfox-hint { ${LABEL_STYLE} } .desertfox-hint b { ${LABEL_TYPED_STYLE} }`;
 
     // Replaces every label with the rows of one complete draw. Each box is read now, so a label sits where its target is at this draw, and a pick checks against that.
     function apply_draw(rows, typed_length) {
@@ -784,12 +822,11 @@
       const origin = session.layers.panel?.host.getBoundingClientRect();
       for (const [id, text] of rows) {
         const target = session.targets.get(id);
-        target.drawn = window_box(session.win, target.element);
+        // A target in a content process has the box the route mapped, at its collect.
+        target.drawn = target.element ? window_box(session.win, target.element) : target.box;
         const node = label_node(doc, text, typed_length);
-        if (session.page) {
-          node.style.cssText = PAGE_LABEL_STYLE;
-          node.children[0].style.cssText = PAGE_LABEL_TYPED_STYLE;
-        }
+        node.style.cssText = session.page ? PAGE_LABEL_STYLE : LABEL_STYLE;
+        node.children[0].style.cssText = LABEL_TYPED_STYLE;
         if (target.place === "panel") {
           node.style.position = "absolute";
           node.style.left = `${Math.round(target.drawn.left - origin.left)}px`;
@@ -832,9 +869,9 @@
         end_session(true);
         return { ok: true };
       }
-      if (session.page && !keeps_labels(session, rows_drawn)) return { ok: true };
+      if (session.spelled_keys && !keeps_labels(session, rows_drawn)) return { ok: true };
       const first = session.drawn_gen === 0;
-      if (first && session.page) {
+      if (first && session.spelled_keys) {
         session.labels = new Map(rows_drawn);
         session.counts_at = time_now(session.win) + LABELS_SEEN_MS;
       }
@@ -969,9 +1006,11 @@
     const READY = "ready";
     const WAITS = "waits";
     const GONE = "gone";
-    function confirm_state({ win, target, identity }) {
+    function confirm_state({ win, target, identity, page }) {
       const { element, drawn } = target;
       if (win.closed || Services.focus.activeWindow !== win || !enabled_by_pref() || !core.may_act(win) || core.keys_held_by(win) !== KEY_OWNER) return GONE;
+      // The route's frame script checks the element itself when the confirmed pick reaches it.
+      if (!element) return page?.remote && tabs_of(win)?.selectedBrowser === page.browser && page.browser.innerWindowID === page.inner ? READY : GONE;
       if (!element.isConnected || element.hidden || !element.checkVisibility()) return GONE;
       const now = identity_of(win, element);
       if (now.notification !== identity.notification || now.download !== identity.download || now.text !== identity.text || moved(win, element, drawn)) return GONE;
@@ -988,7 +1027,7 @@
     function begin_confirm(win, target, look) {
       end_confirm();
       const shown_at = time_now(win);
-      confirming = { win, target, identity: identity_of(win, target.element), shown_at, counts_at: shown_at + security_delay_ms(), undo: [] };
+      confirming = { win, target, page: look.page, identity: target.element ? identity_of(win, target.element) : undefined, shown_at, counts_at: shown_at + security_delay_ms(), undo: [] };
       if (!core.hold_keys(win, KEY_OWNER)) {
         end_confirm();
         return false;
@@ -1006,12 +1045,14 @@
     function add_confirm_parts(win, target, { panel, frame_win, page }) {
       const doc = win.document;
       const in_panel = target.place === "panel" && panel !== undefined;
-      const layer = make_layer(doc, undefined, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
+      const layer = make_layer(doc, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
       if (in_panel) panel.view.prepend(layer.host);
       else doc.documentElement.append(layer.host);
       confirming.undo.push(() => layer.host.remove());
-      const box = window_box(win, target.element);
+      const box = target.element ? window_box(win, target.element) : target.drawn;
       const origin = in_panel ? layer.host.getBoundingClientRect() : { left: 0, top: 0 };
+      // The note over a target in a content process stays inside the tab's content area, as its labels do, so it never covers the toolbars.
+      const min_top = target.element ? 0 : Math.round(page.browser.getBoundingClientRect().top);
       const position = in_panel ? "absolute" : "fixed";
       const left = Math.round(box.left - origin.left);
       const top = Math.round(box.top - origin.top);
@@ -1021,18 +1062,25 @@
       const note = label_node(doc, CONFIRM_TEXT, 0);
       // nowrap: the layer inside a panel has no width, so a note that may wrap breaks after each word.
       // Above the control, inside the panel or dialog it sits in: below it the panel's edge cuts the note, and on it the note hides what Enter grants.
-      note.style.cssText = `position: ${position}; left: ${Math.max(0, left)}px; top: ${Math.max(0, top - NOTE_PX)}px; ${CONFIRM_NOTE_STYLE}`;
+      note.style.cssText = `position: ${position}; left: ${Math.max(0, left)}px; top: ${Math.max(min_top, top - NOTE_PX)}px; ${CONFIRM_NOTE_STYLE}`;
       layer.box.replaceChildren(frame, note);
 
       const ends = () => end_confirm();
       for (const type of ["mousedown", "deactivate", "resize", "unload", "TabSelect"]) listen(confirming, win, type, ends);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(confirming, frame_win, type, ends);
       // A click in the page lands in its own document, as in a dialog.
-      if (page) for (const type of ["mousedown", "pagehide"]) listen(confirming, page.doc.defaultView, type, ends);
+      if (page?.doc) for (const type of ["mousedown", "pagehide"]) listen(confirming, page.doc.defaultView, type, ends);
+      if (page?.remote) {
+        confirming.undo.push(page.remote.on_gone(ends));
+        confirming.undo.push(() => take_remote(page)?.clear());
+      }
       if (panel) listen(confirming, panel.panel, "popuphidden", (event) => event.target === panel.panel && end_confirm(), false);
+      const timer = win.setTimeout(ends, CONFIRM_MS);
+      confirming.undo.push(() => win.clearTimeout(timer));
+      const { element } = target;
+      if (!element) return;
       // A download that finishes or is unblocked elsewhere changes its row, and a doorhanger reuses its element for the next prompt.
       const observer = new win.MutationObserver(ends);
-      const { element } = target;
       const row = closest_of(element, (at) => at.localName === "richlistitem");
       if (row === element) observer.observe(element, { attributes: true, attributeFilter: ["state", "verdict", "hidden"] });
       else {
@@ -1042,8 +1090,6 @@
       const prompt = prompt_of(element);
       if (prompt) observer.observe(prompt, { attributes: true, attributeFilter: ["popupid", "hidden"] });
       confirming.undo.push(() => observer.disconnect());
-      const timer = win.setTimeout(ends, CONFIRM_MS);
-      confirming.undo.push(() => win.clearTimeout(timer));
     }
 
     // While a grant waits, each key in its window is the confirm's: Enter confirms, any other key cancels, and none goes on to Firefox or the page.
@@ -1059,8 +1105,13 @@
       const asked = confirming;
       const state = confirm_state(asked);
       if (state === WAITS) return;
+      // The only `confirmed: true` the route ever sends: this Enter of the user's own.
+      const remote = state === READY && !asked.target.element ? take_remote(asked.page) : undefined;
       end_confirm();
-      if (state === READY) run_target(asked.win, asked.target);
+      if (remote) {
+        void remote.pick(asked.target.remote_id, true).then((picked) => picked.ok || core.log_once(`a confirmed pick in a page did not run: ${picked.error}`));
+        remote.clear();
+      } else if (state === READY && asked.target.element) run_target(asked.win, asked.target);
     }
 
     // ---- Pick.
@@ -1073,18 +1124,23 @@
     }
 
     // A pick of a control that grants something waits for the user's Enter. Any other runs at once, after Firefox's own delay on a doorhanger button.
-    // On a page of Firefox's own the pick must also name the label the user's keys spelled, and a link action opens or copies the link's web address here.
+    // On a page of Firefox's own and on a doorhanger the pick must also name the label the user's keys spelled, and a link action opens or copies the link's web address here.
     function pick({ session: tag, id }) {
       const { target, error } = drawn_target(session, tag, id);
       if (error) return { ok: false, error };
       const { element, drawn } = target;
       const { win, look, keyed, page } = session;
-      const named_by_keys = !page || spelled(session, id);
+      const named_by_keys = !session.spelled_keys || spelled(session, id);
+      const remote = element ? undefined : take_remote(page);
       end_session(false);
-      if (!named_by_keys) return { ok: false, error: "The keys typed do not name this hint" };
+      if (!named_by_keys) {
+        remote?.clear();
+        return { ok: false, error: "The keys typed do not name this hint" };
+      }
+      if (!element) return content_pick(win, target, look, page, remote);
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
       if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
-      if (page && page.action !== "follow") return run_link(win, element, page.action);
+      if (page && page.action !== "follow") return run_link(win, web_address(element), page.action);
       if (grants(win, element)) {
         // A control can come to grant after the collect, as when a prompt's Remember is ticked.
         if (!keyed) return { ok: false, error: "Type the hint key to pick this" };
@@ -1094,6 +1150,22 @@
       if (prompt_waits(element)) return { ok: false, error: "The prompt is not ready yet" };
       run_target(win, target);
       return { ok: true };
+    }
+
+    // A pick of a target in a content process: the route's frame script checks and runs it, and a link action brings back the link's address. A grant only marks it here.
+    async function content_pick(win, target, look, page, remote) {
+      if (!remote) return { ok: false, error: "The hints have ended" };
+      if (target.grants && page.action === "follow") {
+        if (begin_confirm(win, target, { ...look, page: { ...page, remote } })) return { ok: true };
+        remote.clear();
+        return { ok: false, error: "Another feature holds the window's keys" };
+      }
+      const reply = remote.pick(target.remote_id, false);
+      remote.clear();
+      const picked = await reply;
+      if (!picked.ok || page.action === "follow") return { ok: picked.ok, ...(picked.error !== undefined && { error: picked.error }) };
+      if (tabs_of(win)?.selectedBrowser !== page.browser) return { ok: false, error: "The page changed" };
+      return run_link(win, picked.href, page.action);
     }
 
     const box_moved = (drawn, now) => Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX;
@@ -1128,8 +1200,7 @@
     }
 
     // A new tab loads the address as a link the user opened would, with no principal of the page or of chrome behind it.
-    function run_link(win, element, action) {
-      const address = web_address(element);
+    function run_link(win, address, action) {
       if (address === undefined) return { ok: false, error: "The link has no web address" };
       if (action === "yank") {
         Components.classes["@mozilla.org/widget/clipboardhelper;1"].getService(Components.interfaces.nsIClipboardHelper).copyString(address);
@@ -1255,9 +1326,9 @@
     core.register_kind("chrome_hints.pick", pick);
     core.register_kind("chrome_hints.clear", clear);
     core.register_kind("page_hints.collect", page_collect);
-    core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined, start: start_page });
+    core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined || content_kind(browser) !== undefined, start: start_page });
     core.set_hello_flag("page_hints", true);
     // The DevTools hints draw with these, so their label checks and layer stay one code.
-    core.share_hint_drawing({ MAX_TARGETS, label_style_url, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
+    core.share_hint_drawing({ MAX_TARGETS, label_rules, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
   }
 })(this);

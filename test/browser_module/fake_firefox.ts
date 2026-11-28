@@ -151,6 +151,12 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
         if (typeof value !== "boolean") throw new Error("NS_ERROR_UNEXPECTED");
         return value;
       },
+      getStringPref(name: string, fallback: string) {
+        if (!prefs.has(name)) return fallback;
+        const value = prefs.get(name);
+        if (typeof value !== "string") throw new Error("NS_ERROR_UNEXPECTED");
+        return value;
+      },
       getIntPref(name: string, fallback: number) {
         if (!prefs.has(name)) return fallback;
         const value = prefs.get(name);

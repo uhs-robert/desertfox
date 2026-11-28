@@ -82,7 +82,7 @@ export class Node {
   descendants(): Node[] {
     return this.children.flatMap((child) => [child, ...child.descendants()]);
   }
-  // Selectors of one compound each (a tag, an #id or a .class, a [type=...] and the :not([editable]) the feature uses), or a parent > child pair of them.
+  // Selectors of one compound each (a tag, an #id or a .class, a bare [attribute], a [type=...] and the :not([editable]) the feature uses), or a parent > child pair of them.
   matches(selector: string): boolean {
     return selector.split(",").some((part) => {
       const one = part.trim();
@@ -90,6 +90,8 @@ export class Node {
       if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child)) ?? false);
       if (one.startsWith("#")) return this.id === one.slice(1);
       if (one.startsWith(".")) return this.classList.contains(one.slice(1));
+      const bare_attribute = /^\[([a-z-]+)\]$/.exec(one)?.[1];
+      if (bare_attribute !== undefined) return this.attrs.has(bare_attribute);
       const tag = /^[a-z-]+/.exec(one)?.[0];
       const type = /\[type=([a-z]+)\]/.exec(one)?.[1];
       if (type !== undefined && this.getAttribute("type") !== type) return false;
