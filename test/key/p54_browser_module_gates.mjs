@@ -106,7 +106,7 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  await run_case("in DevTools the module takes no key row: J stays, j moves the tree as Down does through the DevTools feature, the tab and the page stay", async () => {
+  await run_case("in DevTools the module takes no key row: dd stays, j moves the tree as Down does through the DevTools feature, the tab and the page stay", async () => {
     await home("bm_devtools");
     await open_tab(`data:text/html,${encodeURIComponent("<!doctype html><main><p>one</p><p>two</p><p>three</p></main><div style='height:4000px'></div>")}`);
     on_teardown(() => chrome(`(async () => { const { require } = ChromeUtils.importESModule("resource://devtools/shared/loader/Loader.sys.mjs"); const { gDevTools } = require("devtools/client/framework/devtools"); for (const tab of ${W}.gBrowser.tabs) await gDevTools.closeToolboxForTab(tab); })()`));
@@ -128,7 +128,8 @@ export async function run_cases(context) {
     expect(/devtools/.test(await focus_in_devtools()), `the focus is not in DevTools: ${await focus_in_devtools()}`);
     const before = await selected();
     const scroll_before = await page_scroll();
-    await switches_none("J in the Inspector tree");
+    // dd closes the tab on a page, so a leak shows as a tab switch. J is no test here: DevTools has its own J row with devtools_tools.
+    await switches_none("dd in the Inspector tree", ["d", "d"]);
     await press_keys("-k", "Down");
     await poll_until("Down to move the Inspector selection", async () => (await selected()) !== before);
     const after_down = await selected();
