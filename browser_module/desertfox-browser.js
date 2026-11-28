@@ -359,6 +359,8 @@
       if (!doc || doc === win.document) return null;
       const context = doc.defaultView?.browsingContext;
       if (!context?.isContent) return null;
+      // A toolbox opened in a tab is a content document of that tab, but its keys are DevTools'.
+      if (key_in_devtools(win, target)) return null;
       const browser = context.top.embedderElement;
       return browser && gBrowser.getTabForBrowser(browser) ? { browser, document: doc } : null;
     }
@@ -419,11 +421,21 @@
       return (tab_state === undefined || tab_state.mode === "normal") && !desertfox_live(browser, tab_state);
     }
 
-    // The focus is in DevTools: a window of its own, or a document under the toolbox frame that DevTools docks in a tab.
+    // The toolbox page that Firefox opens in a tab (about:devtools-toolbox). The system principal keeps a web page from passing as it, and any error counts as no.
+    function is_toolbox_document(doc) {
+      try {
+        return /^about:devtools-toolbox(?![\w-])/i.test(doc.documentURI) && doc.nodePrincipal.isSystemPrincipal === true;
+      } catch {
+        return false;
+      }
+    }
+
+    // The focus is in DevTools: a window of its own, a document under the toolbox frame that DevTools docks in a tab, or a toolbox opened as a tab (its document or a panel under it).
     function key_in_devtools(win, target) {
       if (win.document.documentElement?.getAttribute("windowtype") === DEVTOOLS_WINDOW_TYPE) return true;
       let doc = target?.ownerDocument;
       for (let depth = 0; doc && doc !== win.document && depth < 8; depth++) {
+        if (is_toolbox_document(doc)) return true;
         // frameElement is null across the <browser> that holds a docked toolbox, so its embedder names that frame.
         const frame = doc.defaultView?.frameElement ?? doc.defaultView?.browsingContext?.embedderElement;
         if (!frame) return false;
