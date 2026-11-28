@@ -607,6 +607,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The text selected on a parent-process about: page, where no content script runs, as the reply value. The module caps and cleans it too, and the extension checks it again. An older module refuses the kind and the extension reads no selection there.
   "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
+  // The web links of a page where DesertFox's page code does not run, for `copy.page_links`. `scope` is "page" or "viewport", which the module checks. The reply value is JSON text of [address, text] pairs, capped by the module and checked again by the extension (browser_module_page_links.ts). The one kind whose reply carries addresses: they are only copied, and the request names no address.
+  "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: MAX_KIND_BYTES },
 };
 
 // The module core's fixed refusal of a request whose arg has the wrong shape (`checked_message` in browser_module/desertfox-browser.js). An older module that knows the kind but not a newer value of an arg answers with it.

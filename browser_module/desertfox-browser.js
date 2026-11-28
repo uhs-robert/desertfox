@@ -60,7 +60,7 @@
 //   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
 //   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
 //   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
-//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
+//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), links(browser, scope), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
 //   content_pages()            In the sandbox: that route, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
@@ -167,6 +167,7 @@
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
       "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: 8192 },
+      "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: 65536 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },

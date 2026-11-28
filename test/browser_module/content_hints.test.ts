@@ -99,6 +99,7 @@ function frame_child(firefox: Firefox, chrome: Chrome, { remote_type = "privileg
   // A test sets this to swap what the frame script says before chrome hears it, as a compromised content process would.
   const tamper = { with: undefined as ((sent: Sent) => Sent | undefined) | undefined };
   const context = vm.createContext({
+    TextEncoder,
     content: chrome.content,
     Services: { prefs: firefox.Services.prefs, appinfo: { remoteType: remote_type } },
     ChromeUtils: { importESModule: () => ({ setTimeout: (run: () => void) => (timers.set(next_timer, run), next_timer++), clearTimeout: (id: number) => void timers.delete(id) }) },
@@ -1054,4 +1055,107 @@ test("the hint key reaches an error page once the extension answers page hints, 
     assert.equal(notice(error_options(name), true), "page_hints", name);
     assert.equal(notice(error_options(name), false), "not_here", `${name} without page_hints`);
   }
+});
+
+// The page links read (desertfox-page-links.js asks the route's frame script for the links of a restricted host, a start page or an error page).
+const PAGE_LINKS_FILE = "desertfox-page-links.js";
+const NO_LINKS_HERE = "Links cannot be read on this page";
+
+function links_world(options: Options, build: (root: Node) => void, document_url = "https://addons.mozilla.org/en-US/firefox/") {
+  const run = start_on(options, build, { files: [PAGE_LINKS_FILE] });
+  const { chrome } = run;
+  const tab = { closing: false, linkedBrowser: chrome.browser, userContextId: 0 };
+  Object.assign(chrome.tabs, { selectedTab: tab, getTabForBrowser: (browser: unknown) => (browser === chrome.browser ? tab : null) });
+  Object.assign(chrome.page, { URL: document_url });
+  // Any loaded window carries the fake ChromeUtils, which owns the tab ids.
+  const carrier = run.firefox.make_window();
+  carrier.load();
+  const tracker = (carrier.win as unknown as { ChromeUtils: { importESModule(url: string): { ExtensionParent: { apiManager: { global: { tabTracker: { getId(tab: unknown): number } } } } } } }).ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker;
+  const tab_id = tracker.getId(tab);
+  const ask = async (scope: string) => {
+    const id = run.send("page_links.read", { tab_id, scope });
+    await run.flush();
+    return run.reply(id);
+  };
+  const pairs = async (scope: "page" | "viewport") => {
+    const reply = await ask(scope);
+    assert.equal(reply?.ok, true, reply?.error ?? "");
+    return JSON.parse((reply as unknown as { value: string }).value) as [string, string][];
+  };
+  return { ...run, tab, ask, pairs };
+}
+
+const with_boxes = (node: Node & Record<string, unknown>) => Object.assign(node, { box: { ...node.box, right: node.box.left + node.box.width, bottom: node.box.top + node.box.height } });
+const text_link = (href: string, text: string, left: number, top: number, attrs: Record<string, string> = {}) => with_boxes(Object.assign(link(href, left, top, attrs), { innerText: text }));
+
+test("a restricted host gives its web links by the frame script, with the scope applied there", async () => {
+  const run = links_world({}, (root) => root.append(
+    text_link("https://addons.mozilla.org/en-US/firefox/addon/one/", "One", 20, 20),
+    text_link("https://addons.mozilla.org/en-US/firefox/addon/one/", "One again", 20, 60),
+    text_link("mailto:a@b.c", "Mail", 20, 100),
+    text_link("https://addons.mozilla.org/en-US/firefox/#top", "Top of this page", 20, 140),
+    text_link("https://support.mozilla.org/kb/x", "Support", 20, 180),
+    text_link("https://addons.mozilla.org/below/", "Below the fold", 20, 5000),
+  ));
+  assert.deepEqual(await run.pairs("page"), [
+    ["https://addons.mozilla.org/en-US/firefox/addon/one/", "One"],
+    ["https://support.mozilla.org/kb/x", "Support"],
+    ["https://addons.mozilla.org/below/", "Below the fold"],
+  ]);
+  assert.deepEqual((await run.pairs("viewport")).map(([address]) => address), ["https://addons.mozilla.org/en-US/firefox/addon/one/", "https://support.mozilla.org/kb/x"]);
+});
+
+test("a start page and an error page give their links, and a link with a control character or a long address is dropped", async () => {
+  const build = (root: Node) => root.append(text_link("https://a.example/", "A", 20, 20), text_link("https://b.example/x y", "Blank", 20, 60), text_link(`https://c.example/${"x".repeat(2100)}`, "Long", 20, 100), text_link("javascript:alert(1)", "Script", 20, 140));
+  for (const options of [{ about: "about:newtab" }, { about: "about:privatebrowsing" }, error_options("about:neterror")] as Options[]) {
+    const run = links_world(options, build);
+    assert.deepEqual(await run.pairs("page"), [["https://a.example/", "A"]], JSON.stringify(options));
+  }
+});
+
+test("a page the content route does not label, an account host, a page that changed and a tab that is not selected give the notice or a refusal and no links", async () => {
+  const build = (root: Node) => root.append(text_link("https://a.example/", "A", 20, 20));
+  assert.deepEqual(await links_world({ host: "example.com" }, build).ask("page"), { v: 1, reply_to: "r0", ok: false, error: NO_LINKS_HERE }, "a web page the route never labels");
+  assert.equal((await links_world({ host: "accounts.firefox.com" }, build).ask("page"))?.error, NO_LINKS_HERE);
+  assert.equal((await links_world({ about: "about:logins", remote_type: "web" }, build).ask("page"))?.error, NO_LINKS_HERE);
+  const run = links_world({}, build);
+  run.chrome.browser.innerWindowID = 11;
+  assert.equal((await run.ask("page"))?.error, "The page changed", "a document that is not the one the frame script has");
+  const other = links_world({}, build);
+  Object.assign(other.chrome.tabs, { selectedTab: {} });
+  assert.equal((await other.ask("page"))?.error, "The tab that asked is no longer selected");
+});
+
+test("a frame script that sends too much, junk or a bad address is capped again by the module", async () => {
+  const build = (root: Node) => root.append(text_link("https://a.example/", "A", 20, 20));
+  const run = links_world({}, build);
+  run.child.tamper.with = (message) => {
+    if (message.name !== `${PREFIX}linked`) return message;
+    const pairs = [...Array.from({ length: 700 }, (_, index) => [`https://a.example/${index}`, "t"]), ["javascript:alert(1)", "x"], [3, "x"], "junk", ["about:config", "x"]];
+    return { name: message.name, data: { ...message.data, pairs } };
+  };
+  assert.equal((await run.pairs("page")).length, 500);
+  run.child.tamper.with = (message) => (message.name === `${PREFIX}linked` ? { name: message.name, data: { ...message.data, pairs: "not a list" } } : message);
+  assert.equal((await run.ask("page"))?.error, "The page changed");
+  run.child.tamper.with = (message) => (message.name === `${PREFIX}linked` ? { name: message.name, data: { ...message.data, pairs: [["https://a.example/", "x".repeat(100_000)]] } } : message);
+  assert.equal((await run.ask("page"))?.error, "The page changed", "a reply over 64 KB counts as no reply");
+});
+
+test("the frame script's links reply refuses a page its own copy of the rule does not label", () => {
+  const run = start_on({ host: "example.com", remote_type: "web", pref: "" }, (root) => root.append(text_link("https://a.example/", "A", 20, 20)), { files: [PAGE_LINKS_FILE] });
+  run.child.ask("links", { req: 1, inner: 10, kind: "restricted", scope: "page" });
+  assert.deepEqual(run.child.sent.at(-1)!.data, { req: 1, inner: 10, error: "not_here" });
+  run.child.ask("links", { req: 2, inner: 10, kind: "restricted", scope: "everything" });
+  assert.deepEqual(run.child.sent.at(-1)!.data, { req: 2, inner: 10, error: "changed" });
+  run.child.ask("links", { req: 3, inner: 99, kind: "restricted", scope: "page" });
+  assert.deepEqual(run.child.sent.at(-1)!.data, { req: 3, inner: 99, error: "changed" });
+});
+
+test("the frame script counts the list in UTF-8 bytes, so a page of wide text stays under chrome's 64 KB reply limit", async () => {
+  // 400 links with 80 CJK characters each: about 46,000 UTF-16 units, under 60,000, but about 110,000 UTF-8 bytes.
+  const wide = Array.from({ length: 400 }, (_, index) => text_link(`https://a.example/${index}`, "\u6f22".repeat(80), 20, 20));
+  const run = links_world({}, (root) => root.append(...wide));
+  const pairs = await run.pairs("page");
+  assert.ok(pairs.length > 100 && pairs.length < 400, `${pairs.length} links`);
+  assert.ok(new TextEncoder().encode(JSON.stringify(run.child.sent.at(-1)!.data)).length <= 65536);
 });
