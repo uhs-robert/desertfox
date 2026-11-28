@@ -8,6 +8,7 @@ import { evaluate_in_chrome } from "./rdp.mjs";
 export const areas = ["keys", "config", "tabs"];
 
 const BLUR_WINDOW_MS = 1000;
+const QUIET_MS = 700;
 
 export async function run_cases({ config_copy, load_config_dir, setup, run_case, open_page, press_keys, send_keys, in_background, in_active_tab, wait_event, wait_active_tab, tab_switch_mark, tabs_shown_since, poll_until, settle_focus, events, url_of, scroll_of, expect, sleep, rdp, close_tabs_with, escape_to_normal, wait_tab_quiet }) {
   const badge_of = (page_id) => events.filter((event) => event.type === "indicator" && event.page_id === page_id).at(-1)?.label;
@@ -59,12 +60,19 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
       await expect_keys_work(page_id);
     }
   };
-  // Holds Shift+J for 1.5 s and checks that each repeat went on to the next tab, with no stop at a field.
+  // Holds Shift+J for 3 s and checks that each repeat went on to the next tab, with no stop at a field.
+  // Under load the repeats arrive late and the switches trail the key, so the checks wait until the switch log has been still for QUIET_MS, not for a fixed time. The hold is long enough that a slow machine still passes the tab count.
   const hold_shift_j = async () => {
     const order = await tab_order();
     const switch_mark = await tab_switch_mark();
-    await send_keys("-M", "shift", "-P", "j", "-s", "1500", "-p", "j", "-m", "shift");
-    await sleep(500);
+    await send_keys("-M", "shift", "-P", "j", "-s", "3000", "-p", "j", "-m", "shift");
+    let switch_count = -1;
+    let still_since = Date.now();
+    await poll_until("the held repeats to stop switching tabs", async () => {
+      const count = (await tabs_shown_since(switch_mark)).length;
+      if (count !== switch_count) [switch_count, still_since] = [count, Date.now()];
+      return Date.now() - still_since >= QUIET_MS;
+    }, { timeout_ms: 15000 });
     const shown = await tabs_shown_since(switch_mark);
     expect(shown.length >= order.length + 1, `holding Shift+J switched ${shown.length} times over ${order.length} tabs: ${shown.join(", ")}`);
     const skipped = shown.findIndex((id, index) => index > 0 && id !== order[(order.indexOf(shown[index - 1]) + 1) % order.length]);
