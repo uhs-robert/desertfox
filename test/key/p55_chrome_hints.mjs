@@ -48,7 +48,13 @@ export async function run_cases(context) {
       const blocker = browser.popupAndRedirectBlocker;
       blocker.getBlockedPopupCount = () => 2;
       blocker.isRedirectBlocked = () => false;
-      browser.dispatchEvent(new w.CustomEvent("DOMUpdateBlockedPopups", { bubbles: true }));
+      // Firefox reads both before it awaits anything, and a later navigation of this browser must not bring the bar back.
+      try {
+        browser.dispatchEvent(new w.CustomEvent("DOMUpdateBlockedPopups", { bubbles: true }));
+      } finally {
+        delete blocker.getBlockedPopupCount;
+        delete blocker.isRedirectBlocked;
+      }
     })()`);
   const label_of = (labels, target) => labels.find((label) => label.target === target)?.text;
 
@@ -354,10 +360,9 @@ export async function run_cases(context) {
     poll_until(`the ${value} bar's button to be enabled`, () => chrome(`(async () => { const VALUE = ${JSON.stringify(value)}; ${BAR_BUTTON} return !!button && !button.disabled && button.checkVisibility() && button.getBoundingClientRect().width > 0; })()`), { timeout_ms: 8000 });
   const label_on = (labels, spot) => labels.find((label) => Math.abs(label.left - spot.left) + Math.abs(label.top - spot.top) <= 2)?.text;
 
-  await run_case("gB labels the popup-blocked bar's Options button and its close button, and a pick of Options opens the menu at once", async () => {
+  await run_case("gB labels the popup-blocked bar's Options button and its close button, and a pick of Options waits for Enter, which then opens the menu", async () => {
     await home("ch_bar_popup");
     on_teardown(remove_bars);
-    on_teardown(() => chrome(`(async () => { const blocker = ${W}.gBrowser.selectedBrowser.popupAndRedirectBlocker; delete blocker.getBlockedPopupCount; delete blocker.isRedirectBlocked; })()`));
     await in_selected_page_open_popups();
     await poll_until("the popup-blocked bar to show", () => chrome(`(async () => { const VALUE = "popup-blocked"; ${BAR_BUTTON} return !!button; })()`), { timeout_ms: 8000 });
     await wait_bar_ready("popup-blocked");
@@ -367,12 +372,13 @@ export async function run_cases(context) {
     const options_label = label_on(labels, options);
     expect(options_label !== undefined, `no label on the Options button: ${JSON.stringify({ options, labels })}`);
     expect(label_on(labels, close) !== undefined, `no label on the bar's close button: ${JSON.stringify({ close, labels })}`);
+    const menu_open = () => chrome(`(async () => ${W}.document.getElementById("blockedPopupOptions").state === "open")()`);
     await press_keys(...options_label.split(""));
-    await poll_until("the pick to open the blocked popup menu", () => chrome(`(async () => ${W}.document.getElementById("blockedPopupOptions").state === "open")()`), { timeout_ms: 5000 });
-    expect(
-      !(await chrome(`(async () => [...${W}.document.querySelectorAll(".desertfox-chrome-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`)),
-      "the Options pick waited for Enter",
-    );
+    await poll_until("the mark to show on Options", () => chrome(`(async () => [...${W}.document.querySelectorAll(".desertfox-chrome-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`), { timeout_ms: 4000 });
+    expect(!(await menu_open()), "the Options pick opened the menu with no Enter");
+    await sleep(700);
+    await press_keys("-k", "Return");
+    await poll_until("Enter to open the blocked popup menu", menu_open, { timeout_ms: 5000 });
     await remove_bars();
     await expect_no_layer("the Options pick");
   });

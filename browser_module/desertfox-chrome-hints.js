@@ -106,8 +106,6 @@
       // `deep`: the bar's close button sits in its shadow root.
       { root: "notification-message", take: "button.notification-button, .notification-link, moz-button.close", deep: true },
     ];
-    // The notification bars whose buttons only open a menu, so a pick clicks at once: the popup-blocked bar's one button opens a menu, and Allow pop-ups is chosen there. A button of any other bar grants or acts, so it waits for Enter.
-    const AT_ONCE_BARS = new Set(["popup-blocked"]);
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
     // `layer_in`: where in the shown view the labels go, when not the view itself. Firefox reads the doorhanger panel's first child as a prompt, so its labels go inside the prompt shown.
     // `user_start_only`: only the binding typed in the panel labels it, never a request alone, because a pick there opens a downloaded file. The panel takes the focus, so no page hears the binding meanwhile.
@@ -960,8 +958,8 @@
       return true;
     }
 
-    // The close button and the links only dismiss the bar or open a help page.
-    const bar_grants = (bar, element) => element.classList.contains("notification-button") && !AT_ONCE_BARS.has(bar.getAttribute("value"));
+    // The popup-blocked bar's Options button waits too: its open menu takes the window's keys, and the accesskey of Allow pop-ups would grant on a stray key. The close button and the links dismiss the bar, run a callback that grants nothing in Firefox 161, or open a help page.
+    const bar_grants = (_bar, element) => element.classList.contains("notification-button");
 
     // Firefox disables a bar's buttons for a moment after it shows and on each window focus. A pick then says so, as it does for a doorhanger. The click is never replaced by the button's callback, so Firefox's own check stays.
     const bar_waits = (element) => element.disabled === true && bar_of(element) !== null;

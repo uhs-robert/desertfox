@@ -617,16 +617,21 @@ async function label_all(run: ReturnType<typeof window_with_bar>["run"]) {
   return (node: Node) => run.pick(1, rows.find(([, left, top]) => `${left},${top}` === at(node))![0]!);
 }
 
-test("the popup-blocked bar labels its button, link and close button, and a pick of the button clicks at once", async () => {
+test("the popup-blocked bar's Options button waits for Enter like any bar button, and its close button and link click at once", async () => {
   const { run, chrome } = window_with_bar("popup-blocked");
   assert.equal((await bar_collect(run, { typed: false }))?.ok, true);
   const seen = labelled_boxes(run);
-  for (const node of [chrome.actions[0]!, chrome.link, chrome.close]) assert.ok(seen.includes(at(node)), `no label on ${node.className}`);
+  assert.equal(seen.includes(at(chrome.actions[0]!)), false, "an unkeyed collect labelled Options");
+  for (const node of [chrome.link, chrome.close]) assert.ok(seen.includes(at(node)), `no label on ${node.className}`);
   assert.equal(seen.filter((place) => place === at(chrome.close)).length, 1, "the close button got more than one label");
-  const pick = await label_all(run);
-  assert.equal((await pick(chrome.actions[0]!))?.ok, true);
-  assert.equal(chrome.actions[0]!.clicks, 1);
-  assert.equal(chrome.layers().length, 0, "a mark shows for a button that only opens a menu");
+  const keyed = window_with_bar("popup-blocked");
+  assert.equal((await bar_collect(keyed.run))?.ok, true);
+  const pick = await label_all(keyed.run);
+  assert.equal((await pick(keyed.chrome.actions[0]!))?.ok, true);
+  assert.equal(keyed.chrome.actions[0]!.clicks, 0, "a pick opened the Options menu with no Enter");
+  keyed.chrome.clock.now += 500;
+  keyed.chrome.press("Enter");
+  assert.equal(keyed.chrome.actions[0]!.clicks, 1);
 });
 
 test("an unknown bar's button is left bare by a plain collect, and the rest of the window still gets labels", async () => {
@@ -661,7 +666,7 @@ test("a key other than Enter cancels the wait on a bar's button", async () => {
   assert.equal(chrome.actions[0]!.clicks, 0);
 });
 
-test("the close button and the link of an unknown bar click at once, since they only dismiss it or open a help page", async () => {
+test("the close button and the link of an unknown bar click at once, since they grant nothing", async () => {
   const { run, chrome } = window_with_bar("some-future-bar");
   await bar_collect(run, { typed: false });
   const pick = await label_all(run);
@@ -681,9 +686,9 @@ test("a bar that changes its value while its button waits ends the wait", async 
 });
 
 test("a bar button that Firefox disables after the labels show answers not ready, and a disabled or hidden one gets no label", async () => {
-  const { run, chrome } = window_with_bar("popup-blocked", { buttons: 2 });
+  const { run, chrome } = window_with_bar("some-future-bar", { buttons: 2 });
   chrome.actions[1]!.disabled = true;
-  await bar_collect(run, { typed: false });
+  await bar_collect(run);
   assert.equal(labelled_boxes(run).includes(at(chrome.actions[1]!)), false, "a disabled button got a label");
   const pick = await label_all(run);
   chrome.actions[0]!.disabled = true;
