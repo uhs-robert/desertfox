@@ -679,3 +679,9 @@ Results:
 - The markup view keeps the focus on its document's body. The selected line is the `.tag-line` with `aria-selected="true"`.
 - After a case that showed a source in the Debugger, the test page of the next case never took the focus, so that case runs last in its piece.
 - Storage values were not reached: the Storage panel showed no rows for two localStorage items the page had set (`localStorage.length` 2), so whether its table cells and sidebar select is unknown, and the mode has no Storage row.
+
+## Switching DevTools tools by a synthetic chord (devtools-tool-keys)
+
+- The toolbox binds `selectNextTool` and `selectPreviousTool` to Ctrl+] and Ctrl+[ on Linux (`toolbox.nextTool.key` and `toolbox.previousTool.key`, `CmdOrCtrl`). Its key shortcuts listen for `keydown` on the toolbox's `chromeEventHandler` and check no `isTrusted`. Read from Firefox 161 code.
+- A keydown with `ctrlKey` and the key `]` or `[`, dispatched by chrome code on the focused element in the markup view (a frame in the Inspector panel in the toolbox frame), selects the next or previous tool, wrapping at the ends, in docked DevTools and in a DevTools window. Measured by `p54_browser_module_devtools` (the chord from the markup view docked and in a window, and `gt` and `gT` in both).
+- On macOS the chord is Cmd+] and Cmd+[, which are Firefox's Forward and Back. Not measured.

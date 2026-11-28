@@ -185,8 +185,8 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `yo` | `copy --org` | Copy URL | yes |
 | `ys` | `copy --short` | Copy URL | yes |
 | `yt` | `copy --title` | Copy URL | yes |
-| `yL` | `copylinks` | Copy page links |  |
-| `yl` | `copylinks --viewport` | Copy links in view |  |
+| `yL` | `copylinks` | Copy page links | yes |
+| `yl` | `copylinks --viewport` | Copy links in view | yes |
 | `yT` | `copytabs` | Copy tab links | yes |
 | `gu` | `url.parent` | Parent URL | yes |
 | `gU` | `url.root` | Root URL | yes |

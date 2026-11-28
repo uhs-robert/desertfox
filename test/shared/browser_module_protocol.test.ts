@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { MAX_PAGE_LINKS, MAX_PAGE_LINKS_BYTES } from "../../src/shared/browser_module_page_links.ts";
 import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
   ABSENT_TAB,
   DEVTOOLS_ACTIONS,
+  DEVTOOLS_TOOL_KEYS,
   DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_HINT_KEY,
   DEVTOOLS_SEARCH_KEYS,
@@ -141,7 +143,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "page_links.read"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -452,6 +454,17 @@ test("an older module never gets a table it refuses, and a newer module takes th
   assert.ok(validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys: table_for(older_hello) } }, EXTENSION_TO_MODULE_KINDS).ok);
 });
 
+test("the tool and tab rows are behind devtools_tools, so a module that knows the search rows but not these keeps a table it takes", () => {
+  assert.deepEqual(DEVTOOLS_TOOL_KEYS, [{ key: "g", action: "tool.prefix" }, { key: "J", action: "tab.next" }, { key: "K", action: "tab.prev" }]);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_tools: true }), { ok: true, value: { v: V, module_version: "1", devtools_tools: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_tools: flag }), { ok: true, value: { v: V, module_version: "1" } });
+  const with_search_only: readonly string[] = DEVTOOLS_ACTIONS.filter((action) => !["tool.prefix", "tab.next", "tab.prev"].includes(action));
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+  const search_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true };
+  assert.ok(table_for(search_hello).every(({ action }) => with_search_only.includes(action)));
+  assert.equal(table_for({ ...search_hello, devtools_tools: true }).every(({ action }) => with_search_only.includes(action)), false, "the reason for the flag");
+});
+
 test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {
   for (const verb of ["draw", "pick", "clear"]) assert.deepEqual(EXTENSION_TO_MODULE_KINDS[`devtools_hints.${verb}`], EXTENSION_TO_MODULE_KINDS[`chrome_hints.${verb}`], verb);
   assert.deepEqual(EXTENSION_TO_MODULE_KINDS["devtools_hints.collect"], { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 });
@@ -582,4 +595,17 @@ test("selection.read takes a tab id only and answers with text, so no address or
   assert.equal(read({ tab_id: "4" }).ok, false);
   assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["selection.read"]!.args), ["tab_id"]);
   assert.equal(EXTENSION_TO_MODULE_KINDS["selection.read"]!.reply, true);
+});
+
+test("page_links.read names a tab and a scope only, and a full-size reply fits the kind", () => {
+  const read = (args: Record<string, unknown>) => validate_message({ v: V, id: "l1", kind: "page_links.read", args }, EXTENSION_TO_MODULE_KINDS);
+  assert.deepEqual(read({ tab_id: 4, scope: "page", url: "https://example.com/", selector: "a" }), { ok: true, value: { v: V, id: "l1", kind: "page_links.read", args: { tab_id: 4, scope: "page" } } });
+  assert.equal(read({ tab_id: 4 }).ok, false);
+  assert.equal(read({ scope: "page" }).ok, false);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["page_links.read"]!.args), ["tab_id", "scope"]);
+  const row = EXTENSION_TO_MODULE_KINDS["page_links.read"]!;
+  assert.equal(row.reply, true);
+  const value = JSON.stringify(Array.from({ length: MAX_PAGE_LINKS }, (_, index) => [`https://a.com/${index}`, "x".repeat(90)]));
+  assert.ok(new TextEncoder().encode(value).length <= MAX_PAGE_LINKS_BYTES);
+  assert.equal(reply_fits({ v: V, reply_to: "l1", ok: true, value }, row), true);
 });
