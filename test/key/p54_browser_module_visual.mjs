@@ -36,9 +36,12 @@ export async function run_cases(context) {
     });
     await poll_until("CARET in the bar", mode_is("CARET"), { timeout_ms: 8000 });
     await poll_until("caret browsing on", caret_pref);
-    await press_keys("Escape");
-    await poll_until("NORMAL in the bar", mode_is("NORMAL"), { timeout_ms: 8000 });
-    await poll_until("caret browsing back to the user's value", async () => !(await caret_pref()));
+    await press_keys("-k", "Escape");
+    // The search box takes the focus back as the mode ends, so the bar may say INSERT: it must only stop saying CARET.
+    await poll_until("caret browsing back to the user's value", async () => !(await caret_pref()), { timeout_ms: 5000 }).catch(async (error) => {
+      throw new Error(`${error.message}; bar ${await bar_mode()}; errors ${JSON.stringify((await steps.module_status()).errors)}`);
+    });
+    await poll_until("CARET gone from the bar", async () => (await bar_mode()) !== "CARET", { timeout_ms: 5000 });
     await close_selected_tab();
   });
 
