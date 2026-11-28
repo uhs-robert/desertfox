@@ -271,7 +271,7 @@
       return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, insert_keys: read_insert_keys(value.insert_keys) };
     }
 
-    // insert_keys_of: a bad table is undefined, and the plain Escape stays. A row with a command this version does not know is skipped, so a newer extension can add rows. The result maps a key token to its command.
+    // read_insert_keys: a bad table is undefined, and the plain Escape stays. A row with a command this version does not know is skipped, so a newer extension can add rows. The result maps a key token to its command.
     function read_insert_keys(value) {
       if (!Array.isArray(value) || value.length > MAX_INSERT_KEY_ROWS) return undefined;
       const rows = new Map();
