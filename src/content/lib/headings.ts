@@ -4,12 +4,15 @@
 import { RuntimeRefusal } from "../../shared/command.ts";
 import type { HeadingJump } from "../align_target.ts";
 import type { HeadingItem } from "../../shared/messages/content.ts";
-import { best_match } from "../../shared/score.ts";
+import { pick_heading } from "../../shared/browser_module_headings.ts";
 import { collect, scrollport_top_of, scroll_clips_in_page } from "./candidates.ts";
 import { HEADINGS, is_heading, rendered_text } from "./heading_match.ts";
 import type { Found } from "./candidates.ts";
 import { boxes_with_fallback, clip_to } from "./visible.ts";
 import type { PageProbe, Rect } from "./visible.ts";
+
+// The pick is shared with the extension, which picks for the heading list of a locked page.
+export { pick_heading };
 
 const DEFAULT_HEADING_LEVEL = 2;
 // Boxes thinner than this are the "visually hidden" trick (1px, clipped), made for screen readers only.
@@ -54,23 +57,6 @@ export function keep_present_found(candidates: Found[]): Found[] {
   const kept_frames = keep_present_elements([...new Set(candidates.flatMap((found) => found.frames))]);
   const kept_elements = keep_present_elements(candidates.map((found) => found.element));
   return candidates.filter((found) => kept_elements.has(found.element) && found.frames.every((frame) => kept_frames.has(frame)));
-}
-
-const NUMBER_PICK = /^(\d+)(?:\s+(.*))?$/s;
-
-// `3 Install` is what a completion pick puts in the line: the heading at place 3 of the list, then its text. The number wins over the text,
-// because the text may have changed since the pick. A number past the end of the list is part of the text, so "2024" finds a heading titled 2024.
-// Other text is the best fuzzy match, the same ranking the list shows. An equal tie takes the one that comes first on the page.
-export function pick_heading(rows: readonly HeadingItem[], typed: string): number {
-  const text = typed.trim();
-  const numbered = NUMBER_PICK.exec(text);
-  if (numbered) {
-    const place = Number(numbered[1]);
-    if (place >= 1 && place <= rows.length) return place - 1;
-  }
-  const match = best_match(text, rows.map((row, index) => ({ row, index })), ({ row }) => ({ name: row.text, description: `h${row.level}` }));
-  if (match.found === "none") throw new RuntimeRefusal(`No heading matches ${text}`);
-  return (match.found === "one" ? match.item : match.first).index;
 }
 
 // `scrollIntoView` moves only the document of the element, so each frame that holds it scrolls to the top in turn, innermost first.
