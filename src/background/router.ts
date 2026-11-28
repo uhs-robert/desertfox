@@ -65,6 +65,8 @@ export type RouteRequest = {
   frame_id?: number;
   // Set for a request from a page's content script, and carried to every step's context (`CommandContext.from_page`).
   from_page?: true;
+  // Set when the command line submitted the request (`CommandContext.from_line`).
+  from_line?: true;
   // Set by keys and Firefox shortcuts: a missing value opens the command line. A snippet's `desertfox.run` leaves it
   // unset and gets the validation failure instead, because nobody is there to type.
   may_prompt?: boolean;
@@ -131,7 +133,7 @@ export function create_router(deps: RouterDeps): Router {
     // The sender frame exists only in the sender tab. Another tab gets its top frame.
     const same_tab = tab_id !== undefined && tab_id === request.sender_tab_id;
     const frame_id = same_tab ? (request.frame_id ?? 0) : 0;
-    const context: CommandContext = { tab_id, window_id: active?.window_id, frame_id, mode: request.mode, ...(request.from_page && { from_page: true }) };
+    const context: CommandContext = { tab_id, window_id: active?.window_id, frame_id, mode: request.mode, ...(request.from_page && { from_page: true }), ...(request.from_line && { from_line: true }) };
     return { active, context };
   }
 
