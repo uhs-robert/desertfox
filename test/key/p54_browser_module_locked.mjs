@@ -9,6 +9,8 @@ import { make_article, make_pdf, module_steps } from "./browser_module_steps.mjs
 
 export const areas = ["tabs", "scroll"];
 
+const CONFIG_SNAPSHOT_KEY = "desertfox_browser_module_snapshot_config";
+
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, url_of, sleep, in_background, run_line } = context;
   const steps = module_steps(context);
@@ -38,10 +40,11 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
-  // This piece covers the module's own key path, so the page code stays off on the PDF viewer and Reader View. p54_browser_module_pages covers it on.
+  // This piece covers the module's own key path, so the page code stays off on the PDF viewer and Reader View. p54_browser_module_page_code covers it on.
   await setup("turn the module on, with browser_module_pages off", async () => {
     await steps.turn_on_module();
     await run_line(":set browser_module_pages false");
+    await poll_until("the config snapshot with the setting off", async () => (await steps.session_value(CONFIG_SNAPSHOT_KEY))?.value?.settings?.browser_module_pages !== true);
   });
 
   // The list of add-ons is too short to scroll in a test profile, so the case makes it long.
