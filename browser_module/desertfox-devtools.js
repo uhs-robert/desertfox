@@ -33,6 +33,8 @@
     const rect = element.getBoundingClientRect();
     return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   };
+  // A suggestion popup that shows, in the toolbox document, for the Inspector's search box and the console input. While it shows, Escape is DevTools': it hides the popup and keeps the text.
+  const OPEN_POPUP = ".tooltip-visible .devtools-autocomplete-popup";
   const point_of = (box, area) => (area ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: box.left + Math.min(box.width / 2, 8), y: box.top + box.height / 2 });
   // In the sandbox an error goes on to the core's `adopt`, which turns the module off for the session.
   define(core);
@@ -138,7 +140,7 @@
       const taken_by_visual = visual.answer_key(win, event, token);
       if (taken_by_visual !== undefined) return taken_by_visual;
       const target = event.originalTarget ?? event.target;
-      // Escape is no row, since a row is one character. Each Escape below belongs to a feature the pushed table turned on, and runs before the field check, as both start in a field.
+      // Escape is no row, since a row is one character. Any pushed table turns on the console's double Escape, and the search rows turn on the search box's Escape. Both run before the field check, as both start in a field.
       if (console_escape.answer_key(event, target, actions.size > 0)) return true;
       if (search.answer_escape(event, target, [...actions.values()].some((action) => search.ACTIONS.has(action)))) return true;
       if (event.ctrlKey || event.altKey || event.metaKey) return false;
@@ -167,8 +169,6 @@
     const MARKUP_URL = "chrome://devtools/content/inspector/markup/markup.html";
     const SEARCH_BOX = "inspector-searchbox";
     const MATCH_BUTTONS = { "search.next": "inspector-searchnavigation-button-next", "search.prev": "inspector-searchnavigation-button-prev" };
-    // The suggestion popup sits in the toolbox document. While it shows, Escape is DevTools': it hides the popup and keeps the box's text.
-    const OPEN_POPUP = ".tooltip-visible .devtools-autocomplete-popup";
     const SELECTED_LINE = ".tag-line > .tag-state.theme-selected";
 
     let kept = null;
@@ -258,7 +258,6 @@
     const CONSOLE_URL = "chrome://devtools/content/webconsole/index.html";
     const DOUBLE_MS = 400;
     const CONSOLE_TAB = "#toolbox-tab-webconsole";
-    const OPEN_POPUP = ".tooltip-visible .devtools-autocomplete-popup";
 
     // The first Escape: where and when. It ends on any other key, the input's blur and the console's unload, so the toolbox closing or switching tools between the two Escapes starts over.
     let first = null;

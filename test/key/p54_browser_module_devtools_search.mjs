@@ -198,12 +198,12 @@ export async function run_cases(context) {
   });
 
   // ---- The console's double Escape.
+  const hint_layers = () => chrome(`(async () => { ${TOOLBOX} if (!tb) return 0; let count = 0; const walk = (doc) => { count += doc.querySelectorAll(".desertfox-devtools-hints").length; for (const frame of doc.querySelectorAll("iframe")) if (frame.contentDocument) walk(frame.contentDocument); }; walk(tb.doc); return count; })()`);
   const console_text = () => chrome(`(async () => { ${TOOLBOX} return tb.getPanel("webconsole").hud.ui.jsterm._getValue(); })()`);
   async function open_console(id, { vim = false } = {}) {
-    if (vim) {
-      on_teardown(() => chrome(`(async () => { Services.prefs.clearUserPref(${JSON.stringify(VIM_PREF)}); })()`));
-      await chrome(`(async () => { Services.prefs.setStringPref(${JSON.stringify(VIM_PREF)}, "vim"); })()`);
-    }
+    // Each case sets the keymap: the console reads it when it opens, and the piece's teardown clears it only at the end.
+    on_teardown(() => chrome(`(async () => { Services.prefs.clearUserPref(${JSON.stringify(VIM_PREF)}); })()`));
+    await chrome(`(async () => { ${vim ? `Services.prefs.setStringPref(${JSON.stringify(VIM_PREF)}, "vim")` : `Services.prefs.clearUserPref(${JSON.stringify(VIM_PREF)})`}; })()`);
     await home(`bm_dtc_${id}`);
     await open_tab(PAGE);
     await show_tool("webconsole");
@@ -228,10 +228,9 @@ export async function run_cases(context) {
 
   await run_case("console: one Escape keeps the focus in the input, two close together move it to the console output, two far apart do not", async () => {
     await open_console("plain");
-    // The first key typed in this case went missing in three runs on Firefox 161 (the module takes no letter in the input), so the check compares the text before and after the Escapes.
     await press_keys("a", "1", "b");
-    await poll_until("b to type in the input", async () => (await console_text()).endsWith("b"), { timeout_ms: 3000 });
-    const typed = await console_text();
+    await wait_for("a1b types in the input", console_text, "a1b");
+    const typed = "a1b";
     await press_keys("-k", "Escape");
     await sleep(500);
     expect((await focused()).in_console_input, `one Escape moved the focus: ${await where()}`);
@@ -244,6 +243,11 @@ export async function run_cases(context) {
     await wait_for("a double Escape leaves the input", async () => (await focused()).in_console_input, false);
     expect((await focused()).url === "index.html", `the focus left the console: ${await where()}`);
     expect((await console_text()) === typed, `the double Escape changed the input to ${JSON.stringify(await console_text())}`);
+    // The DevTools keys work again: f shows hint labels over the console.
+    await press_keys("f");
+    await poll_until("f to show hint labels", async () => (await hint_layers()) > 0, { timeout_ms: 5000 });
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to end the hints", async () => (await hint_layers()) === 0, { timeout_ms: 5000 });
   });
 
   await run_case("console: a tool switch between the two Escapes starts over, and the split console under the Inspector keeps its Escape", async () => {

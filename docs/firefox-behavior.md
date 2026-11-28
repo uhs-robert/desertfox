@@ -636,6 +636,11 @@ Results:
 - The labels in a docked toolbox showed in a screenshot taken 700 ms after they were in the documents, and not in one taken at once.
 - A tool tab (`.devtools-tab`) selects its tool on mousedown: `element.click()` does nothing. A `mousedown`, `mouseup`, `click` sequence made by chrome code selects it. The same sequence on a markup `.tag-line` selects its node, and the markup view keeps the keyboard focus, so j then moves on from it.
 
+## Escape in the console input and the Inspector search box (devtools-keys)
+
+- With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. The console's editor maps Escape to nothing. Measured by `p54_browser_module_devtools_search`.
+- With DesertFox's Inspector search keys on, Escape in the Search HTML box stops in the parent, so the box keeps its text and the split console does not open. Without DesertFox, the box clears and Escape toggles the split console.
+
 ## Visual mode in DevTools (devtools-keys)
 
 Question: can chrome code select and copy text in DevTools panels with keys, and where does the focus sit when it starts?
