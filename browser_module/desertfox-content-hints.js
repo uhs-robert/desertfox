@@ -382,6 +382,8 @@
 
     function usable(element) {
       if (element.disabled === true || !element.checkVisibility()) return false;
+      // The handoff button holds an invisible input over its whole box. The button alone is the target.
+      if (element.localName !== "button" && element.closest(".search-handoff-button")) return false;
       if (element.localName === "input" && element.type === "hidden") return false;
       const role = element.getAttribute("role");
       if (["a", "area", "button", "input", "select", "textarea", "summary"].includes(element.localName)) return element.localName !== "a" || element.hasAttribute("href");

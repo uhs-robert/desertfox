@@ -719,14 +719,17 @@ function start_page() {
   const parts = {
     top_site: link("https://example.com/", 20, 20, { class: "top-site-button" }),
     learn_more: link("https://support.mozilla.org/kb/private-browsing", 200, 20),
-    handoff: el("button", 20, 100, {}, { class: "search-handoff-button" }),
+    handoff: el("button", 20, 100, { className: "search-handoff-button" }, { class: "search-handoff-button" }),
     pin: el("button", 400, 20, {}, { class: "context-menu-item" }),
     dismiss: el("button", 500, 20),
     toggle: el("button", 400, 100, {}, { role: "switch" }),
     settings: el("div", 500, 100, {}, { role: "button" }),
     internal: link("about:preferences", 600, 20),
   };
-  return { parts, build: (root: Node) => root.append(...Object.values(parts)) };
+  // Firefox's handoff button holds an invisible input over its whole box, which must get no label of its own.
+  const fake_input = el("input", 20, 100, { type: "search" }, { type: "search", class: "fake-editable" });
+  parts.handoff.append(fake_input);
+  return { parts, fake_input, build: (root: Node) => root.append(...Object.values(parts)) };
 }
 const START_NAMES = ["about:privatebrowsing", "about:home", "about:newtab"];
 const START_KINDS = ["privatebrowsing", "home", "newtab"];
@@ -859,4 +862,14 @@ test("a start page in a private window gets hints only with the extension's priv
   }
   const normal = start_on({ about: "about:home" }, start_page().build, { files: [LOCKED_FILE] });
   assert.equal(normal.core.locked_page_rule().hint_notice(normal.chrome.browser, normal.chrome.win), "page_hints", "a normal window needs no access");
+});
+
+test("the search handoff button gets one label: the invisible input inside it gets none", () => {
+  const { parts, build } = start_page();
+  const run = start_on({ about: "about:privatebrowsing" }, build);
+  run.child.ask("collect", { req: 1, inner: 10, kind: "privatebrowsing", action: "follow" });
+  const rows = run.child.sent.at(-1)!.data.rows as number[][];
+  const at_box = rows.filter((row) => row[1] === parts.handoff.box.left && row[2] === parts.handoff.box.top);
+  assert.equal(at_box.length, 1, `${at_box.length} targets on the search box`);
+  assert.equal(rows.length, Object.keys(parts).length, "a target for the nested input");
 });
