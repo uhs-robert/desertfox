@@ -169,6 +169,8 @@ export const MAX_SIDEBAR_KEY_TOKENS = 2;
 export type SidebarKeyRow = { keys: string[]; id: SidebarCommandId };
 // The command whose bindings the module takes with the focus in Firefox's own dialogs, windows and panels, where no content script hears a key. It starts the hints over that place.
 export const CHROME_HINT_COMMAND_ID = "hint.browser";
+// The one-shot normal prefix, whose `browser` chords the state carries as `normal_once_keys`.
+export const NORMAL_ONCE_COMMAND_ID = "mode.normal_once";
 export const MAX_CHROME_HINT_BINDINGS = 4;
 export const MAX_CHROME_HINT_KEY_TOKENS = 4;
 
@@ -198,7 +200,11 @@ export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof
 // `blur_on_load` is the setting of that name, so the module takes the focus out of a field a locked page focused as it loaded. Absent means off.
 // `page_hints` says the extension answers `page_hints.want`, so the module may start hints on Firefox's own pages. Without it the hint keys there keep the notice.
 // `which_key` holds the which-key panels of the tree, drawn by the module where no DesertFox page code runs.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable; insert_keys?: InsertKeyRow[] };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable; normal_once_keys?: string[]; focus_keys?: string[]; insert_keys?: InsertKeyRow[] };
+// `normal_once_keys`: the chords bound to `mode.normal_once`, so the module starts the one-shot prefix in the sidebar on the keydown itself, before a key typed fast behind it. An older module ignores the field and waits for `sidebar.normal_once`.
+// `focus_keys`: the key paths of the tree's forward leaves whose command moves the focus on purpose (a pane focus), so the module leaves the focus where the command put it. An older module ignores the field.
+export const MAX_NORMAL_ONCE_KEYS = 4;
+export const MAX_FOCUS_KEYS = 64;
 // The normal-mode keys DesertFox runs on a locked page, as a prefix tree the module matches with `src/shared/keys/matcher.ts` (see `src/shared/browser_module_scope.ts`). `keys` stays beside it for a module that predates the tree.
 // A leaf is `forward`, which the module sends back as a `run` request with the keys it matched, or a command the module runs itself with its args. A forward leaf holds no command, so a module never learns more than which keys to take.
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
@@ -378,6 +384,17 @@ export function bar_config_of(value: unknown): BarConfig | undefined {
 }
 
 // The sidebar table, or undefined when any part of it is bad: then the sidebar has no keys, and the tab and scroll keys stay. A row may not begin another row, because the module would never see the longer one.
+// A bad list is left out and the rest of the state stays, as for the sidebar table.
+export function normal_once_keys_of(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_NORMAL_ONCE_KEYS || !value.every(is_key_token)) return undefined;
+  return [...(value as string[])];
+}
+
+export function focus_keys_of(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_FOCUS_KEYS || key_paths_problem(value, "focus") !== undefined) return undefined;
+  return [...(value as string[])];
+}
+
 export function sidebar_keys_of(value: unknown): SidebarKeyRow[] | undefined {
   if (!Array.isArray(value) || value.length > MAX_KEY_ROWS) return undefined;
   const rows: SidebarKeyRow[] = [];
@@ -491,8 +508,10 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
   const chrome_hint_keys = chrome_hint_keys_of(value.chrome_hint_keys);
   const which_key = which_key_table_of(value.which_key);
+  const normal_once_keys = normal_once_keys_of(value.normal_once_keys);
+  const focus_keys = focus_keys_of(value.focus_keys);
   const insert_keys = insert_keys_of(value.insert_keys);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }), ...(insert_keys && { insert_keys }) } };
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }), ...(normal_once_keys && { normal_once_keys }), ...(focus_keys && { focus_keys }), ...(insert_keys && { insert_keys }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.
@@ -569,6 +588,7 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   // The user typed a hint key on one of Firefox's own pages that the module labels. `start` is a token the module made for that key, as for `chrome_hints.want`. `keys` holds the tokens of the hint leaf's path, joined by one space, and `count` the typed count or 0, which a page session ignores. The extension matches the keys against its own tree and names the action, or refuses. The session's targets, keys and end come on the chrome_hints rows.
   "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
 };
+export const SIDEBAR_ONCE_KIND = "sidebar.normal_once";
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
   page_push: { args: { tab_id: "int", document_id: "optional_int", message: "text" }, reply: true, max_bytes: PAGE_TEXT_BYTES, max_age_ms: PAGE_MAX_AGE_MS },
@@ -615,6 +635,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The text selected on a parent-process about: page, where no content script runs, as the reply value. The module caps and cleans it too, and the extension checks it again. An older module refuses the kind and the extension reads no selection there.
   "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
+  // `<A-o>` (`mode.normal_once`) with the focus in Firefox's own sidebar, sent whenever the module is on, with no hello flag, because the hello is near the size an older extension accepts. The module checks that the focus of the window in front is in the sidebar, then holds that window's next key sequence and runs it from the tree. It refuses anywhere else, and an older module refuses the unknown kind: either way the page's own arm acts. No arg: the module reads the focus itself.
+  "sidebar.normal_once": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
   // The web links of a page where DesertFox's page code does not run, for `copy.page_links`. `scope` is "page" or "viewport", which the module checks. The reply value is JSON text of [address, text] pairs, capped by the module and checked again by the extension (browser_module_page_links.ts). The one kind whose reply carries addresses: they are only copied, and the request names no address.
   "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: MAX_KIND_BYTES },
 };

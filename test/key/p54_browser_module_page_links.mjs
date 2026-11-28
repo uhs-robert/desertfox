@@ -1,12 +1,12 @@
 // yL and yl on pages where no DesertFox page code runs: about:preferences in the parent process, a host on the restricted list (a localhost name, offline), and the pages the module refuses.
-// The module reads the page's links and DesertFox formats, strips, dedupes and copies them, as on a web page. The PDF viewer and Reader View with browser_module_pages off have no collector yet and give the notice.
+// The module reads the page's links and DesertFox formats, strips, dedupes and copies them, as on a web page. The PDF viewer and Reader View with browser_module_pages off are read by the content hints frame script.
 import { createServer } from "node:http";
 import { writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { make_tmp_dir } from "../support/tmp_dir.ts";
-import { make_linked_pdf, module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
+import { make_article, make_linked_pdf, module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
 
 export const areas = ["keys"];
 
@@ -51,6 +51,7 @@ export async function run_cases(context) {
   const pdf_url = pathToFileURL(join(files_dir, "linked.pdf")).href;
   let port = 0;
   const server = createServer((request, response) => {
+    if (request.url === "/article") return response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(make_article().replace("</article>", `<p>See <a href="/target?utm_source=news&k=1">the target link</a> and <a href="#top">the top</a>.</p></article>`));
     const body = request.url?.startsWith("/empty") ? `<!doctype html><html><head><title>Empty</title></head><body><p>No links here.</p></body></html>` : links_page(port);
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(body);
   });
@@ -154,10 +155,33 @@ export async function run_cases(context) {
     }
   });
 
-  for (const [page, open] of [
-    ["about:protections, a page in a content process", () => open_tab("about:protections")],
-    ["the PDF viewer with browser_module_pages off", () => open_tab(pdf_url)],
-  ]) {
+  await run_case("with browser_module_pages off yL copies the link annotations of the PDF viewer, and yl the same on its first screen", async () => {
+    try {
+      await open_tab(pdf_url);
+      await poll_until("the PDF viewer to draw its link", () => steps.in_selected_page(`(win) => !!win.document.querySelector(".annotationLayer a[href]")`), { timeout_ms: 10000 });
+      await focus_page();
+      for (const keys of ["yL", "yl"]) {
+        const text = await copied_by(keys, `${keys} on the PDF viewer`);
+        expect(text === "- [https://example.org/from-the-pdf](https://example.org/from-the-pdf)", `${keys} copied ${JSON.stringify(text)}`);
+      }
+    } finally {
+      await close_selected_tab();
+    }
+  });
+
+  await run_case("with browser_module_pages off yL copies the article's links from Reader View, stripped and with none to its own page", async () => {
+    try {
+      await open_tab(`about:reader?url=${encodeURIComponent(`${origin}/article`)}`);
+      await poll_until("Reader View to draw the article", () => steps.in_selected_page(`(win) => !!win.document.querySelector(".moz-reader-content a")`), { timeout_ms: 10000 });
+      await focus_page();
+      const text = await copied_by("yL", "yL on Reader View");
+      expect(text.includes(`(${origin}/target?k=1)`) && !text.includes("utm_source") && !text.includes("#top") && !text.includes("about:reader"), `yL copied ${JSON.stringify(text)}`);
+    } finally {
+      await close_selected_tab();
+    }
+  });
+
+  for (const [page, open] of [["about:protections, a page in a content process", () => open_tab("about:protections")]]) {
     await run_case(`on ${page} yL and yl give the notice and copy nothing`, async () => {
       try {
         await open();

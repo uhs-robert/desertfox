@@ -82,12 +82,18 @@ export class Node {
   descendants(): Node[] {
     return this.children.flatMap((child) => [child, ...child.descendants()]);
   }
-  // Selectors of one compound each (a tag, an #id or a .class, a bare [attribute], a [type=...] and the :not([editable]) the feature uses), or a parent > child pair of them.
+  // Selectors of one compound each (a tag, an #id or a .class, a bare [attribute], a [type=...] and the :not([editable]) the feature uses), a parent > child pair of them, or an ancestor and a descendant separated by a space.
   matches(selector: string): boolean {
     return selector.split(",").some((part) => {
       const one = part.trim();
       const child = one.lastIndexOf(">");
-      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child)) ?? false);
+      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child).trim()) ?? false);
+      const descendant = one.lastIndexOf(" ");
+      if (descendant >= 0) {
+        let above = this.parentNode;
+        while (above && !above.matches(one.slice(0, descendant))) above = above.parentNode;
+        return this.matches(one.slice(descendant + 1)) && above !== null;
+      }
       if (one.startsWith("#")) return this.id === one.slice(1);
       if (one.startsWith(".")) return this.classList.contains(one.slice(1));
       const bare_attribute = /^\[([a-z-]+)\]$/.exec(one)?.[1];

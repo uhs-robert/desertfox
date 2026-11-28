@@ -279,11 +279,18 @@
       return { targets, remote: remote_session(browser, inner, req) };
     }
 
-    // The links of the tab's page as raw [address, text] pairs, for the page links feature, which caps and checks them again. A page the route never labels gives an error the user reads.
+    // The PDF viewer and Reader View run no hint row, so the route never labels them. The links read asks the frame script of such a tab anyway, and the frame script checks the principal itself.
+    function viewer_kind(browser) {
+      if (String(browser.currentURI?.spec ?? "").startsWith("about:reader?")) return "reader";
+      return browser.documentContentType === "application/pdf" ? "pdf" : undefined;
+    }
+
+    // The links of the tab's page as raw [address, text] pairs, for the page links feature, which caps and checks them again. A page the route never labels, and that is no PDF or Reader View page, gives an error the user reads.
     async function links(browser, scope) {
-      if (labels(browser) === undefined) return { ok: false, error: LINKS_NOT_HERE };
+      const kind = viewer_kind(browser) ?? labels(browser);
+      if (kind === undefined) return { ok: false, error: LINKS_NOT_HERE };
       const inner = browser.innerWindowID;
-      const { reply } = ask(browser, inner, "links", { kind: labels(browser), scope }, "linked");
+      const { reply } = ask(browser, inner, "links", { kind, scope }, "linked");
       const data = await reply;
       if (data?.error === "not_here") return { ok: false, error: LINKS_NOT_HERE };
       if (!data || data.error !== undefined || !Array.isArray(data.pairs) || browser.innerWindowID !== inner) return { ok: false, error: PAGE_CHANGED };
@@ -551,11 +558,16 @@
     const LINK_ADDRESS = /^(?:https?|ftp|file):\S*$/i;
     const link_label = (element) => [...String(element.innerText || element.getAttribute("aria-label") || element.getAttribute("title") || "").replace(/\s+/g, " ").trim()].slice(0, MAX_LINK_TEXT_CHARS).join("");
     const without_fragment = (address) => String(address).split("#")[0];
-    function page_links(win, doc, link_scope) {
+    // Pages whose links are read but whose controls hints never touch (page code is off there). The PDF viewer's links are the annotation layer of the pages it has drawn, and its toolbar and dialogs hold none that count.
+    const LINK_PAGES = {
+      pdf: { selector: ".annotationLayer a[href]", matches: (doc) => !doc.nodePrincipal?.isSystemPrincipal && !doc.nodePrincipal?.addonId && doc.nodePrincipal?.spec.startsWith("resource://pdf.js/") },
+      reader: { selector: "a[href]", matches: (doc) => !doc.nodePrincipal?.isSystemPrincipal && !doc.nodePrincipal?.addonId && doc.nodePrincipal?.spec.startsWith("about:reader?") && doc.documentURI.startsWith("about:reader?") },
+    };
+    function page_links(win, doc, link_scope, selector = "a[href]") {
       const pairs = [];
       const seen = new Set();
       let bytes = 2;
-      for (const element of deep_all(doc, "a[href]")) {
+      for (const element of deep_all(doc, selector)) {
         const address = String(element.href ?? "");
         if (address.length > MAX_LINK_ADDRESS_CHARS || !LINK_ADDRESS.test(address) || seen.has(address)) continue;
         if (address.includes("#") && without_fragment(address) === without_fragment(doc.URL)) continue;
@@ -582,9 +594,10 @@
         const win = content;
         const doc = win?.document;
         if (!module_on() || inner_of(win) !== inner || (link_scope !== "page" && link_scope !== "viewport")) return reply({ error: "changed" });
-        const page = typeof kind === "string" && Object.hasOwn(CONTENT_PAGES, kind) ? CONTENT_PAGES[kind] : undefined;
+        const pages = typeof kind === "string" ? [CONTENT_PAGES, LINK_PAGES].find((table) => Object.hasOwn(table, kind)) : undefined;
+        const page = pages?.[kind];
         if (!page || !page.matches(doc)) return reply({ error: "not_here" });
-        reply({ pairs: page_links(win, doc, link_scope) });
+        reply({ pairs: page_links(win, doc, link_scope, page.selector) });
       } catch (_) {
         reply({ error: "changed" });
       }

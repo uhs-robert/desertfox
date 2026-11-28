@@ -53,10 +53,8 @@ const VISIBLE_LINKS = `(doc, deep_find) => { const all = []; const walk = (root)
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, take_shot, run_line, on_teardown, in_background, clear_notices } = context;
   const steps = module_steps(context);
-  const { chrome, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page } = steps;
+  const { chrome, bar_message, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page } = steps;
   const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left")?.children[0]?.textContent ?? null : null; })()`);
-  // With the bar up the refusal shows in its message slot and no notification goes out.
-  const bar_message = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-message")?.textContent ?? null : null; })()`);
   const notices = async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
   const tab_case = (name, body) =>
     run_case(name, async () => {
