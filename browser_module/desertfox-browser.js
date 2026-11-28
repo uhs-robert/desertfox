@@ -548,12 +548,15 @@
       return false;
     }
 
-    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field (`ignorekeys`).
+    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field.
+    // Firefox reads only "true" and "shortcuts" as leaving keys, and its select popup sets "false" once its search box blurs. "shortcuts" (the select popup on Windows) still takes the arrow keys.
+    const leaves_keys_to_field = (popup) => popup.getAttribute("ignorekeys") === "true";
+
     // A dialog's menu sits in the dialog's own document, so the focused element's document is read too.
     function key_taking_menu_open(win, focused) {
       for (const doc of new Set([win.document, focused?.ownerDocument])) {
         if (!doc) continue;
-        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !popup.hasAttribute("ignorekeys")) return true;
+        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !leaves_keys_to_field(popup)) return true;
       }
       return false;
     }
