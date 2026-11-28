@@ -31,6 +31,9 @@
 //   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The which-key feature reads it.
 //   watch_pending(fn)          Anywhere: fn(win) after each key the taker saw and each reset, with `win` undefined for a reset of every window, so a feature can follow module_pending. Returns the call that stops it.
 //                              A listener that throws is logged and the key goes on.
+//   watch_root_list(fn)        Anywhere: fn(win, shown) when `win` should show the which-key root list (`shown` true) or hide it (false). A key that ran `help.whichkey` shows it. The core defines that command itself for the which-key feature to answer. Returns the call that stops it.
+//   show_root_list(win)        In the sandbox: show the root list in `win`, as the key does, for a feature that opens it outside the key walk (a hint session, a one-shot prefix). The next keydown in `win` closes it.
+//   hide_root_list(win)        In the sandbox: hide it again, for a caller that closes it before a key does.
 //   take_held_keys(win, end)   In the sandbox: after a key that opens the command line the taker holds the window's keys until the line has the focus. This gives the text typed meanwhile, once, and with `end` true ends the hold. "" with no hold.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
@@ -56,7 +59,7 @@
 //   share_page_hints(entry)    In the sandbox: chrome hints lend their start on Firefox's own pages, entry = { handles(browser), start({ window, browser, event, keys, count }) }, so the key taker can start hints there. The first one stays.
 //   page_hints()               In the sandbox: that entry, or undefined while no feature lent one.
 //   page_hints_wanted(win)     In the sandbox: whether the state says the extension answers a page hint start, and false whenever may_act(win) is false.
-//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action) }, so chrome hints and the locked page rule reach them. The first one stays.
+//   share_content_pages(route)  In the sandbox: the content hints feature lends its route to pages in a content process, route = { labels(browser), refuses(browser), collect(win, browser, action), excluded_host(host) }, so chrome hints and the locked page rule reach them. The first one stays.
 //   content_pages()            In the sandbox: that route, or undefined while no feature lent one.
 // A feature file either lets an error in its start throw, and the core then turns the module off for the session, or undoes its own start and stays off alone. Either way no half of a feature takes keys.
 //
@@ -302,7 +305,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "page_hints", "firefox_pages", "pane_moves"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "page_hints", "firefox_pages", "pane_moves", "which_key_root"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -557,12 +560,15 @@
       return false;
     }
 
-    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field (`ignorekeys`).
+    // An open XUL menupopup takes every key of its window, a focused field's too, unless it leaves them to its field.
+    // Firefox reads only "true" and "shortcuts" as leaving keys, and its select popup sets "false" once its search box blurs. "shortcuts" (the select popup on Windows) still takes the arrow keys.
+    const leaves_keys_to_field = (popup) => popup.getAttribute("ignorekeys") === "true";
+
     // A dialog's menu sits in the dialog's own document, so the focused element's document is read too.
     function key_taking_menu_open(win, focused) {
       for (const doc of new Set([win.document, focused?.ownerDocument])) {
         if (!doc) continue;
-        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !popup.hasAttribute("ignorekeys")) return true;
+        for (const popup of doc.querySelectorAll("menupopup")) if (popup.state === "open" && !leaves_keys_to_field(popup)) return true;
       }
       return false;
     }
@@ -763,6 +769,17 @@
     const session_watchers = new Map();
     // Every half-typed key change goes through the taker's `key` or `reset`, so the watchers hear it after those.
     const pending_watchers = new Set();
+    const root_list_watchers = new Set();
+    const tell_root_list = (win, shown) => {
+      for (const watcher of [...root_list_watchers]) {
+        try {
+          watcher(win, shown);
+        } catch (error) {
+          log_once(`a watcher of the root list failed: ${error}`);
+        }
+      }
+    };
+    commands.set("help.whichkey", { args: {}, run: ({ window }) => tell_root_list(window, true) });
     const after_pending = (win, result) => {
       for (const watcher of [...pending_watchers]) {
         try {
@@ -1128,6 +1145,12 @@
         pending_watchers.add(fn);
         return () => void pending_watchers.delete(fn);
       },
+      show_root_list: (win) => tell_root_list(win, true),
+      hide_root_list: (win) => tell_root_list(win, false),
+      watch_root_list(fn) {
+        root_list_watchers.add(fn);
+        return () => void root_list_watchers.delete(fn);
+      },
       module_pending(win) {
         if (typeof key_taker?.pending !== "function") return undefined;
         return key_taker.pending(win);
@@ -1183,6 +1206,7 @@
         fail_awaited("the module shut down");
         key_taker?.reset();
         pending_watchers.clear();
+        root_list_watchers.clear();
         try {
           take_back_hello();
         } catch (error) {
