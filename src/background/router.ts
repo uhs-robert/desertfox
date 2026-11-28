@@ -216,7 +216,8 @@ export function create_router(deps: RouterDeps): Router {
 
     // The read finishes before the command starts, because the command moves the view.
     const left = await read_place_left(command, final_args, context, active);
-    const outcome = await run_command(command, final_args, counted.times, context, request);
+    const from_source = Object.values(checked.args).some(is_context_source);
+    const outcome = await run_command(command, final_args, counted.times, context, request, from_source);
     // Only background commands are timed. A content command can wait on the user (hint mode, find, caret, visual), the registry cannot say which, and the wait would read as a slow command.
     // Not `debug.perf`, which would time itself into the numbers it reports. A refusal or a throw is not a round trip.
     if (command.runs_in === "background" && outcome.ok && command.id !== "debug.perf") deps.record_timing?.(command.id, performance.now() - started_ms);
@@ -225,10 +226,11 @@ export function create_router(deps: RouterDeps): Router {
     return outcome;
   }
 
-  async function run_command(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, request: RouteRequest): Promise<Outcome> {
+  async function run_command(command: CommandDef, args: CheckedArgs, times: number, context: CommandContext, request: RouteRequest, from_source: boolean): Promise<Outcome> {
     if (command.runs_in === "content") return run_in_content(command, args, times, context, request);
+    const marked = (step_context: CommandContext): CommandContext => (from_source ? { ...step_context, from_source: true } : step_context);
     for (let time = 0; time < times; time++) {
-      const result = outcome_of_reply(await command.run!(time === 0 ? context : (await read_now(request, false)).context, args));
+      const result = outcome_of_reply(await command.run!(marked(time === 0 ? context : (await read_now(request, false)).context), args));
       if (!result.ok) return result;
     }
     return done;
