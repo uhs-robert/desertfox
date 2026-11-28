@@ -41,6 +41,7 @@
   var PANE_MOVE_DIRECTIONS = ["left", "right", "down"];
   var PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"];
   var FIREFOX_PAGE_WHERE = ["tab", "here"];
+  var VISUAL_REPORT_MODES = ["normal", "caret", "visual", "visual_line"];
   var DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"];
   var MAX_DEVTOOLS_KEY_ROWS = 8;
   var DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"];
@@ -74,7 +75,10 @@
     "scroll.to": { percent: "number", axis: "axis" },
     "page.stop": {},
     // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
-    [ROOT_LIST_COMMAND_ID]: {}
+    [ROOT_LIST_COMMAND_ID]: {},
+    // Caret and visual mode on a parent-process about: page, shown in the bar through `visual.report`. `line` is 1 for line visual mode. A leaf of these goes only to a module whose hello says `visual_mode`.
+    "mode.caret": {},
+    "mode.visual": { line: "optional_int" }
   };
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;
@@ -93,6 +97,7 @@
     if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
     if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
+    if (kind === "visual_mode") return VISUAL_REPORT_MODES.some((mode) => mode === value) ? void 0 : `must be one of ${VISUAL_REPORT_MODES.join(", ")}`;
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
     if (kind === "optional_int" && value === void 0) return void 0;
     if (typeof value !== "number" || !Number.isFinite(value)) return "must be a number";

@@ -149,7 +149,7 @@ test("visual mode with no text to start on starts nothing and leaves the pref al
 });
 
 for (const [name, leave] of [
-  ["a switch to another tab", (w: ReturnType<typeof world>) => w.window.fire_tab_select()],
+  ["a switch to another tab", (w: ReturnType<typeof world>) => (w.window.select(w.b.tab), w.window.fire_tab_select())],
   ["the page going away", (w: ReturnType<typeof world>) => w.shown.hide()],
   ["the window closing", (w: ReturnType<typeof world>) => w.window.close()],
   ["the module shutting down", (w: ReturnType<typeof world>) => w.core.shut_down()],
@@ -293,4 +293,11 @@ test("a new hello from DesertFox ends the mode, and the DevTools feature that al
   w.firefox.start_extension();
   assert.equal(w.firefox.read_pref(CARET), false);
   settled(w);
+});
+
+test("a TabSelect for the tab that stays selected leaves the mode on", () => {
+  const w = world();
+  w.run("mode.caret");
+  w.window.fire_tab_select();
+  assert.equal(w.firefox.read_pref(CARET), true);
 });

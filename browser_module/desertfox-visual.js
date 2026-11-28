@@ -244,7 +244,10 @@
         listen(record, win, "unload", end);
         // The pref is global, so a mode left on in a window in the back would turn caret browsing on in every other window.
         listen(record, win, "deactivate", end);
-        listen(record, win.gBrowser.tabContainer, "TabSelect", end);
+        // Firefox also fires TabSelect for the tab that stays selected (measured), so only a switch to another tab counts.
+        listen(record, win.gBrowser.tabContainer, "TabSelect", () => {
+          if (win.gBrowser.selectedTab !== record.tab) end();
+        });
         listen(record, top_doc.defaultView, "pagehide", end);
         if (doc !== top_doc) listen(record, doc.defaultView, "pagehide", end);
         if (mode !== "caret" && !select_for_visual(doc, given, mode === "visual_line")) return void leave(win);
