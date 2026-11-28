@@ -83,6 +83,8 @@
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;
   var MAX_TREE_BYTES = 32 * 1024;
+  var HELLO_FEATURES = { hint_mode_keys: "hk" };
+  var KNOWN_FEATURES = Object.values(HELLO_FEATURES);
   var bad = (problem) => ({ ok: false, problem });
   var is_record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var is_module_command_id = (id) => typeof id === "string" && Object.hasOwn(MODULE_COMMAND_ARGS, id);
