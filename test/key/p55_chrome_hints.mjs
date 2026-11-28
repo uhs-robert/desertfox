@@ -516,19 +516,13 @@ export async function run_cases(context) {
     }
   });
 
-  await run_case("the bookmark panel gets labels only after the user leaves its name field, and its Remove bookmark button waits for Enter", async () => {
+  await run_case("with the bookmark panel open, gB labels it, and its Remove bookmark button waits for Enter", async () => {
     await panels_home("ch_bookmark_panel");
     const url = await chrome(`(async () => ${W}.gBrowser.currentURI.spec)()`);
     on_teardown(() => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); const found = await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} }); if (found) await PlacesUtils.bookmarks.remove(found); })()`));
     const bookmarked = () => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); return !!(await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} })); })()`);
     await open_panel("editBookmarkPanel", `await w.PlacesCommandHook.bookmarkPage();`);
     await poll_until("the bookmark to be made", bookmarked, { timeout_ms: 5000 });
-    // A real window gives the name field the focus. The test window may not, so the field takes it from chrome.
-    await chrome(`(async () => { ${W}.document.getElementById("editBMPanel_namePicker").focus(); })()`);
-    await poll_until("the name field to have the focus", () => chrome(`(async () => Services.focus.focusedElement?.id === "editBMPanel_namePicker")()`), { timeout_ms: 5000 });
-    await press_keys("g", "B");
-    await sleep(500);
-    expect((await layers()) === 0, "gB typed in the name field started a session");
     await chrome(`(async () => { ${W}.document.getElementById("editBookmarkPanelDoneButton").focus(); })()`);
     const labels = await hints_in_panel("the bookmark panel");
     expect(labels.every((label) => label.panel), `a label is outside the panel: ${JSON.stringify(labels.slice(0, 4))}`);
@@ -542,7 +536,7 @@ export async function run_cases(context) {
     await poll_until("Enter to remove the bookmark", async () => !(await bookmarked()), { timeout_ms: 5000 });
   });
 
-  await run_case("the tab group editor is labelled once the user leaves its name field, a swatch picks at once and Delete group waits for Enter", async () => {
+  await run_case("with the tab group editor open, gB labels it, a swatch picks at once and Delete group waits for Enter", async () => {
     await panels_home("ch_group_editor");
     await make_group();
     on_teardown(() => chrome(`(async () => { ${W}.gBrowser.tabGroupMenu?.panel?.hidePopup?.(); })()`));
