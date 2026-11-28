@@ -36,7 +36,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `mark.ts`: `mark.add`, `mark.jump` and `mark.step`, in the `page` bundle.
 - `mark_list.ts`: `mark.list`, `mark.delete` and `mark.clear`. Typing the command is the confirmation, and `.` never replays `all`.
 - `media.ts`: `media.act` (`media`), which runs the frame fan-out in `src/background/media_actions.ts`.
-- `mode.ts`: the mode commands (`mode.set`, `mode.site`, `mode.insert`, `mode.escape`, `mode.pass_next`) and `page.focus_input` and `page.blur`.
+- `mode.ts`: the mode commands (`mode.set`, `mode.site`, `mode.insert`, `mode.escape`, `mode.pass_next`, `mode.normal_once`) and `page.focus_input` and `page.blur`.
 - `native.ts`: `native.install`, `native.update`, `permissions.grant` and `browser.open_firefox_page`.
 - `open.ts`: `open.url`, `open.search`, `open.clipboard` and `open.anything`.
 - `open_target.ts`: the `where` and `container` params, `open_in`, the container lookup and `typed_url_target` for typed text.

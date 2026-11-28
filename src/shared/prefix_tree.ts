@@ -42,6 +42,8 @@ export type TreeLeaf = {
   otherwise?: TreeLeaf;
   // The bind wrote `otherwise = "page"`: the graft keeps the replaced leaf off the chain, so a failed guard leaves the key to the page.
   otherwise_page?: true;
+  // A `browser` chord whose commands run in every mode, so the content script takes it in every mode and ahead of a mode's own key handling: the one-shot normal prefix.
+  any_mode?: true;
   steps: LeafStep[];
 };
 

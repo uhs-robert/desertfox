@@ -69,7 +69,7 @@ function make_page() {
     user_input_seen_: () => false,
     blur_window_open_: () => false,
     get_mode_: state.get_mode_,
-    take_pass_next_: state.take_pass_next_,
+    take_pass_next_: state.take_pass_next_, take_once_: state.take_once_,
     in_editable_field_: () => false,
     escape_to_page_: () => false,
     is_loading_: host.is_loading_,

@@ -23,8 +23,12 @@ export type ModuleRunDeps = {
   pages_on: () => Promise<boolean>;
 };
 
+// Firefox's start pages get hints from the module, so a refusal there means this module cannot label the page.
+const START_PAGE = /^about:(?:privatebrowsing|home|newtab)(?:[?#]|$)/i;
+
 // The module sends a hint key only from the PDF viewer, Reader View or an about: page, and only the first one per document. The PDF viewer shows the PDF's own address.
 export function hint_refusal_text(url: string | undefined, pages_on: boolean): string {
+  if (url !== undefined && START_PAGE.test(url)) return "The browser module cannot label this page yet";
   return url !== undefined && runs_page_code(url) && !pages_on ? "Hints here need :set browser_module_pages true" : "Hints do not run on this page";
 }
 

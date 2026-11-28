@@ -194,6 +194,8 @@ const BASE_SECTIONS: KeymapConfig = {
     Ek: { id: "pane.focus", args: { region: "page" }, label: "Focus page" },
     ES: { id: "pane.focus", args: { region: "sidebar" }, label: "Focus sidebar" },
     ED: { id: "pane.focus", args: { region: "devtools" }, label: "Focus DevTools" },
+    EH: { id: "pane.move", args: { direction: "left" }, label: "Move left" },
+    EL: { id: "pane.move", args: { direction: "right" }, label: "Move right" },
     gF: { id: "frame.exit" },
     gB: { id: "hint.browser" },
     g0: { id: "tab.goto", args: { index: 1 }, label: "First tab" },
@@ -491,6 +493,7 @@ const BASE_SECTIONS: KeymapConfig = {
     "<A-k>": { id: "tab.prev" },
     "<A-,>": { id: "browser.focus_page" },
     "<A-l>": { id: "mode.site", args: { name: "arrow", toggle: true }, label: "Arrow mode" },
+    "<A-o>": { id: "mode.normal_once", label: "One normal command" },
   },
 };
 

@@ -172,7 +172,7 @@ function make_flow(keymap = tree()) {
     blur_window_open_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,
-    take_pass_next_: state.take_pass_next_,
+    take_pass_next_: state.take_pass_next_, take_once_: state.take_once_,
     run_leaf_: (leaf, count) => void ran.push(`${leaf.steps[0]?.invocation.id}:${leaf.steps[0]?.invocation.args?.register ?? ""}:${count ?? ""}`),
     leave_insert_: () => state.escape(),
     is_loading_: () => false,

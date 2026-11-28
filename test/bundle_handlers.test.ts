@@ -13,7 +13,7 @@ const INTERNAL_IDS: Record<BundleName, string[]> = {
   whichkey: ["whichkey", "whichkey.draw", "whichkey.erase", "whichkey.media_panel"],
   cmdline: ["cmdline.token", "cmdline.headings", "cmdline.find_status", "cmdline.focus", "cmdline.end", "cmdline.find_text", "cmdline.find_end", "cmdline.headings_ask"],
   ui: ["ui.toast", "ui.frame_watch", "ui.badge_count", "ui.badge"],
-  page: [],
+  page: ["once.start", "once.mode"],
   text: ["text.input", "text.flush"],
   editor: [],
   site_actions: [],

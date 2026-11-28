@@ -5,24 +5,23 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { refused_as } from "../src/shared/swallow.ts";
 import { BUNDLE_NAMES } from "../src/shared/bundles.ts";
 import { CMDLINE_STYLE } from "../src/cmdline/style.ts";
-import { STYLE as HINTS_STYLE } from "../src/content/hints/view.ts";
 
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use. Raise one only as AGENTS.md, "Content script size", says, and name the feature in the commit.
 const MAX_BYTES = {
   // Key listener, prefix tree, modes and scrolling. Runs on every page and frame (admission rule in AGENTS.md, "Content script size").
-  "content.js": 23.5 * 1024,
+  "content.js": 24 * 1024,
   // Link hints and the grab target pass. Loads on the first hint command, not on every page.
   "hints.js": 52.75 * 1024,
   // Caret and visual mode.
   "caret.js": 32 * 1024,
-  // The which-key panel. Loads on a pause in a prefix.
+  // The which-key panel. Loads on a pause in a prefix, or at once after the one-shot normal prefix.
   "whichkey.js": 10 * 1024,
   // The command line host in the page, and the remote end for a subframe. Loads on the first `:`.
   "cmdline.js": 7 * 1024,
   // The mode badge and the toast.
   "ui.js": 8 * 1024,
-  // Rare page commands: scroll alignment, page copy, marks and the jump list.
-  "page.js": 6 * 1024,
+  // Rare page commands: scroll alignment, page copy, marks and the jump list, and the return after a one-shot normal command.
+  "page.js": 6.5 * 1024,
   // The typed-text recorder for `.`.
   "text.js": 4 * 1024,
   // The external editor hand-off and the clipboard fallback for code editors.
@@ -117,9 +116,6 @@ for (const file of ["manifest.json", "help/home.html", "newtab/newtab.html", "po
 // The command line's sheet lives in style.ts so another host can import it; the page gets it at the marker.
 const cmdline_html = (await readFile("src/cmdline/cmdline.html", "utf8")).replace("<!--cmdline-style-->", () => `<style>${CMDLINE_STYLE}    </style>`);
 await writeFile(`${out_dir}/cmdline.html`, cmdline_html);
-
-// The label sheet of hints over Firefox's own UI. The browser module links this one fixed file into its labels' closed shadow root, so the labels look as they do on a page.
-await writeFile(`${out_dir}/chrome_hints.css`, HINTS_STYLE);
 
 // The shared base sheet of the help and new tab pages, linked by both.
 await copyFile("src/shared/page_base.css", `${out_dir}/page_base.css`);

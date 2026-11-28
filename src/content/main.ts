@@ -54,7 +54,7 @@ function refresh_mode_indicator(): void {
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
   // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
   const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
-  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
+  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.key_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
   bar_flags = { ...(pass_next_armed && { pass: true as const }), ...(site_label && { site: site_label }) };
   report_bar();
 }
@@ -106,12 +106,15 @@ let escape_to_page = false;
 
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
-  get_mode_: page_mode.get_mode_,
+  get_mode_: page_mode.key_mode_,
   take_pass_next_: page_mode.take_pass_next_,
+  take_once_: page_mode.take_once_,
   run_leaf_: (bound_leaf, count, repeat) => {
     const leaf = leaf_for_page(bound_leaf, document.activeElement, document.body, document);
     // No leaf runs when every guard fails and nothing is left to fall back to: the page keeps the key.
     if (!leaf) return true;
+    // Before the leaf runs, which can change the mode and the focus. The page bundle takes the frame back to this mode once a mode the leaf opens ends.
+    if (page_mode.is_once_armed_()) void bundles.run_command_("once.start", "page", { mode_: page_mode.get_mode_(), focused_: deepest_focused_element() }, "", false);
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
@@ -123,7 +126,8 @@ const key_flow = create_key_flow({
     page_mode.escape();
     blur_focused_element();
   },
-  in_editable_field_: () => is_editable_element(deepest_focused_element()),
+  // The one-shot normal prefix reads the keys as normal ones, in a field too.
+  in_editable_field_: () => !page_mode.is_once_armed_() && is_editable_element(deepest_focused_element()),
   user_input_seen_: () => user_input_seen,
   blur_window_open_: () => Date.now() < blur_ends_ms,
   escape_to_page_: () => escape_to_page,
@@ -300,8 +304,6 @@ let blur_by_switch = false;
 // One is too few: a chat page focuses its prompt on the show and again on the window focus, two moves of one switch.
 const BLURS_PER_WINDOW = 5;
 let blurs_left = 0;
-// The focus_on_load element this window focused, whose own focusin is no page focus and spends no blur.
-let load_focus_given: Element | null = null;
 const end_blur = () => (blur_ends_ms = 0);
 // A key or click of the user's own, which no held key's repeat sets. Once set, no load window opens: input before the keymap reply must keep its field.
 let user_input_seen = false;
@@ -323,21 +325,20 @@ const load_focus_target = (): HTMLElement | null => {
 // True when it blurred or moved the focus. A switch only blurs: focus_on_load is for loads.
 const blur_load_focus = (target: EventTarget | null) => {
   if (Date.now() >= blur_ends_ms || (!blur_by_switch && window !== window.top && navigator.userActivation.isActive) || !(target === document.body || is_editable_element(target))) return false;
-  // The focus_on_load element's own focusin takes the usual path, so a field there enters insert mode.
-  if (target === load_focus_given) return false;
+  // The focus_on_load element takes the usual path, whether the page or this window focused it, so a field there enters insert mode and spends no blur.
+  const wanted = !blur_by_switch && load_focus_target();
+  if (wanted === target) return false;
   // A page that refocuses inside its blur handler fires this focusin before the blur's focusout, so the mode follows the focus once both have run.
   if (blurs_left < 1) return end_blur(), setTimeout(sync_mode_to_focus), false;
-  const wanted = !blur_by_switch && load_focus_target();
   // Counted before the blur: a page can refocus inside its own blur handler, and that focus must find the count already lowered.
   if (target !== document.body) blurs_left--;
-  wanted ? (load_focus_given = wanted).focus() : (target as HTMLElement).blur();
+  wanted ? wanted.focus() : (target as HTMLElement).blur();
   return true;
 };
 
 const open_blur = (by_switch: boolean) => {
   blur_by_switch = by_switch;
   blurs_left = BLURS_PER_WINDOW;
-  load_focus_given = null;
   blur_ends_ms = Date.now() + 1e3;
   blur_load_focus(deepest_focused_element());
 };
@@ -502,7 +503,12 @@ function start(): void {
     document,
   );
 
-  page_mode.listen_display_(refresh_mode_indicator);
+  page_mode.listen_display_(() => {
+    refresh_mode_indicator();
+    // The which-key panel lists the normal keys as soon as the one-shot normal prefix is armed.
+    // Past `follow_prefix`, which drops a prefix with no keys (a bare count): the root with no keys lists the first keys.
+    if (page_mode.is_once_armed_()) follow_which_key(bundles, { mode: "normal", typed_: [] }, true, which_key_delay_ms);
+  });
 
   const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
 
