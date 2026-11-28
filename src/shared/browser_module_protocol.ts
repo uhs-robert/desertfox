@@ -5,6 +5,7 @@
 import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
 import type { ContentRequests } from "./messages/map.ts";
+import type { ToastKind } from "./messages/tab.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
 import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 import { MODULE_FIREFOX_PAGES } from "./firefox_pages.ts";
@@ -148,14 +149,18 @@ export type ModuleArgs = Record<string, number | string | DevtoolsKeyRow[] | Dev
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 // What the status bar shows of a tab beyond its mode, all optional. `pending` holds the keys of a half-typed sequence (a held group included), `count` a typed count, `pass` that pass-next is armed, `site` the label of a site mode and `recording` the register a macro records into. A private tab never has `site`.
 export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
-export type TabState = { mode: Mode; live: boolean } & BarFields;
+// A message in the bar's slot for the tab: `until` is epoch milliseconds, and the module stops drawing it then. `id` counts up, so a repeat of the same text draws again. The extension writes it, and a page never reports one.
+export type BarToast = { id: number; text: string; kind: ToastKind; until: number };
+export type TabState = { mode: Mode; live: boolean; toast?: BarToast } & BarFields;
+export const MAX_TOAST_CHARS = 200;
+const TOAST_KINDS: readonly string[] = ["error", "warning", "info", "success"] satisfies ToastKind[];
 // The roles the bar's mode badge takes from the theme, for the dark and the light scheme.
 // The which-key panel takes `bg_core`, `fg_core`, `primary` and `secondary`. An older module reads only the roles it knows.
 export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "fg_core", "primary", "secondary"] as const;
-// `mode_command` is optional so a state from an older extension still validates. The module falls back to the normal color without it.
-export const BAR_OPTIONAL_ROLES = ["mode_command"] as const;
+// Each optional role is dropped unless it is a color, so a state from an older extension still validates. Without `mode_command` the module uses the normal color, and without a toast role it uses the color of the page's toast.
+export const BAR_OPTIONAL_ROLES = ["mode_command", "error", "warn", "info", "ok"] as const;
 export type BarRole = (typeof BAR_ROLES)[number];
-export type BarColors = Record<BarRole, string> & { mode_command?: string };
+export type BarColors = Record<BarRole, string> & Partial<Record<(typeof BAR_OPTIONAL_ROLES)[number], string>>;
 export type BarTheme = { dark: BarColors; light: BarColors };
 // What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
@@ -190,8 +195,8 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `hint_mode_keys` says its chrome and page sessions send each key as a token and the targets' texts (`chrome_hints.texts`).
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; hint_mode_keys?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `hint_mode_keys` says its chrome and page sessions send each key as a token and the targets' texts (`chrome_hints.texts`).
+export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; hint_mode_keys?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -294,6 +299,16 @@ export function bar_fields_of(value: Record<string, unknown>): BarFields {
   if (typeof site === "string" && site.length > 0 && site.length <= MAX_SITE_LABEL_CHARS && !/[\p{Cc}\p{Cf}]/u.test(site)) fields.site = site;
   if (typeof recording === "string" && /^[\p{L}\p{N}"]$/u.test(recording)) fields.recording = recording;
   return fields;
+}
+
+// The toast a tab carries, or undefined for anything of the wrong shape. A kind this version does not know is drawn as info.
+export function bar_toast_of(value: unknown): BarToast | undefined {
+  if (!is_record(value)) return undefined;
+  const { id, text, kind, until } = value;
+  if (typeof id !== "number" || !Number.isInteger(id) || id < 0 || id > Number.MAX_SAFE_INTEGER) return undefined;
+  if (typeof text !== "string" || text.length === 0 || text.length > MAX_TOAST_CHARS || /[\p{Cc}\p{Cf}]/u.test(text)) return undefined;
+  if (typeof until !== "number" || !Number.isInteger(until) || until <= 0) return undefined;
+  return { id, text, kind: (TOAST_KINDS.includes(kind as string) ? kind : "info") as ToastKind, until };
 }
 
 function bar_colors_of(value: unknown): BarColors | undefined {
@@ -413,7 +428,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
     const tab = given_tabs[id];
     if (!/^\d{1,10}$/.test(id)) return bad("a tab id must be a number");
     if (!is_record(tab) || typeof tab.live !== "boolean" || !(MODES as readonly unknown[]).includes(tab.mode)) return bad("a tab needs a mode and a live mark");
-    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab) };
+    const toast = bar_toast_of(tab.toast);
+    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab), ...(toast && { toast }) };
   }
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);
@@ -441,7 +457,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.hint_mode_keys === true && { hint_mode_keys: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.hint_mode_keys === true && { hint_mode_keys: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.

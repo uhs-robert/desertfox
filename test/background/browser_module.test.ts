@@ -106,8 +106,8 @@ function setup(options: { on?: boolean; disabled?: boolean; records?: Record<str
   };
   const hello_reads = () => config.gets.filter((key) => key === BROWSER_MODULE_HELLO_STORAGE_KEY).length;
   // The module says it built the bar, and the extension has read it.
-  const raise_bar = async () => {
-    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true });
+  const raise_bar = async (message = true) => {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, { v: 1, module_version: "1", bar: true, ...(message && { bar_message: true }) });
     config.now += HELLO_MIN_INTERVAL_MS + 1;
     module.read_hello();
     timers.splice(0).forEach((run) => run());
@@ -880,4 +880,86 @@ test("a hello that changes while the DevTools table is on its way still gets its
   await flush();
   assert.ok(overtaken);
   assert.equal(visual_pushes().length, 1);
+});
+
+test("a toast lands in the tab's entry with an end time, survives a full sync and a load, and goes when it ends or the tab closes", async () => {
+  const records: Record<string, TabModeRecord> = { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } };
+  const { data, config, module, flush, raise_bar } = setup({ records });
+  await module.sync();
+  await flush();
+  assert.equal(await module.show_toast(3, false, false, "early", "info"), false, "no bar yet");
+  await raise_bar();
+  const start = config.now;
+  assert.equal(await module.show_toast(3, false, false, "Copied\n the  address\u0007", "success"), true);
+  assert.deepEqual(state_of(data).tabs["3"]!.toast, { id: 0, text: "Copied the address", kind: "success", until: start + 1 }, "the keymap gives the length");
+  await module.show_toast(3, false, false, "no", "error");
+  assert.deepEqual(state_of(data).tabs["3"]!.toast, { id: 1, text: "no", kind: "error", until: start + 1 }, "last write wins");
+  await module.bar_report(3, 0, false, { pending: ["g"] });
+  assert.equal((state_of(data).tabs["3"]!.toast as { text: string }).text, "no", "a page report keeps the toast");
+  await module.sync();
+  await flush();
+  assert.equal((state_of(data).tabs["3"]!.toast as { text: string }).text, "no");
+  config.now = start + 1;
+  await module.sync();
+  await flush();
+  assert.equal("toast" in state_of(data).tabs["3"]!, false, "an ended toast is dropped at the next write");
+  await module.show_toast(3, false, false, "again", "warning");
+  await module.tab_changed("3", undefined);
+  assert.equal("3" in state_of(data).tabs, false);
+});
+
+test("a toast text is cut to the cap, and an empty or private-and-barred one is refused", async () => {
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar();
+  assert.equal(await module.show_toast(3, false, false, "x".repeat(500), "info"), true);
+  assert.equal((state_of(data).tabs["3"]!.toast as { text: string }).text.length, 200);
+  assert.equal(await module.show_toast(3, false, false, " \n ", "info"), false);
+  assert.equal(await module.show_toast(3, true, false, "secret title", "info"), false, "the extension may not run in private windows");
+  assert.equal(JSON.stringify(data.get(BROWSER_MODULE_STATE_STORAGE_KEY)).includes("secret"), false);
+  assert.equal(await module.show_toast(3, true, true, "private ok", "info"), true);
+});
+
+test("the bar going away takes the toasts with it", async () => {
+  const { data, config, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar();
+  await module.show_toast(3, false, false, "hello", "info");
+  config.bar_setting = false;
+  await module.sync();
+  await flush();
+  assert.equal(await module.show_toast(3, false, false, "x", "info"), false);
+  config.bar_setting = true;
+  await raise_bar();
+  assert.equal("toast" in state_of(data).tabs["3"]!, false, "the old message does not return");
+});
+
+test("a module whose hello has no bar_message gets no toast, so the notification shows", async () => {
+  const { data, module, flush, raise_bar } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true } } });
+  await module.sync();
+  await flush();
+  await raise_bar(false);
+  assert.equal(await module.bar_active(), true);
+  assert.equal(await module.show_toast(3, false, false, "hello", "info"), false);
+  assert.equal("toast" in state_of(data).tabs["3"]!, false);
+  await raise_bar(true);
+  assert.equal(await module.show_toast(3, false, false, "hello", "info"), true);
+});
+
+test("a toast on a tab with no record survives a full sync and is cleared when the tab closes", async () => {
+  const { data, module, flush, raise_bar } = setup();
+  await module.sync();
+  await flush();
+  await raise_bar();
+  assert.equal(await module.show_toast(9, false, false, "no record", "info"), true);
+  await module.sync();
+  await flush();
+  assert.equal((state_of(data).tabs["9"]!.toast as { text: string }).text, "no record");
+  await module.tab_changed("9", undefined);
+  assert.equal("9" in state_of(data).tabs, false);
+  await module.sync();
+  await flush();
+  assert.equal("9" in state_of(data).tabs, false, "the map entry went with the tab");
 });
