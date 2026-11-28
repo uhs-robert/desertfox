@@ -139,8 +139,17 @@ test("a mode report passes the frame guard with frame 0, and Reader View counts 
   assert.equal(seen[0]?.sender.frameId, 0);
 });
 
-test("a call from a tab on about:addons, about:preferences, another about: page or an extension page is refused", async () => {
-  for (const url of ["about:addons", "about:preferences#privacy", "about:config", "about:reader", "moz-extension://abc/home.html", "chrome://browser/content/browser.xhtml"]) {
+test("view-source: of a web or file page and a blob: that one made count as locked pages", async () => {
+  for (const url of ["view-source:https://example.org/", "view-source:http://example.org/a", "view-source:file:///tmp/a.html", "blob:https://example.org/0b3c", "blob:http://127.0.0.1:8080/0b3c", "blob:file:///0b3c"]) {
+    const { seen, from_module, config } = setup();
+    config.tabs = [{ ...TAB, url }];
+    await from_module([call({ type: "mode_changed", mode: "normal" })]);
+    assert.equal(seen.length, 1, url);
+  }
+});
+
+test("a call from a tab on about:addons, about:preferences, another about: page, an extension page or the source of one is refused", async () => {
+  for (const url of ["about:addons", "about:preferences#privacy", "about:config", "about:reader", "moz-extension://abc/home.html", "chrome://browser/content/browser.xhtml", "view-source:moz-extension://abc/home.html", "view-source:about:preferences", "view-source:data:text/html,x", "blob:null/0b3c", "blob:moz-extension://abc/0b3c"]) {
     const { seen, from_module, base_replies, data } = setup({ tabs: [{ ...TAB, url }] });
     await from_module([call({ type: "run", invocations: [], mode: "normal" })]);
     assert.deepEqual(seen, [], url);

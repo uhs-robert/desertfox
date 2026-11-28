@@ -5,6 +5,7 @@
 import { MODES } from "./command.ts";
 import type { Mode } from "./command.ts";
 import type { ContentRequests } from "./messages/map.ts";
+import type { ToastKind } from "./messages/tab.ts";
 import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_THEME_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_WHICH_KEY_STORAGE_KEY } from "./config/storage_keys.ts";
 import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 import { MODULE_FIREFOX_PAGES } from "./firefox_pages.ts";
@@ -53,10 +54,12 @@ export const FIREFOX_PAGE_WHERE = ["tab", "here"] as const;
 
 // The keys the module takes in DevTools, as data: a one-character key and an action from a fixed list. The module turns each tree action into an arrow key on the focused DevTools element, so the table can do no more than the arrow keys do. A one-character key never carries a modifier, so no DevTools shortcut and no Escape can be claimed.
 // `hints.start` asks the extension for hints over DevTools (`devtools_hints.ask`). `visual.start` starts visual mode in the focused DevTools text area.
-export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start"] as const;
+// The `search.` actions work in the Inspector only: `search.focus` focuses its Search HTML box, and `search.next` and `search.prev` press the box's own next and previous match buttons.
+// `tool.prefix` holds a `g` whose next key `t` or `T` selects the next or previous tool, by the toolbox's own Ctrl+] and Ctrl+[. `tab.next` and `tab.prev` switch the browser tab.
+export const DEVTOOLS_ACTIONS = ["tree.down", "tree.up", "tree.collapse", "tree.expand", "hints.start", "visual.start", "search.focus", "search.next", "search.prev", "tool.prefix", "tab.next", "tab.prev"] as const;
 export type DevtoolsAction = (typeof DEVTOOLS_ACTIONS)[number];
 export type DevtoolsKeyRow = { key: string; action: DevtoolsAction };
-export const MAX_DEVTOOLS_KEY_ROWS = 8;
+export const MAX_DEVTOOLS_KEY_ROWS = 16;
 export const DEVTOOLS_TREE_KEYS: DevtoolsKeyRow[] = [
   { key: "j", action: "tree.down" },
   { key: "k", action: "tree.up" },
@@ -67,6 +70,25 @@ export const DEVTOOLS_TREE_KEYS: DevtoolsKeyRow[] = [
 export const DEVTOOLS_HINT_KEY: DevtoolsKeyRow = { key: "f", action: "hints.start" };
 // Pushed only to a module whose hello says `devtools_visual`, for the same reason.
 export const DEVTOOLS_VISUAL_KEY: DevtoolsKeyRow = { key: "v", action: "visual.start" };
+// Pushed only to a module whose hello says `devtools_search`, for the same reason.
+export const DEVTOOLS_SEARCH_KEYS: DevtoolsKeyRow[] = [
+  { key: "/", action: "search.focus" },
+  { key: "n", action: "search.next" },
+  { key: "N", action: "search.prev" },
+];
+// Pushed only to a module whose hello says `devtools_tools`, for the same reason. `g` holds a prefix whose second key the module owns: `t` selects the next tool and `T` the previous one (`gt` and `gT`). `J` and `K` switch browser tabs.
+export const DEVTOOLS_TOOL_KEYS: DevtoolsKeyRow[] = [
+  { key: "g", action: "tool.prefix" },
+  { key: "J", action: "tab.next" },
+  { key: "K", action: "tab.prev" },
+];
+// The rows past the tree keys, each list behind the hello flag of its feature. A new feature adds its flag and rows here, and the background pushes them.
+export const DEVTOOLS_FLAGGED_KEYS = [
+  { flag: "devtools_hints", keys: [DEVTOOLS_HINT_KEY] },
+  { flag: "devtools_visual", keys: [DEVTOOLS_VISUAL_KEY] },
+  { flag: "devtools_search", keys: DEVTOOLS_SEARCH_KEYS },
+  { flag: "devtools_tools", keys: DEVTOOLS_TOOL_KEYS },
+] as const satisfies readonly { flag: keyof ModuleHello; keys: readonly DevtoolsKeyRow[] }[];
 // The keys of visual mode in DevTools, a push of their own (`devtools.visual_keys`), so a module before visual mode keeps its tree table. Each op moves the end of the selection or copies it.
 // The module copies on its own, so no text ever comes back. Escape ends the mode in the module, as it ends the hints, since a one-character key cannot name it.
 export const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"] as const;
@@ -110,6 +132,8 @@ function devtools_visual_keys_problem(value: unknown): string | undefined {
 }
 const devtools_visual_rows_of = (value: unknown): DevtoolsVisualRow[] => (value as Record<string, unknown>[]).map((row) => ({ key: row.key as string, op: row.op as DevtoolsVisualOp }));
 
+// The command that shows the which-key root list. Its leaf goes only to a module whose hello says `which_key_root`.
+export const ROOT_LIST_COMMAND_ID = "help.whichkey";
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
   "tab.next": {},
@@ -119,6 +143,8 @@ export const MODULE_COMMAND_ARGS = {
   "scroll.pages": { fraction: "number", count: "int" },
   "scroll.to": { percent: "number", axis: "axis" },
   "page.stop": {},
+  // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
+  [ROOT_LIST_COMMAND_ID]: {},
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
 // The commands of Firefox's own sidebar. The module runs them only with the focus in the vertical tab strip or in the history, bookmarks or open tabs panel. None takes args.
@@ -142,14 +168,18 @@ export type ModuleArgs = Record<string, number | string | DevtoolsKeyRow[] | Dev
 export type KeyRow = { key: string; id: ModuleCommandId; args: ModuleArgs };
 // What the status bar shows of a tab beyond its mode, all optional. `pending` holds the keys of a half-typed sequence (a held group included), `count` a typed count, `pass` that pass-next is armed, `site` the label of a site mode and `recording` the register a macro records into. A private tab never has `site`.
 export type BarFields = { pending?: string[]; count?: number; pass?: true; site?: string; recording?: string };
-export type TabState = { mode: Mode; live: boolean } & BarFields;
+// A message in the bar's slot for the tab: `until` is epoch milliseconds, and the module stops drawing it then. `id` counts up, so a repeat of the same text draws again. The extension writes it, and a page never reports one.
+export type BarToast = { id: number; text: string; kind: ToastKind; until: number };
+export type TabState = { mode: Mode; live: boolean; toast?: BarToast } & BarFields;
+export const MAX_TOAST_CHARS = 200;
+const TOAST_KINDS: readonly string[] = ["error", "warning", "info", "success"] satisfies ToastKind[];
 // The roles the bar's mode badge takes from the theme, for the dark and the light scheme.
 // The which-key panel takes `bg_core`, `fg_core`, `primary` and `secondary`. An older module reads only the roles it knows.
 export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "fg_core", "primary", "secondary"] as const;
-// `mode_command` is optional so a state from an older extension still validates. The module falls back to the normal color without it.
-export const BAR_OPTIONAL_ROLES = ["mode_command"] as const;
+// Each optional role is dropped unless it is a color, so a state from an older extension still validates. Without `mode_command` the module uses the normal color, and without a toast role it uses the color of the page's toast.
+export const BAR_OPTIONAL_ROLES = ["mode_command", "error", "warn", "info", "ok"] as const;
 export type BarRole = (typeof BAR_ROLES)[number];
-export type BarColors = Record<BarRole, string> & { mode_command?: string };
+export type BarColors = Record<BarRole, string> & Partial<Record<(typeof BAR_OPTIONAL_ROLES)[number], string>>;
 export type BarTheme = { dark: BarColors; light: BarColors };
 // What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
@@ -174,11 +204,12 @@ export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
 // The which-key panel of each branch of the tree, keyed by its path (tokens joined by one space), the root left out. Built from the same rows the page's panel shows (`panel_after_prefix`), so the module draws text and never learns a command. A row has no description: the page shows it on hover, and the module's panel takes no pointer.
-// `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns which-key off, and the field is left out.
+// `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns the prefix panels off: `panels` is then empty and only `root` shows.
 export type WhichKeyTableRow = { keys: string; command: string; more?: true };
 export type WhichKeyTablePanel = { title: string[]; rows: WhichKeyTableRow[] };
-export type WhichKeyTable = { delay_ms: number; skip?: string[]; border: WhichKeyBorder; panels: Record<string, WhichKeyTablePanel> };
-// The default table is about 8 KB (test/background/browser_module_which_key.test.ts measures it). A table over a limit is left out, and the module draws no panel.
+// `root` is the panel of the keys with nothing typed, which `help.whichkey` shows on a locked page. An older module ignores it.
+export type WhichKeyTable = { delay_ms: number; skip?: string[]; border: WhichKeyBorder; panels: Record<string, WhichKeyTablePanel>; root?: WhichKeyTablePanel };
+// The default table is about 10 KB (test/background/browser_module_which_key.test.ts measures it). A table over a limit is left out, and the module draws no panel.
 export const MAX_WHICH_KEY_BYTES = 49_152;
 export const MAX_WHICH_KEY_PANELS = 64;
 export const MAX_WHICH_KEY_ROWS = 80;
@@ -187,8 +218,8 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `sidebar_once` says it answers `sidebar.normal_once`.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; sidebar_once?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `bar_message` says the bar draws the `toast` of a tab, so a module without it keeps the desktop notice. `devtools_search` says it runs the Inspector search keys, so it may get the `search.` rows. `devtools_tools` says it runs the tool and tab keys there, so it may get the `tool.prefix`, `tab.next` and `tab.prev` rows. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`. `which_key_root` says it shows the which-key root list. `sidebar_once` says it answers `sidebar.normal_once`.
+export type ModuleHello = { v: number; module_version: string; bar?: true; bar_message?: true; devtools_hints?: true; devtools_visual?: true; devtools_search?: true; devtools_tools?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true; which_key_root?: true; sidebar_once?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -251,6 +282,8 @@ function tree_problem(node: unknown, depth: number): string | undefined {
     if (token !== "" && !is_key_token(token)) return "a tree key is not a key token";
     if (child === "forward") continue;
     if (is_record(child) && "native" in child) {
+      // A command this module does not know (a newer extension's) is dropped by `kept_tree`, and the rest of the tree stays.
+      if (typeof child.native === "string" && !is_module_command_id(child.native)) continue;
       if (!is_module_command_id(child.native) || !check_module_args(child.native, child.args).ok) return "a native leaf names a command the module does not run";
       const rule = child.count_rule;
       if (rule !== undefined && rule !== "repeat" && !(is_record(rule) && typeof rule.param === "string" && Object.hasOwn(MODULE_COMMAND_ARGS[child.native], rule.param))) return "a native leaf has a bad count rule";
@@ -260,6 +293,16 @@ function tree_problem(node: unknown, depth: number): string | undefined {
     if (problem !== undefined) return problem;
   }
   return undefined;
+}
+
+// The tree without the native leaves of commands this module does not know, so a command added later takes no key away from an older module.
+function kept_tree(node: ScopeTree): ScopeTree {
+  const children = Object.fromEntries(Object.entries(node.children).flatMap(([token, child]): [string, ScopeNode][] => {
+    if (typeof child === "string") return [[token, child]];
+    if ("native" in child) return is_module_command_id(child.native) ? [[token, child]] : [];
+    return [[token, kept_tree(child)]];
+  }));
+  return { ...node, children };
 }
 
 function key_paths_problem(paths: unknown, name: string): string | undefined {
@@ -274,7 +317,7 @@ export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
   const root = value as { line_keys?: unknown; hint_keys?: unknown };
   const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
-  return problem === undefined ? { ok: true, value: value as ScopeTree } : bad(problem);
+  return problem === undefined ? { ok: true, value: kept_tree(value as ScopeTree) } : bad(problem);
 }
 
 const is_color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
@@ -290,6 +333,16 @@ export function bar_fields_of(value: Record<string, unknown>): BarFields {
   if (typeof site === "string" && site.length > 0 && site.length <= MAX_SITE_LABEL_CHARS && !/[\p{Cc}\p{Cf}]/u.test(site)) fields.site = site;
   if (typeof recording === "string" && /^[\p{L}\p{N}"]$/u.test(recording)) fields.recording = recording;
   return fields;
+}
+
+// The toast a tab carries, or undefined for anything of the wrong shape. A kind this version does not know is drawn as info.
+export function bar_toast_of(value: unknown): BarToast | undefined {
+  if (!is_record(value)) return undefined;
+  const { id, text, kind, until } = value;
+  if (typeof id !== "number" || !Number.isInteger(id) || id < 0 || id > Number.MAX_SAFE_INTEGER) return undefined;
+  if (typeof text !== "string" || text.length === 0 || text.length > MAX_TOAST_CHARS || /[\p{Cc}\p{Cf}]/u.test(text)) return undefined;
+  if (typeof until !== "number" || !Number.isInteger(until) || until <= 0) return undefined;
+  return { id, text, kind: (TOAST_KINDS.includes(kind as string) ? kind : "info") as ToastKind, until };
 }
 
 function bar_colors_of(value: unknown): BarColors | undefined {
@@ -367,7 +420,7 @@ export function which_key_table_of(value: unknown): WhichKeyTable | undefined {
   if (!is_record(value) || !is_record(value.panels)) return undefined;
   if ((json_bytes(value) ?? Number.POSITIVE_INFINITY) > MAX_WHICH_KEY_BYTES) return undefined;
   const { delay_ms, skip, border } = value;
-  if (typeof delay_ms !== "number" || !Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS) return undefined;
+  if (typeof delay_ms !== "number" || !Number.isInteger(delay_ms) || delay_ms < 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS) return undefined;
   if (!(WHICH_KEY_BORDERS as readonly unknown[]).includes(border)) return undefined;
   if (skip !== undefined && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return undefined;
   const paths = Object.keys(value.panels);
@@ -381,7 +434,9 @@ export function which_key_table_of(value: unknown): WhichKeyTable | undefined {
     // Defined, not assigned, so a `__proto__` path stays a key and sets no prototype.
     Object.defineProperty(panels, path, { value: panel, enumerable: true, writable: true, configurable: true });
   }
-  return { delay_ms, ...(skip !== undefined && skip.length > 0 && { skip: [...(skip as string[])] }), border: border as WhichKeyBorder, panels };
+  const root = value.root === undefined ? undefined : which_key_panel_of(value.root);
+  if (value.root !== undefined && !root) return undefined;
+  return { delay_ms, ...(skip !== undefined && skip.length > 0 && { skip: [...(skip as string[])] }), border: border as WhichKeyBorder, panels, ...(root && { root }) };
 }
 
 export function validate_module_state(value: unknown): Checked<ModuleState> {
@@ -409,7 +464,8 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
     const tab = given_tabs[id];
     if (!/^\d{1,10}$/.test(id)) return bad("a tab id must be a number");
     if (!is_record(tab) || typeof tab.live !== "boolean" || !(MODES as readonly unknown[]).includes(tab.mode)) return bad("a tab needs a mode and a live mark");
-    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab) };
+    const toast = bar_toast_of(tab.toast);
+    tabs[id] = { mode: tab.mode as Mode, live: tab.live, ...bar_fields_of(tab), ...(toast && { toast }) };
   }
   // The theme is optional and a bad one is left out, as the bar fields are.
   const bar_theme = bar_theme_of(value.bar_theme);
@@ -438,7 +494,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.sidebar_once === true && { sidebar_once: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }), ...(value.sidebar_once === true && { sidebar_once: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -533,7 +589,7 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
   // The DevTools key table, pushed after each matched hello, since the module keeps it in memory only. A module without DevTools code refuses the kind, and one that never got it claims no key in DevTools.
   // A day to be read, not the default 2 s: the push sets a table rather than pressing a key, so a late one does no harm, and a dropped one leaves DevTools keys off until the next hello.
-  "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 512, max_age_ms: 86_400_000 },
+  "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86_400_000 },
   // Hints over DevTools, for a `devtools_hints.ask`: the module takes its own `ask` token once, while fresh, and only with the focus still in DevTools. Draw, pick and clear match the chrome_hints rows, apart so that the file that holds a DevTools session gets them.
   "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
   "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: CHROME_HINT_PART_BYTES },

@@ -57,15 +57,15 @@ test("a run request runs its binding in the active tab, in normal mode, with the
   assert.deepEqual(shown, []);
 });
 
-test("a hint key says why hints do not run: the setting on the PDF viewer and Reader View, and the page anywhere else", async () => {
+test("a hint key says why hints do not run: the setting on the PDF viewer, Reader View, view-source:, the JSON viewer and a blob: page, and the page anywhere else", async () => {
   const { run, runs, shown, state } = run_setup();
   const said = async (url: string | undefined, pages_on: boolean) => {
     Object.assign(state, { url, pages_on });
     await assert.rejects(run({ keys: "f", count: 0 }));
     return shown.at(-1)?.message;
   };
-  for (const url of ["https://example.org/paper.pdf", "file:///tmp/paper.pdf", "about:reader?url=https%3A%2F%2Fexample.org%2F"]) assert.equal(await said(url, false), "Hints here need :set browser_module_pages true", url);
-  for (const url of ["about:preferences", "about:addons", undefined]) assert.equal(await said(url, false), "Hints do not run on this page", String(url));
+  for (const url of ["https://example.org/paper.pdf", "file:///tmp/paper.pdf", "about:reader?url=https%3A%2F%2Fexample.org%2F", "view-source:https://example.org/", "view-source:file:///tmp/a.html", "https://example.org/data.json", "blob:https://example.org/0b3c"]) assert.equal(await said(url, false), "Hints here need :set browser_module_pages true", url);
+  for (const url of ["about:preferences", "about:addons", "view-source:moz-extension://abc/x.json", "view-source:about:preferences", "view-source:data:text/html,x", "blob:null/0b3c", "blob:moz-extension://abc/0b3c", undefined]) assert.equal(await said(url, false), "Hints do not run on this page", String(url));
   for (const url of ["about:privatebrowsing", "about:home", "about:newtab", "about:home?x=1"]) assert.equal(await said(url, false), "The browser module cannot label this page yet", url);
   assert.equal(await said("about:homepage", false), "Hints do not run on this page", "a name that only starts like a start page");
   assert.equal(await said("about:reader?url=x", true), "Hints do not run on this page", "the setting is on already");

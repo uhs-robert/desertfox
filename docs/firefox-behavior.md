@@ -593,6 +593,18 @@ Facts from the built feature (Firefox 161, key piece `test/key/p54_browser_modul
 - Item mode (`I`) finds no list on these two pages. That is the item finder's rule, not a fault of the sandbox: it gives no list under much prose and skips narrow items (see `src/content/item/finder.ts`). The PDF viewer's sidebar starts closed and its text layer holds no links. The key piece has no item case on these pages.
 - The principal results above hold for the built feature: the page code runs under `[page, extension]` on the PDF viewer and Reader View, and a page script sees none of `desertfox_host`, the transport or `browser` there.
 
+view-source: and the JSON viewer (Firefox 161, key piece `test/key/p54_browser_module_page_kinds.mjs`):
+- view-source: of an http page runs under a content principal whose spec is the view-source: address and whose origin is the source page's, with an empty `addonId`. view-source: of a file: page has the whole view-source:file: address as its origin.
+- view-source: of another extension's page also has an empty `addonId` (remote type `extension`), view-source of about:preferences runs under the system principal in the parent process, and view-source of a data: page under a null principal.
+- The JSON viewer runs under `resource://devtools/client/jsonview/` (origin `resource://devtools`, empty `addonId`) in the web process of the response's site, for http and file: JSON. A moz-extension JSON file does not open in the viewer.
+- `yy` copies the tab's address on the JSON viewer and on view-source: of a file page. view-source: of an http page is no secure context, even on 127.0.0.1 where the http page itself is one, so the page code's clipboard write fails there and `yy` says it could not copy, as on any plain http page.
+- view-source: turns each address in the source into a link with a `view-source:` address.
+
+A blob: page in its tab (Firefox 161, same key piece):
+- A web page that sets `location.href` to a blob: of HTML it made shows a document whose `documentURI` is `blob:http://host:port/<uuid>`, under the maker's http content principal (spec `http://host:port/`). No content script runs there.
+- `tabs.executeScript` on that tab rejects with "Missing host permission for the tab", even with `match_origin_as_fallback` on the content script, while `tabs.sendMessage` reaches the tab. So the module's page code is the one way in: its bundles load through the module, never through `executeScript`.
+- With the page code on, `f` draws labels and `yy` copies the blob: address. A blob: made by an http page on 127.0.0.1 is a secure context, as its maker is.
+
 Not measured: the real `storage.session` channel, a dark theme, scanned, large or form PDFs, real Reader View articles, and an IME.
 
 ## Processes of Firefox's own pages (locked-page-hints)
@@ -636,6 +648,23 @@ Results:
 - The labels in a docked toolbox showed in a screenshot taken 700 ms after they were in the documents, and not in one taken at once.
 - A tool tab (`.devtools-tab`) selects its tool on mousedown: `element.click()` does nothing. A `mousedown`, `mouseup`, `click` sequence made by chrome code selects it. The same sequence on a markup `.tag-line` selects its node, and the markup view keeps the keyboard focus, so j then moves on from it.
 
+## Tab range (tab-visual)
+
+Measured in Firefox 161 in the key test (`test/key/p57_tab_visual.mjs`), and read from its source (`ext-tabs.js`, `Tabbrowser.sys.mjs`).
+
+- `tabs.highlight` with the active tab listed first selects the tabs and fires no `onActivated` (probe in p57). It sets the whole selection through `gBrowser.selectedTabs`, which makes the first tab listed the active one. A tab switch that lands between reading the active tab and the call is undone, so tab range mode does not use it.
+- `tabs.update(id, { highlighted: true, active: false })` adds one tab to the selection and leaves the active tab alone (`addToMultiSelectedTabs`). Without `active: false` Firefox also makes the tab active. `tabs.update(id, { highlighted: false })` takes one tab out (`removeFromMultiSelectedTabs`). Taking the active tab out switches to another selected tab, so tab range mode never touches the active tab.
+- A tab switch clears the whole selection (`clearMultiSelectedTabs` in `updateCurrentBrowser`), also a switch to a tab inside it (p57, "a tab switch ends the mode and the range").
+- The tabs of a collapsed group stay in `tabs.query`, so the range reads `tabGroups.query({ collapsed: true })` to skip them. `j` from the tab before a collapsed group selects the tab after it and leaves the group's tabs out (p57).
+- `pinTab` puts the tab after the pinned tabs, and `unpinTab` puts it before the other tabs. Unpinning [A, B] in that order gives [B, A]. Pinning in strip order and unpinning in reverse, one tab at a time, keeps the order (p57, the `p` round trip).
+
+## Escape in the console input and the Inspector search box (devtools-keys)
+
+- With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. Measured by `p54_browser_module_devtools_search`.
+- The cause: the console's editor maps Escape to nothing (`Esc: false` in `JSTerm.js`). Read from Firefox 161 code, not measured.
+- With DesertFox's Inspector search keys on, Escape in the Search HTML box stops in the parent, so the box keeps its text and the split console does not open. Measured by `p54_browser_module_devtools_search`.
+- Without DesertFox, the box clears and Escape toggles the split console (`toolbox.js`). Read from Firefox 161 code, not measured.
+
 ## Visual mode in DevTools (devtools-keys)
 
 Question: can chrome code select and copy text in DevTools panels with keys, and where does the focus sit when it starts?
@@ -650,3 +679,9 @@ Results:
 - The markup view keeps the focus on its document's body. The selected line is the `.tag-line` with `aria-selected="true"`.
 - After a case that showed a source in the Debugger, the test page of the next case never took the focus, so that case runs last in its piece.
 - Storage values were not reached: the Storage panel showed no rows for two localStorage items the page had set (`localStorage.length` 2), so whether its table cells and sidebar select is unknown, and the mode has no Storage row.
+
+## Switching DevTools tools by a synthetic chord (devtools-tool-keys)
+
+- The toolbox binds `selectNextTool` and `selectPreviousTool` to Ctrl+] and Ctrl+[ on Linux (`toolbox.nextTool.key` and `toolbox.previousTool.key`, `CmdOrCtrl`). Its key shortcuts listen for `keydown` on the toolbox's `chromeEventHandler` and check no `isTrusted`. Read from Firefox 161 code.
+- A keydown with `ctrlKey` and the key `]` or `[`, dispatched by chrome code on the focused element in the markup view (a frame in the Inspector panel in the toolbox frame), selects the next or previous tool, wrapping at the ends, in docked DevTools and in a DevTools window. Measured by `p54_browser_module_devtools` (the chord from the markup view docked and in a window, and `gt` and `gT` in both).
+- On macOS the chord is Cmd+] and Cmd+[, which are Firefox's Forward and Back. Not measured.

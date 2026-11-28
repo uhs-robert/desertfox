@@ -69,10 +69,11 @@
     }
 
     // The popup walk owns the keys while a menu that takes keys or a walking panel is open.
+    // As the walk reads it, only `ignorekeys="true"` leaves a menu's keys to its field: Firefox's select popup sets "false" and "shortcuts" and still takes keys.
     function popup_owns_keys(win) {
       for (const popup of win.document.querySelectorAll("menupopup, panel")) {
         if (popup.state !== "open" && popup.state !== "showing") continue;
-        if (popup.localName === "menupopup" && !popup.hasAttribute("ignorekeys")) return true;
+        if (popup.localName === "menupopup" && popup.getAttribute("ignorekeys") !== "true") return true;
         if (popup.localName === "panel" && (popup.id === "downloadsPanel" || popup.querySelector("panelmultiview"))) return true;
       }
       return false;

@@ -6,8 +6,9 @@ import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tr
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
 import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
+import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleHello, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { BarConfig, BarFields, BarToast, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleHello, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -18,9 +19,8 @@ import {
   bar_config_of,
   bar_fields_of,
   bar_theme_of,
-  DEVTOOLS_HINT_KEY,
+  DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_TREE_KEYS,
-  DEVTOOLS_VISUAL_KEY,
   DEVTOOLS_VISUAL_KEYS,
   validate_module_hello,
   HELLO_MIN_INTERVAL_MS,
@@ -40,6 +40,7 @@ import {
   MAX_FOCUS_KEYS,
   MAX_KEY_ROWS,
   MAX_STATE_TABS,
+  MAX_TOAST_CHARS,
   status_of_hello,
   EXTENSION_TO_MODULE_KINDS,
   message_list_bytes,
@@ -50,6 +51,7 @@ import {
   validate_message_list,
   validate_module_state,
   validate_scope_tree,
+  ROOT_LIST_COMMAND_ID,
   MAX_KEY_CHARS,
   MAX_WHICH_KEY_BYTES,
   MAX_WHICH_KEY_DELAY_MS,
@@ -60,7 +62,8 @@ import {
   MAX_WHICH_KEY_TITLE_PARTS,
   which_key_table_of,
 } from "../shared/browser_module_protocol.ts";
-import { DEFAULT_SETTINGS } from "../shared/default_settings.ts";
+import { DEFAULT_SETTINGS, DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
+import type { ToastKind } from "../shared/messages/tab.ts";
 import { native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -167,23 +170,28 @@ const shown_text = (text: string, max_chars: number): string => text.replace(/[\
 export function which_key_table_of_keymap(keymap: CompiledKeymap | undefined, tree: ScopeTree, find_command: (id: string) => CommandMeta | undefined): WhichKeyTable | undefined {
   const normal = current_keymap(keymap)?.modes.normal;
   const delay_ms = Math.min(Math.round(keymap?.which_key_delay_ms ?? 0), MAX_WHICH_KEY_DELAY_MS);
-  if (!normal || !(delay_ms > 0)) return undefined;
+  if (!normal || !(delay_ms >= 0)) return undefined;
   const border = keymap?.which_key_border ?? "square";
   const shown = branch_in_scope(normal, tree);
   const panels: Record<string, WhichKeyTablePanel> = {};
+  const table_panel_of = (panel: WhichKeyPanel): WhichKeyTablePanel | undefined => {
+    const rows = panel.rows.slice(0, MAX_WHICH_KEY_ROWS).map(({ keys: row_keys, command, more }) => ({ keys: shown_text(row_keys, MAX_KEY_CHARS), command: shown_text(command, MAX_WHICH_KEY_LABEL_CHARS), ...(more && { more: true as const }) }));
+    return rows.length > 0 ? { title: panel.title.slice(-MAX_WHICH_KEY_TITLE_PARTS).map((part) => shown_text(part, MAX_WHICH_KEY_LABEL_CHARS)), rows } : undefined;
+  };
   const add_panels = (branch: TreeBranch, path: string[]): void => {
     for (const [token, child] of Object.entries(branch.children)) {
       if (child.kind !== "branch" || token === "") continue;
       const keys = [...path, token];
-      const panel = panel_after_prefix(shown, keys, find_command, border);
-      const rows = panel.rows.slice(0, MAX_WHICH_KEY_ROWS).map(({ keys: row_keys, command, more }) => ({ keys: shown_text(row_keys, MAX_KEY_CHARS), command: shown_text(command, MAX_WHICH_KEY_LABEL_CHARS), ...(more && { more: true as const }) }));
-      if (rows.length > 0) panels[keys.join(" ")] = { title: panel.title.slice(-MAX_WHICH_KEY_TITLE_PARTS).map((part) => shown_text(part, MAX_WHICH_KEY_LABEL_CHARS)), rows };
+      const panel = table_panel_of(panel_after_prefix(shown, keys, find_command, border));
+      if (panel) panels[keys.join(" ")] = panel;
       add_panels(child, keys);
     }
   };
-  add_panels(shown, []);
+  // A delay of 0 turns the prefix panels off. The root list stays, as on a page, where the command ignores the delay.
+  if (delay_ms > 0) add_panels(shown, []);
   const skip = keymap?.which_key_skip?.slice(0, MAX_WHICH_KEY_SKIP);
-  const table = { delay_ms, ...(skip && skip.length > 0 && { skip }), border, panels };
+  const root = table_panel_of(panel_after_prefix(shown, [], find_command, border));
+  const table = { delay_ms, ...(skip && skip.length > 0 && { skip }), border, panels, ...(root && { root }) };
   const checked = which_key_table_of(table);
   if (!checked) console.warn(`DesertFox: the which-key panels of locked pages were left out, because they are over the limit of ${MAX_WHICH_KEY_PANELS} panels or ${MAX_WHICH_KEY_BYTES} bytes`);
   return checked;
@@ -288,8 +296,15 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const frame_keys = new Map<string, Map<number, Pick<BarFields, "pending" | "count">>>();
   // Whether the bar is up: the settings are on and the module said in its hello that it built the bar. Pages ask on their first key, so they get this copy and no storage read.
   let bar_seen = false;
+  // The message each tab shows in the bar, in memory only like `bars`. The module hides it at `until`, and a tab entry drops it once `until` has passed.
+  const toasts = new Map<string, BarToast>();
+  let toast_count = 0;
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
   let hello_bar = false;
+  // Whether the last hello said the module shows the root list. An older module refuses a whole tree that holds the `help.whichkey` leaf, so the leaf goes only to one that says so.
+  let hello_root_list = false;
+  // Whether that hello says the bar draws toasts. An older module builds a bar that ignores the field, so its refusals stay desktop notices.
+  let hello_message = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
   // Counts each reset of `devtools_keys_sent`, so a send that a newer hello overtook does not mark the newer hello as served.
@@ -301,12 +316,16 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const hello = validate_module_hello(stored_hello);
     const flags = hello.ok ? hello.value : undefined;
     if (flags?.devtools_visual === true && !(await send_now("devtools.visual_keys", { keys: DEVTOOLS_VISUAL_KEYS })).ok) return false;
-    const keys = [...DEVTOOLS_TREE_KEYS, ...(flags?.devtools_hints === true ? [DEVTOOLS_HINT_KEY] : []), ...(flags?.devtools_visual === true ? [DEVTOOLS_VISUAL_KEY] : [])];
+    const keys = [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys: rows }) => (flags?.[flag] === true ? rows : []))];
     return (await send_now("devtools.keys", { keys })).ok;
   };
   const bar_built = (stored_hello: unknown): boolean => {
     const hello = validate_module_hello(stored_hello);
     return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.bar === true;
+  };
+  const root_list_built = (stored_hello: unknown): boolean => {
+    const hello = validate_module_hello(stored_hello);
+    return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.which_key_root === true;
   };
   // A change of the answer tells the pages to ask again. The bar going away also drops what the tabs reported, which would otherwise show again, stale, when the bar returns.
   const set_bar_seen = (now: boolean): boolean => {
@@ -314,6 +333,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     bar_seen = now;
     if (!now) {
       bars.clear();
+      toasts.clear();
       child_keys.clear();
       frame_keys.clear();
     }
@@ -323,10 +343,18 @@ export function create_browser_module(deps: BrowserModuleDeps) {
 
   // The tabs whose record says a load began and no page has taken over yet.
   const loading = new Set<string>();
+  const live_toast = (id: string): BarToast | undefined => {
+    const toast = toasts.get(id);
+    if (toast && toast.until <= deps.now()) toasts.delete(id);
+    return toasts.get(id);
+  };
+  // A load hides the page's own fields but not the toast, which the page never reported.
   const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
-    if (loading.has(id)) return { mode: tab?.mode ?? "normal", live: tab?.live ?? false };
+    const toast = live_toast(id);
+    const base = { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(toast && { toast }) };
+    if (loading.has(id)) return base;
     const { pending: _, count: __, ...top } = bars.get(id) ?? {};
-    return { mode: tab?.mode ?? "normal", live: tab?.live ?? false, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
+    return { ...base, ...(child_keys.has(id) ? { ...top, ...child_keys.get(id) } : bars.get(id)) };
   };
   // A tab that began a load shows no bar fields, from a record change or from a report. A load that leaves the old page in place brings them back at its end, because the page's own report is kept and its content script has nothing new to send.
   const tab_of_record = (id: string, record: TabModeRecord): TabState => {
@@ -413,7 +441,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     }
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
-    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
+    const checked_hello = validate_module_hello(hello);
+    hello_message = hello_bar && checked_hello.ok && checked_hello.value.bar_message === true;
+    const root_list_changed = hello_root_list !== root_list_built(hello);
+    hello_root_list = root_list_built(hello);
+    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar) || root_list_changed) await sync_now();
   };
 
   const read_messages = async (): Promise<void> => {
@@ -426,6 +458,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const sync_now = async (): Promise<void> => {
     if (!(await deps.is_on())) {
       hello_bar = false;
+      hello_root_list = false;
+      hello_message = false;
       devtools_keys_sent = false;
       hello_generation++;
       set_bar_seen(false);
@@ -442,18 +476,27 @@ export function create_browser_module(deps: BrowserModuleDeps) {
       const id = tab_id_of_key(key);
       if (id !== undefined && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_of_record(id, record);
     }
+    // A locked page has no record, so its live toast would vanish from the rewrite.
+    for (const id of [...toasts.keys()]) if (!(id in tabs) && live_toast(id) && Object.keys(tabs).length < MAX_STATE_TABS) tabs[id] = tab_with_bar(id, undefined);
     const bar_theme = bar_theme_of(await deps.read_theme?.());
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
     const keymap = disabled ? undefined : await deps.read_keymap();
     // A tree over its cap is left out, and the module falls back to the single keys, which stay.
-    const tree = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, deps.check_args);
-    const fits = tree && validate_scope_tree(tree).ok;
-    const which_key = fits && deps.find_command ? which_key_table_of_keymap(keymap, tree, deps.find_command) : undefined;
+    // The root list keys stay with the page until the module says it shows the list and the table carries the list.
+    const locked_keys = (check_args: CheckCommandArgs) => {
+      const scope = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, check_args);
+      const fits = scope && validate_scope_tree(scope).ok ? scope : undefined;
+      return { fits, which_key: fits && deps.find_command ? which_key_table_of_keymap(keymap, fits, deps.find_command) : undefined, check_args };
+    };
+    const without_root_list: CheckCommandArgs = (id, args) => (id === ROOT_LIST_COMMAND_ID ? undefined : deps.check_args(id, args));
+    let locked = locked_keys(hello_root_list ? deps.check_args : without_root_list);
+    if (hello_root_list && !locked.which_key?.root) locked = locked_keys(without_root_list);
+    const { fits, which_key } = locked;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
     const normal_once_keys = normal_once_keys_of_keymap(keymap);
-    const focus_keys = fits ? focus_keys_of_keymap(keymap, tree) : [];
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
+    const focus_keys = fits ? focus_keys_of_keymap(keymap, fits) : [];
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }) });
     request_hello_read();
     request_messages_read();
   };
@@ -463,9 +506,11 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const state = await read_state();
     // No state yet: a full sync is on its way or the setting just turned off.
     if (state === undefined) return;
+    // A tab with no entry has nothing to clear, so a close need not rewrite the whole state.
+    if (record === undefined && !(tab_id in state.tabs)) return void (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
-    if (record === undefined) (bars.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
+    if (record === undefined) (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     if (record === undefined) delete tabs[tab_id];
     else if (tab_id in tabs || Object.keys(tabs).length < MAX_STATE_TABS) tabs[tab_id] = tab_of_record(tab_id, record);
     await write_state({ ...state, tabs });
@@ -508,6 +553,22 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, { mode: state.tabs[tab_id]?.mode ?? "normal", live: state.tabs[tab_id]?.live ?? false }) } });
   };
 
+  // Puts a message in the bar's slot of the tab. Gives false when the bar is not up, the tab is private and the extension may not run there, or the state has no room, so the caller falls back to a notification.
+  const toast_now = async (tab_id: string, text: string, kind: ToastKind): Promise<boolean> => {
+    if (!bar_seen || !hello_message) return false;
+    const state = await read_state();
+    if (state === undefined || !(await deps.is_on())) return false;
+    if (!(tab_id in state.tabs) && Object.keys(state.tabs).length >= MAX_STATE_TABS) return false;
+    const keymap = await deps.read_keymap();
+    const ms = (kind === "error" ? keymap?.toast_error_ms : keymap?.toast_ms) || (kind === "error" ? DEFAULT_TOAST_ERROR_MS : DEFAULT_TOAST_MS);
+    // One line: a message with a line break or a control character would draw as a gap or not at all.
+    const line = text.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim().slice(0, MAX_TOAST_CHARS);
+    if (line === "") return false;
+    toasts.set(tab_id, { id: toast_count++, text: line, kind, until: deps.now() + ms });
+    await write_state({ ...state, tabs: { ...state.tabs, [tab_id]: tab_with_bar(tab_id, state.tabs[tab_id]) } });
+    return true;
+  };
+
   // A child frame took the focus: its own half-typed keys, which the top frame's report may have dropped, show again. The frame's mode report says it, so it sends no second one.
   const bar_focus_now = async (tab_id: string, frame_id: number): Promise<void> => {
     if (!bar_seen || frame_id === 0) return;
@@ -544,6 +605,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
     bar_focus: (tab_id: number, frame_id: number) => enqueue(() => bar_focus_now(String(tab_id), frame_id)),
     bar_active: (): Promise<boolean> => Promise.resolve(bar_seen),
+    // `allow_private` is whether the extension may run in private windows, the same gate the module's bar has.
+    show_toast: (tab_id: number, is_private: boolean, allow_private: boolean, text: string, kind: ToastKind) => (is_private && !allow_private ? Promise.resolve(false) : enqueue(() => toast_now(String(tab_id), text, kind))),
     send: (kind: string, args: ModuleArgs = {}, on_id?: (id: string) => boolean | void) => enqueue(() => send_now(kind, args, on_id)),
     withdraw: (id: string) => enqueue(() => withdraw_now(id)),
     // Ask for a read. Each has its own limiter, which decides when it runs.
