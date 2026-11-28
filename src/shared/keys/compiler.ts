@@ -3,7 +3,7 @@
 import type { BundleName } from "../bundles.ts";
 import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
-import { hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
+import { about_pattern_of, hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
 import type { CompiledKeymap, CompiledModeParent, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
@@ -391,8 +391,9 @@ function warn_prefix_binds(rows: readonly { site: string; rule: SiteRule }[], wa
   type Scope = { site: string; merges_as: string | undefined; binds: SiteBind[] };
   const scopes = new Map<string, Scope>();
   // A table has binds of its own, so its keys are checked against each other and not against another table's.
+  // An about: rule has a regex that matches nothing, so its pattern names the group.
   const add = (site: string, regex: string, scope_name: string, merges_as: string | undefined, binds: Record<string, SiteBind> | undefined) => {
-    const key = `${regex} ${scope_name}`;
+    const key = `${about_pattern_of(site) ? site : regex} ${scope_name}`;
     const scope = scopes.get(key) ?? { site, merges_as, binds: [] };
     scope.binds.push(...Object.values(binds ?? {}));
     scopes.set(key, scope);

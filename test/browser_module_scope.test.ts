@@ -3,6 +3,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
+import { site_rules_view } from "../src/shared/site/site_rules_view.ts";
 import { page_keymap_of } from "../src/shared/site/page_keymap_resolve.ts";
 import { site_columns_for } from "../src/shared/site/site_columns.ts";
 import { MAX_ADDRESS_TREES, MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
@@ -333,4 +334,13 @@ test("past the cap the run check and the module both keep the global tree for th
   assert.equal(address_entry_of(address_trees_of_keymap(keymap, allowed, real_check), "about:late"), undefined);
   assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, allowed, real_check), "L", 0, allowed).ok, true);
   assert.equal(resolve_run(keymap_for_page(keymap, { url: "about:late", incognito: false }, allowed, real_check), "Q", 0, allowed).ok, false);
+});
+
+test("two about: rules do not warn about each other's binds, and the Site Rules view lists the rules that cover an about: page", () => {
+  const rules = [{ site: "about:config", bind: { Q: { id: "page.reload" } } }, { site: "about:support", bind: { QW: { id: "page.reload" } } }];
+  const { compiled, warnings } = compile_config({ config: { ...empty_config(), settings: { site_rules: rules } as never }, default_keymap: DEFAULT_KEYMAP, default_site_rows: [], get_command: (id) => registry.get(id), enum_sources: {} });
+  assert.deepEqual(warnings.filter((warning) => warning.includes("skipped bind")), []);
+  assert.deepEqual(site_rules_view(compiled, "about:config#x").rows.map((row) => row.site), ["about:config"]);
+  assert.deepEqual(site_rules_view(compiled, "about:addons").rows, []);
+  assert.deepEqual(site_rules_view(compiled, "https://a.test/").rows, []);
 });

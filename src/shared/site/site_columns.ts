@@ -15,8 +15,11 @@ export function unguarded_columns_for(keymap: CompiledKeymap | undefined, addres
     const { keymap: _, modes: __, ...rest } = rule;
     return { ...rest, ...(rule.bind && { bind: Object.fromEntries(Object.entries(rule.bind).filter(([, { leaf }]) => !has_page_guard(leaf))) }) };
   };
-  return resolve_site_columns((keymap?.site_rules ?? []).filter(({ site }) => matches_about_pattern(site, address)).map(unguarded));
+  return resolve_site_columns(about_rules_matching(keymap, address).map(unguarded));
 }
+
+// The rows whose about: pattern covers an address, in table order. Only the module path and the Site Rules view read them.
+export const about_rules_matching = (keymap: CompiledKeymap | undefined, address: string): SiteRule[] => (keymap?.site_rules ?? []).filter(({ site }) => matches_about_pattern(site, address));
 
 // The rows that fit the page, in table order.
 export const site_rules_matching = (keymap: CompiledKeymap | undefined, addresses: readonly (string | undefined)[]): SiteRule[] => (keymap?.site_rules ?? []).filter(({ regex }) => matches_any_address(regex, addresses));

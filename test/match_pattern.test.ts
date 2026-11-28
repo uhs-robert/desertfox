@@ -40,7 +40,7 @@ test("an about: pattern names one page or a prefix, and there is no about:*", ()
 
 test("an about: pattern is disjoint from a web pattern, and from another page unless a prefix reaches it", () => {
   assert.ok(hosts_disjoint("about:config", "*://a.test/*"));
-  assert.ok(!hosts_disjoint("about:config", "<all_urls>"));
+  assert.ok(hosts_disjoint("about:config", "<all_urls>"));
   assert.ok(hosts_disjoint("about:config", "about:support"));
   assert.ok(!hosts_disjoint("about:config", "about:config"));
   assert.ok(!hosts_disjoint("about:conf*", "about:config"));

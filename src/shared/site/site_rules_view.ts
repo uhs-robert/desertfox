@@ -3,7 +3,7 @@
 import type { CompiledKeymap, SiteBind, SiteRule, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { resolve_site_columns } from "../match_pattern.ts";
 import { shown_steps, with_resolved_modes } from "../keys/mode_parents.ts";
-import { hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, type PageSiteColumns } from "./site_columns.ts";
+import { about_rules_matching, hiding_bind, normal_tree_for, site_columns_for, site_rules_matching, unguarded_columns_for, type PageSiteColumns } from "./site_columns.ts";
 
 // One column a row sets, shown as text. `shadowed` means an earlier matching row already decides it.
 export type RuleColumn = { name: string; value: string; shadowed: boolean };
@@ -66,7 +66,7 @@ const EARLIER_ROW = "an earlier row decides it";
 type PageState = { columns: PageSiteColumns; all_off: boolean; tree: TreeNode | undefined };
 
 function page_state(keymap: CompiledKeymap | undefined, address: string): PageState {
-  const columns = site_columns_for(keymap, [address]);
+  const columns = address.startsWith("about:") ? unguarded_columns_for(keymap, address) : site_columns_for(keymap, [address]);
   const page = normal_tree_for(keymap?.modes.normal, columns);
   return { columns, all_off: page.all_off, tree: page.tree };
 }
@@ -134,7 +134,7 @@ function row_view(rule: SiteRule, earlier: PageSiteColumns, page: PageState, nor
 
 // The rows that fit `address`, in table order. A keymap with no rows, or none that fit, gives an empty list.
 export function site_rules_view(keymap: CompiledKeymap | undefined, address: string): SiteRulesView {
-  const matching = site_rules_matching(keymap, [address]);
+  const matching = address.startsWith("about:") ? about_rules_matching(keymap, address) : site_rules_matching(keymap, [address]);
   const normal = keymap?.modes.normal;
   const page = page_state(keymap, address);
   // What a keymap mode bind replaces counts the keys a child mode takes from its parent.

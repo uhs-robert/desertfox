@@ -92,8 +92,8 @@ const abouts_overlap = (left: AboutPattern, right: AboutPattern): boolean =>
 export function hosts_disjoint(left: string, right: string): boolean {
   const [left_about, right_about] = [about_pattern_of(left), about_pattern_of(right)];
   if (left_about && right_about) return !abouts_overlap(left_about, right_about);
-  // A web pattern never names an about: address.
-  if (left_about || right_about) return PATTERN_PARTS.test(left_about ? right : left);
+  // A web pattern, `<all_urls>` included, never names an about: address.
+  if (left_about || right_about) return PATTERN_PARTS.test(left_about ? right : left) || (left_about ? right : left) === "<all_urls>";
   const left_parts = PATTERN_PARTS.exec(left);
   const right_parts = PATTERN_PARTS.exec(right);
   if (!left_parts || !right_parts) return false;
