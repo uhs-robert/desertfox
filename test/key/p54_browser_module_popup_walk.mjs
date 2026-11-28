@@ -9,7 +9,7 @@ const PAGE_INFO = `Services.wm.getMostRecentWindow("Browser:page-info")`;
 const wait = (ms) => `await new Promise((resolve) => setTimeout(resolve, ${ms}));`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep, in_active_tab } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep } = context;
   const steps = module_steps(context);
   const { chrome, set_pref, open_tab, focus_page, close_selected_tab, home, page_scroll } = steps;
 
