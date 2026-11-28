@@ -121,7 +121,7 @@ test("sync writes the state while the setting is on and removes it when off", as
   const { data, config, module, flush } = setup({ records: { [`${TAB_MODE_STORAGE_PREFIX}3`]: { top_mode: "normal", live: true }, [`${TAB_MODE_STORAGE_PREFIX}insert_3`]: true as never } });
   await module.sync();
   await flush();
-  assert.deepEqual(data.get(BROWSER_MODULE_STATE_STORAGE_KEY), { v: 1, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], tabs: { "3": { mode: "normal", live: true } }, bar: BAR_CONFIG, page_hints: true, hint_mode_keys: [] });
+  assert.deepEqual(data.get(BROWSER_MODULE_STATE_STORAGE_KEY), { v: 1, enabled: true, keys: [{ key: "J", id: "tab.next", args: {} }], insert_keys: [], tabs: { "3": { mode: "normal", live: true } }, bar: BAR_CONFIG, page_hints: true, hint_mode_keys: [] });
   assert.deepEqual(data.get(BROWSER_MODULE_STATUS_STORAGE_KEY), { result: "waiting" });
   config.on = false;
   await module.sync();

@@ -56,7 +56,7 @@ const LOGIN = `<!doctype html><html><head><meta charset="utf-8"><title>login</ti
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, sleep, on_teardown, in_background, clear_notices, take_shot } = context;
   const steps = module_steps(context);
-  const { chrome, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page, selected_spec } = steps;
+  const { chrome, bar_message, session_value, open_tab, focus_page, close_selected_tab, home, in_selected_page, selected_spec } = steps;
 
   const events = [];
   const server = createServer((request, response) => {
@@ -272,7 +272,9 @@ export async function run_cases(context) {
     await clear_notices();
     on_teardown(clear_notices);
     await press_keys("f");
-    await poll_until("the notice on the login page", async () => (await notices()).includes(NOT_HERE_NOTICE), { timeout_ms: 5000 });
+    // With the bar up the refusal shows in its message slot and no desktop notice goes out.
+    await poll_until("the notice on the login page", async () => ((await bar_message()) ?? "").includes(NOT_HERE_NOTICE), { timeout_ms: 5000 });
+    expect((await notices()).length === 0, `the login page showed a desktop notice: ${JSON.stringify(await notices())}`);
     expect((await chrome(page_layers)) === 0, "the login page got labels");
     await poll_until("the start to give the keys back", async () => (await chrome(held_by)) === null, { timeout_ms: 3000 });
     await clear_notices();

@@ -143,7 +143,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `tS` | `session.open` (prompts) | Open tab session | yes |
 | `td` | `tab.duplicate` | Duplicate tab | yes |
 | `tm` | `tab.move` (prompts) | Move tab | yes |
-| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset |  |
+| `tM` | `cmdline.open --text='tab.move --offset='` | Move tab by an offset | yes |
 | `tn` | `tab.next` | Next tab | yes |
 | `tp` | `tab.prev` | Previous tab | yes |
 | `ta` | `tab.goto_audible` | Go to audible tab | yes |
@@ -196,7 +196,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `[c` | `url.increment --down` | Change URL number | yes |
 | `gi` | `page.focus_input` | Focus input |  |
 | `I` | `hint --lists ; page.item --current` | Pick a list for item mode |  |
-| `i` | `mode.insert` | Insert mode |  |
+| `i` | `mode.insert` | Insert mode | yes |
 | `pp` | `paste` | Open clipboard | yes |
 | `pt` | `paste --tab` | Open clipboard | yes |
 | `pw` | `paste --window` | Open clipboard | yes |
@@ -228,19 +228,19 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `zt` | `scroll.align --top` | Align focus |  |
 | `zz` | `scroll.align` | Align focus |  |
 | `zb` | `scroll.align --bottom` | Align focus |  |
-| `<S-Escape>` | `mode ignore` | Set mode |  |
-| `<S-Insert>` | `mode ignore` | Set mode |  |
-| `<AC-Escape>` | `mode ignore` | Set mode |  |
-| ``<AC-`>`` | `mode ignore` | Set mode |  |
+| `<S-Escape>` | `mode ignore` | Set mode | yes |
+| `<S-Insert>` | `mode ignore` | Set mode | yes |
+| `<AC-Escape>` | `mode ignore` | Set mode | yes |
+| ``<AC-`>`` | `mode ignore` | Set mode | yes |
 | `<Escape>` | `mode.escape` | Escape |  |
 | `<C-[>` | `mode.escape` | Escape |  |
-| `<C-v>` | `mode.pass_next` | Pass next key |  |
+| `<C-v>` | `mode.pass_next` | Pass next key | yes |
 | `<F1>` | `help` | Help | yes |
 | `,r` | `config.reload` | Reload config | yes |
 | `,h` | `help` | Help | yes |
 | `,s` | `help settings` | Settings page | yes |
 | `,t` | `toggle` (prompts) | Toggle a setting | yes |
-| `,i` | `mode ignore` | Set mode |  |
+| `,i` | `mode ignore` | Set mode | yes |
 | `,,` | `anything` (prompts) | Find anything | yes |
 | `,b` | `page.blur` | Blur |  |
 | `,e` | `pane.focus sidebar` | Focus the sidebar | yes |

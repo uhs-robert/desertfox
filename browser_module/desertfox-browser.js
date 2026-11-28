@@ -23,9 +23,11 @@
 //   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
 //   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
-//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), reset(win?), pending(win), take_held(win, end)?, ignores(browser)? }. ignores says the tab passes every key to the page, so Escape is left alone there.
-//                              key gets every key the module may take on a page, after the guards: context = { window, browser, tab, event, tree, row_runs }, `tree` the state's raw tree or undefined,
-//                              `row_runs` whether a single-key row would run the key. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
+//   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), field_key(context)?, reset(win?), pending(win), take_held(win, end)?, ignores(browser)? }. ignores says the tab passes every key to the page, so a taker with no field_key leaves Escape alone there.
+//                              key gets every key the module may take on a page, after the guards, while no text field has the focus: context = { window, browser, tab, event, tree, row_runs, in_field, insert_keys }, `tree` the state's raw tree or undefined,
+//                              `row_runs` whether a single-key row would run the key, `in_field` false here, `insert_keys` the state's insert table as a Map of key token to command id, or undefined. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
+//                              field_key gets the same context, with `in_field` true, for a key typed while a text field has the focus (the one predicate is in_field below). It is the one place that decides which keys a field does not give the page. It returns true to take the key and anything else to leave it to the page, and the rows never run in a field.
+//                              The core does not reset the taker for a key in a field: field_key does that itself. A taker with no field_key keeps the old rule: the core resets it, passes every key in a field, and blurs the field on a plain Escape itself.
 //                              reset(win) drops what the taker holds half typed in `win`, or in every window with no `win`: the core calls it for a key a guard refused and when the module or the toolbar switch goes off.
 //   run_command(id, args, context)  In the sandbox: run a command a feature defined, with its args checked as for a row. Returns false when no feature defines it or the args do not fit.
 //   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The which-key feature reads it.
@@ -44,6 +46,8 @@
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
+//   blur_field(context)        In the sandbox: drop the focus from the text field a key of `context` (as the taker gets it) was typed in, as a plain Escape does. Returns whether a field was blurred: false for design mode, a field in an iframe of a remote page and a subdialog, which keep their Escape.
+//   send_escape(context)       In the sandbox: send the page an Escape keydown and keyup, from the focused element, as `page.send_key` does. They are trusted on a system page, so `on_key` skips them while the module sends. Returns whether it was sent.
 //   ime_in_field(win)          In the sandbox: whether the window's input state says a text field has the focus, which covers a field in a page of another process.
 //   type_key(win, key, still_holds, { menu_owns_keys })  In the sandbox: type `key` (an arrow key, Home, End or Enter) into `win` once the current key event is over, if `still_holds()` is then true.
 //                              Returns false and types nothing for another key, or with the focus in a text field or DevTools.
@@ -120,6 +124,8 @@
     const FROM_MODULE_STORAGE_KEY = "desertfox_browser_module_from_module";
     const MAX_KEY_ROWS = 32;
     const MAX_SIDEBAR_KEY_TOKENS = 2;
+    const MAX_INSERT_KEY_ROWS = 8;
+    const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey"];
     const MAX_CHROME_HINT_BINDINGS = 4;
     const MAX_CHROME_HINT_KEY_TOKENS = 4;
     const HINT_MODE_KEY_OPS = ["escape", "whichkey"];
@@ -187,6 +193,7 @@
     const REPORT_MESSAGE = "desertfox-browser-module:report";
     const REPORT_NOW_MESSAGE = "desertfox-browser-module:report-now";
     const BLUR_MESSAGE = "desertfox-browser-module:blur";
+    const SEND_ESCAPE_MESSAGE = "desertfox-browser-module:send-escape";
     const DEVTOOLS_WINDOW_TYPE = "devtools:toolbox";
 
     const Ci = Components.interfaces;
@@ -269,7 +276,20 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, hint_mode_keys: read_hint_mode_keys(value.hint_mode_keys) };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, insert_keys: read_insert_keys(value.insert_keys), hint_mode_keys: read_hint_mode_keys(value.hint_mode_keys) };
+    }
+
+    // read_insert_keys: a bad table is undefined, and the plain Escape stays. A row with a command this version does not know is skipped, so a newer extension can add rows. The result maps a key token to its command.
+    function read_insert_keys(value) {
+      if (!Array.isArray(value) || value.length > MAX_INSERT_KEY_ROWS) return undefined;
+      const rows = new Map();
+      const seen = new Set();
+      for (const row of value) {
+        if (!is_record(row) || typeof row.key !== "string" || !KEY_TOKEN.test(row.key) || typeof row.id !== "string" || seen.has(row.key)) return undefined;
+        seen.add(row.key);
+        if (INSERT_KEY_COMMAND_IDS.includes(row.id)) rows.set(row.key, row.id);
+      }
+      return rows;
     }
 
     // chrome_hint_keys_of: a bad list leaves chrome focus without the hint start and the rest of the state alone.
@@ -321,7 +341,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "hint_mode_keys"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "mode_keys", "hint_mode_keys"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -460,8 +480,11 @@
       event.stopPropagation();
     }
 
+    // True while send_escape_to_page dispatches in this process: a system-principal page makes the event trusted, and the module must not take its own Escape again.
+    let sending_escape = false;
+
     function on_key(win, event) {
-      if (!event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      if (sending_escape || !event.isTrusted || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (MODIFIER_KEYS.has(event.key)) return;
       // A DevTools window has no tab browser, so no key there is for a page.
       const page = win.gBrowser ? page_of(win, event.target) : null;
@@ -489,43 +512,82 @@
       event.stopPropagation();
     }
 
-    // Escape leaves a field on a page the module handles, as it does on a web page. The blur is the module's own: the page's Escape does not run, so a search box keeps its text.
-    // A feature holding the window's keys or an ignored tab keeps Escape for itself. Returns whether the key was used.
-    function escape_blurs_field(win, page, state, event) {
-      if (event.key !== "Escape" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
-      if (key_holders.has(win) || key_taker?.ignores?.(page.browser) === true) return false;
-      const tab = win.gBrowser.getTabForBrowser(page.browser);
-      if (!left_to_module(state, page.browser, tab)) return false;
+    // Drops the focus from the text field of a page the key was typed in. Returns whether a field lost it.
+    function blur_page_field(page) {
       if (page.document) {
         // Only the tab's own document: a subdialog (Manage Exceptions) keeps its Escape to close itself.
         const focused = deep_active(page.document);
         // A design mode document has no focused element to blur, so Escape stays the page's.
         if (page.document.defaultView?.browsingContext?.parent !== null || !is_field(focused)) return false;
         focused.blur();
-      } else {
-        // The report covers the top document only, so a field in an iframe leaves Escape to the page.
-        const report = reports.get(page.browser);
-        if (report?.inner !== page.browser.innerWindowID || !report.text_field) return false;
-        page.browser.messageManager.sendAsyncMessage(BLUR_MESSAGE, { inner: page.browser.innerWindowID, escape: true });
+        return true;
       }
+      // The report covers the top document only, so a field in an iframe leaves Escape to the page.
+      const report = reports.get(page.browser);
+      if (report?.inner !== page.browser.innerWindowID || !report.text_field) return false;
+      page.browser.messageManager.sendAsyncMessage(BLUR_MESSAGE, { inner: page.browser.innerWindowID, escape: true });
+      return true;
+    }
+
+    // The page the taker's context names: its key's target must still be in that tab.
+    function page_of_context(context) {
+      const page = page_of(context.window, context.event.target);
+      return page?.browser === context.browser ? page : null;
+    }
+
+    // An Escape for the page, which has no way to tell it from the user's. A page in this process takes it from here, and another process takes it from its frame script. The event is untrusted in a content process, and trusted in a system-principal page, so `sending_escape` keeps on_key from taking it again.
+    function send_escape_to_page(page) {
+      if (page.document) {
+        const view = page.document.defaultView;
+        const target = deep_active(page.document) ?? page.document.documentElement;
+        sending_escape = true;
+        try {
+          for (const type of ["keydown", "keyup"]) target.dispatchEvent(new view.KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true, composed: true }));
+        } finally {
+          sending_escape = false;
+        }
+        return true;
+      }
+      page.browser.messageManager.sendAsyncMessage(SEND_ESCAPE_MESSAGE, { inner: page.browser.innerWindowID });
+      return true;
+    }
+
+    // Escape leaves a field on a page the module handles, as it does on a web page. The blur is the module's own: the page's Escape does not run, so a search box keeps its text.
+    // A feature holding the window's keys or an ignored tab keeps Escape for itself. Returns whether the key was used.
+    // Only for a taker with no field_key: the taker that has one decides itself, so a remapped Escape works.
+    function escape_blurs_field(win, page, state, event) {
+      if (event.key !== "Escape" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+      if (typeof key_taker?.field_key === "function" || key_holders.has(win) || key_taker?.ignores?.(page.browser) === true) return false;
+      const tab = win.gBrowser.getTabForBrowser(page.browser);
+      if (!left_to_module(state, page.browser, tab)) return false;
+      if (!blur_page_field(page)) return false;
       key_taker?.reset(win);
       event.preventDefault();
       event.stopPropagation();
       return true;
     }
 
-    // The taker sees a key only where a row could run: not in a field, and on a tab left to the module. `row_runs` says a single-key row would run the key.
+    // The taker sees a key only where the module may take it: on a tab left to the module. The one predicate for a key typed into a text field is `in_field`.
+    // `row_runs` says a single-key row would run the key. A taker with no `field_key` sees no key in a field.
     function offer_key(win, page, state, event, row_runs) {
       const tab = win.gBrowser.getTabForBrowser(page.browser);
-      if (in_field(win, page, event) || !left_to_module(state, page.browser, tab)) {
+      if (!left_to_module(state, page.browser, tab)) {
         key_taker.reset(win);
         return false;
       }
-      const taken = key_taker.key({ window: win, browser: page.browser, tab, event, tree: state.tree, row_runs });
+      const field = in_field(win, page, event);
+      if (field && typeof key_taker.field_key !== "function") {
+        key_taker.reset(win);
+        return false;
+      }
+      const context = { window: win, browser: page.browser, tab, event, tree: state.tree, row_runs, in_field: field, insert_keys: state.insert_keys };
+      const taken = field ? key_taker.field_key(context) : key_taker.key(context);
       if (taken === true) {
         event.preventDefault();
         event.stopPropagation();
       }
+      // The page types in a field, so the rows never run there.
+      if (field) return taken === true;
       return taken === true || taken === false ? taken : undefined;
     }
 
@@ -720,6 +782,16 @@
           focused.blur();
         } catch (_) {
           // A document going away keeps its focus.
+        }
+      });
+      addMessageListener("desertfox-browser-module:send-escape", ({ data }) => {
+        try {
+          const win = content;
+          if (!module_on() || win?.windowGlobalChild?.innerWindowId !== data?.inner) return;
+          const target = deep_active(win.document) ?? win.document.documentElement;
+          for (const type of ["keydown", "keyup"]) target.dispatchEvent(new win.KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true, composed: true }));
+        } catch (_) {
+          // A document going away has nothing to receive the key.
         }
       });
       report();
@@ -1137,7 +1209,7 @@
       },
       take_keys(taker) {
         if (key_taker) log_once("two feature files take keys, the first one does");
-        else if (typeof taker?.key === "function" && typeof taker.reset === "function") key_taker = { ...taker, key: (context) => after_pending(context.window, taker.key(context)), reset: (win) => after_pending(win, taker.reset(win)) };
+        else if (typeof taker?.key === "function" && typeof taker.reset === "function") key_taker = { ...taker, key: (context) => after_pending(context.window, taker.key(context)), reset: (win) => after_pending(win, taker.reset(win)), ...(typeof taker.field_key === "function" && { field_key: (context) => after_pending(context.window, taker.field_key(context)) }) };
       },
       run_command(id, args, context) {
         const command = commands.get(id);
@@ -1173,6 +1245,14 @@
       deep_active,
       focused_element,
       ime_in_field,
+      blur_field: (context) => {
+        const page = page_of_context(context);
+        return page !== null && blur_page_field(page);
+      },
+      send_escape: (context) => {
+        const page = page_of_context(context);
+        return page !== null && send_escape_to_page(page);
+      },
       type_key,
       on_shut_down(fn) {
         shut_down_steps.push(fn);
