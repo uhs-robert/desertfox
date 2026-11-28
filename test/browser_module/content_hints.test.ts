@@ -72,7 +72,7 @@ function restricted_window(firefox: Firefox, options: Options, build: (root: Nod
   Object.assign(window.win, { gBrowser: tabs, devicePixelRatio: chrome_dpr });
   const page_root = new Node("html");
   build(page_root);
-  const content = { devicePixelRatio: content_dpr, innerWidth: AREA.width / (content_dpr / chrome_dpr), innerHeight: AREA.height / (content_dpr / chrome_dpr), windowGlobalChild: { innerWindowId: 10 } } as Record<string, unknown>;
+  const content = { location: { href: `${scheme}://${host}/addon/one/` }, devicePixelRatio: content_dpr, innerWidth: AREA.width / (content_dpr / chrome_dpr), innerHeight: AREA.height / (content_dpr / chrome_dpr), windowGlobalChild: { innerWindowId: 10 } } as Record<string, unknown>;
   const page = chrome_document(page_root, content, `${scheme}://${host}/`);
   Object.assign(page.document, { nodePrincipal: principal, visibilityState: "visible" });
   page.own();
@@ -657,4 +657,55 @@ test("the idle frame script drops a session nobody picks from, and a clear from 
   assert.ok(idle.child.listening() > 0);
   for (const timer of [...idle.child.timers.values()]) timer();
   assert.equal(idle.child.listening(), 0);
+});
+
+// The flag masks the frame script gives each element of `build`, in document order.
+function masks_of(build: (root: Node) => void) {
+  const run = start_on({}, build);
+  run.child.ask("collect", { req: 1, inner: 10, kind: "restricted", action: "follow" });
+  const rows = run.child.sent.at(-1)!.data.rows as number[][];
+  return { run, masks: rows.map((row) => row[5]) };
+}
+
+test("a select is a field: it gets no Enter mark, and a pick focuses it at once", async () => {
+  const select = el("select", 20, 20);
+  const { masks } = masks_of((root) => root.append(select));
+  assert.deepEqual(masks, [2], "a select waits for Enter or is no field");
+  const choose = el("select", 20, 20);
+  const run = start_on({}, (root) => root.append(choose));
+  const { pick } = await labelled(run, 5);
+  assert.equal((await pick(choose))?.ok, true);
+  assert.equal(run.marked(), false);
+  assert.equal((choose as Node & { focused: number }).focused, 1);
+  assert.equal(choose.clicks, 0);
+});
+
+test("a link with a control's role waits for Enter, and only role=link stays a plain link", () => {
+  const roles = ["switch", "menuitem", "tab", "checkbox", "link"];
+  const { masks } = masks_of((root) => root.append(...roles.map((role, index) => link(`https://addons.mozilla.org/p${index}`, 20, 20 + 40 * index, { role }))));
+  assert.deepEqual(masks, [1, 1, 1, 1, 4], roles.join(" "));
+});
+
+test("the frame script's idle end tells chrome, so the labels go and a later Enter clicks nothing", async () => {
+  const run = start_on();
+  await labelled(run, 5);
+  for (const timer of [...run.child.timers.values()]) timer();
+  await run.flush();
+  assert.equal(run.page_layers().length, 0, "the labels outlived the frame script's session");
+  assert.equal(run.held(), undefined);
+  assert.deepEqual(run.pushes("chrome_hints.end").map((args) => args.session), [5]);
+});
+
+test("a route change of the page during the mark refuses the confirmed pick, even when an element alike sits at the same place", async () => {
+  const remove = el("button", 20, 20, { id: "remove" });
+  const run = start_on({}, (root) => root.append(remove));
+  const { pick } = await labelled(run, 5);
+  await pick(remove);
+  assert.ok(run.marked());
+  (run.chrome.content.location as { href: string }).href = "https://addons.mozilla.org/addon/two/";
+  run.chrome.clock.now += DWELL_MS;
+  run.chrome.press("Enter");
+  await run.flush();
+  assert.deepEqual(run.child_picks().map(({ confirmed }) => confirmed), [true]);
+  assert.equal(remove.clicks, 0, "a button on another route was clicked");
 });

@@ -274,7 +274,7 @@
     const MIN_SIDE_PX = 4;
     // A target that moved further than this since it was collected is not picked: the label no longer marks it.
     const MOVED_PX = 2;
-    // A session nobody picks from or clears ends after this, so no element stays held.
+    // A session nobody picks from or clears ends after this, so no element stays held. Chrome hears of it as of a page that went.
     const IDLE_MS = 30000;
     const GRANTS_BIT = 1;
     const FIELD_BIT = 2;
@@ -322,11 +322,12 @@
       return found;
     }
 
-    const text_field = (element) => element.isContentEditable === true || element.localName === "textarea" || (element.localName === "input" && TEXT_INPUT.test(element.type || "text"));
+    // A select counts as core.is_field counts it: a pick focuses it, and the user chooses with the keys.
+    const text_field = (element) => element.isContentEditable === true || element.localName === "textarea" || element.localName === "select" || (element.localName === "input" && TEXT_INPUT.test(element.type || "text"));
     const web_href = (element) => ((element.localName === "a" || element.localName === "area") && typeof element.href === "string" && /^https?:\/\/\S+$/i.test(element.href) ? element.href : undefined);
     // A link that only goes to another page: no download, no add-on file, no button dressed as a link and nothing a form sends.
     function plain_link(element) {
-      if (web_href(element) === undefined || element.hasAttribute("download") || element.getAttribute("role") === "button" || element.closest("form")) return false;
+      if (web_href(element) === undefined || element.hasAttribute("download") || (element.getAttribute("role") ?? "link") !== "link" || element.closest("form")) return false;
       const path = String(element.pathname ?? "");
       return !/\.xpi$/i.test(path) && !/\/downloads\//i.test(path);
     }
@@ -405,7 +406,7 @@
       for (const type of GONE_EVENTS) removeEventListener(type, on_gone_event, true);
     }
 
-    // The page changed under the labels: chrome ends the session or the Enter mark.
+    // The page changed under the labels, or the session sat idle: chrome ends the session or the Enter mark.
     function on_gone_event(event) {
       const owner = session;
       if (!owner) return;
@@ -427,7 +428,7 @@
         const { shown } = target;
         rows.push([id, shown.left, shown.top, shown.width, shown.height, target.flags]);
       }
-      session = { req, inner, action, page, targets, timer: setTimeout(end_session, IDLE_MS) };
+      session = { req, inner, action, page, targets, url: content.location.href, timer: setTimeout(() => on_gone_event({ type: "idle" }), IDLE_MS) };
       for (const type of GONE_EVENTS) addEventListener(type, on_gone_event, true);
       return rows;
     }
@@ -462,7 +463,8 @@
       const reply = (fields) => sendAsyncMessage(MESSAGE_PREFIX + "picked", { req, inner, ...fields });
       const owner = session;
       try {
-        if (!owner || owner.req !== tag || owner.inner !== inner || inner_of(content) !== inner || !module_on()) return reply({ ok: false, error: "gone" });
+        // A page that changed its route in place keeps its document, and a control alike can sit where the picked one was.
+        if (!owner || owner.req !== tag || owner.inner !== inner || inner_of(content) !== inner || content.location.href !== owner.url || !module_on()) return reply({ ok: false, error: "gone" });
         end_session();
         const target = owner.targets.get(id);
         if (!target) return reply({ ok: false, error: "gone" });
