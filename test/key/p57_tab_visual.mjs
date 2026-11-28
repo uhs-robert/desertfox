@@ -14,12 +14,34 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   // Presses a motion key and waits until the selection holds that many tabs, so an action key never beats the move.
   const grow = async (keys, size) => {
     await press_keys(keys);
-    await poll_until(`a range of ${size} tabs`, async () => (await highlighted_ids()).length === size);
+    try {
+      await poll_until(`a range of ${size} tabs`, async () => (await highlighted_ids()).length === size);
+    } catch (error) {
+      throw new Error(`${error.message} (badge ${await badge()}, strip ${JSON.stringify(await strip())})`);
+    }
   };
   const activate = async (id) => {
     await background(`browser.tabs.update(${id}, { active: true }).then(() => 0)`);
     await poll_until(`tab ${id} active`, async () => (await active_id()) === id);
     await settle_focus();
+  };
+  // Puts the strip back as the setup left it: nothing pinned, muted or grouped, the tabs in their first order, one tab selected, NORMAL mode.
+  const fresh = async (anchor) => {
+    await background(`(async () => {
+      const tabs = await browser.tabs.query({ currentWindow: true });
+      for (const tab of tabs) {
+        if (tab.pinned) await browser.tabs.update(tab.id, { pinned: false });
+        if (tab.mutedInfo.muted) await browser.tabs.update(tab.id, { muted: false });
+      }
+      const grouped = tabs.filter((tab) => tab.groupId !== -1).map((tab) => tab.id);
+      if (grouped.length > 0) await browser.tabs.ungroup(grouped);
+      await browser.tabs.move(${JSON.stringify(ids)}, { index: -1 });
+      return 0;
+    })()`);
+    await activate(anchor);
+    await background(`(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); await browser.tabs.highlight({ windowId: tab.windowId, tabs: [tab.index] }); return 0; })()`);
+    await expect_highlighted([anchor], "one tab selected");
+    await expect_badge("NORMAL");
   };
   // Opens n tabs after the current one, the last of them active, and answers the ids of the whole strip in order.
   const make_strip = async (name, count) => {
@@ -100,6 +122,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
 
   await run_case("p pins the range and ends the mode, and a second round unpins it", async () => {
     const anchor = ids.at(-4);
+    await fresh(anchor);
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await grow("j", 2);
@@ -117,6 +140,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   });
 
   await run_case("m mutes the range", async () => {
+    await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await grow("j", 2);
@@ -130,6 +154,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   });
 
   await run_case("r reloads every tab of the range", async () => {
+    await fresh(ids.at(-4));
     const wanted = [ids.at(-4), ids.at(-3)];
     for (const id of wanted) await background(`browser.tabs.executeScript(${id}, { code: "document.documentElement.dataset.p57 = 'old'" }).then(() => 0)`);
     await press_keys("gv");
@@ -143,7 +168,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
 
   await run_case("J inside the range ends it and lands on the next tab, which the end does not undo", async () => {
     const anchor = ids.at(-4);
-    await activate(anchor);
+    await fresh(anchor);
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await grow("j", 2);
@@ -156,7 +181,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   });
 
   await run_case("ga puts the range in one new group and ends the mode", async () => {
-    await activate(ids.at(-4));
+    await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await grow("j", 2);
@@ -170,7 +195,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   });
 
   await run_case("a tab switch ends the mode and the range", async () => {
-    await activate(ids.at(-4));
+    await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await grow("jj", 3);
@@ -182,7 +207,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   });
 
   await run_case("a key with no binding goes to the page", async () => {
-    await activate(ids.at(-4));
+    await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await in_active_tab(`window.__p57_keys = []; addEventListener("keydown", (event) => window.__p57_keys.push(event.key)); 0`);
@@ -193,7 +218,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   });
 
   await run_case("d closes the range and moves focus to the nearest tab outside it", async () => {
-    await activate(ids.at(-4));
+    await fresh(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await grow("jj", 3);
