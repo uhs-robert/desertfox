@@ -259,10 +259,11 @@ export async function run_cases(context) {
     await focus_in_devtools();
     await moves("j", tree_state, ["p", false], "in a toolbox tab: j moves down past the collapsed section");
     await moves("k", tree_state, ["section", false], "in a toolbox tab: k moves back up");
-    await switches_none("J in a toolbox tab");
     await press_keys("x", "x");
     await sleep(NO_EFFECT_MS);
-    expect(JSON.stringify(await tab_state()) === JSON.stringify(tabs_before), `J or x x changed the tabs: ${JSON.stringify(tabs_before)} to ${JSON.stringify(await tab_state())}`);
+    expect(JSON.stringify(await tab_state()) === JSON.stringify(tabs_before), `x x changed the tabs: ${JSON.stringify(tabs_before)} to ${JSON.stringify(await tab_state())}`);
+    // J is the DevTools row that switches the browser tab, as in a docked toolbox, so it switches one tab here too.
+    await switches_one("J in a toolbox tab");
   });
 
   await run_case("with the setting browser_module off DevTools gets every key, and turned on again the module gets the table again", async () => {
