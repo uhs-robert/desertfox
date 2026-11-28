@@ -106,13 +106,51 @@
       // `deep`: the bar's close button sits in its shadow root.
       { root: "notification-message", take: "button.notification-button, .notification-link, moz-button.close", deep: true },
     ];
+    // The site panels. Their navigation, back buttons and drop-downs only open a view or a menu. The tracking protection toggles, Clear cookies and site data, Remove certificate exception, the exception remove buttons and the Smartblock toggles all wait.
+    const SITE_PANEL_TAKE = "toolbarbutton, button, moz-button, moz-toggle, menulist";
+    const SITE_PANEL_AT_ONCE_IDS = new Set([
+      "trustpanel-popup-connection",
+      "trustpanel-blocker-see-all",
+      "trustpanel-privacy-link",
+      "trustpanel-clear-cookies-button",
+      "trustpanel-clear-cookie-cancel",
+      "trustpanel-siteinformation-morelink",
+      "identity-popup-security-button",
+      "identity-popup-more-info",
+      "protections-popup-info-button",
+      "protections-popup-report-broken-site-button",
+      "protections-popup-settings-button",
+      "protections-popup-show-report-button",
+    ]);
+    function site_panel_at_once(element) {
+      return element.localName === "menulist" || SITE_PANEL_AT_ONCE_IDS.has(element.id) || has_class(element, "subviewbutton-back") || has_class(element, "moz-button-subviewbutton-nav") || has_class(element, "protections-popup-category") || /^protections-popup-\w+View-settings-button$/.test(element.id);
+    }
+    // The bookmark panel's Remove bookmark button waits. Its Done button, folder and tag expanders, New Folder button and the show-for-new-bookmarks checkbox change nothing that is lost.
+    const BOOKMARK_PANEL_AT_ONCE = new Set(["editBookmarkPanelDoneButton", "editBMPanel_foldersExpander", "editBMPanel_tagsSelectorExpander", "editBMPanel_newFolderButton", "editBookmarkPanel_showForNewBookmarks"]);
+    // The tab group editor's Delete group, Ungroup tabs and Save and close group wait. The rest only add a tab, move the group, copy its links or pick a color. A swatch's radio input is hidden, so its label is the target.
+    const TAB_GROUP_AT_ONCE = new Set(["tabGroupEditor_addNewTabInGroup", "tabGroupEditor_moveGroupToNewWindow", "tabGroupEditor_copyAllLinks", "tab-group-editor-button-cancel", "tab-group-editor-button-create", "tab-group-cancel-suggestions-button", "tab-group-suggestions-load-cancel"]);
+
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
     // `layer_in`: where in the shown view the labels go, when not the view itself. Firefox reads the doorhanger panel's first child as a prompt, so its labels go inside the prompt shown.
     // `user_start_only`: only the binding typed in the panel labels it, never a request alone, because a pick there opens a downloaded file. The panel takes the focus, so no page hears the binding meanwhile.
+    // `find`: a panel with no id of its own. `view_ok`: a panel Firefox shares between views, labelled only while one of these shows.
+    // `at_once`: a panel that can grant, clear or delete. Its controls this names click at once, and every other control waits for Enter (`grants`).
     const PANELS = [
       { id: "appMenu-popup", take: "toolbarbutton, button" },
       { id: DOORHANGER_ID, take: "moz-button, button, toolbarbutton, checkbox, menulist, label.text-link", layer_in: (view) => [...view.children].find((child) => child.localName === "popupnotification" && !child.hidden) },
       { id: "downloadsPanel", take: "richlistitem, button, toolbarbutton", user_start_only: true },
+      // An extension's button runs it, which can give it access to the page (activeTab). That is the pick the nav bar's buttons already make at once.
+      { id: "unified-extensions-panel", take: "toolbarbutton, moz-button" },
+      { id: "trustpanel-popup", take: SITE_PANEL_TAKE, at_once: site_panel_at_once },
+      { id: "identity-popup", take: SITE_PANEL_TAKE, at_once: site_panel_at_once },
+      { id: "protections-popup", take: SITE_PANEL_TAKE, at_once: site_panel_at_once },
+      // The Allow menus of this panel open with a pick, and the user's own key chooses in them. Every remove button and any other control waits.
+      { id: "permission-popup", take: "toolbarbutton, button, menulist", at_once: (element) => element.localName === "menulist" },
+      // The panel opens with the name field focused, so a start waits until the user leaves the field.
+      { id: "editBookmarkPanel", take: "button, toolbarbutton, menulist, checkbox", at_once: (element) => element.localName === "menulist" || BOOKMARK_PANEL_AT_ONCE.has(element.id) },
+      { id: "tab-group-editor", find: (doc) => doc.querySelectorAll("#tab-group-editor > panel.tab-group-editor-panel")[0], take: "toolbarbutton, moz-button, button, label.tab-group-editor-swatch", at_once: (element) => has_class(element, "tab-group-editor-swatch") || TAB_GROUP_AT_ONCE.has(element.id) },
+      // The all-tabs panel is one view of Firefox's shared widget panel, which other views use too.
+      { id: "customizationui-widget-panel", take: "toolbarbutton, button", view_ok: (view) => view.id.startsWith("allTabsMenu-") },
     ];
 
     const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
@@ -208,7 +246,8 @@
       return views.at(-1) ?? panel;
     }
 
-    const open_panels = (doc) => PANELS.map((row) => ({ panel: doc.getElementById(row.id), row })).filter(({ panel }) => panel?.state === "open");
+    const panel_of = (doc, row) => row.find?.(doc) ?? doc.getElementById(row.id);
+    const open_panels = (doc) => PANELS.map((row) => ({ panel: panel_of(doc, row), row })).filter(({ panel, row }) => panel?.state === "open" && (!row.view_ok || row.view_ok(shown_view(panel))));
 
     function panel_targets(panel, row) {
       const view = shown_view(panel);
@@ -931,9 +970,11 @@
     const bar_of = (element) => closest_of(element, (at) => at.localName === "notification-message");
     const notification_of = (prompt) => prompt.notification ?? prompt.wrappedJSObject?.notification;
 
-    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
+    // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, a notification bar, the downloads lists, the site, permission, bookmark and tab group panels, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
     function grants(win, element) {
       if (page_row(element.ownerDocument)?.grants?.(element)) return true;
+      const grant_panel = PANELS.find((row) => row.at_once && holds(panel_of(element.ownerDocument, row), element));
+      if (grant_panel) return !grant_panel.at_once(element);
       const prompt = prompt_of(element);
       if (prompt) return prompt_grants(prompt, element);
       const bar = bar_of(element);
@@ -1031,7 +1072,7 @@
         bar,
         notification: prompt ? notification_of(prompt) : undefined,
         download: in_blocked_view ? win.document.getElementById("downloadsListBox")?.selectedItem : undefined,
-        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), bar?.getAttribute("value"), row?.getAttribute("state"), row?.getAttribute("verdict")]),
+        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), bar?.getAttribute("value"), row?.getAttribute("state"), row?.getAttribute("verdict"), element.hasAttribute("pressed")]),
       };
     }
 

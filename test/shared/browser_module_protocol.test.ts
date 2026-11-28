@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { MAX_PAGE_LINKS, MAX_PAGE_LINKS_BYTES } from "../../src/shared/browser_module_page_links.ts";
 import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
 import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
@@ -18,6 +19,9 @@ import {
   check_module_args,
   EXTENSION_TO_MODULE_KINDS,
   MAX_HELLO_BYTES,
+  MAX_INSERT_KEY_ROWS,
+  insert_keys_of,
+  validate_scope_tree,
   MAX_KEY_ROWS,
   MAX_MESSAGE_LIST_BYTES,
   MAX_KIND_BYTES,
@@ -142,7 +146,7 @@ const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", 
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
   assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "page_links.read"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -594,4 +598,63 @@ test("selection.read takes a tab id only and answers with text, so no address or
   assert.equal(read({ tab_id: "4" }).ok, false);
   assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["selection.read"]!.args), ["tab_id"]);
   assert.equal(EXTENSION_TO_MODULE_KINDS["selection.read"]!.reply, true);
+});
+
+test("the hello says mode_keys only when it is true, and a hello with every flag and the longest version still fits", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", mode_keys: true }), { ok: true, value: { v: V, module_version: "1", mode_keys: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", mode_keys: "true" }), { ok: true, value: { v: V, module_version: "1" } });
+  const every_flag = { v: V, module_version: "x".repeat(32), bar: true, bar_message: true, devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true, page_hints: true, firefox_pages: true, pane_moves: true, which_key_root: true, mode_keys: true };
+  assert.ok(validate_module_hello(every_flag).ok, "every flag with a 32 character version");
+  assert.ok(new TextEncoder().encode(JSON.stringify(every_flag)).length <= MAX_HELLO_BYTES);
+});
+
+test("mode.insert and mode.pass_next take no args, and mode.set takes ignore or insert only", () => {
+  assert.deepEqual(check_module_args("mode.insert", {}), { ok: true, value: {} });
+  assert.deepEqual(check_module_args("mode.pass_next", { junk: 1 }), { ok: true, value: {} });
+  for (const mode of ["ignore", "insert"]) assert.deepEqual(check_module_args("mode.set", { mode }), { ok: true, value: { mode } }, mode);
+  for (const mode of ["normal", "caret", "visual", "", undefined, 1, ["ignore"]]) assert.equal(check_module_args("mode.set", { mode }).ok, false, String(mode));
+});
+
+test("a tree with a mode leaf passes the check, and one with a mode value the module does not know fails as a whole, while an unknown command is skipped", () => {
+  assert.ok(validate_scope_tree({ children: { i: { native: "mode.insert", args: {} }, ",": { children: { i: { native: "mode.set", args: { mode: "ignore" } } } } } }).ok);
+  assert.equal(validate_scope_tree({ children: { J: { native: "tab.next", args: {} }, v: { native: "mode.set", args: { mode: "caret" } } } }).ok, false);
+  assert.ok(validate_scope_tree({ children: { x: { native: "mode.escape", args: {} } } }).ok, "a command the module does not know is skipped, not refused");
+});
+
+test("the insert table takes up to MAX_INSERT_KEY_ROWS key rows of the fixed commands and skips others", () => {
+  assert.deepEqual(insert_keys_of([{ key: "<Escape>", id: "mode.escape" }, { key: "<A-Escape>", id: "page.send_key" }, { key: "<A-?>", id: "help.whichkey" }]), [{ key: "<Escape>", id: "mode.escape" }, { key: "<A-Escape>", id: "page.send_key" }, { key: "<A-?>", id: "help.whichkey" }]);
+  assert.deepEqual(insert_keys_of([{ key: "<C-r>", id: "register.paste" }, { key: "<Escape>", id: "mode.escape" }, { key: "x", id: "later.command", extra: 1 }]), [{ key: "<Escape>", id: "mode.escape" }], "other commands are skipped");
+  assert.deepEqual(insert_keys_of([]), []);
+  const many = (count: number) => Array.from({ length: count }, (_, index) => ({ key: `<F${index + 1}>`, id: "mode.escape" }));
+  assert.equal(insert_keys_of(many(MAX_INSERT_KEY_ROWS))?.length, MAX_INSERT_KEY_ROWS);
+  assert.equal(insert_keys_of(many(MAX_INSERT_KEY_ROWS + 1)), undefined);
+});
+
+test("a bad insert table is undefined as a whole: junk rows, a bad key token, a duplicate key and a non-list", () => {
+  for (const bad of [undefined, null, "x", {}, [null], [{ id: "mode.escape" }], [{ key: "", id: "mode.escape" }], [{ key: "a b", id: "mode.escape" }], [{ key: "x".repeat(25), id: "mode.escape" }], [{ key: "a", id: 5 }], [{ key: "a", id: "mode.escape" }, { key: "a", id: "page.send_key" }], [{ key: "a", id: "mode.escape" }, { key: "a", id: "unknown.command" }]]) {
+    assert.equal(insert_keys_of(bad), undefined, JSON.stringify(bad));
+  }
+});
+
+test("the state carries a valid insert table and drops a bad one without failing the state", () => {
+  const rows = [{ key: "<Escape>", id: "mode.escape" }];
+  const kept = validate_module_state(state({ insert_keys: rows }));
+  assert.ok(kept.ok && JSON.stringify(kept.value.insert_keys) === JSON.stringify(rows));
+  const dropped = validate_module_state(state({ insert_keys: [{ key: "a", id: "mode.escape" }, { key: "a", id: "mode.escape" }] }));
+  assert.ok(dropped.ok && dropped.value.insert_keys === undefined);
+  const absent = validate_module_state(state());
+  assert.ok(absent.ok && absent.value.insert_keys === undefined);
+});
+
+test("page_links.read names a tab and a scope only, and a full-size reply fits the kind", () => {
+  const read = (args: Record<string, unknown>) => validate_message({ v: V, id: "l1", kind: "page_links.read", args }, EXTENSION_TO_MODULE_KINDS);
+  assert.deepEqual(read({ tab_id: 4, scope: "page", url: "https://example.com/", selector: "a" }), { ok: true, value: { v: V, id: "l1", kind: "page_links.read", args: { tab_id: 4, scope: "page" } } });
+  assert.equal(read({ tab_id: 4 }).ok, false);
+  assert.equal(read({ scope: "page" }).ok, false);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS["page_links.read"]!.args), ["tab_id", "scope"]);
+  const row = EXTENSION_TO_MODULE_KINDS["page_links.read"]!;
+  assert.equal(row.reply, true);
+  const value = JSON.stringify(Array.from({ length: MAX_PAGE_LINKS }, (_, index) => [`https://a.com/${index}`, "x".repeat(90)]));
+  assert.ok(new TextEncoder().encode(value).length <= MAX_PAGE_LINKS_BYTES);
+  assert.equal(reply_fits({ v: V, reply_to: "l1", ok: true, value }, row), true);
 });

@@ -5,7 +5,7 @@ import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
-import { counted_steps, locked_page_command_ids, matcher_keymap_of, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
+import { counted_steps, locked_page_command_ids, matcher_keymap_of, native_allowed_by, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
@@ -35,7 +35,7 @@ test("the locked-page set: background commands that need no page, minus the deny
   // A new background command shows here in review. A command that needs a page must stay out.
   assert.deepEqual([...allowed].sort(), [
     "bookmark.add", "bookmark.edit_url", "bookmark.move", "bookmark.open", "bookmark.open_folder", "bookmark.remove", "bookmark.rename",
-    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
+    "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.page_links", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
     "help.issue", "help.key", "help.open", "hint.browser", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
     "page.back", "page.forward", "page.home", "page.print", "page.reader", "page.reload", "page.save_pdf",
@@ -60,18 +60,26 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.equal(node_at(DEFAULT_TREE, ["@", ""]), "forward");
   // A page swaps the record key for macro.stop while a macro records, which the stored tree cannot follow, so `q` stays with the page.
   assert.equal(node_at(DEFAULT_TREE, ["q"]), undefined);
-  // Hints, find, the command line, marks and insert mode need DesertFox's page code.
-  for (const keys of [["f"], ["/"], ["i"], ["m"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
-  // The bare command line key stays, so the background opens the line as a panel. A line with typed text (`A`, `tM`) does not.
+  // The mode keys run in the module: insert, ignore in every spelling, and pass-next. A mode that needs the page code stays out.
+  assert.deepEqual(node_at(DEFAULT_TREE, ["i"]), { native: "mode.insert", args: {} });
+  for (const keys of [["<S-Escape>"], ["<S-Insert>"], ["<AC-Escape>"], ["<AC-`>"], [",", "i"]]) assert.deepEqual(node_at(DEFAULT_TREE, keys), { native: "mode.set", args: { mode: "ignore" } }, keys.join(""));
+  assert.deepEqual(node_at(DEFAULT_TREE, ["<C-v>"]), { native: "mode.pass_next", args: {} });
+  assert.equal(node_at(DEFAULT_TREE, ["v"]), undefined, "caret mode needs the page code");
+  // Hints, find, marks and the page's own Escape need DesertFox's page code.
+  for (const keys of [["f"], ["/"], ["m"], [";"], ["<Esc>"], ["<Escape>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  // The bare command line key stays, so the background opens the line as a panel. A line with typed text stays only when its command runs with no page (`tM`), not for `A`, `sh` or `;;`.
   assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
-  for (const keys of [["A"], ["t", "M"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  assert.equal(node_at(DEFAULT_TREE, ["t", "M"]), "forward");
+  for (const keys of [["A"], ["s", "h"], [";", ";"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
 });
 
 test("the page yanks run on a locked page as their background variant, with their args and register", () => {
-  for (const keys of [["y", "y"], ["y", "c"], ["y", "m"], ["y", "o"], ["y", "s"], ["y", "t"]]) assert.equal(node_at(DEFAULT_TREE, keys), "forward", keys.join(""));
-  // The link yanks need the page's links, so they stay out of the tree.
-  for (const keys of [["y", "L"], ["y", "l"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  for (const keys of [["y", "y"], ["y", "c"], ["y", "m"], ["y", "o"], ["y", "s"], ["y", "t"], ["y", "L"], ["y", "l"]]) assert.equal(node_at(DEFAULT_TREE, keys), "forward", keys.join(""));
+  // The link yanks ask the module for the page's links, with the scope and format of the key.
+  const links = resolve_run(compiled(), "y l", 0, allowed);
+  assert.ok(links.ok);
+  assert.deepEqual(counted_steps(links.leaf.steps, undefined).map(({ id, args }) => ({ id, ...args })), [{ id: "copy.page_links", scope: "viewport", format: "markdown", register: "" }]);
   const resolved = resolve_run(compiled(), "y m", 0, allowed);
   assert.ok(resolved.ok);
   assert.deepEqual(counted_steps(resolved.leaf.steps, undefined).map(({ id, args }) => ({ id, format: args?.["format"] })), [{ id: "copy.page", format: "markdown" }]);
@@ -95,7 +103,7 @@ test("the tree names the hint keys of the user's keymap, which the module claims
 
 test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
   // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
-  for (const keys of [":", "o", "T", "w w"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of [":", "o", "T", "w w", "t M"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
   for (const keys of ["u", "x x", "g t"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
   assert.equal(DEFAULT_TREE.line_keys?.some((keys) => keys.split(" ").includes("")), false, "a path through the capture key");
   for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, line_keys: [junk] }).ok, false, JSON.stringify(junk));
@@ -229,6 +237,21 @@ test("a hint key on one of Firefox's own pages maps to the page action of its bi
   for (const keys of [";", "f f"]) assert.deepEqual(action(keys), refused, keys);
   assert.equal(page_hint_action_of(keymap, "a b".repeat(9)).ok, false);
   assert.equal(page_hint_action_of(undefined, "f").ok, false);
+});
+
+test("the mode commands are in the tree only for a hello that says mode_keys, and every other native leaf stays", () => {
+  const without = scope_tree_of(compiled(), allowed, real_check, native_allowed_by(undefined));
+  const older = scope_tree_of(compiled(), allowed, real_check, native_allowed_by({}));
+  const newer = scope_tree_of(compiled(), allowed, real_check, native_allowed_by({ mode_keys: true }));
+  for (const keys of [["i"], ["<S-Escape>"], ["<S-Insert>"], ["<AC-Escape>"], ["<AC-`>"], ["<C-v>"], [",", "i"]]) {
+    assert.equal(node_at(without, keys), undefined, `${keys.join("")} without a hello`);
+    assert.equal(node_at(older, keys), undefined, `${keys.join("")} with an older hello`);
+    assert.notEqual(node_at(newer, keys), undefined, `${keys.join("")} with mode_keys`);
+  }
+  assert.deepEqual(node_at(without, ["J"]), node_at(newer, ["J"]));
+  assert.deepEqual(node_at(without, ["g", "g"]), node_at(newer, ["g", "g"]));
+  assert.deepEqual(scope_tree_of(compiled(), allowed, real_check), newer, "no filter is every command");
+  assert.ok(validate_scope_tree(without).ok && validate_scope_tree(newer).ok);
 });
 
 test("the guarded default j and k stay on locked pages as their scroll fallback", () => {
