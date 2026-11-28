@@ -594,7 +594,7 @@ test("on about:unloads the Unload button waits for Enter and the rest of the all
   }
 });
 
-test("on about:firefoxview the sync button, a history delete item and a send to device item wait for Enter, and another menu item clicks at once", async () => {
+test("on about:firefoxview the sync button, a history or chat delete item and a send to device item wait for Enter, and another menu item clicks at once", async () => {
   // A menu item holds its button in its own shadow root.
   const item = (top: number, attributes: Record<string, string>) => {
     const panel_item = el("panel-item", 20, top);
@@ -610,9 +610,10 @@ test("on about:firefoxview the sync button, a history delete item and a send to 
   sign_in.setAttribute("data-action", "sign-in");
   const delete_item = item(100, { "data-l10n-id": "firefoxview-history-context-delete" });
   const device_item = item(140, { "device-id": "d1" });
+  const chat_item = item(220, { "data-l10n-id": "firefoxview-chat-context-delete" });
   const other_item = item(180, { "data-l10n-id": "fxviewtabrow-open-in-new-window" });
-  const build = (root: Node) => root.append(sync, sign_in, delete_item.panel_item, device_item.panel_item, other_item.panel_item);
-  for (const target of [sync, delete_item.inner, device_item.inner]) {
+  const build = (root: Node) => root.append(sync, sign_in, delete_item.panel_item, device_item.panel_item, other_item.panel_item, chat_item.panel_item);
+  for (const target of [sync, delete_item.inner, device_item.inner, chat_item.inner]) {
     const run = start_on("about:firefoxview", build);
     const { pick } = await labelled_session(run, 5);
     assert.equal((await pick(target))?.ok, true);
