@@ -700,3 +700,149 @@ test("a bar button that Firefox disables after the labels show answers not ready
   await bar_collect(hidden.run, { typed: false });
   assert.equal(labelled_boxes(hidden.run).includes(at(hidden.chrome.actions[0]!)), false, "a bar in a hidden deck box got labels");
 });
+
+// ---- Toolbar panels.
+
+type Control = { name: string; id?: string; class_name?: string; type?: string };
+
+// A browser window with the page focused and one panel open. `controls` are its rows. `find` leaves the panel without an id, inside a tab group editor element, as Firefox builds it. `view_id` puts the rows in a panelview that shows.
+function window_with_panel(panel_id: string, controls: Control[], { find = false, view_id = "" } = {}) {
+  const run = started_run((firefox) => {
+    const page = new Node("browser", { box: box(0, 120, 1200, 600) });
+    const panel = new Node("panel", { id: find ? "" : panel_id, box: box(400, 60, 300, 400) });
+    panel.state = "open";
+    const view = view_id ? new Node("panelview", { id: view_id, box: box(400, 60, 300, 400) }) : panel;
+    if (view_id) {
+      view.setAttribute("visible", "true");
+      panel.append(view);
+    }
+    const nodes = controls.map((control, index) => Object.assign(new Node(control.name, { id: control.id ?? "", className: control.class_name ?? "", box: box(410, 70 + index * 30, 120, 24) }), control.type ? { type: control.type, attrs: new Map([["type", control.type]]) } : {}));
+    view.append(...nodes);
+    const nav = new Node("toolbar", { id: "nav-bar" });
+    const reload = chrome_button("reload-button", 10);
+    nav.append(reload);
+    const editor = find ? new Node("tabgroup-menu", { id: "tab-group-editor" }) : undefined;
+    editor?.append(panel);
+    const window = plain_chrome_window(firefox, "navigator:browser", (root) => root.append(nav, page, editor ?? panel));
+    window.focus(page);
+    return Object.assign(window, { panel, nodes, reload });
+  });
+  return { run, chrome: run.chrome as unknown as ReturnType<typeof plain_chrome_window> & { panel: Node; nodes: Node[]; reload: Node } };
+}
+
+// What one pick of a control does: whether it got a label, and the clicks right after the pick and after the user's Enter.
+async function panel_pick(panel_id: string, control: Control, options: { find?: boolean; view_id?: string } = {}) {
+  const { run, chrome } = window_with_panel(panel_id, [control], options);
+  const started = await bar_collect(run);
+  const target = chrome.nodes[0]!;
+  const labelled = labelled_boxes(run).includes(at(target));
+  if (!labelled) return { labelled, started };
+  const pick = await label_all(run);
+  const reply = await pick(target);
+  const after_pick = target.clicks + target.commands + (target.open ? 1 : 0);
+  chrome.clock.now += 500;
+  chrome.press("Enter");
+  return { labelled, started, reply, after_pick, after_enter: target.clicks + target.commands + (target.open ? 1 : 0) };
+}
+
+const ONCE = { after_pick: 1, after_enter: 1 };
+const WAITS = { after_pick: 0, after_enter: 1 };
+
+const PANEL_CASES: [string, string, Control, typeof ONCE, { find?: boolean; view_id?: string }?][] = [
+  ["the extensions panel's extension button", "unified-extensions-panel", { name: "toolbarbutton", class_name: "unified-extensions-item-action-button" }, ONCE],
+  ["the extensions panel's menu button", "unified-extensions-panel", { name: "toolbarbutton", class_name: "unified-extensions-item-menu-button" }, ONCE],
+  ["the site panel's connection row", "trustpanel-popup", { name: "toolbarbutton", id: "trustpanel-popup-connection" }, ONCE],
+  ["the site panel's clear-cookies row, which only opens its confirm view", "trustpanel-popup", { name: "toolbarbutton", id: "trustpanel-clear-cookies-button" }, ONCE],
+  ["the site panel's back button", "trustpanel-popup", { name: "toolbarbutton", class_name: "subviewbutton subviewbutton-back" }, ONCE],
+  ["the site panel's blocker row", "trustpanel-popup", { name: "moz-button", class_name: "moz-button-subviewbutton-nav" }, ONCE],
+  ["the site panel's HTTPS-only drop-down", "trustpanel-popup", { name: "menulist", id: "trustpanel-popup-security-httpsonlymode-menulist" }, ONCE],
+  ["the site panel's tracking protection toggle", "trustpanel-popup", { name: "moz-toggle", id: "trustpanel-toggle" }, WAITS],
+  ["the site panel's confirm Clear cookies button", "trustpanel-popup", { name: "moz-button", id: "trustpanel-clear-cookie-clear" }, WAITS],
+  ["the site panel's Remove certificate exception", "trustpanel-popup", { name: "button", id: "identity-popup-remove-cert-exception" }, WAITS],
+  ["the site panel's Smartblock toggle", "trustpanel-popup", { name: "moz-toggle", id: "trustpanel-smartblock-fb-toggle" }, WAITS],
+  ["a control the site panel does not name", "trustpanel-popup", { name: "button", id: "a-future-button" }, WAITS],
+  ["the site info panel's connection row", "identity-popup", { name: "toolbarbutton", id: "identity-popup-security-button" }, ONCE],
+  ["the site info panel's Clear cookies and site data", "identity-popup", { name: "toolbarbutton", id: "identity-popup-clear-sitedata-button" }, WAITS],
+  ["the site info panel's Remove certificate exception", "identity-popup", { name: "button", id: "identity-popup-remove-cert-exception" }, WAITS],
+  ["the protections panel's category row", "protections-popup", { name: "toolbarbutton", id: "protections-popup-category-trackers", class_name: "protections-popup-category" }, ONCE],
+  ["the protections panel's tracking protection switch", "protections-popup", { name: "moz-toggle", id: "protections-popup-tp-switch" }, WAITS],
+  ["the protections panel's exception remove button", "protections-popup", { name: "button", class_name: "permission-popup-permission-remove-button" }, WAITS],
+  ["the permission panel's remove button", "permission-popup", { name: "button", class_name: "permission-popup-permission-remove-button" }, WAITS],
+  ["the permission panel's Allow menu", "permission-popup", { name: "menulist", id: "permission-popup-menulist" }, ONCE],
+  ["the bookmark panel's Done button", "editBookmarkPanel", { name: "button", id: "editBookmarkPanelDoneButton" }, ONCE],
+  ["the bookmark panel's folder drop-down", "editBookmarkPanel", { name: "menulist", id: "editBMPanel_folderMenuList" }, ONCE],
+  ["the bookmark panel's Remove bookmark button", "editBookmarkPanel", { name: "button", id: "editBookmarkPanelRemoveButton" }, WAITS],
+  ["the tab group editor's New tab row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_addNewTabInGroup" }, ONCE, { find: true }],
+  ["the tab group editor's color swatch", "tab-group-editor", { name: "input", id: "tab-group-editor-swatch-blue", type: "radio" }, ONCE, { find: true }],
+  ["the tab group editor's Delete group row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_deleteGroup" }, WAITS, { find: true }],
+  ["the tab group editor's Ungroup tabs row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_ungroupTabs" }, WAITS, { find: true }],
+  ["the tab group editor's Save and close group row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_saveAndCloseGroup" }, WAITS, { find: true }],
+  ["an all-tabs panel row", "customizationui-widget-panel", { name: "toolbarbutton", id: "allTabsMenu-closeDuplicateTabs" }, ONCE, { view_id: "allTabsMenu-allTabsView" }],
+];
+
+for (const [name, panel_id, control, expected, options] of PANEL_CASES) {
+  test(`${name} ${expected === ONCE ? "clicks at once" : "waits for Enter"}`, async () => {
+    const result = await panel_pick(panel_id, control, options);
+    assert.equal(result.started?.ok, true);
+    assert.equal(result.labelled, true, "the control got no label");
+    assert.equal(result.reply?.ok, true);
+    assert.deepEqual({ after_pick: result.after_pick, after_enter: result.after_enter }, expected);
+  });
+}
+
+test("a plain collect with a site panel open refuses, since its controls can grant, and a panel of clicks at once labels with no start key", async () => {
+  const site = window_with_panel("trustpanel-popup", [{ name: "toolbarbutton", id: "trustpanel-popup-connection" }, { name: "moz-toggle", id: "trustpanel-toggle" }]);
+  assert.equal((await bar_collect(site.run, { typed: false }))?.error, "Type the hint key to label the prompt");
+  const extensions = window_with_panel("unified-extensions-panel", [{ name: "toolbarbutton", class_name: "unified-extensions-item-action-button" }]);
+  assert.equal((await bar_collect(extensions.run, { typed: false }))?.ok, true);
+  assert.ok(labelled_boxes(extensions.run).includes(at(extensions.chrome.nodes[0]!)));
+});
+
+test("a key other than Enter cancels the wait on a site panel's toggle, and a navigation under it ends the wait", async () => {
+  const cases = [(chrome: ReturnType<typeof window_with_panel>["chrome"]) => chrome.press("a"), (chrome: ReturnType<typeof window_with_panel>["chrome"]) => chrome.panel.fire("popuphidden", { target: chrome.panel } as never)];
+  for (const end of cases) {
+    const { run, chrome } = window_with_panel("trustpanel-popup", [{ name: "moz-toggle", id: "trustpanel-toggle" }]);
+    await bar_collect(run);
+    const pick = await label_all(run);
+    await pick(chrome.nodes[0]!);
+    chrome.clock.now += 500;
+    end(chrome);
+    chrome.press("Enter");
+    assert.equal(chrome.nodes[0]!.clicks, 0);
+  }
+});
+
+test("a toggle that flips between its mark and Enter ends the wait", async () => {
+  const { run, chrome } = window_with_panel("trustpanel-popup", [{ name: "moz-toggle", id: "trustpanel-toggle" }]);
+  await bar_collect(run);
+  const pick = await label_all(run);
+  await pick(chrome.nodes[0]!);
+  chrome.nodes[0]!.setAttribute("pressed", "");
+  chrome.clock.now += 500;
+  chrome.press("Enter");
+  assert.equal(chrome.nodes[0]!.clicks, 0, "an Enter ran a toggle that had changed state");
+});
+
+test("the shared widget panel is labelled only while the all-tabs view shows", async () => {
+  const other = window_with_panel("customizationui-widget-panel", [{ name: "toolbarbutton", id: "PanelUI-history-clear" }], { view_id: "PanelUI-history" });
+  await bar_collect(other.run, { typed: false });
+  assert.equal(labelled_boxes(other.run).includes(at(other.chrome.nodes[0]!)), false, "another view of the widget panel got labels");
+  assert.ok(labelled_boxes(other.run).includes(at(other.chrome.reload)), "the window lost its labels");
+});
+
+test("a panel that opens with its name field focused gets no session until the user leaves the field", async () => {
+  for (const [panel_id, options] of [["editBookmarkPanel", {}], ["tab-group-editor", { find: true }]] as const) {
+    const { run, chrome } = window_with_panel(panel_id, [{ name: "button", id: "editBookmarkPanelDoneButton" }, { name: "toolbarbutton", id: "tabGroupEditor_addNewTabInGroup" }], options);
+    const field = new Node("input", { id: "editBMPanel_namePicker", box: box(410, 300, 200) });
+    chrome.panel.append(field);
+    Object.assign(field, { ownerDocument: chrome.panel.ownerDocument });
+    chrome.focus(field);
+    run.type_binding();
+    assert.deepEqual(run.tokens(), [], `a binding typed in the field of ${panel_id} began a start`);
+    assert.equal((await bar_collect(run, { typed: false }))?.error, "Leave the field first");
+    chrome.focus(chrome.nodes[0]!);
+    run.type_binding();
+    assert.equal((await run.collect_here(2))?.ok, true, `${panel_id} gave no labels once the focus left the field`);
+    assert.ok(labelled_boxes(run).includes(at(chrome.nodes[0]!)));
+  }
+});
