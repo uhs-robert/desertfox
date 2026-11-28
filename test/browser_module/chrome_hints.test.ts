@@ -8,6 +8,7 @@ import { label_parts } from "../../src/background/chrome_hints.ts";
 import { make_labels } from "../../src/shared/hints/labels.ts";
 import { Node } from "./chrome_dom.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
+import { box, button as chrome_button, chrome_window as plain_chrome_window, settle as settle_run, started as started_run } from "./chrome_windows.ts";
 
 const FILE = "desertfox-chrome-hints.js";
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
@@ -571,4 +572,131 @@ test("in a window opened after startup the popup walk, whose watcher Firefox cal
   assert.deepEqual(typed, ["ArrowDown"], "the walk moved the menu on a session's j");
   const keys = (plain(firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY)) as { kind?: string; args?: { key: string } }[]).filter((message) => message.kind === "chrome_hints.key");
   assert.deepEqual(keys.map((message) => message.args!.key), ["j"]);
+});
+
+// ---- Notification bars.
+
+// A browser window with the page focused and one notification bar under the toolbar: its buttons and a link in the light DOM, its close button in the shadow root, as Firefox builds one.
+function window_with_bar(value: string, { buttons = 1, shown = true } = {}) {
+  const run = started_run((firefox) => {
+    const page = new Node("browser", { box: box(0, 120, 1200, 600) });
+    const bar = new Node("notification-message", { box: box(0, 60, 1200, 40), visible: shown });
+    bar.setAttribute("value", value);
+    const actions = Array.from({ length: buttons }, (_, index) => new Node("button", { className: "notification-button", box: box(300 + index * 100, 66) }));
+    const link = new Node("label", { className: "text-link notification-link", box: box(200, 66, 80, 20) });
+    const close = new Node("moz-button", { className: "close", box: box(1150, 66, 24, 24) });
+    const shadow = new Node("#shadow");
+    shadow.append(close);
+    bar.openOrClosedShadowRoot = shadow;
+    shadow.host = bar;
+    bar.append(link, ...actions);
+    const nav = new Node("toolbar", { id: "nav-bar" });
+    const reload = chrome_button("reload-button", 10);
+    nav.append(reload);
+    const window = plain_chrome_window(firefox, "navigator:browser", (root) => root.append(nav, bar, page));
+    window.focus(page);
+    return Object.assign(window, { bar, actions, link, close, reload });
+  });
+  return { run, chrome: run.chrome as unknown as ReturnType<typeof plain_chrome_window> & { bar: Node; actions: Node[]; link: Node; close: Node; reload: Node } };
+}
+
+// The extension's own start, as gB typed in the page sends it. `typed: false` has no key of the user's behind it.
+async function bar_collect(run: ReturnType<typeof window_with_bar>["run"], { typed = true } = {}) {
+  if (typed) run.type_binding();
+  const id = run.send("chrome_hints.collect", { session: 1, window_id: run.chrome.id, colors: "" });
+  await settle_run();
+  return run.reply(id);
+}
+
+const labelled_boxes = (run: ReturnType<typeof window_with_bar>["run"]) => run.target_rows().map(([, left, top]) => `${left},${top}`);
+const at = (node: Node) => `${Math.round(node.box.left)},${Math.round(node.box.top)}`;
+
+async function label_all(run: ReturnType<typeof window_with_bar>["run"]) {
+  const rows = run.target_rows();
+  await run.draw(1, rows.map(([id], index) => [id!, `a${String.fromCharCode(97 + index)}`]));
+  return (node: Node) => run.pick(1, rows.find(([, left, top]) => `${left},${top}` === at(node))![0]!);
+}
+
+test("the popup-blocked bar's Options button waits for Enter like any bar button, and its close button and link click at once", async () => {
+  const { run, chrome } = window_with_bar("popup-blocked");
+  assert.equal((await bar_collect(run, { typed: false }))?.ok, true);
+  const seen = labelled_boxes(run);
+  assert.equal(seen.includes(at(chrome.actions[0]!)), false, "an unkeyed collect labelled Options");
+  for (const node of [chrome.link, chrome.close]) assert.ok(seen.includes(at(node)), `no label on ${node.className}`);
+  assert.equal(seen.filter((place) => place === at(chrome.close)).length, 1, "the close button got more than one label");
+  const keyed = window_with_bar("popup-blocked");
+  assert.equal((await bar_collect(keyed.run))?.ok, true);
+  const pick = await label_all(keyed.run);
+  assert.equal((await pick(keyed.chrome.actions[0]!))?.ok, true);
+  assert.equal(keyed.chrome.actions[0]!.clicks, 0, "a pick opened the Options menu with no Enter");
+  keyed.chrome.clock.now += 500;
+  keyed.chrome.press("Enter");
+  assert.equal(keyed.chrome.actions[0]!.clicks, 1);
+});
+
+test("an unknown bar's button is left bare by a plain collect, and the rest of the window still gets labels", async () => {
+  const { run, chrome } = window_with_bar("some-future-bar");
+  const reply = await bar_collect(run, { typed: false });
+  assert.equal(reply?.ok, true, "a waiting button refused the whole session");
+  const seen = labelled_boxes(run);
+  assert.equal(seen.includes(at(chrome.actions[0]!)), false, "an unkeyed collect labelled a button that waits");
+  assert.deepEqual([seen.includes(at(chrome.close)), seen.includes(at(chrome.link)), seen.includes(at(chrome.reload))], [true, true, true], "the close button, the link or the toolbar button lost its label");
+});
+
+test("with the user's own start key an unknown bar's button gets a label, and its pick waits for Enter", async () => {
+  const { run, chrome } = window_with_bar("some-future-bar");
+  assert.equal((await bar_collect(run))?.ok, true);
+  assert.ok(labelled_boxes(run).includes(at(chrome.actions[0]!)));
+  const pick = await label_all(run);
+  assert.equal((await pick(chrome.actions[0]!))?.ok, true);
+  assert.equal(chrome.actions[0]!.clicks, 0, "a pick ran a button of an unknown bar");
+  chrome.clock.now += 500;
+  chrome.press("Enter");
+  assert.equal(chrome.actions[0]!.clicks, 1);
+});
+
+test("a key other than Enter cancels the wait on a bar's button", async () => {
+  const { run, chrome } = window_with_bar("some-future-bar");
+  await bar_collect(run);
+  const pick = await label_all(run);
+  await pick(chrome.actions[0]!);
+  chrome.clock.now += 500;
+  chrome.press("a");
+  chrome.press("Enter");
+  assert.equal(chrome.actions[0]!.clicks, 0);
+});
+
+test("the close button and the link of an unknown bar click at once, since they grant nothing", async () => {
+  const { run, chrome } = window_with_bar("some-future-bar");
+  await bar_collect(run, { typed: false });
+  const pick = await label_all(run);
+  assert.equal((await pick(chrome.close))?.ok, true);
+  assert.equal(chrome.close.clicks, 1);
+});
+
+test("a bar that changes its value while its button waits ends the wait", async () => {
+  const { run, chrome } = window_with_bar("some-future-bar");
+  await bar_collect(run);
+  const pick = await label_all(run);
+  await pick(chrome.actions[0]!);
+  chrome.mutate(chrome.bar, "value", "another-bar");
+  chrome.clock.now += 500;
+  chrome.press("Enter");
+  assert.equal(chrome.actions[0]!.clicks, 0, "an Enter ran a button of a bar that had changed");
+});
+
+test("a bar button that Firefox disables after the labels show answers not ready, and a disabled or hidden one gets no label", async () => {
+  const { run, chrome } = window_with_bar("some-future-bar", { buttons: 2 });
+  chrome.actions[1]!.disabled = true;
+  await bar_collect(run);
+  assert.equal(labelled_boxes(run).includes(at(chrome.actions[1]!)), false, "a disabled button got a label");
+  const pick = await label_all(run);
+  chrome.actions[0]!.disabled = true;
+  assert.equal((await pick(chrome.actions[0]!))?.error, "The prompt is not ready yet");
+  assert.equal(chrome.actions[0]!.clicks, 0);
+
+  const hidden = window_with_bar("popup-blocked", { shown: false });
+  for (const node of [...hidden.chrome.actions, hidden.chrome.link, hidden.chrome.close]) node.visible = false;
+  await bar_collect(hidden.run, { typed: false });
+  assert.equal(labelled_boxes(hidden.run).includes(at(hidden.chrome.actions[0]!)), false, "a bar in a hidden deck box got labels");
 });
