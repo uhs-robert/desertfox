@@ -52,7 +52,7 @@ const LAYER_COUNT = `(async () => { ${TOOLBOX} if (!tb) return 0; let count = 0;
 const TREE_PAGE = `data:text/html,${encodeURIComponent("<!doctype html><title>tree</title><main><section><p>one</p><p>two</p></section><p>three</p></main><div style='height:4000px'></div>")}`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, on_teardown, run_line, sleep, take_shot } = context;
+  const { run_case, setup, expect, poll_until, press_keys, on_teardown, run_line, sleep, take_shot, in_background, clear_notices } = context;
   const steps = module_steps(context);
   const { chrome, session_value, set_session_value, module_status, home, open_tab, in_selected_page, page_scroll, switches_one, focus_page } = steps;
 
@@ -577,13 +577,18 @@ export async function run_cases(context) {
     await open_tab(TREE_PAGE);
     await show_tool("inspector");
     await with_cmdline_hello(() => in_devtools_window(async () => {
+      const NOTICE = "The command line cannot tell which tab this DevTools inspects, so it does not open here";
+      const notices = async () => Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
+      await clear_notices();
+      on_teardown(clear_notices);
       const asks_before = (((await session_value("desertfox_browser_module_from_module")) ?? []).filter((message) => message.kind === "devtools_cmdline.ask")).length;
       await press_keys(":");
       await poll_until("the ask without a tab to reach the extension", async () => {
         const asks = ((await session_value("desertfox_browser_module_from_module")) ?? []).filter((message) => message.kind === "devtools_cmdline.ask");
         return asks.length === asks_before + 1 && asks.at(-1).args.tab_id === undefined;
       }, { timeout_ms: 5000 });
-      await sleep(NO_EFFECT_MS);
+      // A desktop notice, since the tab in front sits behind the DevTools window.
+      await poll_until("the notice that the line does not open from this DevTools window", async () => (await notices()).includes(NOTICE), { timeout_ms: 5000 });
       expect((await panel_now()) === null, ": in a DevTools window opened the command line");
     }));
   });

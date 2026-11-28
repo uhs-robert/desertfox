@@ -25,7 +25,7 @@ function toolbox_document(host: Host, win: { document: unknown }, address: strin
   return (local_name: string) => Object.assign(new Node(local_name), { ownerDocument: doc }) as unknown as Node;
 }
 
-function world({ host = "docked" as Host, address = undefined as string | undefined, mapped = true, table = TABLE as unknown, private_inspected = false } = {}) {
+function world({ host = "docked" as Host, address = undefined as string | undefined, mapped = true, table = TABLE as unknown } = {}) {
   address ??= host === "tab" ? toolbox_address(INSPECTED_BROWSER_ID) : BARE;
   const firefox = create_firefox();
   firefox.start_extension();
@@ -37,8 +37,6 @@ function world({ host = "docked" as Host, address = undefined as string | undefi
   const container: { contains(node: unknown): boolean; frame?: unknown } = { contains: (node) => node === container.frame };
   const other_container = { contains: () => false };
   Object.assign(browser_window.win.gBrowser, { tabs: mapped ? [other_tab, inspected] : [other_tab], getBrowserContainer: (browser: unknown) => (browser === inspected.linkedBrowser ? container : other_container) });
-  const listed_window = private_inspected ? Object.assign(firefox.make_window({ private_window: true }).win, { gBrowser: (browser_window.win as { gBrowser: unknown }).gBrowser }) : browser_window.win;
-  (firefox.Services.wm as { getEnumerator: (type: string | null) => unknown[] }).getEnumerator = (type) => (type === "navigator:browser" ? [listed_window] : []);
   // The id the extension's tab tracker gives that tab.
   const tab_id = (browser_window.win as unknown as { ChromeUtils: { importESModule(url: string): { ExtensionParent: { apiManager: { global: { tabTracker: { getId(tab: unknown): number } } } } } } }).ChromeUtils.importESModule("x").ExtensionParent.apiManager.global.tabTracker.getId(inspected);
   const devtools_window = host === "window" ? firefox.make_window({ devtools_window: true }) : undefined;
@@ -82,8 +80,9 @@ test(": in an editable DevTools field still types, and a modifier or a frame tar
   assert.deepEqual(env.asks(), []);
 });
 
-test("a toolbox that maps to no tab asks without one", async () => {
-  const cases = [{ host: "tab", address: toolbox_address(INSPECTED_BROWSER_ID, "other") }, { host: "tab", address: toolbox_address(1234) }, { host: "tab", mapped: false }, { host: "tab", address: `${BARE}?type=tab` }, { host: "tab", address: `${BARE}?type=tab&id=x` }, { host: "docked", mapped: false }] as const;
+// `mapped: false` stands for a tab that is not in the toolbox's own window, or for a closed one.
+test("a toolbox that maps to no tab asks without one (an other kind, an id of nothing, extra or repeated parameters such as a remote target, a tab of another window)", async () => {
+  const cases = [{ host: "tab", address: toolbox_address(INSPECTED_BROWSER_ID, "other") }, { host: "tab", address: toolbox_address(1234) }, { host: "tab", mapped: false }, { host: "tab", address: `${BARE}?type=tab` }, { host: "tab", address: `${BARE}?type=tab&id=x` }, { host: "tab", address: `${BARE}?id=${INSPECTED_BROWSER_ID}&remoteId=abc&type=tab` }, { host: "tab", address: `${BARE}?type=tab&id=${INSPECTED_BROWSER_ID}&id=${INSPECTED_BROWSER_ID}` }, { host: "docked", mapped: false }] as const;
   for (const options of cases) {
     const env = world(options);
     await settle();
@@ -91,15 +90,6 @@ test("a toolbox that maps to no tab asks without one", async () => {
     await settle();
     assert.deepEqual(env.asks(), [{}], JSON.stringify(options));
   }
-});
-
-// A docked toolbox is in the window the core already checked for the key, so only a toolbox tab can name a tab of another window.
-test("a toolbox tab for a tab of a window the module may not act in names no tab", async () => {
-  const env = world({ host: "tab", private_inspected: true });
-  await settle();
-  assert.equal(env.press(":"), true);
-  await settle();
-  assert.deepEqual(env.asks(), [{}]);
 });
 
 test("a table without the row, as from an older extension, leaves : to DevTools", async () => {

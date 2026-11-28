@@ -257,34 +257,22 @@
   // A DevTools window of its own has neither (measured: its address has no query and its frame is in a window with no tab list), so it maps to no tab. The ask then goes without one, and the extension refuses with a notice.
   function define_cmdline(core) {
     const ACTIONS = new Set(["cmdline.open"]);
-    const TYPE_TAB = /^about:devtools-toolbox\?(?:[^#]*&)?type=tab(?:&|#|$)/;
-    const BROWSER_ID = /^about:devtools-toolbox\?(?:[^#]*&)?id=(\d{1,15})(?:&|#|$)/;
-    const browser_windows = () => [...Services.wm.getEnumerator("navigator:browser")];
-
-    // The tab and its window for a toolbox document, or undefined.
-    function inspected_tab(toolbox) {
-      const address = String(toolbox?.documentURI);
-      const id = TYPE_TAB.test(address) ? BROWSER_ID.exec(address)?.[1] : undefined;
-      if (id !== undefined) {
-        for (const win of browser_windows()) {
-          for (const tab of win.gBrowser?.tabs ?? []) {
-            const browser = tab.linkedBrowser;
-            if ((browser?.browsingContext?.browserId ?? browser?.browserId) === Number(id)) return { win, tab };
-          }
-        }
-        return undefined;
-      }
+    // The tab and its window for a toolbox document, or undefined. A toolbox tab maps only to a tab of its own window.
+    function inspected_tab(toolbox, win) {
+      const named = core.tab_of_toolbox_address(toolbox?.documentURI, win);
+      if (named) return { win, tab: named };
+      if (String(toolbox?.documentURI).includes("?")) return undefined;
       const frame = frame_of(toolbox);
       if (!frame?.classList?.contains("devtools-toolbox-iframe")) return undefined;
-      const win = frame.ownerDocument?.defaultView;
-      const gBrowser = win?.gBrowser;
-      for (const tab of gBrowser?.tabs ?? []) if (gBrowser.getBrowserContainer?.(tab.linkedBrowser)?.contains(frame)) return { win, tab };
+      const frame_win = frame.ownerDocument?.defaultView;
+      const gBrowser = frame_win?.gBrowser;
+      for (const tab of gBrowser?.tabs ?? []) if (gBrowser.getBrowserContainer?.(tab.linkedBrowser)?.contains(frame)) return { win: frame_win, tab };
       return undefined;
     }
 
     // The target is no field or frame here: the claim checked that before it called this.
     function start(win, target) {
-      const found = inspected_tab(toolbox_of(target));
+      const found = inspected_tab(toolbox_of(target), win);
       const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
       const tab_id = found && core.may_act(found.win) ? ExtensionParent.apiManager.global.tabTracker.getId(found.tab) : -1;
       const sent = core.send("devtools_cmdline.ask", tab_id >= 0 ? { tab_id } : {});

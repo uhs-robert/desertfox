@@ -92,7 +92,8 @@ export const DEVTOOLS_FLAGGED_KEYS = [
   { flag: "devtools_tools", keys: DEVTOOLS_TOOL_KEYS },
 ] as const satisfies readonly { flag: keyof ModuleHello; keys: readonly DevtoolsKeyRow[] }[];
 // Stand-in for the packed hello field of #1073: one helper, so the key and the code change in one place.
-export const has_hello_feature = (hello: ModuleHello | undefined, code: string): boolean => hello?.f?.includes(code) === true;
+// Codes are matched whole, since the field may hold two-letter codes and `ac` must not turn on `c`. The separator is a guess until #1073.
+export const has_hello_feature = (hello: ModuleHello | undefined, code: string): boolean => hello?.f?.split(/[ ,]/).includes(code) === true;
 // The keys of visual mode in DevTools, a push of their own (`devtools.visual_keys`), so a module before visual mode keeps its tree table. Each op moves the end of the selection or copies it.
 // The module copies on its own, so no text ever comes back. Escape ends the mode in the module, as it ends the hints, since a one-character key cannot name it.
 export const DEVTOOLS_VISUAL_OPS = ["char.back", "char.forward", "line.down", "line.up", "word.forward", "word.back", "line.start", "line.end", "copy"] as const;
@@ -479,7 +480,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(typeof value.f === "string" && /^[a-z]{1,16}$/.test(value.f) && { f: value.f }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.bar_message === true && { bar_message: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.devtools_search === true && { devtools_search: true as const }), ...(value.devtools_tools === true && { devtools_tools: true as const }), ...(typeof value.f === "string" && /^[a-z]{1,2}(?:[ ,][a-z]{1,2}){0,7}$/.test(value.f) && { f: value.f }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.

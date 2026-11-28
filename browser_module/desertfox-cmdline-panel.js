@@ -3,7 +3,7 @@
 // so the page runs in DesertFox's own process with DesertFox's principal, never the system principal. The extension names only the tab. The address is a constant here, with a random key this file makes.
 // The reply carries the key and the keys typed since the line was asked for, as JSON text. The page does the rest through the extension's own messages: the background admits it by its address, key included,
 // so no other copy of the page can act as the panel.
-// Over DevTools it opens for the tab the toolbox inspects, in the browser window of a docked toolbox or of a toolbox in a tab, anchored to the tab's whole browser container. A toolbox in a tab names the tab in its address (`about:devtools-toolbox?type=tab&id=<browser id>`).
+// Over DevTools it opens for the tab the toolbox inspects, in the browser window of a docked toolbox or of a toolbox in a tab, anchored to the tab's whole browser container. A toolbox in a tab names the tab in its address, which the core reads (`tab_of_toolbox_address`).
 // A DevTools window of its own gets no panel: nothing in it names the tab it inspects, short of DevTools internals.
 // In a window it asks the core to load it into the core sandbox, where it starts once per process.
 
@@ -43,22 +43,6 @@
 
     const tab_id_of = (tab) => ExtensionParent.apiManager.global.tabTracker.getId(tab);
 
-    // The tab a toolbox inspects, from the toolbox's address. The id is the browser id of that tab's browser. Undefined for any other address, such as the Browser Toolbox.
-    const TOOLBOX_ADDRESS = /^about:devtools-toolbox\?(?:[^#]*&)?type=tab(?:&|#|$)/;
-    const TOOLBOX_BROWSER_ID = /^about:devtools-toolbox\?(?:[^#]*&)?id=(\d{1,15})(?:&|#|$)/;
-    function inspected_tab_id(address) {
-      const text = String(address);
-      const id = TOOLBOX_ADDRESS.test(text) ? TOOLBOX_BROWSER_ID.exec(text)?.[1] : undefined;
-      if (id === undefined) return undefined;
-      for (const other of Services.wm.getEnumerator("navigator:browser")) {
-        for (const tab of other.gBrowser?.tabs ?? []) {
-          const browser = tab.linkedBrowser;
-          if ((browser?.browsingContext?.browserId ?? browser?.browserId) === Number(id)) return tab_id_of(tab);
-        }
-      }
-      return undefined;
-    }
-
     // Whether the key's focus is in a docked toolbox of the selected tab: the toolbox frame is in the tab's browser container and the focused element is in a DevTools document.
     function docked_focus(win) {
       const browser = win.gBrowser.selectedBrowser;
@@ -72,7 +56,8 @@
       if (!win || win.closed) return undefined;
       if (win.document?.documentElement?.getAttribute("windowtype") !== "navigator:browser" || !win.gBrowser?.selectedTab) return undefined;
       if (tab_id_of(win.gBrowser.selectedTab) === tab_id) return { win, devtools: docked_focus(win) };
-      return inspected_tab_id(win.gBrowser.selectedBrowser?.currentURI?.spec) === tab_id ? { win, devtools: true } : undefined;
+      const inspected = core.tab_of_toolbox_address(win.gBrowser.selectedBrowser?.currentURI?.spec, win);
+      return inspected && tab_id_of(inspected) === tab_id ? { win, devtools: true } : undefined;
     }
 
     // The element the line is placed against. Over DevTools it is the tab's whole browser container, so the line sits at the window's bottom below a docked toolbox.
@@ -154,9 +139,10 @@
           browser.removeEventListener("DOMWindowClose", on_window_close, true);
           browser.messageManager?.removeMessageListener(RESIZED_MESSAGE, on_resized);
           panel.remove();
+          // The focus goes back only while the tab the line opened over is still the one shown.
+          if (win.gBrowser.selectedBrowser !== opener || opener_tab.closing) return;
           if (focus_before && give_back_focus(win, focus_before)) return;
-          // The focus goes back to the page the line opened over, if it is still the one shown.
-          if (win.gBrowser.selectedBrowser === opener && !opener_tab.closing) opener.focus();
+          opener.focus();
         },
         { once: true },
       );

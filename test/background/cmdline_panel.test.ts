@@ -165,7 +165,7 @@ test("the DevTools ask opens the line over the tab it names, refuses with a noti
   assert.deepEqual(refusals, [[5, "The command line did not open over DevTools"]]);
   await ask({});
   assert.deepEqual(opened, [4, 5], "no tab, no panel");
-  assert.deepEqual(refusals.at(-1), [undefined, "The command line does not open from a DevTools window of its own"]);
+  assert.deepEqual(refusals.at(-1), [undefined, "The command line cannot tell which tab this DevTools inspects, so it does not open here"]);
   await ask({ tab_id: 1.5 });
   assert.deepEqual(opened, [4, 5]);
 });

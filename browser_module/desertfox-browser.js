@@ -35,6 +35,7 @@
 //   show_root_list(win)        In the sandbox: show the root list in `win`, as the key does, for a feature that opens it outside the key walk (a hint session, a one-shot prefix). The next keydown in `win` closes it.
 //   hide_root_list(win)        In the sandbox: hide it again, for a caller that closes it before a key does.
 //   take_held_keys(win, end)   In the sandbox: after a key that opens the command line the taker holds the window's keys until the line has the focus. This gives the text typed meanwhile, once, and with `end` true ends the hold. "" with no hold.
+//   tab_of_toolbox_address(address, win)  In the sandbox: the tab of `win` that a toolbox opened as a tab inspects, from its address `about:devtools-toolbox?type=tab&id=<browser id>`, or undefined. Only the parameters `type` and `id` count, so a remote target (`remoteId`) maps to nothing, and only a tab of `win` itself.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
 //   sidebar_row(win, keys)     In the sandbox: the sidebar table's row for `keys` (one or two key tokens) as { id }, { prefix: true } when they begin a longer row, else undefined. Undefined too whenever may_act(win) is false.
@@ -1147,6 +1148,19 @@
       take_held_keys(win, end) {
         if (typeof key_taker?.take_held !== "function") return "";
         return key_taker.take_held(win, end === true);
+      },
+      tab_of_toolbox_address(address, win) {
+        const match = /^about:devtools-toolbox\?([^#]*)(?:#.*)?$/.exec(String(address));
+        if (!match) return undefined;
+        const params = new Map();
+        for (const pair of match[1].split("&")) {
+          const [name, value = ""] = pair.split("=");
+          if ((name !== "type" && name !== "id") || params.has(name)) return undefined;
+          params.set(name, value);
+        }
+        if (params.get("type") !== "tab" || !/^\d{1,15}$/.test(params.get("id") ?? "")) return undefined;
+        const id = Number(params.get("id"));
+        return [...(win?.gBrowser?.tabs ?? [])].find((tab) => (tab.linkedBrowser?.browsingContext?.browserId ?? tab.linkedBrowser?.browserId) === id);
       },
       may_act: (win) => state_for(win) !== undefined,
       sidebar_row: (win, keys) => state_for(win)?.sidebar_keys.get(keys.join(" ")),

@@ -470,8 +470,10 @@ test("the : row is behind the c feature of the packed hello field, and the ask t
   assert.deepEqual(DEVTOOLS_CMDLINE_KEY, { key: ":", action: "cmdline.open" });
   assert.deepEqual(validate_module_hello({ v: V, module_version: "1", f: "c" }), { ok: true, value: { v: V, module_version: "1", f: "c" } });
   for (const f of [false, 1, "C", "c-", "abcdefghijklmnopq"]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", f }), { ok: true, value: { v: V, module_version: "1" } });
-  assert.equal(has_hello_feature({ v: V, module_version: "1", f: "xc" }, "c"), true);
+  assert.equal(has_hello_feature({ v: V, module_version: "1", f: "x c" }, "c"), true);
   assert.equal(has_hello_feature({ v: V, module_version: "1" }, "c"), false);
+  assert.equal(has_hello_feature({ v: V, module_version: "1", f: "ac cv" }, "c"), false, "whole codes only");
+  assert.equal(has_hello_feature({ v: V, module_version: "1", f: "ac c" }, "c"), true);
   const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : [])), ...(hello.f === "c" ? [DEVTOOLS_CMDLINE_KEY] : [])];
   const tools_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true };
   assert.equal(table_for(tools_hello).some(({ action }) => action === "cmdline.open"), false, "a module without the flag gets no row it would refuse the table for");

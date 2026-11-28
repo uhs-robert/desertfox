@@ -127,7 +127,7 @@ export type CmdlinePanel = ReturnType<typeof create_cmdline_panel>;
 
 export type DevtoolsCmdlineDeps = {
   open: (tab_id: number) => Promise<boolean>;
-  // The notice for a refusal. No tab id means the tab in front.
+  // The notice for a refusal. With no tab id it is a desktop notice, since the tab in front may sit behind a DevTools window.
   refuse: (tab_id: number | undefined, message: string) => Promise<unknown>;
 };
 
@@ -137,7 +137,7 @@ export function create_devtools_cmdline_handlers(deps: DevtoolsCmdlineDeps) {
   return {
     "devtools_cmdline.ask": async (args: ModuleArgs): Promise<void> => {
       const tab_id = Number.isInteger(args.tab_id) ? (args.tab_id as number) : undefined;
-      if (tab_id === undefined) return void (await deps.refuse(undefined, "The command line does not open from a DevTools window of its own"));
+      if (tab_id === undefined) return void (await deps.refuse(undefined, "The command line cannot tell which tab this DevTools inspects, so it does not open here"));
       if (!(await deps.open(tab_id))) await deps.refuse(tab_id, "The command line did not open over DevTools");
     },
   };

@@ -240,6 +240,18 @@ test("a docked toolbox anchors the panel to the tab's whole browser container, a
   assert.equal(world.log.includes("focus opener"), false, "not the page");
 });
 
+test("a tab switch while the panel shows closes it and leaves the focus alone, also from a docked toolbox", async () => {
+  const world = devtools_world();
+  world.container.docked = true;
+  const focused = { isConnected: true, ownerDocument: { documentURI: "about:devtools-toolbox", defaultView: { focus: () => world.log.push("focus DevTools view") } }, focus: () => world.log.push("focus DevTools element") };
+  world.win.document.commandDispatcher = { focusedElement: focused };
+  await world.ask({ tab_id: 7 });
+  world.select_b();
+  world.tab_container.fire("TabSelect");
+  assert.equal(world.panel()!.state, "closed");
+  assert.equal(world.log.some((entry) => entry.startsWith("focus DevTools") || entry === "focus opener"), false);
+});
+
 test("a page with no toolbox keeps its own anchor and its focus return", async () => {
   const world = devtools_world();
   await world.ask({ tab_id: 7 });
@@ -254,6 +266,16 @@ test("a toolbox in a tab: the line opens in that browser window for the inspecte
   (world.tab_b.linkedBrowser as Record<string, unknown>).currentURI = { spec: toolbox_address() };
   assert.deepEqual(await world.ask({ tab_id: 7 }), OPENED);
   assert.equal(world.anchors[0], world.container);
+  // A toolbox tab whose address carries a remote id, or names a tab of another window, maps to nothing.
+  const remote = devtools_world();
+  remote.select_b();
+  (remote.tab_b.linkedBrowser as Record<string, unknown>).currentURI = { spec: `about:devtools-toolbox?id=${INSPECTED_BROWSER_ID}&remoteId=abc&type=tab` };
+  assert.equal((await remote.ask({ tab_id: 7 })).ok, false);
+  const elsewhere = devtools_world();
+  elsewhere.select_b();
+  (elsewhere.tab_b.linkedBrowser as Record<string, unknown>).currentURI = { spec: toolbox_address() };
+  elsewhere.win.gBrowser.tabs = [elsewhere.tab_b];
+  assert.equal((await elsewhere.ask({ tab_id: 7 })).ok, false);
   // Another tab than the inspected one is still refused.
   const other = devtools_world();
   other.select_b();
