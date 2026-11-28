@@ -470,17 +470,19 @@
     }
 
     // Where `target` sits in DevTools, short of a window of its own: "docked" under the toolbox frame that DevTools docks in a tab, "tab" in a toolbox opened as a tab (its document or a panel under it), else undefined.
+    // A docked toolbox's own document is about:devtools-toolbox too, so a toolbox document says "tab" only when no docking frame lies above it.
     function toolbox_place(win, target) {
       let doc = target?.ownerDocument;
+      let in_toolbox_document = false;
       for (let depth = 0; doc && doc !== win.document && depth < 8; depth++) {
-        if (is_toolbox_document(doc)) return "tab";
+        if (is_toolbox_document(doc)) in_toolbox_document = true;
         // frameElement is null across the <browser> that holds a docked toolbox, so its embedder names that frame.
         const frame = doc.defaultView?.frameElement ?? doc.defaultView?.browsingContext?.embedderElement;
-        if (!frame) return undefined;
+        if (!frame) break;
         if (frame.classList?.contains("devtools-toolbox-iframe")) return "docked";
         doc = frame.ownerDocument;
       }
-      return undefined;
+      return in_toolbox_document ? "tab" : undefined;
     }
 
     // The focus is in DevTools: a window of its own, or a place `toolbox_place` names.

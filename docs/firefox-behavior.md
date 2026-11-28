@@ -476,7 +476,7 @@ Measured in Firefox 161.0 in the key test (`p55_panes`), through the pane keys, 
 - After `ED` with the console docked at the bottom, the window's focused window was the toolbox's.
 - `E=` after a widen made the two panels equal within 2 px. `E<Space><<<` narrowed the first panel three steps of 5 percent. `El` and `Eh` moved between the panes of a split.
 - `EL` from the left pane of a split moved it to the right, and the pane kept the selection and the window's focused element. `EL` again was refused with "This pane is already on the right", and `EH` moved it back. `E<Space>LH` did the same inside the hold.
-- Not measured: the sidebar focus, DevTools docked left or right, a split in a private window, and the DevTools and sidebar moves, which no key reaches yet. `switchHost` and `reversePosition` are read from the 161.0 source only.
+- Not measured: the sidebar focus, DevTools docked left or right, a split in a private window, and the DevTools and sidebar moves with a key (unit tests only, no hand measurement). `switchHost` and `reversePosition` are read from the 161.0 source only.
 
 ## Sidebar keys (sidebar-keys)
 

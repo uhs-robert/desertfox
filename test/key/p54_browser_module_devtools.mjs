@@ -156,6 +156,49 @@ export async function run_cases(context) {
     await chrome(`(async () => { ${TOOLBOX} await tb.closeSplitConsole(); })()`);
   });
 
+  await run_case("E then H, L and J dock the toolbox left, right and at the bottom, and E then another key or a typed E in the console input change nothing", async () => {
+    await home("bm_dt_pane_moves");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    const host = () => chrome(`(async () => { ${TOOLBOX} return tb.hostType; })()`);
+    const dock = async (keys, want) => {
+      await markup_on_section();
+      await focus_in_devtools();
+      await press_keys(...keys);
+      await poll_until(`${keys.join("")} to dock DevTools ${want}`, async () => (await host()) === want, { timeout_ms: 5000 }).catch(async (error) => {
+        const sent = ((await session_value("desertfox_browser_module_from_module")) ?? []).slice(-4).map(({ kind, args, ok, error: reason }) => ({ kind, args, ok, reason }));
+        const tree_keys = Object.keys((await session_value(STATE_KEY))?.tree?.children?.E?.children ?? {});
+        const where = await chrome(`(async () => { const w = ${W}; const core = Services.desertfox_browser_module; const el = core.focused_element(w); return { el: el ? el.localName + "#" + el.id + " " + el.ownerDocument.documentURI : null, place: core.toolbox_place(w, el) ?? null, held: core.keys_held_by(w) ?? null }; })()`);
+        throw new Error(`${error.message} where ${JSON.stringify(where)} (module said ${JSON.stringify(sent)}, E group ${tree_keys.join("")}, host ${await host()})`);
+      });
+      await sleep(500);
+    };
+    expect((await host()) === "bottom", `the toolbox starts at ${await host()}`);
+    await dock(["E", "H"], "left");
+    await dock(["E", "L"], "right");
+    await dock(["E", "J"], "bottom");
+    // E then a key that is no pane key ends the hold and moves nothing, and the j after it is the tree's again.
+    await markup_on_section();
+    await focus_in_devtools();
+    await press_keys("E");
+    await press_keys("x");
+    await sleep(NO_EFFECT_MS);
+    expect((await host()) === "bottom", "E then x moved the toolbox");
+    await focus_in_devtools();
+    const before = JSON.stringify(await markup_state());
+    await press_keys("j");
+    await poll_until("j to move the tree after the ended hold", async () => JSON.stringify(await markup_state()) !== before, { timeout_ms: 3000 });
+    // In the console input E is text.
+    await chrome(`(async () => { ${TOOLBOX} await tb.openSplitConsole(); })()`);
+    await poll_until("the split console", () => chrome(`(async () => { ${TOOLBOX} return tb.splitConsole === true && !!tb.getPanel("webconsole")?.hud; })()`), { timeout_ms: 5000 });
+    const console_text = () => chrome(`(async () => { ${TOOLBOX} return tb.getPanel("webconsole").hud.ui.outputNode.ownerDocument.querySelector(".jsterm-input-container")?.textContent ?? null; })()`);
+    await chrome(`(async () => { ${TOOLBOX} const hud = tb.getPanel("webconsole").hud; hud.ui.outputNode.ownerDocument.defaultView.focus(); hud.ui.jsterm.focus(); })()`);
+    await press_keys("E", "H");
+    await poll_until("EH to type into the console input", async () => (await console_text())?.includes("EH"), { timeout_ms: 3000 });
+    expect((await host()) === "bottom", "EH in the console input moved the toolbox");
+    await chrome(`(async () => { ${TOOLBOX} await tb.closeSplitConsole(); })()`);
+  });
+
   await run_case("docked Storage: j and k move through the storage tree", async () => {
     await home("bm_dt_storage");
     await open_tab(TREE_PAGE);

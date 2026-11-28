@@ -59,13 +59,13 @@ function toolbox_in(win: { document: unknown }) {
   return { doc, view, element };
 }
 
-function started({ table = TABLE as unknown } = {}) {
+function started({ table = TABLE as unknown, written = STATE as unknown } = {}) {
   const firefox = create_firefox();
   firefox.start_extension();
   const window = firefox.make_window();
   window.load();
   window.add_tab();
-  firefox.write_state(STATE);
+  firefox.write_state(written);
   const dom = toolbox_in(window.win);
   const tree = dom.element("div");
   let sent = 0;
@@ -242,4 +242,85 @@ test("J and K in a DevTools window act on the newest browser window, and not on 
   assert.deepEqual(private_window.tab_moves, []);
   firefox.most_recent_window = null;
   assert.equal(in_devtools_window("J"), false);
+});
+
+const E_STATE = { ...STATE, tree: { children: { E: { children: { H: "forward", L: "forward", J: "forward", S: { native: "scroll.to", args: { percent: 0, axis: "y" } } } }, g: { children: { t: "forward" } } } } };
+const E_SIDE = { shiftKey: true };
+
+function runs_of(firefox: ReturnType<typeof create_firefox>) {
+  const sent = (firefox.read_holder("desertfox_browser_module_from_module") ?? []) as { kind?: string; args?: unknown }[];
+  return JSON.parse(JSON.stringify(sent.filter((message) => message.kind === "run").map((message) => message.args)));
+}
+
+test("E then H, L or J sends the keys to the extension and adds no hello flag or table row", async () => {
+  const { firefox, press } = started({ written: E_STATE });
+  await settle();
+  assert.equal(protocol.DEVTOOLS_FLAGGED_KEYS.flatMap(({ keys }) => keys).concat(protocol.DEVTOOLS_TREE_KEYS).some(({ key }) => key === "E"), false);
+  for (const second of ["H", "L", "J"]) {
+    assert.equal(press("E", E_SIDE), true);
+    assert.equal(press(second, E_SIDE), true, second);
+  }
+  assert.deepEqual(runs_of(firefox), [{ keys: "E H", count: 0 }, { keys: "E L", count: 0 }, { keys: "E J", count: 0 }]);
+});
+
+test("E ends on Escape, an unknown key, a native leaf, a modifier, a blur and its time, and sends nothing then", async () => {
+  const ends: Record<string, (env: ReturnType<typeof started>) => boolean> = {
+    Escape: ({ press }) => press("Escape"),
+    "an unknown key": ({ press }) => press("x"),
+    "a key that is no leaf to forward": ({ press }) => press("S", E_SIDE),
+    "a modifier": ({ press }) => press("H", { shiftKey: true, ctrlKey: true }),
+    "a blur": ({ dom, tree }) => (tree.focus(), dom.doc.focus_on(null), false),
+    "its time": ({ window }) => (window.run_timers(), false),
+  };
+  for (const [name, end] of Object.entries(ends)) {
+    const env = started({ written: E_STATE });
+    await settle();
+    env.tree.focus();
+    assert.equal(env.press("E", E_SIDE), true, name);
+    assert.equal(end(env), false, name);
+    assert.equal(env.press("H", E_SIDE), false, `H after ${name}`);
+    assert.deepEqual(runs_of(env.firefox), [], name);
+  }
+});
+
+test("E in a field or a frame, with no pushed table, no E group or the pref off passes, and a held E never outlives them", async () => {
+  const field = started({ written: E_STATE });
+  await settle();
+  for (const target of [field.dom.element("input"), field.dom.element("iframe")]) {
+    assert.equal(field.press("E", E_SIDE, target), false, target.localName);
+    assert.equal(field.press("H", E_SIDE, target), false, target.localName);
+  }
+  const no_table = started({ written: E_STATE, table: null });
+  await settle();
+  assert.equal(no_table.press("E", E_SIDE), false);
+  const no_group = started();
+  await settle();
+  assert.equal(no_group.press("E", E_SIDE), false);
+  assert.equal(no_group.press("H", E_SIDE), false);
+  assert.deepEqual(runs_of(no_group.firefox), []);
+  const off = started({ written: E_STATE });
+  await settle();
+  off.press("E", E_SIDE);
+  off.firefox.set_pref(false);
+  assert.equal(off.press("H", E_SIDE), false);
+  assert.deepEqual(runs_of(off.firefox), []);
+});
+
+test("E does not start in a DevTools window of its own, which has no tab for a pane command", async () => {
+  const { window, press } = started({ written: E_STATE });
+  await settle();
+  (window.win as { gBrowser?: unknown }).gBrowser = undefined;
+  assert.equal(press("E", E_SIDE), false);
+});
+
+test("toolbox_place names a docked toolbox even under its own about:devtools-toolbox document, and a toolbox tab and the page apart", async () => {
+  const { firefox, window, dom, tree } = started();
+  await settle();
+  const core = firefox.Services.desertfox_browser_module as { toolbox_place(win: unknown, element: unknown): string | undefined };
+  Object.assign(dom.doc, { nodePrincipal: { isSystemPrincipal: true } });
+  assert.equal(core.toolbox_place(window.win, tree), "docked");
+  // The same document with no docking frame above it is a toolbox opened as a tab.
+  (dom.view as { browsingContext: unknown }).browsingContext = { embedderElement: { classList: { contains: () => false }, ownerDocument: window.win.document } };
+  assert.equal(core.toolbox_place(window.win, tree), "tab");
+  assert.equal(core.toolbox_place(window.win, { ownerDocument: window.win.document }), undefined);
 });

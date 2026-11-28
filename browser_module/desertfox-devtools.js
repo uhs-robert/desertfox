@@ -115,6 +115,7 @@
     const search = define_search(core);
     const prefix_hold = define_prefix_hold(core);
     const tools = define_tool_keys(core, prefix_hold);
+    const pane_keys = define_pane_keys(core, prefix_hold);
     const console_escape = define_console_escape(core);
     // A reloaded or older DesertFox gets a new hello. The tables, the hints and the mode of the one before go, so only a DesertFox that pushes its own table gets these keys.
     core.on_hello(() => {
@@ -153,7 +154,8 @@
       if (search.answer_escape(event, target, [...actions.values()].some((action) => search.ACTIONS.has(action)))) return true;
       if (event.ctrlKey || event.altKey || event.metaKey) return false;
       const action = actions.get(token);
-      if (!action) return false;
+      // E has no row: a pushed table is the sign of a DesertFox that answers the forwarded keys.
+      if (!action) return token === "E" && actions.size > 0 && !in_editable(target) && !is_frame(target) && pane_keys.start(win, target);
       // Before the field check: a code area of the mode's own table is an editor that DevTools keeps read-only. The mode refuses every other field.
       if (action === VISUAL_START) return visual.start(win, target);
       if (in_editable(target) || is_frame(target)) return false;
@@ -246,6 +248,35 @@
     core.set_hello_flag("devtools_tools", true);
 
     return { ACTIONS, start };
+  }
+
+  // ---- The E pane group.
+  // `E` holds for a second key, then sends "E <key>" for the extension to read against its stored keymap, so the keymap's own pane moves (EH, EL, EJ) and the rest of the group run from here. This file names no pane command. Only a leaf the tree marks "forward" goes out, so a key the extension runs itself, a deeper prefix or a key the tree lacks goes on to DevTools.
+  // Docked DevTools only: a DevTools window has no tab for a pane command to act in. The table key is fixed `E` and ignores a remap of the group's key.
+  function define_pane_keys(core, prefix_hold) {
+    const GROUP = "E";
+    const group_of = (win) => {
+      const tree = typeof core.scope_tree === "function" ? core.scope_tree(win) : undefined;
+      const group = tree?.children !== null && typeof tree?.children === "object" && Object.hasOwn(tree.children, GROUP) ? tree.children[GROUP]?.children : undefined;
+      return typeof group === "object" && group !== null ? group : undefined;
+    };
+    const forwards = (win, token) => {
+      const group = group_of(win);
+      return typeof token === "string" && group !== undefined && Object.hasOwn(group, token) && group[token] === "forward";
+    };
+
+    // The target is no field or frame here: the claim checked that before it called this.
+    function start(win, target) {
+      if (!win.gBrowser || !core.may_act?.(win) || typeof core.send !== "function" || group_of(win) === undefined) return false;
+      return prefix_hold.start(win, target, (token) => {
+        if (!forwards(win, token)) return undefined;
+        const sent = core.send("run", { keys: `${GROUP} ${token}`, count: 0 });
+        if (!sent.ok) core.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
+        return true;
+      });
+    }
+
+    return { start };
   }
 
   // ---- The Inspector search keys.

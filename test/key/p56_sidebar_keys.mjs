@@ -114,6 +114,26 @@ export async function run_cases(context) {
     await hide_panel();
   });
 
+  await run_case("in the history list E then L moves the sidebar to the right and E then H back, and E in the search box types", async () => {
+    await sidebar_table_ready();
+    const at_start = () => chrome(`(async () => Services.prefs.getBoolPref("sidebar.position_start", true))()`);
+    on_teardown(() => chrome(`(async () => Services.prefs.clearUserPref("sidebar.position_start"))()`));
+    await show_panel("viewHistorySidebar");
+    await press_keys("E");
+    await poll_until("E to type into the search box", async () => (await focus()).value === "E");
+    await clear_search();
+    await into_list();
+    expect(await at_start(), "the sidebar does not start at the start side");
+    await press_keys("E", "L");
+    await explain(poll_until("EL to move the sidebar to the end", async () => !(await at_start()), { timeout_ms: 5000 }));
+    await sleep(500);
+    await chrome(`(async () => { ${W}.SidebarController.browser.focus(); })()`);
+    await explain(poll_until("the focus to be in the sidebar", async () => (await focus()).in_panel));
+    await press_keys("E", "H");
+    await explain(poll_until("EH to move the sidebar back", async () => await at_start(), { timeout_ms: 5000 }));
+    await hide_panel();
+  });
+
   await run_case("in the open tabs panel d closes the row's tab", async () => {
     await sidebar_table_ready();
     await open_page("page", "p56_close", { new_tab: true });

@@ -1,7 +1,7 @@
 // DesertFox browser module, the sidebar feature: keys in Firefox's own sidebar, the vertical tab strip and the history, bookmarks and open tabs panels. See docs/design/browser_module.md.
 // The keys come from the sidebar table in the extension's state (the core's sidebar_row). They act only with the focus in one of those places, never in an add-on's sidebar and never in a text field, except the key that leaves.
 // In a panel the moves type arrow keys, so Firefox keeps its own selection and scrolling. In the strip they move the strip's own keyboard focus.
-// `<A-o>` (`mode.normal_once`) there holds the window's keys for one key sequence of the locked-page tree, which runs as on a locked page. The extension asks for it with `sidebar.normal_once`.
+// `<A-o>` (`mode.normal_once`) there holds the window's keys for one key sequence of the locked-page tree, which runs as on a locked page. The extension asks for it with `sidebar.normal_once`. `E` there starts the same hold inside the E pane group, so EH, EL and EJ run from the sidebar.
 // In a window it asks the core to load it into the core sandbox, where it starts once per process and attaches to every browser window, open or opened later.
 
 (function desertfox_browser_module_sidebar(scope) {
@@ -269,6 +269,8 @@
     const ONCE_OWNER = "sidebar_once";
     // The chord that ends a hold armed by `sidebar.normal_once` from an extension whose state names no chord.
     const ONCE_KEY = "<A-o>";
+    // The key of the pane group in the extension's default keymap. A remap of it leaves the group to `<A-o>`.
+    const PANE_GROUP = "E";
     // The hold eats every key of the window, so it must end on its own: this long after the prefix and after each key of the sequence.
     const ONCE_IDLE_MS = 3000;
     // Firefox fires the shortcut for the chord's own keydown, so a `sidebar.normal_once` this soon after a chord typed here only confirms it. Else a second chord that ended the hold would start it again.
@@ -358,14 +360,17 @@
       core.release_keys(win, ONCE_OWNER);
     }
 
-    function start_once(win) {
+    // `group` is the token of a prefix the walk starts inside, with its key already typed: the E pane group, which the sidebar holds itself.
+    function start_once(win, group) {
       const element = core.focused_element(win);
       if (!place_of(win, element)) return { ok: false, error: "The focus is not in the sidebar" };
       const tree = checked_tree(core.scope_tree(win));
       if (!tree) return { ok: false, error: "DesertFox sent no keys for here" };
+      const start_node = group === undefined ? tree : child_of(tree, group);
+      if (!is_record(start_node) || !("children" in start_node)) return { ok: false, error: "DesertFox has no such keys here" };
       if (popup_owns_keys(win) || !core.hold_keys(win, ONCE_OWNER)) return { ok: false, error: "Another feature holds the keys" };
       const chords = chords_in(win);
-      const once = { tree, node: tree, keys: [], digits: "", element, chords: chords.length > 0 ? chords : [ONCE_KEY], waiting: false };
+      const once = { tree, node: start_node, keys: group === undefined ? [] : [group], digits: "", element, chords: chords.length > 0 ? chords : [ONCE_KEY], waiting: false };
       onces.set(win, once);
       once_timer(win, once);
       return { ok: true };
@@ -385,6 +390,15 @@
       if (event.repeat || !chords_in(win).includes(token) || !start_once(win).ok) return false;
       chord_at.set(win, Date.now());
       owe_alt_up(win, event);
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+
+    // The E pane group in a sidebar place, with no field and no row of the sidebar table on E: the sequence starts inside the group, so EH, EL and EJ reach the extension as `E <key>` and run from the tree. The same hold as `<A-o>`, so it ends the same way.
+    function pane_group_key(win, place, token, event) {
+      if (token !== PANE_GROUP || once_missing || place.field || event.repeat || event.ctrlKey || event.altKey || event.metaKey || core.sidebar_row(win, [token])) return false;
+      if (!start_once(win, PANE_GROUP).ok) return false;
       event.preventDefault();
       event.stopPropagation();
       return true;
@@ -468,7 +482,7 @@
       if (core.keys_held_by(win) !== undefined || popup_owns_keys(win) || !core.may_act(win)) return;
       const token = core.token_of(event);
       if (!token) return;
-      if (chord_key(win, token, event)) return;
+      if (chord_key(win, token, event) || (record.pending === undefined && pane_group_key(win, place, token, event))) return;
       const choice = decide(place, token, record.pending, (keys) => core.sidebar_row(win, keys));
       record.pending = choice.pending;
       if (!choice.take) return;

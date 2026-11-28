@@ -665,6 +665,78 @@ test("Escape and <A-o> again end the hold and run nothing, and a key the tree la
   assert.deepEqual([runs().length, scrolls(), typed], [3, [], []]);
 });
 
+const E_TREE = { children: { E: { children: { H: "forward", L: "forward", J: "forward", S: { native: "scroll.to", args: { percent: 0, axis: "y" } } } }, g: { children: { t: "forward" } } } };
+
+test("E in a sidebar place holds the window's keys inside the E group, and a leaf goes out as a run of E and its key", async () => {
+  const { panel_doc, focus, press, runs, held, answer_runs, run_timers } = once_setup({ written: state({ tree: E_TREE }) });
+  focus(panel_row(panel_doc));
+  assert.ok(press("E", { shiftKey: true }).prevented);
+  assert.equal(held(), "sidebar_once");
+  assert.ok(press("J", { shiftKey: true }).prevented);
+  assert.equal(held(), undefined);
+  assert.deepEqual(runs(), [{ keys: "E J", count: 0 }]);
+  answer_runs();
+  await settle();
+  run_timers();
+});
+
+test("E in the sidebar ends on Escape, an unknown key and the idle time, and a digit after E is no count", async () => {
+  const { panel_doc, focus, press, runs, held, run_timers } = once_setup({ written: state({ tree: E_TREE }) });
+  focus(panel_row(panel_doc));
+  press("E", { shiftKey: true });
+  assert.ok(press("Escape").prevented);
+  assert.equal(held(), undefined);
+  press("E", { shiftKey: true });
+  press("x");
+  assert.equal(held(), undefined);
+  assert.deepEqual(runs(), [{ keys: "E x", count: 0 }]);
+  press("E", { shiftKey: true });
+  assert.equal(held(), "sidebar_once");
+  run_timers();
+  assert.equal(held(), undefined, "the idle time did not end the hold");
+});
+
+test("E arms no hold in a field, in the page, with no E group in the tree, with a held window or with a modifier", async () => {
+  const field = once_setup({ written: state({ tree: E_TREE }) });
+  field.focus(make_node(field.panel_doc, "input", { type: "search" }));
+  assert.equal(field.press("E", { shiftKey: true }).prevented, false);
+  assert.equal(field.held(), undefined);
+
+  const page = once_setup({ written: state({ tree: E_TREE }) });
+  page.focus(page.page);
+  assert.equal(page.press("E", { shiftKey: true }).prevented, false);
+  assert.equal(page.held(), undefined);
+
+  const bare = once_setup();
+  bare.focus(panel_row(bare.panel_doc));
+  assert.equal(bare.press("E", { shiftKey: true }).prevented, false);
+  assert.equal(bare.held(), undefined);
+
+  const other = once_setup({ written: state({ tree: E_TREE }) });
+  other.focus(panel_row(other.panel_doc));
+  other.core.hold_keys(other.win, "hints");
+  assert.equal(other.press("E", { shiftKey: true }).prevented, false);
+  assert.equal(other.held(), "hints");
+
+  const ctrl = once_setup({ written: state({ tree: E_TREE }) });
+  ctrl.focus(panel_row(ctrl.panel_doc));
+  assert.equal(ctrl.press("E", { shiftKey: true, ctrlKey: true }).prevented, false);
+  assert.equal(ctrl.held(), undefined);
+});
+
+test("the E hold ends when the focus leaves the sidebar place or the window loses it", async () => {
+  const moved = once_setup({ written: state({ tree: E_TREE }) });
+  moved.focus(panel_row(moved.panel_doc));
+  moved.press("E", { shiftKey: true });
+  moved.focus(moved.page);
+  assert.equal(moved.held(), undefined);
+  const blurred = once_setup({ written: state({ tree: E_TREE }) });
+  blurred.focus(panel_row(blurred.panel_doc));
+  blurred.press("E", { shiftKey: true });
+  blurred.own.fire("blur", key_event("blur"));
+  assert.equal(blurred.held(), undefined);
+});
+
 test("the hold ends after the idle time, on a focus move out of the place, a window blur, the window closing and the module shutting down", async () => {
   const idle = once_setup();
   idle.focus(panel_row(idle.panel_doc));
