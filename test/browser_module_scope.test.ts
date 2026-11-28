@@ -364,6 +364,7 @@ test("two about: rules do not warn about each other's binds, and the Site Rules 
   assert.deepEqual(site_rules_view(compiled, "about:config#x").rows.map((row) => row.site), ["about:config"]);
   assert.deepEqual(site_rules_view(compiled, "about:addons").rows, []);
   assert.deepEqual(site_rules_view(compiled, "https://a.test/").rows, []);
+});
 
 test("the guarded default j and k stay on locked pages as their scroll fallback", () => {
   for (const [key, count] of [["j", 10], ["k", -10]] as const) {
