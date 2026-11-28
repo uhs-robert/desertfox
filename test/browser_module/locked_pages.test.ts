@@ -14,6 +14,7 @@ import {
 import { create_firefox, source_of } from "./fake_firefox.ts";
 
 const LOCKED_FILE = "desertfox-locked-pages.js";
+const CONTENT_HINTS_FILE = "desertfox-content-hints.js";
 const source = source_of(LOCKED_FILE);
 const plain = (value: unknown) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 const settle = async () => {
@@ -111,8 +112,9 @@ function frame_of(frame_source: string, to_parent: (name: string, data: unknown)
 }
 
 // One window, one tab showing a PDF, DesertFox running with both settings on, and the frame script of that tab wired to the parent half. `add_tab` opens one more such tab in the same Firefox.
-function locked({ config = ON_CONFIG as unknown, keymap = KEYMAP as unknown, page = { principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 5 } as Page, private_browser = false, private_access = false } = {}) {
-  const firefox = create_firefox({ extra_files: { [LOCKED_FILE]: source } });
+function locked({ content_hints = true, config = ON_CONFIG as unknown, keymap = KEYMAP as unknown, page = { principal: PDF_PRINCIPAL, uri: "file:///tmp/a.pdf", inner: 5 } as Page, private_browser = false, private_access = false } = {}) {
+  // The content hints feature lends the account host test the new kinds ask.
+  const firefox = create_firefox({ extra_files: { [LOCKED_FILE]: source, ...(content_hints ? { [CONTENT_HINTS_FILE]: source_of(CONTENT_HINTS_FILE) } : {}) } });
   const extension = firefox.start_extension({ private_access });
   const window = firefox.make_window();
   window.load();
@@ -269,6 +271,34 @@ test("view-source: of a web or file page and the JSON viewer on a web or file do
     assert.equal(each.frame.sandboxes.length, 0, `${page.principal.spec} on ${page.uri}`);
     assert.deepEqual(each.frame.sent, [], `the frame asks nothing for ${page.principal.spec} on ${page.uri}`);
   }
+  // The account and Sync hosts, whose pages content hints never label, get no page code as a source or as JSON. The frame still asks, so chrome refuses.
+  const account_pages: Page[] = [
+    source_of_page("view-source:https://accounts.firefox.com/settings"),
+    source_of_page("view-source:https://token.services.mozilla.com/"),
+    source_of_page("view-source:https://user@ACCOUNTS.firefox.com:443/"),
+    { principal: JSON_VIEWER, uri: "https://accounts.firefox.com/.well-known/openid-configuration", inner: 5 },
+    { principal: JSON_VIEWER, uri: "https://sync.services.mozilla.com./x.json", inner: 5 },
+  ];
+  for (const page of account_pages) {
+    const each = locked({ page });
+    await each.load();
+    assert.equal(each.frame.sandboxes.length, 0, `${page.principal.spec} on ${page.uri}`);
+  }
+  // A host that only ends like an account host still counts.
+  for (const uri of ["view-source:https://notaccounts.firefox.com.example/", "view-source:https://evilservices.mozilla.com.test/"]) {
+    const each = locked({ page: source_of_page(uri) });
+    await each.load();
+    assert.equal(each.frame.sandboxes.length, 1, uri);
+  }
+  // Without the content hints feature's host test, the new kinds stay out, and the PDF viewer still gets page code.
+  for (const page of [PAGE_CODE_KINDS[0]!, PAGE_CODE_KINDS[3]!]) {
+    const each = locked({ page, content_hints: false });
+    await each.load();
+    assert.equal(each.frame.sandboxes.length, 0, `${page.uri} with no host test`);
+  }
+  const pdf = locked({ content_hints: false });
+  await pdf.load();
+  assert.equal(pdf.frame.sandboxes.length, 1, "the PDF viewer needs no host test");
   // Chrome checks the kind again when the frame asks.
   for (const page of refused) {
     const each = locked({ page: PAGE_CODE_KINDS[0]! });

@@ -97,8 +97,19 @@
     // The JSON viewer also renders file: JSON. Any other document under its principal stays out.
     const JSON_VIEWER_DOCUMENT = /^(?:https?|file):/;
 
+    // The host of a web address, or of the web page a view-source: address shows, without a final dot.
+    const web_host_of = (address) => /^(?:view-source:)?https?:\/\/(?:[^/?#@]*@)?([^/?#:]*)/i.exec(address)?.[1]?.toLowerCase().replace(/\.$/, "");
+    // The account and Sync hosts, which content hints never label, get no page code either, as the source or the JSON of one of their pages. The list is the content hints feature's, and without it these kinds stay out.
+    function on_account_host(address) {
+      const host = web_host_of(address);
+      if (host === undefined) return false;
+      const excluded_host = core.content_pages?.()?.excluded_host;
+      return typeof excluded_host !== "function" || excluded_host(host);
+    }
+
     // The page kinds that get page code, read from the document chrome sees, never from the frame's word. A principal that is the system's or an extension's is never one of them.
-    // The JSON viewer's sandbox holds the viewer's resource://devtools principal, the one principal that reaches its DOM. That reach also loads devtools files, which page code never does: it makes no fetch and loads nothing by address.
+    // The JSON viewer's sandbox holds the viewer's resource://devtools principal, the one principal that reaches its DOM. That reach can also load devtools files. Page code never loads one: it fetches only its own extension files, and the one address it navigates to is a page link the user asks to follow (`]]`).
+    // The frame's copy (`is_locked_page`) has no account host test, because the host list lives here in chrome. Chrome refuses the attach, so the frame starts nothing.
     function page_kind_of(browser, inner) {
       const global = browser.browsingContext?.currentWindowGlobal;
       const principal = global?.documentPrincipal;
@@ -106,8 +117,8 @@
       const address = global.documentURI?.spec ?? "";
       if (principal.spec.startsWith("resource://pdf.js/")) return "pdf";
       if (principal.spec.startsWith("about:reader?") && address.startsWith("about:reader?")) return "reader";
-      if (VIEW_SOURCE_OF_PAGE.test(principal.spec) && VIEW_SOURCE_OF_PAGE.test(address)) return "source";
-      if (principal.spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address)) return "json";
+      if (VIEW_SOURCE_OF_PAGE.test(principal.spec) && VIEW_SOURCE_OF_PAGE.test(address)) return on_account_host(address) ? undefined : "source";
+      if (principal.spec === JSON_VIEWER_PRINCIPAL && JSON_VIEWER_DOCUMENT.test(address)) return on_account_host(address) ? undefined : "json";
       return undefined;
     }
 
