@@ -14,7 +14,7 @@
 //
 // It also labels a few of Firefox's own pages that run in this process (PAGE_HINT_PAGES), which no content script reaches. The key taker (desertfox-commands.js) calls the start it lends through the core's `share_page_hints` on the user's own hint key there.
 // That start makes a token as a chrome-focus start does and pushes page_hints.want. The extension names the action and answers with page_hints.collect. Draw, key, pick and clear then go on the chrome_hints kinds.
-// A pick there runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it.
+// A pick there and on a doorhanger runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it. Those keys count only after the labels showed 300 ms.
 // A page in a content process that the content hints route labels (desertfox-content-hints.js, through the core's `share_content_pages`) runs the same session. Its targets carry no element: the route's frame script holds them, and a pick goes to it.
 
 (function desertfox_browser_module_chrome_hints(scope) {
@@ -32,11 +32,8 @@
   define(core);
 
   function define(core) {
-    const EXTENSION_ID = "desertfox@uhs-robert";
     const ENABLED_PREF = "desertfox.browser_module.enabled";
     const HTML = "http://www.w3.org/1999/xhtml";
-    // The one sheet the labels take, built from the hint view's own style (tools/build.mjs). Never a path or a sheet from a message.
-    const STYLE_FILE = "chrome_hints.css";
     const HOST_CLASS = "desertfox-chrome-hints";
     const DOORHANGER_ID = "notification-popup";
     // Bounds so that a session's targets fit a few messages of the from-module list, which keeps only its newest 16.
@@ -391,25 +388,17 @@
       return `:host { ${block(colors.dark)} }\n@media (prefers-color-scheme: light) { :host { ${block(colors.light)} } }`;
     }
 
-    const label_style_url = () => ExtensionParent.GlobalManager.getExtension(EXTENSION_ID).baseURI.resolve(STYLE_FILE);
-
     // ---- The layer: a host in the window document for the toolbars, and one inside the panel for its rows.
 
     // The theme goes in a constructed sheet: the DevTools toolbox and Storage documents ignore an inline style.
-    // With no `style_url` the layer takes no sheet at all, so nothing the extension ships styles what it holds.
-    function make_layer(doc, style_url, theme, fixed, host_class = HOST_CLASS) {
+    // The layer takes no sheet of the extension's, so nothing the extension ships styles what it holds.
+    function make_layer(doc, theme, fixed, host_class = HOST_CLASS) {
       const host = doc.createElementNS(HTML, "div");
       host.className = host_class;
       host.style.cssText = fixed ? "position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;" : "position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; z-index: 2147483647;";
       const root = host.attachShadow({ mode: "closed" });
       const box = doc.createElementNS(HTML, "div");
       box.className = "desertfox-hints";
-      if (style_url) {
-        const sheet = doc.createElementNS(HTML, "link");
-        sheet.setAttribute("rel", "stylesheet");
-        sheet.setAttribute("href", style_url);
-        root.append(sheet);
-      }
       root.append(box);
       if (theme !== "") {
         const colors = new doc.defaultView.CSSStyleSheet();
@@ -638,12 +627,12 @@
     function add_session_parts(win, found, theme, panel, frame_win, page) {
       const doc = win.document;
       for (const target of found) session.targets.set(next_target_id++, { ...target, kind: target.element ? kind_of(target.element) : "remote" });
-      const window_layer = make_layer(doc, undefined, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
+      const window_layer = make_layer(doc, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
       doc.documentElement.append(window_layer.host);
       session.layers.window = window_layer;
       session.undo.push(() => window_layer.host.remove());
       if (panel) {
-        const panel_layer = make_layer(doc, undefined, theme, false);
+        const panel_layer = make_layer(doc, theme, false);
         panel.view.prepend(panel_layer.host);
         session.layers.panel = panel_layer;
         session.undo.push(() => panel_layer.host.remove());
@@ -819,6 +808,8 @@
     // A page's labels take no theme at all, so their colors are fixed values.
     const PAGE_LABEL_STYLE = "position: fixed; padding: 2px 4px; border-radius: 3px; text-transform: uppercase; background: #7fa3c9; color: #0c0e13; border: 1px solid #7fa3c9; box-shadow: 0 1px 3px #0008; font: bold 12px/1 monospace; white-space: nowrap;";
     const LABEL_TYPED_STYLE = "opacity: .6; font-weight: inherit;";
+    // The same look as class rules, for the DevTools layers, whose labels the draw makes in many documents. DevTools adopts them in a constructed sheet, since the toolbox ignores an inline <style>. A fixed string of this file.
+    const label_rules = `.desertfox-hint { ${LABEL_STYLE} } .desertfox-hint b { ${LABEL_TYPED_STYLE} }`;
 
     // Replaces every label with the rows of one complete draw. Each box is read now, so a label sits where its target is at this draw, and a pick checks against that.
     function apply_draw(rows, typed_length) {
@@ -1050,7 +1041,7 @@
     function add_confirm_parts(win, target, { panel, frame_win, page }) {
       const doc = win.document;
       const in_panel = target.place === "panel" && panel !== undefined;
-      const layer = make_layer(doc, undefined, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
+      const layer = make_layer(doc, "", !in_panel, page ? PAGE_HOST_CLASS : HOST_CLASS);
       if (in_panel) panel.view.prepend(layer.host);
       else doc.documentElement.append(layer.host);
       confirming.undo.push(() => layer.host.remove());
@@ -1334,6 +1325,6 @@
     core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined || content_kind(browser) !== undefined, start: start_page });
     core.set_hello_flag("page_hints", true);
     // The DevTools hints draw with these, so their label checks and layer stay one code.
-    core.share_hint_drawing({ MAX_TARGETS, label_style_url, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
+    core.share_hint_drawing({ MAX_TARGETS, label_rules, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
   }
 })(this);
