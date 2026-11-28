@@ -26,6 +26,9 @@ The mail reads need --app thunderbird and the DesertBird share settings, all off
                                                                          needs bridge_share_headers and bridge_share_folders
   desertfox --app thunderbird mail read <id> [--json]                    needs bridge_share_headers and bridge_share_bodies
   desertfox --app thunderbird mail attachments <id> [--json]             needs bridge_share_attachments
+  desertfox --app thunderbird mail contacts <query> [--limit N] [--json] needs bridge_share_contacts and the addressBooks permission
+                                       name and email only. Each word of the query has 2 characters or more, at most 5 words
+                                       and 100 characters. The limit is 1 to 20 (20 without it).
 
 The mail writes need --app thunderbird and `bridge`. They print a short line and never any mail text:
 
@@ -63,6 +66,7 @@ import socket
 import sys
 import tempfile
 import time
+import unicodedata
 
 EXIT_DONE = 0
 EXIT_FAILED = 1
@@ -104,6 +108,8 @@ USAGE = """usage: desertfox [--app firefox|thunderbird] <verb> ...
                                                                    needs bridge_share_headers and bridge_share_folders
        desertfox --app thunderbird mail read <id> [--json]         needs bridge_share_headers and bridge_share_bodies
        desertfox --app thunderbird mail attachments <id> [--json]  needs bridge_share_attachments
+       desertfox --app thunderbird mail contacts <query> [--limit N] [--json]
+                                                                   needs bridge_share_contacts and the addressBooks permission
        desertfox --app thunderbird mail draft --to A [--to B ...] [--cc C ...] --subject S [--from EMAIL] [--reply-to ID] --body-file PATH|-
                                                                    needs bridge_allow_drafts; the body comes from the file or stdin (-)
        desertfox --app thunderbird mail archive <id>...            needs bridge_allow_actions
@@ -489,6 +495,56 @@ def mail_attachments(words):
     return EXIT_DONE
 
 
+MAX_CONTACTS_LIMIT = 20
+MIN_CONTACTS_WORD_CHARS = 2
+MAX_CONTACTS_WORDS = 5
+MAX_CONTACTS_QUERY_UNITS = 100
+
+
+def contacts_query(words):
+    """The query the words make, checked by the DesertBird rules. The add-on stays the authority and checks again."""
+    query = " ".join(words)
+    if any(ord(char) < 32 or 127 <= ord(char) < 160 or unicodedata.category(char) in ("Cf", "Zl", "Zp", "Cs") for char in query):
+        raise Usage("the query holds a control character")
+    if len(query.encode("utf-16-le")) // 2 > MAX_CONTACTS_QUERY_UNITS:
+        raise Usage("the query is at most %d characters" % MAX_CONTACTS_QUERY_UNITS)
+    query_words = query.split()
+    if not query_words:
+        raise Usage("mail contacts takes a query")
+    if any(len(word) < MIN_CONTACTS_WORD_CHARS for word in query_words):
+        raise Usage("each word of the query needs at least %d characters" % MIN_CONTACTS_WORD_CHARS)
+    if len(query_words) > MAX_CONTACTS_WORDS:
+        raise Usage("the query is at most %d words" % MAX_CONTACTS_WORDS)
+    return " ".join(query_words)
+
+
+def contacts_row(contact):
+    """Name and email only, whatever else the reply holds."""
+    emails = contact.get("emails")
+    return {"name": contact.get("name", ""), "emails": [str(email) for email in emails] if isinstance(emails, list) else []}
+
+
+def mail_contacts(words):
+    limit, words = take_option(words, "--limit")
+    as_json = "--json" in words
+    query = contacts_query([word for word in words if word != "--json"])
+    request = {"verb": "contacts", "query": query}
+    if limit is not None:
+        request["limit"] = whole_number(limit, "the limit")
+        if not 1 <= request["limit"] <= MAX_CONTACTS_LIMIT:
+            raise Usage("the limit is from 1 to %d" % MAX_CONTACTS_LIMIT)
+    reply = ask(request)
+    if reply.get("ok") is not True:
+        return fail(reply.get("message") or "the bridge did not search the contacts")
+    rows = [contacts_row(contact) for contact in reply.get("contacts", []) if isinstance(contact, dict)]
+    if as_json:
+        print_untrusted("contacts", json.dumps({"contacts": rows, "untrusted": True, "truncated": reply.get("truncated") is True}, indent=2))
+        return EXIT_DONE
+    print_untrusted("contacts", "".join("\t".join((one_line(row["name"]), ", ".join(one_line(email) for email in row["emails"]))) + "\n" for row in rows))
+    note_truncated(reply)
+    return EXIT_DONE
+
+
 def take_repeated_option(words, name):
     """(every value of `--name value` or `--name=value` in the words, the other words)."""
     values = []
@@ -598,9 +654,9 @@ def do_mail(words):
     verb = words[0] if words else None
     if verb in ACT_DONE:
         return mail_act(verb, words[1:])
-    handler = {"folders": mail_folders, "list": mail_list, "read": mail_read, "attachments": mail_attachments, "draft": mail_draft}.get(verb)
+    handler = {"folders": mail_folders, "list": mail_list, "read": mail_read, "attachments": mail_attachments, "contacts": mail_contacts, "draft": mail_draft}.get(verb)
     if not handler:
-        raise Usage("mail takes folders, list, read, attachments, draft, archive, trash or move")
+        raise Usage("mail takes folders, list, read, attachments, contacts, draft, archive, trash or move")
     return handler(words[1:])
 
 
