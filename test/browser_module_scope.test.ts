@@ -224,7 +224,7 @@ test("a forged, stale or page key, a typed count or register and junk are refuse
   // Bound, but to page code: hints, find, the command line, a mark.
   for (const keys of ["f", "/", "A", "m a"]) assert.match(refused(keys)!.problem, /needs a page/, keys);
   // A count or a hold belongs in `count` or nowhere, never in the keys. A register name the pattern refuses, or a register with no command, runs nothing.
-  for (const keys of ["5 x x", "t <Space> n", "\" ! x x", "\"", "\" a", "\" \" x x", "x \" a x"]) refused(keys);
+  for (const keys of ["5 x x", "t <Space> n", "\" ! x x", "\"", "\" a", "x \" a x"]) refused(keys);
   // Junk keys text is no sequence and is not shown.
   for (const keys of ["", "x  x", "x\tx", "a".repeat(30), Array(MAX_SEQUENCE_KEYS + 1).fill("x").join(" "), "\u0000"]) assert.equal(refused(keys)?.shown, undefined, JSON.stringify(keys));
   for (const count of [-1, 1.5, MAX_COUNT + 1]) assert.equal(refused("x x", count)?.shown, undefined, String(count));

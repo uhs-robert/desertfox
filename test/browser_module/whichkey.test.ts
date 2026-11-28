@@ -173,6 +173,8 @@ test("a hold shows its group's panel at once, with the leave footer, and keeps i
   const { type, press, shown, window } = started();
   type("g");
   press(" ");
+  // The hold needs no delay, only the zero-length timer of the page panel's timer.
+  window.run_timers();
   assert.deepEqual(shown(), { title: "+Go", rows: rows_of("g"), footer: "SPCleaveESCclose", frame: "frame square" });
   press("x");
   window.run_timers();
