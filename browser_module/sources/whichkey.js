@@ -51,8 +51,9 @@ function start(win, core, undo) {
   const COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
   const HTML_NS = "http://www.w3.org/1999/xhtml";
   const HOST_CLASS = "desertfox-whichkey-host";
-  // The module walk has no Backspace and no hold, so Escape is the one way out it shows.
+  // The module walk has no Backspace, so Escape is the one way out of a half-typed sequence. A hold also ends on a second Space.
   const FOOTER = [["ESC", "close"]];
+  const HELD_FOOTER = [["SPC", "leave"], ["ESC", "close"]];
   // Below the chrome hints' layer, so a hint label started from the panel's keys stays on top.
   const Z_INDEX = 2147483646;
   // Chrome's own font, as the status bar has it, and the corner above the status bar.
@@ -155,11 +156,11 @@ function start(win, core, undo) {
     }
   }
 
-  function draw(panel, table, theme) {
+  function draw(panel, table, theme, held) {
     surface ??= make_surface();
     apply_theme(surface.host, theme);
     const page_height = win.gBrowser.selectedBrowser?.getBoundingClientRect?.().height || win.innerHeight;
-    const { parts, chip } = render_panel(doc, { rows: panel.rows, border: table.border }, FOOTER, page_height);
+    const { parts, chip } = render_panel(doc, { rows: panel.rows, border: table.border }, held ? HELD_FOOTER : FOOTER, page_height);
     surface.text.replaceChildren(...parts);
     if (surface.host.parentNode !== doc.documentElement) doc.documentElement.append(surface.host);
     fit_chip(chip, panel.title);
@@ -185,7 +186,7 @@ function start(win, core, undo) {
       // The keys may have changed with no key the core saw: a tab switch, a load.
       const pending = core.module_pending(win);
       if (!panel || !is_current() || !pending || !same_keys(pending.keys, prefix.typed_)) return;
-      draw(panel, sequence_table.table, sequence_table.theme);
+      draw(panel, sequence_table.table, sequence_table.theme, prefix.held_ === true);
       drawn();
     },
     () => sequence_table?.table.skip,
@@ -204,7 +205,8 @@ function start(win, core, undo) {
       sequence_table = undefined;
       return follow_prefix(undefined);
     }
-    follow_prefix({ mode: "normal", typed_: [...pending.keys] });
+    // A hold shows its panel at once, since the user chose to keep the group open.
+    follow_prefix({ mode: "normal", typed_: [...pending.keys], ...(pending.held && { held_: true }) }, pending.held === true);
   };
   const end_sequence = () => {
     sequence_table = undefined;

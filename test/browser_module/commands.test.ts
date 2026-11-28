@@ -381,13 +381,97 @@ test("with no tree or a bad one, the single-key rows decide", () => {
   }
 });
 
-test("a hold Space and a register do nothing on a locked page", () => {
-  const { press, type, runs } = started();
-  type("g");
-  assert.equal(press(" ").prevented, false);
-  type("x", "x");
-  type('"', "a", "x", "x");
-  assert.deepEqual(runs(), [{ keys: "x x", count: 0 }]);
+const HOLD_TREE: ScopeTree = {
+  children: { E: { children: { x: "forward", y: "forward", j: { native: "tab.next", args: {} }, i: { native: "mode.insert", args: {} } } }, y: { children: { y: "forward" } }, o: "forward", j: { native: "tab.next", args: {} } },
+  register_keys: true,
+};
+// `module_pending` is asked with the window's own global, as the status bar does.
+const hold_world = (tree: ScopeTree = HOLD_TREE) => {
+  const world = started({ written: state({ tree }) });
+  const pending = () => world.core.module_pending(vm.runInContext("globalThis", world.window.win.context!));
+  return { ...world, pending };
+};
+
+test("Space in a group holds it: each leaf runs with its full path, a second Space ends the hold and is consumed", () => {
+  const { press, type, runs, pending, window } = hold_world();
+  type("E");
+  assert.equal(press(" ").prevented, true);
+  assert.deepEqual(plain(pending()), { keys: ["E"], held: true });
+  assert.equal(press("x").prevented, true);
+  assert.equal(press("y").prevented, true);
+  assert.deepEqual(runs(), [{ keys: "E x", count: 0 }, { keys: "E y", count: 0 }]);
+  assert.deepEqual(plain(pending()), { keys: ["E"], held: true });
+  assert.equal(press(" ").prevented, true);
+  assert.equal(pending(), undefined);
+  // The hold is over: x is no longer bound at the root, so it goes to the page.
+  assert.equal(press("x").prevented, false);
+});
+
+test("a key that breaks a prefix, or leaves a hold, runs as a first key with its own path", () => {
+  const { press, type, runs } = hold_world();
+  type("y", "o");
+  type("E", " ", "o");
+  assert.equal(press("x").prevented, false);
+  assert.deepEqual(runs(), [{ keys: "o", count: 0 }, { keys: "o", count: 0 }]);
+});
+
+test("a leaf that sets a mode inside a hold ends the hold", () => {
+  const { type, pending } = hold_world();
+  type("E", " ", "i");
+  assert.equal(pending(), undefined);
+});
+
+test("a hold ignores the auto-repeat of its opening Space, takes a native leaf and ends on a tab switch", () => {
+  const { press, type, runs, window, on_tab, second, pending } = hold_world();
+  type("E");
+  press(" ");
+  assert.equal(press(" ", { repeat: true }).prevented, true);
+  assert.deepEqual(plain(pending()), { keys: ["E"], held: true });
+  press("j");
+  assert.deepEqual(window.tab_moves, [1]);
+  on_tab(second);
+  assert.equal(pending(), undefined);
+  assert.equal(press("x").prevented, false);
+  assert.deepEqual(runs(), []);
+});
+
+test("Escape in a hold ends it and reaches the page, as on a web page", () => {
+  const { press, type, pending, window } = hold_world();
+  type("E");
+  press(" ");
+  assert.equal(press("Escape").prevented, false);
+  assert.equal(pending(), undefined);
+});
+
+test("a register before a forward leaf goes first in the keys, and the keys do nothing without the tree's flag", () => {
+  const { press, type, runs } = hold_world();
+  type('"', "a", "y", "y");
+  type("3", '"', "b", "y", "y");
+  assert.deepEqual(runs(), [{ keys: '" a y y', count: 0 }, { keys: '" b y y', count: 3 }]);
+  const { register_keys: _flag, ...older } = HOLD_TREE;
+  const without = hold_world(older);
+  assert.ok(without.type('"', "a", "y", "y").every((event) => event.prevented));
+  assert.deepEqual(without.runs(), []);
+  assert.equal(press('"').prevented, true);
+});
+
+test("a register before a native leaf runs it, and before a hint key does nothing", () => {
+  const { press, type, runs, window } = hold_world();
+  type('"', "a", "j");
+  assert.deepEqual(window.tab_moves, [1]);
+  assert.equal(press('"').prevented, true);
+  assert.equal(press("a").prevented, true);
+  assert.equal(press("Escape").prevented, false);
+  assert.deepEqual(runs(), []);
+});
+
+test("a register before a hint key on a page chrome hints label does nothing and keeps the key", () => {
+  const { type, runs, first, notices, core } = with_notices();
+  const starts: string[] = [];
+  (core as unknown as { share_page_hints(entry: unknown): void }).share_page_hints({ handles: () => true, start: ({ keys }: { keys: string }) => (starts.push(keys), true) });
+  notices.set(first.browser, "page_hints");
+  assert.ok(type('"', "a", "f").every((event) => event.prevented));
+  assert.deepEqual([starts, runs()], [[], []]);
 });
 
 test(": opens the address bar with df, unless the tree binds it", () => {

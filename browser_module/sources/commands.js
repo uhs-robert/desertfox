@@ -96,7 +96,9 @@ function define(core) {
   }
 
   // The modes exclude each other: only one tab state shows at a time.
-  function enter_mode(browser, flags) {
+  function enter_mode(win, browser, flags) {
+    // A leaf that changes the mode ends the sequence and any hold, as on a web page.
+    reset_walk(win);
     for (const each of [ignored, inserted, pass_armed]) each.delete(browser);
     set_flag(flags, browser, true);
   }
@@ -188,13 +190,13 @@ function define(core) {
     const parsed = JSON.parse(text);
     const tree = notice === undefined ? parsed : with_hint_leaves(parsed, notice === PAGE_HINTS ? PAGE_HINT_LEAF : NOTICE_LEAF);
     const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
-    const fresh = { text, notice, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: undefined };
+    const fresh = { text, notice, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, sends_register: tree.register_keys === true, pending: undefined, typed: [], held: false };
     walks.set(win, fresh);
     return fresh;
   }
 
-  // The keys of the binding alone. The count digits and the register name come before them (matcher.ts), and the count goes in the request on its own.
-  const path_of = (result) => result.keys.slice(String(result.count ?? "").length + (result.register_keys_?.length ?? 0));
+  // The walk keeps the typed keys of the binding itself (`walk.typed`, the group's keys while a hold is on), because on a match inside a hold the matcher's `keys` leave out the leaf. The count and the register go in the request apart from them.
+  const REGISTER_PREFIX = '"';
 
   function run_native(leaf, result, context) {
     const { native, args, count_rule } = leaf;
@@ -207,24 +209,26 @@ function define(core) {
     return true;
   }
 
-  function forward(result, walk, win) {
-    const keys = path_of(result).join(" ");
-    const sent = core.send("run", { keys, count: result.count ?? 0 });
+  // The register tokens go first in `keys`: the extension matches the whole text again and fills the register into the steps that take one.
+  function forward(result, path, walk, win) {
+    const keys = path.join(" ");
+    const register_tokens = result.register_keys_ === undefined ? [] : [REGISTER_PREFIX, ...result.register_keys_.slice(REGISTER_PREFIX.length)];
+    const sent = core.send("run", { keys: [...register_tokens, ...path].join(" "), count: result.count ?? 0 });
     if (!sent.ok) core.log_once(`a key was not sent to DesertFox: ${sent.problem}`);
     else if (walk.line_keys.has(keys)) start_hold(win, walk.browser);
     return sent.ok;
   }
 
   // The key stays claimed whatever the start says, so a hint key never reaches the page there.
-  function start_page_hints(result, context) {
-    core.page_hints?.()?.start({ window: context.window, browser: context.browser, event: context.event, keys: path_of(result).join(" "), count: result.count ?? 0 });
+  function start_page_hints(result, path, context) {
+    core.page_hints?.()?.start({ window: context.window, browser: context.browser, event: context.event, keys: path.join(" "), count: result.count ?? 0 });
     return true;
   }
 
   // The key stays claimed after the first, so a hint key never reaches the page while hints cannot run. A send that failed leaves the document unmarked, so the next hint key tries again.
-  function notice_once(result, browser) {
+  function notice_once(path, browser) {
     if (noticed.get(browser) === browser.innerWindowID) return true;
-    const sent = core.send("run", { keys: path_of(result).join(" "), count: 0 });
+    const sent = core.send("run", { keys: path.join(" "), count: 0 });
     if (sent.ok) noticed.set(browser, browser.innerWindowID);
     else core.log_once(`a hint key was not sent to DesertFox: ${sent.problem}`);
     return true;
@@ -293,24 +297,32 @@ function define(core) {
     if (idle && token === ADDRESS_BAR_KEY && !walk?.matcher.binds_after_("normal", [], token)) return open_address_bar(win, OMNIBOX_PREFIX).ok;
     if (!walk) return undefined;
 
+    // The key that opened a hold repeats while it is down, and the matcher would take the repeat as the Space that ends the hold.
+    if (event.repeat && walk.held && token === "<Space>") return true;
     const result = walk.matcher.feed("normal", token);
+    // Inside a hold the matcher's `keys` drop the leaf, so the walk's typed group is used. Elsewhere the keys of the binding alone come from the matcher, which drops a broken prefix when it retries the key as a first key.
+    const path = result.kind_ !== "match" ? [] : result.held_ !== undefined ? [...walk.typed, token] : result.keys.slice(String(result.count ?? "").length + (result.register_keys_?.length ?? 0));
     walk.pending = undefined;
-    // A hold needs the which-key panel, which a locked page has none of, so its Space goes to the page.
-    if (result.held_ !== undefined) {
-      walk.matcher.reset();
-      return false;
+    walk.held = result.held_ !== undefined;
+    walk.typed = (result.kind_ === "pending" ? result.typed_ : result.held_) ?? [];
+    if (result.kind_ === "pending" || (result.kind_ === "match" && walk.held)) {
+      // In a hold the group stays after each leaf, so its panel stays up.
+      walk.pending = { keys: [...walk.typed], ...(result.count !== undefined && { count: result.count }), ...(walk.held && { held: true }) };
+      if (result.kind_ === "pending") return true;
     }
-    if (result.kind_ === "pending") {
-      walk.pending = { keys: path_of(result), ...(result.count !== undefined && { count: result.count }) };
-      return true;
-    }
+    // The Space that ends a hold is spent, so it does not scroll the page.
+    if (result.kind_ === "no_match") return result.ended_ === true;
     if (result.kind_ !== "match") return false;
     const leaf = result.leaf.scope;
-    // A register means nothing to the commands a locked page runs, so the keys do nothing.
-    if (result.register_keys_ !== undefined) return true;
-    if (leaf === "forward") return forward(result, walk, win);
-    if (leaf === NOTICE_LEAF) return notice_once(result, browser);
-    if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
+    if (leaf === "forward") {
+      // Without the tree's flag the extension takes no register, so the keys do nothing as before.
+      if (result.register_keys_ !== undefined && !walk.sends_register) return true;
+      return forward(result, path, walk, win);
+    }
+    // A hint key with a register does nothing, as before: a hint yank takes no register on a locked page.
+    if (result.register_keys_ !== undefined && (leaf === NOTICE_LEAF || leaf === PAGE_HINT_LEAF)) return true;
+    if (leaf === NOTICE_LEAF) return notice_once(path, browser);
+    if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, path, context);
     return run_native(leaf, result, context);
   }
 
@@ -345,7 +357,7 @@ function define(core) {
     const walk = walks.get(win);
     const browser = win?.gBrowser?.selectedBrowser;
     if (!walk?.pending || walk.browser !== browser || walk.inner !== browser.innerWindowID) return undefined;
-    return { keys: [...walk.pending.keys], ...(walk.pending.count !== undefined && { count: walk.pending.count }) };
+    return { keys: [...walk.pending.keys], ...(walk.pending.count !== undefined && { count: walk.pending.count }), ...(walk.pending.held && { held: true }) };
   }
 
   // The text goes into the field and nothing else happens: the user reads it, edits it and presses Enter. It is never submitted here.
@@ -369,9 +381,9 @@ function define(core) {
   const selected_tab_id = (win) => ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs").ExtensionParent.apiManager.global.tabTracker.getId(win.gBrowser.selectedTab);
 
   core.define_command("page.stop", { args: {}, run: ({ browser }) => browser.stop() });
-  core.define_command("mode.insert", { args: {}, run: ({ browser }) => enter_mode(browser, inserted) });
-  core.define_command("mode.pass_next", { args: {}, run: ({ browser }) => enter_mode(browser, pass_armed) });
-  core.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ browser, args }) => enter_mode(browser, args.mode === "insert" ? inserted : ignored) });
+  core.define_command("mode.insert", { args: {}, run: ({ window, browser }) => enter_mode(window, browser, inserted) });
+  core.define_command("mode.pass_next", { args: {}, run: ({ window, browser }) => enter_mode(window, browser, pass_armed) });
+  core.define_command("mode.set", { args: { mode: { type: "enum", values: ["ignore", "insert"] } }, run: ({ window, browser, args }) => enter_mode(window, browser, args.mode === "insert" ? inserted : ignored) });
   core.set_hello_flag("mode_keys", true);
   core.register_kind("address_bar.open", ({ text, tab_id }) => {
     const win = focused_window();
