@@ -2,7 +2,7 @@
 // tools/build_browser_module.ts bundles this file with the extension's own matcher, token and tree check into browser_module/desertfox-commands.js, so a key event and the keymap meet in one form on both sides.
 // A forward leaf goes to the extension as a `run` request with the matched keys and the count. A native leaf runs here, through the command a feature file defined.
 // It also holds the per-tab ignore, insert and pass-next states, defines page.stop and the mode commands, and answers address_bar.open, the command line's stand-in on a page with no DesertFox page code.
-// With the focus in a text field the core calls `field_key`, not `key`. It is the one place that decides which keys a field does not give the page, and by default none.
+// With the focus in a text field the core calls `field_key`, not `key`. It is the one place that decides which keys a field does not give the page, and by default none. `<C-r>` is one of its rows: it asks the extension for a register's text and the page keys frame script writes it.
 // After a forward leaf that opens the command line (the tree's `line_keys`) it holds the window's keys until the line has the focus, so a key typed meanwhile never runs on the page.
 // Where hints cannot run now (the locked pages feature's rule), it claims the tree's `hint_keys` too, and sends the first one per document as a `run`, which the extension refuses with the reason.
 // On a page chrome hints label themselves (the rule says "page_hints"), each hint key starts those hints instead, through the core's `page_hints`.
@@ -51,6 +51,8 @@ function define(core) {
   const ignored = new WeakMap();
   const inserted = new WeakMap();
   const pass_armed = new WeakMap();
+  // `<C-r>` in a field waits for the register name, per browser, in the document it was typed in.
+  const paste_armed = new WeakMap();
   // The status bar reads the mode off the tab's <browser> element, so the module needs no message to it. The document id ends the display on a load, when no key has run yet to clear it.
   const MODE_ATTRIBUTE = "desertfox-module-mode";
   const MODE_DOCUMENT_ATTRIBUTE = "desertfox-module-document";
@@ -62,6 +64,7 @@ function define(core) {
   const is_ignored = (browser) => is_set(ignored, browser);
   const is_inserted = (browser) => is_set(inserted, browser);
   const is_pass_armed = (browser) => is_set(pass_armed, browser);
+  const is_paste_armed = (browser) => is_set(paste_armed, browser);
 
   // The browsers that carry the mode attributes now, so a shut down can clear them: a new module instance starts with empty flags and must not leave a badge behind.
   const marked_browsers = new Set();
@@ -233,6 +236,32 @@ function define(core) {
   // The leave and send keys of insert mode, from the state's table. Without a table (an older extension) only the plain Escape leaves, as it always did.
   const insert_row_of = (context, token) => (context.insert_keys === undefined ? (token === "<Escape>" ? "mode.escape" : undefined) : context.insert_keys.get(token));
 
+  // The key after `<C-r>`: one key names a register, as in vim, and any other key ends the wait and is consumed. The extension answers with the text of a text register only, and the page's frame script writes it into the field that still has the focus.
+  const REGISTER_NAME = /^[A-Za-z"+_/]$/;
+  // The same cap as REGISTER_TEXT_CHARS in the protocol: the extension cuts the text, and a longer one is dropped here.
+  const MAX_REGISTER_CHARS = 2000;
+  const PASTE_MESSAGE = "desertfox-browser-module:paste";
+
+  function paste_register(context, token) {
+    const { window: win, browser } = context;
+    paste_armed.delete(browser);
+    if (!REGISTER_NAME.test(token)) return true;
+    const inner = browser.innerWindowID;
+    const tab_id = selected_tab_id(win);
+    const sent = core.send("register.read", { tab_id, name: token }, (reply) => {
+      if (!reply.ok || typeof reply.value !== "string" || [...reply.value].length > MAX_REGISTER_CHARS) return;
+      // The user may have left the tab or the page while the extension read the register.
+      try {
+        if (browser.innerWindowID !== inner || selected_tab_id(win) !== tab_id) return;
+        browser.messageManager.sendAsyncMessage(PASTE_MESSAGE, { inner, text: reply.value });
+      } catch (_) {
+        // A window that closed has nothing to paste into.
+      }
+    });
+    if (!sent.ok) core.log_once(`a register was not asked for: ${sent.problem}`);
+    return true;
+  }
+
   function reset_walk(win) {
     walks.delete(win);
     end_hold(win);
@@ -333,6 +362,11 @@ function define(core) {
       // As on a web page, the ignore leave key ends the mode in a field too.
       if (token !== IGNORE_TOGGLE_KEY) return false;
       set_flag(ignored, browser, false);
+      return true;
+    }
+    if (is_paste_armed(browser)) return paste_register(context, token);
+    if (insert_row_of(context, token) === "register.paste") {
+      paste_armed.set(browser, browser.innerWindowID);
       return true;
     }
     if (is_inserted(browser)) return insert_key(context, token);

@@ -233,6 +233,7 @@ test("no background handler refuses args the schema accepts", async () => {
 // plain throw that a handler gives belongs to RuntimeRefusal.
 const PLAIN_ERRORS: Record<string, { count: number; why: string }> = {
   "src/background/browser_module_rpc.ts": { count: 16, why: "a refused page call or a failed push on a locked page, turned into an error answer or a rejected tabs.sendMessage stand-in, not a command handler" },
+  "src/background/browser_module_page_keys.ts": { count: 3, why: "a refused register.read request from the browser module, turned into the module's error reply, not a command handler" },
   "src/background/browser_module_run.ts": { count: 2, why: "a refused run request from the browser module, turned into the module's error reply, not a command handler" },
   "src/background/chrome_hints.ts": { count: 2, why: "a refused or superseded page hint start from the browser module, turned into the module's error reply so it gives the keys back, not a command handler" },
   "src/content/locked_shim.ts": { count: 11, why: "the extension API stand-in on a locked page, rejecting as runtime.sendMessage and storage.local.get reject, not a command handler" },

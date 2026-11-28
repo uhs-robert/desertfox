@@ -12,7 +12,7 @@ import { DEFAULT_KEYMAP } from "../../src/shared/keys/default_keymap.ts";
 import { event_to_token } from "../../src/shared/keys/token.ts";
 import { registry } from "../../src/shared/registry/builtin.ts";
 import { check_args } from "../../src/shared/registry/check_args.ts";
-import { COMMANDS_FILE, create_firefox, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
+import { COMMANDS_FILE, create_firefox, IME_ENABLED, key_event, PAGE_KEYS_FILE, source_of } from "./fake_firefox.ts";
 import type { FakeEvent } from "./fake_firefox.ts";
 
 const DEFAULT_TREE = scope_tree_of(
@@ -32,7 +32,7 @@ type Core = { share_locked_page_rule(rule: { hint_notice(browser: unknown): stri
 
 // One window with two tabs, the core, the tab and scroll feature and the commands feature loaded, and the state written.
 function started({ written = state() as unknown, private_window = false, private_access = false } = {}) {
-  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE) } });
+  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE), [PAGE_KEYS_FILE]: source_of(PAGE_KEYS_FILE) } });
   firefox.start_extension({ private_access });
   const window = firefox.make_window({ private_window });
   window.load();
@@ -136,7 +136,7 @@ test("an about: page claims the hint keys too, and a page with no notice, a web 
   notices.set(first.browser, "not_here");
   assert.ok(press("f").prevented);
   on_tab(second);
-  for (const key of ["f", ";", "F"]) assert.equal(press(key).prevented, false, key);
+  for (const key of ["f", "F"]) assert.equal(press(key).prevented, false, key);
   assert.deepEqual(runs(), [{ keys: "f", count: 0 }]);
 });
 
@@ -147,7 +147,7 @@ test("the hint keys go to the page at once when the notice ends, as when browser
   notices.set(first.browser, undefined);
   assert.equal(press("f").prevented, false, "the half-typed ; ends with the notice, and f goes to the page");
   assert.equal(core.module_pending(window.win), undefined);
-  assert.equal(press(";").prevented, false);
+  assert.equal(press("F").prevented, false);
   assert.deepEqual(runs(), []);
 });
 
@@ -795,10 +795,10 @@ test("<A-Escape> on a page in another process asks its frame script for the Esca
 });
 
 test("a reserved help.whichkey row takes no key yet, and a row for a command this version does not know is skipped", () => {
-  const world = started({ written: state({ insert_keys: [{ key: "<A-?>", id: "help.whichkey" }, { key: "<C-r>", id: "register.paste" }] }) });
+  const world = started({ written: state({ insert_keys: [{ key: "<A-?>", id: "help.whichkey" }, { key: "<C-q>", id: "future.command" }] }) });
   const page = page_with_field(world.first.browser);
   assert.equal(world.press("?", { ...page.target, altKey: true }).prevented, false);
-  assert.equal(world.press("r", { ...page.target, ctrlKey: true }).prevented, false);
+  assert.equal(world.press("q", { ...page.target, ctrlKey: true }).prevented, false);
   assert.deepEqual(world.firefox.sent_to_frames, []);
 });
 
@@ -893,4 +893,94 @@ test("the commands feature says mode_keys in the hello, and the hello still vali
   const { firefox } = started();
   const checked = validate_module_hello(firefox.hello());
   assert.ok(checked.ok && checked.value.mode_keys === true);
+});
+
+// The `register.read` requests the module wrote, newest last, as { id, args }.
+const register_reads = (firefox: ReturnType<typeof started>["firefox"]) =>
+  ((firefox.read_holder("desertfox_browser_module_from_module") ?? []) as { id?: string; kind?: string; args?: unknown }[]).filter((message) => message.kind === "register.read").map((message) => ({ id: message.id!, args: plain(message.args) }));
+const pastes = (firefox: ReturnType<typeof started>["firefox"]) => firefox.sent_to_frames.filter(({ name }) => name.endsWith(":paste")).map(({ data }) => plain(data));
+const answer_register = (firefox: ReturnType<typeof started>["firefox"], id: string, reply: Record<string, unknown>) => firefox.extension_writes("desertfox_browser_module_from_extension", [{ v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: id, ...reply }]);
+const PASTE_TABLE = { insert_keys: [{ key: "<C-r>", id: "register.paste" }, { key: "<Escape>", id: "mode.escape" }] };
+
+test("<C-r> in a field takes the next key as a register name, asks the extension for it and writes the answer into the field", () => {
+  const world = started({ written: state(PASTE_TABLE) });
+  const page = page_with_field(world.first.browser);
+  assert.deepEqual([world.press("r", { ...page.target, ctrlKey: true }).prevented, register_reads(world.firefox)], [true, []], "the key after <C-r> is waited for");
+  const named = world.press("a", page.target);
+  assert.equal(named.prevented, true, "the register name is not typed into the field");
+  const [read] = register_reads(world.firefox);
+  assert.equal((read!.args as { name: string }).name, "a");
+  assert.equal(Number.isInteger((read!.args as { tab_id: number }).tab_id), true);
+  assert.deepEqual(pastes(world.firefox), [], "nothing is written before the answer");
+  answer_register(world.firefox, read!.id, { ok: true, value: "pasted text" });
+  assert.deepEqual(pastes(world.firefox), [{ inner: 10, text: "pasted text" }]);
+});
+
+test("<C-r> followed by a key that names no register, or Escape, asks for nothing and the key is consumed", () => {
+  const world = started({ written: state(PASTE_TABLE) });
+  const page = page_with_field(world.first.browser);
+  for (const second of ["Escape", "Enter", "ArrowLeft", "1"]) {
+    world.press("r", { ...page.target, ctrlKey: true });
+    assert.equal(world.press(second, page.target).prevented, true, second);
+  }
+  assert.deepEqual(register_reads(world.firefox), []);
+  assert.equal(world.press("a", page.target).prevented, false, "the wait ended with the key, so a plain key goes to the field again");
+});
+
+test("the text of a register reaches the page only while it is still the page and the tab it was asked for", () => {
+  const world = started({ written: state(PASTE_TABLE) });
+  const page = page_with_field(world.first.browser);
+  const ask = (name: string) => {
+    world.press("r", { ...page.target, ctrlKey: true });
+    world.press(name, page.target);
+    return register_reads(world.firefox).at(-1)!.id;
+  };
+  answer_register(world.firefox, ask("a"), { ok: false, error: "the register has no text" });
+  answer_register(world.firefox, ask("b"), { ok: true, value: "x".repeat(2001) });
+  assert.deepEqual(pastes(world.firefox), [], "a refusal and an over-long text paste nothing");
+  const loaded = ask("c");
+  world.first.browser.innerWindowID = 11;
+  answer_register(world.firefox, loaded, { ok: true, value: "late" });
+  assert.deepEqual(pastes(world.firefox), [], "a page that loaded meanwhile gets nothing");
+  const switched = ask("d");
+  world.on_tab(world.second);
+  answer_register(world.firefox, switched, { ok: true, value: "late" });
+  assert.deepEqual(pastes(world.firefox), [], "another tab gets nothing");
+});
+
+test("<C-r> is the page's with no register.paste row, in ignore mode and outside a field", () => {
+  const none = started({ written: state({ insert_keys: [{ key: "<Escape>", id: "mode.escape" }] }) });
+  const field = page_with_field(none.first.browser);
+  assert.equal(none.press("r", { ...field.target, ctrlKey: true }).prevented, false, "an older extension sends no paste row");
+  const ignoring = started({ written: state(PASTE_TABLE) });
+  const ignoring_field = page_with_field(ignoring.first.browser);
+  ignoring.press("Escape", { shiftKey: true, target: ignoring.first.browser, originalTarget: ignoring.first.browser });
+  assert.equal(ignoring.press("r", { ...ignoring_field.target, ctrlKey: true }).prevented, false);
+  const outside = started({ written: state(PASTE_TABLE) });
+  assert.equal(outside.press("r", { ctrlKey: true, target: outside.first.browser, originalTarget: outside.first.browser }).prevented, false);
+  assert.deepEqual([register_reads(none.firefox), register_reads(ignoring.firefox), register_reads(outside.firefox)], [[], [], []]);
+});
+
+test("a page key goes to the frame script with its checked args and the count in steps, and with no page keys file the key stays the page's", () => {
+  const world = started();
+  world.type("3", "]", "h");
+  world.type("z", "t");
+  world.type("g", "i");
+  const sent = world.firefox.sent_to_frames.filter(({ name }) => name.endsWith(":page-key")).map(({ data }) => plain(data));
+  assert.deepEqual(sent, [
+    { id: "page.heading", args: { direction: "next", steps: 3 }, inner: 10 },
+    { id: "scroll.align", args: { position: "top" }, inner: 10 },
+    { id: "page.focus_input", args: {}, inner: 10 },
+  ]);
+  const bare = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE) } });
+  bare.start_extension();
+  const window = bare.make_window();
+  window.load();
+  const tab = window.add_tab();
+  window.select(tab.tab);
+  bare.write_state(state());
+  const pressed = [window.press(key_event("]", { target: tab.browser, originalTarget: tab.browser })), window.press(key_event("h", { target: tab.browser, originalTarget: tab.browser }))];
+  assert.deepEqual(pressed.map((event) => event.prevented), [true, false], "] waits as a prefix, and h finds no command to run, so the page gets it");
+  assert.deepEqual(bare.sent_to_frames, []);
+  assert.deepEqual(bare.errors, []);
 });

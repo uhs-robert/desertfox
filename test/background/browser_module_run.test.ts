@@ -275,14 +275,15 @@ test("the bare command line key opens the line over the active tab and runs noth
   assert.deepEqual(shown, []);
 });
 
-test("a line key with text opens the line with it when its command needs no page, and refuses otherwise", async () => {
+test("a line key with text opens the line with it when its command needs no page or runs through the module, and refuses otherwise", async () => {
   const { run, runs, shown, lines } = run_setup();
   await run({ keys: "t M", count: 0 });
-  assert.deepEqual(lines, ["tab.move --offset="]);
+  await run({ keys: "s h", count: 0 });
+  assert.deepEqual(lines, ["tab.move --offset=", "heading "]);
   assert.deepEqual(runs, []);
-  for (const keys of ["s h", "; ;", "A"]) await assert.rejects(run({ keys, count: 0 }), /not a key|needs a page/, keys);
-  assert.deepEqual(lines, ["tab.move --offset="]);
-  assert.equal(shown.length, 3);
+  for (const keys of ["; ;", "A"]) await assert.rejects(run({ keys, count: 0 }), /not a key|needs a page/, keys);
+  assert.deepEqual(lines, ["tab.move --offset=", "heading "]);
+  assert.equal(shown.length, 2);
 });
 
 test("a prompt step handed to the address bar ends the binding, so its later steps do not run", async () => {

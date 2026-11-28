@@ -4,7 +4,8 @@
 
 import type { SearchEngine } from "../shared/config.ts";
 import type { PageInfo } from "../shared/engines/index.ts";
-import type { BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, RegisterItem, SessionItem, TabContainer, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages/content.ts";
+import type { BookmarkRows, ClosedTabRow, CompleteItemsAnswer, EngineItem, FolderItem, HeadingItem, RegisterItem, SessionItem, TabContainer, TabRowsAction, TabRowsActionAnswer, WindowItem } from "../shared/messages/content.ts";
+import { PANEL_FRAME_ID } from "./cmdline_panel.ts";
 import { available_engine_names } from "./availability.ts";
 import { FOLDER_PATH_SEPARATOR } from "../shared/folder_pick.ts";
 import { DEFAULT_COOKIE_STORE_ID } from "../shared/container_store.ts";
@@ -155,6 +156,8 @@ export type CompleteItemsDeps = typeof browser_complete_items_deps & {
   // The tab the line's window was on before its current one.
   previous_tab: (window_id: number) => Promise<number | undefined>;
   search_engines: () => Promise<Record<string, SearchEngine>>;
+  // The headings of the line's tab read by the browser module, for a line over a locked page. Undefined when the module cannot read them.
+  locked_headings: (tab_id: number) => Promise<HeadingItem[] | undefined>;
   // The page of the line's tab, undefined when it has none.
   page_of: (tab_id: number) => Promise<PageInfo | undefined>;
   // The address of the subframe the line acts in, or undefined when the line acts in the top frame. A subframe's local marks sit under its own address.
@@ -203,7 +206,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     return { source, incognito, quickmarks, bookmarks, closed, tabs: own.map((tab) => ({ id: tab.id as number, url: tab.url ?? "" })), tab_used: tab_use_times(tabs, incognito), history_max };
   };
 
-  const fetch_items = async (kind: "bookmarks" | "engines" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
+  const fetch_items = async (kind: "bookmarks" | "engines" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "headings", asker: Asker): Promise<CompleteItemsAnswer["items"]> => {
     // The set is read once per line. The line is modal over one tab, so the page cannot change under it.
     if (kind === "engines") return engine_items(await deps.search_engines(), await deps.page_of(asker.tab_id));
     // A private line lists no sessions, as the commands refuse there.
@@ -211,6 +214,8 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     if (kind === "registers") return deps.registers(asker.incognito);
     if (kind === "marks") return deps.marks((await deps.line_frame_url(asker.tab_id)) ?? (await deps.page_of(asker.tab_id))?.url, asker.incognito);
     if (kind === "quality_levels") return deps.quality_levels(asker.tab_id);
+    // Only the line over a locked page asks the background. A line in a page reads its own headings.
+    if (kind === "headings") return asker.frame_id === PANEL_FRAME_ID ? ((await deps.locked_headings(asker.tab_id)) ?? []) : [];
     if (kind === "quickmarks") return deps.quickmarks(asker.incognito);
     if (kind === "saved_quickmarks") return deps.saved_quickmarks(asker.incognito);
     if (kind === "folders") return folder_items(await deps.folders());
@@ -260,7 +265,7 @@ export function create_complete_items(deps: CompleteItemsDeps) {
     // Undefined for a sender that is not a tab, for a tab that opened no line and for a tab that closed or navigated
     // while the lookup ran. A failed browser call gives an empty list.
     answer: async (kind: unknown, asker: Asker | undefined): Promise<CompleteItemsAnswer | undefined> => {
-      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
+      if ((kind !== "bookmarks" && kind !== "engines" && kind !== "windows" && kind !== "sessions" && kind !== "registers" && kind !== "folders" && kind !== "marks" && kind !== "quickmarks" && kind !== "saved_quickmarks" && kind !== "quality_levels" && kind !== "headings") || !asker || !(await deps.is_opener(asker.tab_id, asker.frame_id))) return undefined;
       const items = await fetch_items(kind, asker).catch(warn_and_go("complete_items.fetch", kind === "bookmarks" ? { rows: [], folders: [] } : []));
       return (await deps.is_opener(asker.tab_id, asker.frame_id)) ? { items } : undefined;
     },

@@ -11,7 +11,7 @@ import {
 } from "../../src/shared/config/storage_keys.ts";
 import { event_to_token } from "../../src/shared/keys/token.ts";
 import { MODULE_FIREFOX_PAGES } from "../../src/shared/firefox_pages.ts";
-import { COMMANDS_FILE, CORE_FILE, create_firefox, DEVTOOLS_FILE, FEATURE_FILE, IME_ENABLED, key_event, source_of } from "./fake_firefox.ts";
+import { COMMANDS_FILE, CORE_FILE, create_firefox, DEVTOOLS_FILE, FEATURE_FILE, IME_ENABLED, key_event, PAGE_KEYS_FILE, source_of } from "./fake_firefox.ts";
 
 const DEFAULT_KEYS = [
   { key: "J", id: "tab.next", args: {} },
@@ -64,11 +64,11 @@ test("the module's copy of the key names, the version, the limits and the kind l
 });
 
 test("the feature files define every command of the protocol with the protocol's arg shapes", () => {
-  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE) } });
+  const firefox = create_firefox({ extra_files: { [COMMANDS_FILE]: source_of(COMMANDS_FILE), [PAGE_KEYS_FILE]: source_of(PAGE_KEYS_FILE) } });
   firefox.make_window().load();
   const core = firefox.Services.desertfox_browser_module as { status(): { commands: string[] } };
   assert.deepEqual(plain(core.status().commands).sort(), Object.keys(MODULE_COMMAND_ARGS).sort());
-  const source = source_of(FEATURE_FILE) + source_of(COMMANDS_FILE);
+  const source = source_of(FEATURE_FILE) + source_of(COMMANDS_FILE) + source_of(PAGE_KEYS_FILE);
   for (const [id, args] of Object.entries(MODULE_COMMAND_ARGS)) {
     for (const name of Object.keys(args)) assert.match(source, new RegExp(`"${id.replace(".", "\\.")}", \\{[^}]*\\b${name}:`), `${id} ${name}`);
   }
@@ -847,9 +847,9 @@ test("the insert table reaches the taker as a Map of key to command: unknown com
     const seen = (firefox.Services as { zz_insert: unknown }).zz_insert;
     return seen === undefined ? undefined : plain(seen);
   };
-  const good = with_taker(true, state({ insert_keys: [{ key: "<Escape>", id: "mode.escape" }, { key: "<C-r>", id: "register.paste" }, { key: "<A-?>", id: "help.whichkey" }] }));
+  const good = with_taker(true, state({ insert_keys: [{ key: "<Escape>", id: "mode.escape" }, { key: "<C-r>", id: "register.paste" }, { key: "<A-?>", id: "help.whichkey" }, { key: "<C-q>", id: "future.command" }] }));
   good.press("x");
-  assert.deepEqual(insert(good.firefox), [["<Escape>", "mode.escape"], ["<A-?>", "help.whichkey"]]);
+  assert.deepEqual(insert(good.firefox), [["<Escape>", "mode.escape"], ["<C-r>", "register.paste"], ["<A-?>", "help.whichkey"]]);
   for (const bad of [[{ key: "a", id: "mode.escape" }, { key: "a", id: "page.send_key" }], [{ key: "a b", id: "mode.escape" }], [{ id: "mode.escape" }], "junk", Array.from({ length: 9 }, (_, index) => ({ key: `<F${index + 1}>`, id: "mode.escape" }))]) {
     const world = with_taker(true, state({ insert_keys: bad }));
     world.press("x");

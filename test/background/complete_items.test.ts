@@ -70,6 +70,10 @@ function make({ openers = [1, 2], tabs = ALL_TABS, bookmarks = [] as BookmarkNod
       if (fail) throw new Error("no bookmarks");
       return { rows: bookmark_rows(bookmarks, folders), folders };
     },
+    locked_headings: async (tab_id) => {
+      if (fail) throw new Error("no headings");
+      return tab_id === 1 ? [{ level: 1, text: "Title" }] : undefined;
+    },
     registers: async (is_private) => {
       if (fail) throw new Error("no registers");
       return is_private ? registers.private : registers.normal;
@@ -180,6 +184,7 @@ test("a tab that navigates or closes while the lookup runs gets nothing", async 
     query_windows: async () => WINDOWS,
     sessions: async () => [],
     registers: async () => [],
+    locked_headings: async () => undefined,
     marks: async () => [],
     quality_levels: async () => [],
     quickmarks: async () => [],
@@ -905,4 +910,12 @@ test("the bookmark use boost reads the browser's newest rows while no rank Worke
   } finally {
     delete (globalThis as { browser?: unknown }).browser;
   }
+});
+
+test("the heading list comes from the browser module for the command line panel and from nothing else", async () => {
+  const { service } = make({});
+  const panel = { ...NORMAL_LINE, frame_id: -1 };
+  assert.deepEqual(await service.answer("headings", panel), { items: [{ level: 1, text: "Title" }] });
+  assert.deepEqual(await service.answer("headings", NORMAL_LINE), { items: [] }, "a line in a page reads its own headings");
+  assert.equal(await service.answer("headings", { ...panel, tab_id: 9 }), undefined, "a tab that opened no line gets nothing");
 });

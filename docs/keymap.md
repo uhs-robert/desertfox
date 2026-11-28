@@ -58,18 +58,18 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `gH` | `page.home --tab` | Home page | yes |
 | `]]` | `page.follow --next` | Next page |  |
 | `[[` | `page.follow --prev` | Previous page |  |
-| `]i` | `page.focus_field --next` | Next form control |  |
-| `[i` | `page.focus_field --prev` | Previous form control |  |
-| `]h` | `page.heading --next` | Next heading |  |
-| `[h` | `page.heading --prev` | Previous heading |  |
-| `}` | `page.heading --next-block` | Next paragraph |  |
-| `{` | `page.heading --prev-block` | Previous paragraph |  |
-| `]H` | `page.heading --last` | Last heading |  |
-| `[H` | `page.heading --first` | First heading |  |
+| `]i` | `page.focus_field --next` | Next form control | yes |
+| `[i` | `page.focus_field --prev` | Previous form control | yes |
+| `]h` | `page.heading --next` | Next heading | yes |
+| `[h` | `page.heading --prev` | Previous heading | yes |
+| `}` | `page.heading --next-block` | Next paragraph | yes |
+| `{` | `page.heading --prev-block` | Previous paragraph | yes |
+| `]H` | `page.heading --last` | Last heading | yes |
+| `[H` | `page.heading --first` | First heading | yes |
 | `]'` | `mark.step --next` | Next mark |  |
 | `['` | `mark.step --prev` | Previous mark |  |
-| `]l` | `page.focus_link --next` | Next link |  |
-| `[l` | `page.focus_link --prev` | Previous link |  |
+| `]l` | `page.focus_link --next` | Next link | yes |
+| `[l` | `page.focus_link --prev` | Previous link | yes |
 | `]g` | `tabgroup.next` | Next tab group | yes |
 | `[g` | `tabgroup.prev` | Previous tab group | yes |
 | `]t` | `tab.next` | Next tab | yes |
@@ -80,7 +80,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `[j` | `page.jump --older` | Jump back |  |
 | `]v` | `media skip next` | Next video |  |
 | `[v` | `media skip previous` | Previous video |  |
-| `sh` | `cmdline.open --text='heading '` | Search headings |  |
+| `sh` | `cmdline.open --text='heading '` | Search headings | yes |
 | `.` | `repeat` | Repeat | yes |
 | `J` | `tab.next` | Next tab | yes |
 | `K` | `tab.prev` | Previous tab | yes |
@@ -194,7 +194,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `<C-x>` | `url.increment --down` | Change URL number | yes |
 | `]c` | `url.increment --up` | Change URL number | yes |
 | `[c` | `url.increment --down` | Change URL number | yes |
-| `gi` | `page.focus_input` | Focus input |  |
+| `gi` | `page.focus_input` | Focus input | yes |
 | `I` | `hint --lists ; page.item --current` | Pick a list for item mode |  |
 | `i` | `mode.insert` | Insert mode | yes |
 | `pp` | `paste` | Open clipboard | yes |
@@ -225,9 +225,9 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `z=` | `zoom 1` | Reset zoom | yes |
 | `zI` | `zoom 3` | Zoom to 300% | yes |
 | `zO` | `zoom 0.3` | Zoom to 30% | yes |
-| `zt` | `scroll.align --top` | Align focus |  |
-| `zz` | `scroll.align` | Align focus |  |
-| `zb` | `scroll.align --bottom` | Align focus |  |
+| `zt` | `scroll.align --top` | Align focus | yes |
+| `zz` | `scroll.align` | Align focus | yes |
+| `zb` | `scroll.align --bottom` | Align focus | yes |
 | `<S-Escape>` | `mode ignore` | Set mode | yes |
 | `<S-Insert>` | `mode ignore` | Set mode | yes |
 | `<AC-Escape>` | `mode ignore` | Set mode | yes |
@@ -242,7 +242,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `,t` | `toggle` (prompts) | Toggle a setting | yes |
 | `,i` | `mode ignore` | Set mode | yes |
 | `,,` | `anything` (prompts) | Find anything | yes |
-| `,b` | `page.blur` | Blur |  |
+| `,b` | `page.blur` | Blur | yes |
 | `,e` | `pane.focus sidebar` | Focus the sidebar | yes |
 | `,?` | `help.whichkey` | Which key | yes |
 | `<A-?>` | `help.whichkey` | Show the keys | yes |
@@ -299,7 +299,7 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `;xf` | `hint --delete --frames` | Delete frame |  |
 | `;fF` | `frame.exit` | Focus top page |  |
 | `;fs` | `hint --focus --scrollable` | Focus scroll box |  |
-| `;fe` | `page.focus_input` | Main input |  |
+| `;fe` | `page.focus_input` | Main input | yes |
 | `;fh` | `hint --focus --headings` | Focus heading |  |
 | `;m` | `hint --media` | Play or pause media |  |
 | `;M` | `hint --enter-media --media` | Start media mode at a video |  |

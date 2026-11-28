@@ -34,6 +34,7 @@ import {
   SNAPSHOT_PARTS,
   validate_snapshot,
   reply_fits,
+  REGISTER_TEXT_CHARS,
   MAX_MESSAGES,
   MODULE_TO_EXTENSION_KINDS,
   PAGE_HINT_ACTIONS,
@@ -145,8 +146,8 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
-  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "page_links.read"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want", "register.read"]);
+  assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read", "page_links.read", "page_headings.read", "page_heading.go"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
   // A page waits on its first calls while it starts, so they may be older than the default.
@@ -623,7 +624,7 @@ test("a tree with a mode leaf passes the check, and one with a mode value the mo
 
 test("the insert table takes up to MAX_INSERT_KEY_ROWS key rows of the fixed commands and skips others", () => {
   assert.deepEqual(insert_keys_of([{ key: "<Escape>", id: "mode.escape" }, { key: "<A-Escape>", id: "page.send_key" }, { key: "<A-?>", id: "help.whichkey" }]), [{ key: "<Escape>", id: "mode.escape" }, { key: "<A-Escape>", id: "page.send_key" }, { key: "<A-?>", id: "help.whichkey" }]);
-  assert.deepEqual(insert_keys_of([{ key: "<C-r>", id: "register.paste" }, { key: "<Escape>", id: "mode.escape" }, { key: "x", id: "later.command", extra: 1 }]), [{ key: "<Escape>", id: "mode.escape" }], "other commands are skipped");
+  assert.deepEqual(insert_keys_of([{ key: "<C-r>", id: "register.paste" }, { key: "<Escape>", id: "mode.escape" }, { key: "x", id: "later.command", extra: 1 }]), [{ key: "<C-r>", id: "register.paste" }, { key: "<Escape>", id: "mode.escape" }], "other commands are skipped");
   assert.deepEqual(insert_keys_of([]), []);
   const many = (count: number) => Array.from({ length: count }, (_, index) => ({ key: `<F${index + 1}>`, id: "mode.escape" }));
   assert.equal(insert_keys_of(many(MAX_INSERT_KEY_ROWS))?.length, MAX_INSERT_KEY_ROWS);
@@ -657,4 +658,23 @@ test("page_links.read names a tab and a scope only, and a full-size reply fits t
   const value = JSON.stringify(Array.from({ length: MAX_PAGE_LINKS }, (_, index) => [`https://a.com/${index}`, "x".repeat(90)]));
   assert.ok(new TextEncoder().encode(value).length <= MAX_PAGE_LINKS_BYTES);
   assert.equal(reply_fits({ v: V, reply_to: "l1", ok: true, value }, row), true);
+});
+
+test("register.read names a tab and a register key, and its reply fits the kind with a full text", () => {
+  const read = (args: Record<string, unknown>) => validate_message({ v: V, id: "r1", kind: "register.read", args, sent_at: 1 }, MODULE_TO_EXTENSION_KINDS);
+  assert.ok(read({ tab_id: 3, name: "a" }).ok);
+  assert.equal(read({ tab_id: "3", name: "a" }).ok, false);
+  assert.equal(read({ tab_id: 3 }).ok, false);
+  const full = "\u{1F600}".repeat(REGISTER_TEXT_CHARS);
+  assert.ok(reply_fits({ v: V, reply_to: "r1", ok: true, value: full }, MODULE_TO_EXTENSION_KINDS["register.read"]!), "2000 four-byte characters fit");
+  assert.equal(reply_fits({ v: V, reply_to: "r1", ok: true, value: "\u0001".repeat(REGISTER_TEXT_CHARS * 2) }, MODULE_TO_EXTENSION_KINDS["register.read"]!), false, "a reply past the cap is refused");
+});
+
+test("page_headings.read and page_heading.go name a tab and an index only", () => {
+  const ask = (kind: string, args: Record<string, unknown>) => validate_message({ v: V, id: "h1", kind, args, sent_at: 1 }, EXTENSION_TO_MODULE_KINDS);
+  assert.ok(ask("page_headings.read", { tab_id: 3 }).ok);
+  assert.equal(ask("page_headings.read", {}).ok, false);
+  assert.ok(ask("page_heading.go", { tab_id: 3, index: 0 }).ok);
+  assert.equal(ask("page_heading.go", { tab_id: 3, index: 1.5 }).ok, false);
+  assert.equal(ask("page_heading.go", { tab_id: 3, index: "0" }).ok, false);
 });

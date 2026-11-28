@@ -39,7 +39,12 @@ export const MESSAGE_MIN_GAP_MS = 50;
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
 // `firefox_page` is a name from MODULE_FIREFOX_PAGES. `optional_open_where` is absent, "tab" or "here".
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction" | "module_mode";
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction" | "module_mode" | "field_direction" | "heading_direction" | "align_position";
+
+// The page keys of `desertfox-page-keys.js`: the values of the direction and position args, as the registry's params list them.
+export const FIELD_DIRECTIONS = ["next", "prev"] as const;
+export const HEADING_DIRECTIONS = ["next", "prev", "first", "last", "next_block", "prev_block"] as const;
+export const ALIGN_POSITIONS = ["top", "center", "bottom"] as const;
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
@@ -146,6 +151,13 @@ export const MODULE_COMMAND_ARGS = {
   "mode.insert": {},
   "mode.pass_next": {},
   "mode.set": { mode: "module_mode" },
+  // The page keys. The frame script of `desertfox-page-keys.js` runs them in the tab, on every page the module takes keys on. An older module knows none of these ids and skips their leaves (`kept_tree`).
+  "page.focus_field": { direction: "field_direction", steps: "int" },
+  "page.focus_link": { direction: "field_direction", steps: "int" },
+  "page.heading": { direction: "heading_direction", steps: "int" },
+  "scroll.align": { position: "align_position" },
+  "page.focus_input": {},
+  "page.blur": {},
   // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
   [ROOT_LIST_COMMAND_ID]: {},
 } as const satisfies Record<string, Record<string, ArgKind>>;
@@ -154,8 +166,8 @@ export const MODULE_COMMAND_ARGS = {
 export const MODE_KEY_COMMAND_IDS = ["mode.insert", "mode.pass_next", "mode.set"] as const;
 // The values `mode.set` takes on a locked page. The other modes need DesertFox's page code.
 export const MODULE_MODES = ["ignore", "insert"] as const;
-// The commands the module takes in a text field, from the keymap's `insert` mode (the state's `insert_keys`). `mode.escape` leaves insert mode and drops the focus from the field, and `page.send_key` is the row that sends the page a plain Escape. `help.whichkey` is reserved: the module keeps the row and takes no key by it yet.
-export const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey"] as const;
+// The commands the module takes in a text field, from the keymap's `insert` mode (the state's `insert_keys`). `mode.escape` leaves insert mode and drops the focus from the field, and `page.send_key` is the row that sends the page a plain Escape. `help.whichkey` is reserved: the module keeps the row and takes no key by it yet. `register.paste` is `<C-r>`: the module takes the next key as the register name and asks the extension for its text (`register.read`).
+export const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey", "register.paste"] as const;
 export type InsertKeyCommandId = (typeof INSERT_KEY_COMMAND_IDS)[number];
 export const MAX_INSERT_KEY_ROWS = 8;
 export type InsertKeyRow = { key: string; id: InsertKeyCommandId };
@@ -208,7 +220,7 @@ export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
 export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[] };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
-// The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
+// The default keymap's tree is about 7 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
 // The which-key panel of each branch of the tree, keyed by its path (tokens joined by one space), the root left out. Built from the same rows the page's panel shows (`panel_after_prefix`), so the module draws text and never learns a command. A row has no description: the page shows it on hover, and the module's panel takes no pointer.
 // `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns the prefix panels off: `panels` is then empty and only `root` shows.
@@ -250,6 +262,9 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
   if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
   if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? undefined : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
+  if (kind === "field_direction") return FIELD_DIRECTIONS.some((each) => each === value) ? undefined : `must be one of ${FIELD_DIRECTIONS.join(", ")}`;
+  if (kind === "heading_direction") return HEADING_DIRECTIONS.some((each) => each === value) ? undefined : `must be one of ${HEADING_DIRECTIONS.join(", ")}`;
+  if (kind === "align_position") return ALIGN_POSITIONS.some((each) => each === value) ? undefined : `must be one of ${ALIGN_POSITIONS.join(", ")}`;
   if (kind === "module_mode") return MODULE_MODES.some((mode) => mode === value) ? undefined : `must be one of ${MODULE_MODES.join(", ")}`;
   if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? undefined : "must be a page from the list";
   if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.some((where) => where === value) ? undefined : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
@@ -540,6 +555,11 @@ const SELECTION_REPLY_BYTES = 8192;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
 const PANEL_CALL_BYTES = 256;
+// The text of a register that `register.read` carries: 2000 characters at up to 4 bytes each, with the escapes and the envelope of the reply.
+export const REGISTER_TEXT_CHARS = 2000;
+const REGISTER_REPLY_BYTES = 10240;
+// The headings list (`browser_module_headings.ts`) fits this with room for escapes.
+const HEADINGS_REPLY_BYTES = 49_152;
 // The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
 export const CHROME_HINT_PART_BYTES = 4096;
 // The most parts a session's targets or one draw may come in. The module keeps the same number.
@@ -565,6 +585,8 @@ export const MODULE_TO_EXTENSION_KINDS: KindTable = {
   "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The user typed a hint key on one of Firefox's own pages that the module labels. `start` is a token the module made for that key, as for `chrome_hints.want`. `keys` holds the tokens of the hint leaf's path, joined by one space, and `count` the typed count or 0, which a page session ignores. The extension matches the keys against its own tree and names the action, or refuses. The session's targets, keys and end come on the chrome_hints rows.
   "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: RUN_BYTES },
+  // `<C-r>` in a text field: the register `name` (one key, which the extension checks again) of the tab `tab_id` (a fact chrome reads). The reply value is the register's text, cleaned and capped by the extension (`REGISTER_TEXT_CHARS`), and a refusal for a macro, an empty or an unknown register. The text goes into the field the user typed in and nowhere else.
+  "register.read": { args: { tab_id: "int", name: "text" }, reply: true, max_bytes: REGISTER_REPLY_BYTES },
 };
 export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   // A message of the background for the page, in place of `tabs.sendMessage`. `document_id` is the attach the tab's lock names, and the module refuses the push when another document holds the tab, so a push sent before a reload never reaches the next document. It is optional, so an older extension that sends none still reaches the tab's page.
@@ -614,6 +636,10 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
   // The web links of a page where DesertFox's page code does not run, for `copy.page_links`. `scope` is "page" or "viewport", which the module checks. The reply value is JSON text of [address, text] pairs, capped by the module and checked again by the extension (browser_module_page_links.ts). The one kind whose reply carries addresses: they are only copied, and the request names no address.
   "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: MAX_KIND_BYTES },
+  // The headings of a page for the command line list of `sh`: the reply value is JSON text of `[level, text]` pairs in page order, capped by the module and checked again by the extension. It also makes the module's snapshot, which `page_heading.go` indexes.
+  "page_headings.read": { args: { tab_id: "int" }, reply: true, max_bytes: HEADINGS_REPLY_BYTES },
+  // Scrolls the heading at `index` (from 0) of the snapshot the last `page_headings.read` made, as `heading` does on a page with page code. The reply refuses a missing snapshot, an index past it and a heading that left the page.
+  "page_heading.go": { args: { tab_id: "int", index: "int" }, reply: true, max_bytes: PANE_CALL_BYTES },
 };
 
 // The module core's fixed refusal of a request whose arg has the wrong shape (`checked_message` in browser_module/desertfox-browser.js). An older module that knows the kind but not a newer value of an arg answers with it.

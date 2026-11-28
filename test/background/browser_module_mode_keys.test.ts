@@ -79,6 +79,7 @@ test("the insert table holds the default Escape, C-[, send-Escape and the reserv
   assert.deepEqual(insert_rows_of(compiled(), real_check), [
     { key: "<A-?>", id: "help.whichkey" },
     { key: "<A-Escape>", id: "page.send_key" },
+    { key: "<C-r>", id: "register.paste" },
     { key: "<Escape>", id: "mode.escape" },
   ]);
 });
@@ -112,5 +113,5 @@ test("with no usable keymap there is no table, so the module keeps its plain Esc
 test("the state carries the table beside the tree", async () => {
   const { module, state } = setup();
   await module.sync();
-  assert.deepEqual(state().insert_keys?.map((row) => row.key), ["<A-?>", "<A-Escape>", "<Escape>"]);
+  assert.deepEqual(state().insert_keys?.map((row) => row.key), ["<A-?>", "<A-Escape>", "<C-r>", "<Escape>"]);
 });

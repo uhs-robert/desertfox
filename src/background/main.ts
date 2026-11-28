@@ -63,6 +63,7 @@ import { ask_item_start, create_tab_item } from "./tab_item.ts";
 import { step_target, tab_steps } from "./tab_steps.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, SLOT_TABLE_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import { attach_browser_module, browser_module_call } from "./browser_module_call.ts";
+import { create_register_read, create_run_without_page, read_module_headings } from "./browser_module_page_keys.ts";
 import { chrome_hints } from "../commands/hint_browser.ts";
 import { create_browser_module, read_bar_config, module_setting_on, stored_setting_on } from "./browser_module.ts";
 import { check_args } from "../shared/registry/check_args.ts";
@@ -154,7 +155,7 @@ const cmdline_panel = create_cmdline_panel({
     return cmdline.open(await cmdline.issue_ticket(tab.tab_id), tab.tab_id, frame_id, tab.window_id, tab, tab.incognito, mode);
   },
 });
-const router_deps = { ...make_router_deps(get_config, repeat_memory, cmdline_panel.open), record_step };
+const router_deps = { ...make_router_deps(get_config, repeat_memory, cmdline_panel.open), record_step, run_without_page: create_run_without_page((kind, args) => browser_module_call.call(kind, args)) };
 const router = create_router(router_deps);
 const watch_tab = (tab_id: number) =>
   watch_page_ready({ get_tab: (id) => ignore_refusal(browser.tabs.get(id)), on_updated: browser.tabs.onUpdated, on_removed: browser.tabs.onRemoved, has_content_script, set_timer: (callback, ms) => setTimeout(callback, ms), clear_timer: (timer) => clearTimeout(timer as number) }, tab_id);
@@ -264,6 +265,7 @@ const complete_items = create_complete_items({
   is_opener: cmdline.is_opener,
   search_engines: async () => (await get_config()).search_engines,
   page_of,
+  locked_headings: (tab_id) => read_module_headings((kind, args) => browser_module_call.call(kind, args), tab_id),
   line_frame_url: async (tab_id) => {
     const frame_id = await cmdline.target_of(tab_id);
     return frame_id === undefined ? undefined : (await refused_as(browser.webNavigation.getFrame({ tabId: tab_id, frameId: frame_id }), null))?.url;
@@ -365,7 +367,7 @@ const browser_module = create_browser_module({
   },
   locked_commands,
   find_command: (id) => registry.get(id),
-  handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async (text) => {
+  handlers: { ...browser_module_rpc.handlers, "register.read": create_register_read({ store: browser_register_store, is_private: async (tab_id) => (await ignore_refusal(browser.tabs.get(tab_id)))?.incognito }), run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async (text) => {
     const tab = await router_deps.active_tab();
     if (tab) await router_deps.open_cmdline(tab.tab_id, 0, text);
   }, active_url: async () => (await router_deps.active_tab())?.url, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers },

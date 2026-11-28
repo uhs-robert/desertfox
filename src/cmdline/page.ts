@@ -119,7 +119,10 @@ async function panel_line(): Promise<void> {
     else if (message.kind === "submit") {
       void ask_background({ type: "run", invocations: [message.invocation], mode: "normal", from_line: true });
       window.close();
-    } else if (message.kind === "list_headings") to_line?.({ kind: "headings", items: [] });
+    } else if (message.kind === "list_headings") {
+      // The page has no code of its own here, so the background asks the browser module for the headings.
+      void ask_background<CompleteItemsAnswer | undefined>({ type: "complete_items", kind: "headings" }).then((answer) => to_line?.({ kind: "headings", items: (answer?.items ?? []) as HeadingItem[] }));
+    }
   };
   start_line({ kind: "start", ticket: "", text: opened.text + input.value, tokens: [], mode: opened.mode }, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
     to_line = on_message;

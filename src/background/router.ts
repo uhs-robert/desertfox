@@ -48,6 +48,8 @@ export type RouterDeps = {
   repeat_memory: RepeatMemory;
   // Replaces the `.` recorder, for a caller that records every step.
   record_step?: RecordStep;
+  // Runs a content command on a tab with no content script through the browser module, or says nothing (undefined) for a command it does not serve. Only asked after the send to the tab failed.
+  run_without_page?: (command_id: string, args: CheckedArgs, tab_id: number) => Promise<Outcome | undefined>;
   // Gets the time one background command took from the start of its step to its answer, for `debug.perf`.
   record_timing?: (command_id: string, ms: number) => void;
 };
@@ -268,6 +270,8 @@ export function create_router(deps: RouterDeps): Router {
       return outcome_of_reply(await deps.send_to_tab(tab_id, { type: "run_in_content", invocations, ...(request.instant && { repeat: true as const }) }, frame_id));
     } catch {
       if (await refused_as(request.lost_reply_is_done?.() ?? Promise.resolve(false), false)) return done;
+      const served = times === 1 ? await refused_as(deps.run_without_page?.(command.id, args, tab_id) ?? Promise.resolve(undefined), undefined) : undefined;
+      if (served !== undefined) return served;
       return refuse(needs_message(command, NO_PAGE, request));
     }
   }

@@ -319,7 +319,7 @@ export async function run_cases(context) {
   await run_case("last, as the config stays remapped to the end of the piece: a key remapped in the config follows on about:support, and the key it freed leaves the tree", async () => {
     await home("bmc_remap");
     const dir = config_copy();
-    writeFileSync(join(dir, "keymap.d", "90-browser-module-commands.toml"), '[normal]\nQ = "tab.duplicate"\nxx = "page.blur"\n');
+    writeFileSync(join(dir, "keymap.d", "90-browser-module-commands.toml"), '[normal]\nQ = "tab.duplicate"\nxx = "find.next"\n');
     on_teardown(() => load_config_dir(config_dir));
     await load_config_dir(dir);
     {

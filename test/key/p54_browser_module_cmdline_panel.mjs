@@ -126,16 +126,17 @@ export async function run_cases(context) {
     await close_others();
   });
 
-  await run_case("tM opens the panel with tab.move --offset= typed in, and sh opens no line", async () => {
+  await run_case("tM opens the panel with tab.move --offset= typed in, and sh with heading typed in", async () => {
     await prefs_with_tab_after();
     await press_keys("tM");
     await panel.wait_open("tM");
     await poll_until("the line to start with tab.move --offset=", async () => (await panel.line_text())?.startsWith("tab.move --offset=") === true);
     await escape_until_closed();
-    // The heading list reads the page's DOM, so sh stays out and the panel does not open.
+    // The heading list comes from the module's page keys frame script (p54_browser_module_page_keys lists it and picks from it).
     await press_keys("sh");
-    await sleep(NO_EFFECT_MS);
-    expect((await panel.state()).state === "none", "sh opened a panel on about:preferences");
+    await panel.wait_open("sh");
+    await poll_until("the line to start with heading", async () => (await panel.line_text())?.startsWith("heading ") === true);
+    await escape_until_closed();
     await close_others();
   });
 

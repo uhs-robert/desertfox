@@ -3,7 +3,7 @@ import { test } from "node:test";
 import "../src/background/command_modules.ts";
 import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
-import { MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
+import { check_module_args, MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
 import { counted_steps, locked_page_command_ids, matcher_keymap_of, native_allowed_by, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
@@ -66,12 +66,43 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.deepEqual(node_at(DEFAULT_TREE, ["<C-v>"]), { native: "mode.pass_next", args: {} });
   assert.equal(node_at(DEFAULT_TREE, ["v"]), undefined, "caret mode needs the page code");
   // Hints, find, marks and the page's own Escape need DesertFox's page code.
-  for (const keys of [["f"], ["/"], ["m"], [";"], ["<Esc>"], ["<Escape>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
-  // The bare command line key stays, so the background opens the line as a panel. A line with typed text stays only when its command runs with no page (`tM`), not for `A`, `sh` or `;;`.
+  for (const keys of [["f"], ["/"], ["m"], [";", "l"], ["<Esc>"], ["<Escape>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  // The bare command line key stays, so the background opens the line as a panel. A line with typed text stays only when its command runs with no page (`tM`) or through the module (`sh`), not for `A` or `;;`.
   assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
   assert.equal(node_at(DEFAULT_TREE, ["t", "M"]), "forward");
-  for (const keys of [["A"], ["s", "h"], [";", ";"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  assert.equal(node_at(DEFAULT_TREE, ["s", "h"]), "forward");
+  for (const keys of [["A"], [";", ";"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   assert.ok(validate_scope_tree(DEFAULT_TREE).ok);
+});
+
+test("the page keys run in the module's frame script, with the count in `steps` where the key takes one", () => {
+  const stepped = (native: string, direction: string) => ({ native, args: { direction, steps: 1 }, count_rule: { param: "steps" } });
+  assert.deepEqual(node_at(DEFAULT_TREE, ["]", "i"]), stepped("page.focus_field", "next"));
+  assert.deepEqual(node_at(DEFAULT_TREE, ["[", "i"]), stepped("page.focus_field", "prev"));
+  assert.deepEqual(node_at(DEFAULT_TREE, ["]", "l"]), stepped("page.focus_link", "next"));
+  assert.deepEqual(node_at(DEFAULT_TREE, ["[", "l"]), stepped("page.focus_link", "prev"));
+  for (const [keys, direction] of [[["]", "h"], "next"], [["[", "h"], "prev"], [["}"], "next_block"], [["{"], "prev_block"], [["]", "H"], "last"], [["[", "H"], "first"]] as const) assert.deepEqual(node_at(DEFAULT_TREE, [...keys]), stepped("page.heading", direction), keys.join(""));
+  for (const [key, position] of [["t", "top"], ["z", "center"], ["b", "bottom"]]) assert.deepEqual(node_at(DEFAULT_TREE, ["z", key!]), { native: "scroll.align", args: { position } }, `z${key}`);
+  for (const keys of [["g", "i"], [";", "f", "e"]]) assert.deepEqual(node_at(DEFAULT_TREE, keys), { native: "page.focus_input", args: {} }, keys.join(""));
+  assert.deepEqual(node_at(DEFAULT_TREE, [",", "b"]), { native: "page.blur", args: {} });
+});
+
+test("a module that does not know the page keys skips their leaves and keeps the rest of the tree", () => {
+  // The older module's validator knows no page.heading: its table lacks the id, as the unknown id here does.
+  const tree = { children: { J: { native: "tab.next", args: {} }, "]": { children: { h: { native: "page.heading_from_the_future", args: { direction: "next", steps: 1 } } } } } };
+  const checked = validate_scope_tree(tree);
+  assert.ok(checked.ok, "one unknown native does not refuse the tree");
+  assert.deepEqual(checked.ok && node_at(checked.value, ["J"]), { native: "tab.next", args: {} });
+  assert.equal(checked.ok && node_at(checked.value, ["]", "h"]), undefined);
+});
+
+test("the page keys take only the values of their arg kinds", () => {
+  assert.equal(check_module_args("page.heading", { direction: "next_block", steps: 3 }).ok, true);
+  assert.equal(check_module_args("page.heading", { direction: "sideways", steps: 1 }).ok, false);
+  assert.equal(check_module_args("page.focus_field", { direction: "last", steps: 1 }).ok, false, "the control keys step next or prev only");
+  assert.equal(check_module_args("page.focus_link", { direction: "prev", steps: 1.5 }).ok, false);
+  assert.equal(check_module_args("scroll.align", { position: "middle" }).ok, false);
+  assert.equal(check_module_args("scroll.align", { position: "bottom" }).ok, true);
 });
 
 test("the page yanks run on a locked page as their background variant, with their args and register", () => {
@@ -103,7 +134,7 @@ test("the tree names the hint keys of the user's keymap, which the module claims
 
 test("the tree names the forward keys that open the line, so the module holds the keys after them", () => {
   // `:` opens the line, and `o`, `T` and `ww` prompt for a value. The keys that run at once do not.
-  for (const keys of [":", "o", "T", "w w", "t M"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of [":", "o", "T", "w w", "t M", "s h"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
   for (const keys of ["u", "x x", "g t"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
   assert.equal(DEFAULT_TREE.line_keys?.some((keys) => keys.split(" ").includes("")), false, "a path through the capture key");
   for (const junk of ["", "a  b", 3]) assert.equal(validate_scope_tree({ children: {}, line_keys: [junk] }).ok, false, JSON.stringify(junk));
@@ -112,9 +143,9 @@ test("the tree names the forward keys that open the line, so the module holds th
   assert.equal(validate_scope_tree({ children: {} }).ok, true);
 });
 
-test("the default tree is about 4 KB and a large keymap's stays under the cap", () => {
+test("the default tree is under 9 KB and a large keymap's stays under the cap", () => {
   const size = bytes(DEFAULT_TREE);
-  assert.ok(size > 2000 && size < 6000, `default tree ${size} bytes`);
+  assert.ok(size > 2000 && size < 9000, `default tree ${size} bytes`);
   // 400 more three-key sequences, far more than a large user keymap binds.
   const letters = "abcdefghijklmnopqrst";
   const extra: KeymapConfig["normal"] = {};

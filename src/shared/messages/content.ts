@@ -174,7 +174,7 @@ export type RecordCmdline = {
 // sender is a tab whose line redeemed a ticket, and it holds only tabs and windows of the sender's own privacy (private or not).
 export type CompleteItems = {
   type: "complete_items";
-  kind: "bookmarks" | "engines" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels";
+  kind: "bookmarks" | "engines" | "windows" | "sessions" | "registers" | "folders" | "marks" | "quickmarks" | "saved_quickmarks" | "quality_levels" | "headings";
 };
 
 // From the command line page when a row key acts on tabs of the list. `tab_ids` were captured at the key press, so a later change of the list does not change them. The answer is undefined unless the sender is a tab whose line

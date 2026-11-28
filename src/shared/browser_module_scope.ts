@@ -43,7 +43,9 @@ const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolea
 export const forwards_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => !has_guard(leaf) && leaf.steps.length > 0 && leaf.steps.every((step) => step.leave !== true && runs_without_page(step, allowed));
 
 // A key that opens the command line: the bare `:`, or one with text typed in whose first word is a command of the locked-page set (`tM` types `tab.move --offset=`). The background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`).
-// Text for any other command is left out, because that command needs a page. That keeps `sh` (the heading list reads the page), `;;` and `A` on the page.
+// Text for any other command is left out, because that command needs a page. That keeps `;;` and `A` on the page.
+// `heading` is the one word that runs in the page yet opens the line here: the module lists the headings (`page_headings.read`) and the background runs the pick through it (`page_heading.go`).
+export const MODULE_LINE_WORDS: readonly string[] = ["heading"];
 export const opens_line_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => line_text_of(leaf, allowed) !== undefined;
 
 // The text a line key types, or undefined when the leaf opens no line on a locked page.
@@ -52,7 +54,8 @@ export const line_text_of = (leaf: TreeLeaf, allowed: ReadonlySet<string>): stri
   if (has_guard(leaf) || step?.invocation.id !== "cmdline.open" || step.capture !== undefined || step.register !== undefined) return undefined;
   const text = step.invocation.args?.["text"];
   if (text === undefined || text === "") return "";
-  return typeof text === "string" && allowed.has(text.split(" ", 1)[0]!) ? text : undefined;
+  const word = typeof text === "string" ? text.split(" ", 1)[0]! : undefined;
+  return word !== undefined && (allowed.has(word) || MODULE_LINE_WORDS.includes(word)) ? (text as string) : undefined;
 };
 
 // Whether the module that said this hello runs a native command. A command added after the first module version waits for its hello flag, so an older module never gets a tree with a command it does not define (it refuses the whole tree for one). With no hello yet only the first commands are on.

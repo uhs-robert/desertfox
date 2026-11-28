@@ -124,7 +124,7 @@
     const MAX_KEY_ROWS = 32;
     const MAX_SIDEBAR_KEY_TOKENS = 2;
     const MAX_INSERT_KEY_ROWS = 8;
-    const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey"];
+    const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey", "register.paste"];
     const MAX_CHROME_HINT_BINDINGS = 4;
     const MAX_CHROME_HINT_KEY_TOKENS = 4;
     const MAX_STATE_TABS = 1024;
@@ -171,6 +171,8 @@
       "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: 256 },
       "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: 8192 },
       "page_links.read": { args: { tab_id: "int", scope: "text" }, reply: true, max_bytes: 65536 },
+      "page_headings.read": { args: { tab_id: "int" }, reply: true, max_bytes: 49152 },
+      "page_heading.go": { args: { tab_id: "int", index: "int" }, reply: true, max_bytes: 256 },
     };
     const MODULE_TO_EXTENSION_KINDS = {
       page_call: { args: { tab_id: "int", document_id: "int", message: "text" }, reply: true, max_bytes: 65536, max_age_ms: 10000 },
@@ -182,6 +184,7 @@
       "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: 256 },
       "page_hints.want": { args: { start: "int", keys: "text", count: "int" }, reply: true, max_bytes: 512 },
+      "register.read": { args: { tab_id: "int", name: "text" }, reply: true, max_bytes: 10240 },
     };
     const MODULE_VERSION = "1.0.0";
     // The kill switch. The module takes keys only while it is true, so a broken extension or module can be turned off from about:config.

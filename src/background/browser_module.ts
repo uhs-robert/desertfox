@@ -93,6 +93,16 @@ export function key_rows_of(keymap: CompiledKeymap | undefined, check_args: Chec
 const sends_plain_escape = (args: Record<string, unknown>): boolean =>
   args["key"] === "Escape" && args["key_code"] === 27 && (args["target"] === undefined || args["target"] === "") && args["times"] === 1 && ["ctrl", "shift", "alt", "meta", "keypress", "focus"].every((name) => args[name] === false);
 
+// `<C-r>` is a branch whose one child is the capture of the register name, since `register.paste` takes the name as a key. The module waits for that next key itself.
+const is_register_paste_branch = (node: TreeNode): boolean => {
+  if (node.kind !== "branch") return false;
+  const only = Object.entries(node.children);
+  const [token, leaf] = only[0] ?? [];
+  if (only.length !== 1 || token !== "" || leaf?.kind !== "leaf" || leaf.steps.length !== 1 || leaf.when_focus !== undefined || leaf.when_present !== undefined || leaf.otherwise !== undefined || leaf.otherwise_page !== undefined) return false;
+  const step = leaf.steps[0]!;
+  return step.invocation.id === "register.paste" && step.capture === "name" && step.register === undefined && step.invocation.prompt === undefined;
+};
+
 // The keymap's insert mode, as the keys the module takes in a text field: one-token keys whose leaf runs one command of the protocol's fixed list. Other rows (register paste, the external editor) stay with the page code. Undefined when there is no current keymap, so the module keeps its plain Escape.
 export function insert_rows_of(keymap: CompiledKeymap | undefined, check_args: CheckCommandArgs): InsertKeyRow[] | undefined {
   const current = current_keymap(keymap);
@@ -102,6 +112,10 @@ export function insert_rows_of(keymap: CompiledKeymap | undefined, check_args: C
   if (insert_tree?.kind !== "branch") return [];
   const rows: InsertKeyRow[] = [];
   for (const [key, node] of Object.entries(insert_tree.children)) {
+    if (is_register_paste_branch(node)) {
+      rows.push({ key, id: "register.paste" });
+      continue;
+    }
     if (node.kind !== "leaf" || node.steps.length !== 1 || node.when_focus !== undefined || node.when_present !== undefined || node.otherwise !== undefined || node.otherwise_page !== undefined) continue;
     const { invocation, capture, register } = node.steps[0]!;
     if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !(INSERT_KEY_COMMAND_IDS as readonly string[]).includes(invocation.id)) continue;

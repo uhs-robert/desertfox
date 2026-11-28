@@ -35,6 +35,9 @@
 
   // src/shared/browser_module_protocol.ts
   var MAX_KEY_CHARS = 24;
+  var FIELD_DIRECTIONS = ["next", "prev"];
+  var HEADING_DIRECTIONS = ["next", "prev", "first", "last", "next_block", "prev_block"];
+  var ALIGN_POSITIONS = ["top", "center", "bottom"];
   var PANE_REGIONS = ["sidebar", "page", "split", "devtools"];
   var MAX_RESIZE_STEPS = 20;
   var PANE_DIRECTIONS = ["left", "right"];
@@ -76,6 +79,13 @@
     "mode.insert": {},
     "mode.pass_next": {},
     "mode.set": { mode: "module_mode" },
+    // The page keys. The frame script of `desertfox-page-keys.js` runs them in the tab, on every page the module takes keys on. An older module knows none of these ids and skips their leaves (`kept_tree`).
+    "page.focus_field": { direction: "field_direction", steps: "int" },
+    "page.focus_link": { direction: "field_direction", steps: "int" },
+    "page.heading": { direction: "heading_direction", steps: "int" },
+    "scroll.align": { position: "align_position" },
+    "page.focus_input": {},
+    "page.blur": {},
     // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
     [ROOT_LIST_COMMAND_ID]: {}
   };
@@ -96,6 +106,9 @@
     if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
     if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? void 0 : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
     if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? void 0 : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
+    if (kind === "field_direction") return FIELD_DIRECTIONS.some((each) => each === value) ? void 0 : `must be one of ${FIELD_DIRECTIONS.join(", ")}`;
+    if (kind === "heading_direction") return HEADING_DIRECTIONS.some((each) => each === value) ? void 0 : `must be one of ${HEADING_DIRECTIONS.join(", ")}`;
+    if (kind === "align_position") return ALIGN_POSITIONS.some((each) => each === value) ? void 0 : `must be one of ${ALIGN_POSITIONS.join(", ")}`;
     if (kind === "module_mode") return MODULE_MODES.some((mode) => mode === value) ? void 0 : `must be one of ${MODULE_MODES.join(", ")}`;
     if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? void 0 : "must be a page from the list";
     if (kind === "optional_open_where") return value === void 0 || FIREFOX_PAGE_WHERE.some((where) => where === value) ? void 0 : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
@@ -330,6 +343,7 @@
     const ignored = /* @__PURE__ */ new WeakMap();
     const inserted = /* @__PURE__ */ new WeakMap();
     const pass_armed = /* @__PURE__ */ new WeakMap();
+    const paste_armed = /* @__PURE__ */ new WeakMap();
     const MODE_ATTRIBUTE = "desertfox-module-mode";
     const MODE_DOCUMENT_ATTRIBUTE = "desertfox-module-document";
     const holds = /* @__PURE__ */ new Map();
@@ -337,6 +351,7 @@
     const is_ignored = (browser2) => is_set(ignored, browser2);
     const is_inserted = (browser2) => is_set(inserted, browser2);
     const is_pass_armed = (browser2) => is_set(pass_armed, browser2);
+    const is_paste_armed = (browser2) => is_set(paste_armed, browser2);
     const marked_browsers = /* @__PURE__ */ new Set();
     function show_mode(browser2) {
       const shown = is_inserted(browser2) ? "insert" : is_ignored(browser2) ? "ignore" : is_pass_armed(browser2) ? "pass" : void 0;
@@ -473,6 +488,26 @@
       return true;
     }
     const insert_row_of = (context, token) => context.insert_keys === void 0 ? token === "<Escape>" ? "mode.escape" : void 0 : context.insert_keys.get(token);
+    const REGISTER_NAME = /^[A-Za-z"+_/]$/;
+    const MAX_REGISTER_CHARS = 2e3;
+    const PASTE_MESSAGE = "desertfox-browser-module:paste";
+    function paste_register(context, token) {
+      const { window: win, browser: browser2 } = context;
+      paste_armed.delete(browser2);
+      if (!REGISTER_NAME.test(token)) return true;
+      const inner = browser2.innerWindowID;
+      const tab_id = selected_tab_id(win);
+      const sent = core2.send("register.read", { tab_id, name: token }, (reply) => {
+        if (!reply.ok || typeof reply.value !== "string" || [...reply.value].length > MAX_REGISTER_CHARS) return;
+        try {
+          if (browser2.innerWindowID !== inner || selected_tab_id(win) !== tab_id) return;
+          browser2.messageManager.sendAsyncMessage(PASTE_MESSAGE, { inner, text: reply.value });
+        } catch (_) {
+        }
+      });
+      if (!sent.ok) core2.log_once(`a register was not asked for: ${sent.problem}`);
+      return true;
+    }
     function reset_walk(win) {
       walks.delete(win);
       end_hold(win);
@@ -556,6 +591,11 @@
       if (is_ignored(browser2)) {
         if (token !== IGNORE_TOGGLE_KEY) return false;
         set_flag(ignored, browser2, false);
+        return true;
+      }
+      if (is_paste_armed(browser2)) return paste_register(context, token);
+      if (insert_row_of(context, token) === "register.paste") {
+        paste_armed.set(browser2, browser2.innerWindowID);
         return true;
       }
       if (is_inserted(browser2)) return insert_key(context, token);

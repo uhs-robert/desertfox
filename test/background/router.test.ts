@@ -690,6 +690,25 @@ test("a lost reply is done when the caller says the tab navigated, and refuses w
   }
 });
 
+test("a content command that finds no page runs through the module's stand-in when it has one, and refuses when it has none or the stand-in says nothing", async () => {
+  const commands = { "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content" } } as const;
+  const gone = { send_to_tab: async () => { throw new Error("no content script"); } };
+  const asked: [string, number][] = [];
+  const served = make_fake(commands, { ...gone, run_without_page: async (id, _args, tab_id) => (asked.push([id, tab_id]), { ok: true }) });
+  assert.equal((await create_router(served.deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1 })).ok, true);
+  assert.deepEqual(asked, [["scroll.lines", 1]]);
+  const refused = make_fake(commands, { ...gone, run_without_page: async () => ({ ok: false, message: "The headings of this page cannot be read" }) });
+  const refusal = await create_router(refused.deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1 });
+  assert.deepEqual(refusal.ok === false && refusal.refusal.message, "The headings of this page cannot be read");
+  for (const stand_in of [undefined, async () => undefined]) {
+    const none = make_fake(commands, { ...gone, ...(stand_in && { run_without_page: stand_in }) });
+    const response = await create_router(none.deps).run({ invocations: [{ id: "scroll.lines" }], mode: "normal", sender_tab_id: 1 });
+    assert.deepEqual(response.ok === false && response.refusal.message, "Scroll needs a page DesertFox runs on");
+  }
+  const repeated = make_fake({ "scroll.lines": { label: "Scroll", intent: "x", runs_in: "content", count: "repeat" } }, { ...gone, run_without_page: async () => ({ ok: true }) });
+  assert.equal((await create_router(repeated.deps).run({ invocations: [{ id: "scroll.lines", count: 3 }], mode: "normal", sender_tab_id: 1 })).ok, false, "a counted command is not served, so it never repeats through the module");
+});
+
 test("a content step with no page to run on names its step only during a replay", async () => {
   const cases: [string, number | undefined, string][] = [
     ["a typed key", undefined, "Scroll needs a page DesertFox runs on"],
