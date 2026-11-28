@@ -129,6 +129,15 @@ export async function run_cases({ config_copy, load_config_dir, setup, on_teardo
     await with_state("fol_field", poll_until("typing in the focus_on_load field", async () => (await in_active_tab(`document.getElementById("last").value`)) === "abc"));
   });
 
+  await run_case("a focus_on_load field the page focuses itself inside the window keeps the focus and enters insert mode", async () => {
+    // The checkbox holds the focus at the install, so the window gives the target no focus of its own and the page's focus on it is the first.
+    const installed_at = await open_without_keys("controls", "fol_boxfocus");
+    const held = await focus_field("last");
+    expect_in_window(installed_at, "the page focus");
+    expect(held === "last", `the page focus lost the focus_on_load field: ${await page_state("fol_boxfocus")}`);
+    await with_state("fol_boxfocus", poll_until("insert mode on the self-focused focus_on_load field", async () => badge_of("fol_boxfocus") === "INSERT"));
+  });
+
   await run_case("a click on a field before the keymap reply keeps the focus there, and typing reaches it", async () => {
     // The same page lays out the same, so the field's place is read on a first copy, while the background still answers.
     await open_page("controls", "blur_pre_layout", { new_tab: true });

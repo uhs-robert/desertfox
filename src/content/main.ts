@@ -328,6 +328,8 @@ const blur_load_focus = (target: EventTarget | null) => {
   // A page that refocuses inside its blur handler fires this focusin before the blur's focusout, so the mode follows the focus once both have run.
   if (blurs_left < 1) return end_blur(), setTimeout(sync_mode_to_focus), false;
   const wanted = !blur_by_switch && load_focus_target();
+  // The page focused the target itself: focus() would fire no focusin, so no blur is spent and the mode follows the focus as for any field.
+  if (wanted === target) return (load_focus_given = wanted as Element), false;
   // Counted before the blur: a page can refocus inside its own blur handler, and that focus must find the count already lowered.
   if (target !== document.body) blurs_left--;
   wanted ? (load_focus_given = wanted).focus() : (target as HTMLElement).blur();
