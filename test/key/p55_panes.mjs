@@ -1,4 +1,4 @@
-// The pane keys on the browser module (desertfox-panes.js): En opens a split with a new tab, EN splits with the next tab, Eu unsplits, E> and E< resize the left pane, E= makes the panes equal, Eh and El move between panes, E<Space> holds the group, Ej and ES focus DevTools and the sidebar, and Ex closes both tabs.
+// The pane keys on the browser module (desertfox-panes.js): En opens a split with a new tab, EN splits with the next tab, Eu unsplits, E> and E< resize the left pane, E= makes the panes equal, Eh and El move between panes, E<Space> holds the group, ED and ES focus DevTools and the sidebar, and Ex closes both tabs.
 // Each key runs in the extension, which sends the request to the module, so every case also crosses the from-extension and from-module lists in a real Firefox.
 import { module_steps } from "./browser_module_steps.mjs";
 
@@ -111,7 +111,7 @@ export async function run_cases(context) {
     await poll_until("the left pane to be selected", async () => (await tab_of("p55_a"))?.selected === true);
   });
 
-  await run_case("Ej puts the focus in the docked toolbox", async () => {
+  await run_case("ED puts the focus in the docked toolbox", async () => {
     await select_page("p55_a");
     on_teardown(() => chrome(`(async () => { ${DEVTOOLS} for (const tab of ${W}.gBrowser.tabs) await gDevTools.closeToolboxForTab(tab); })()`));
     // The first toolbox takes longer than one debugger call may run, so the call starts it and the case waits for it.
@@ -121,8 +121,8 @@ export async function run_cases(context) {
     await chrome(`(async () => ${W}.gBrowser.selectedBrowser.focus())()`);
     await settle_focus();
     const focused = () => chrome(`(async () => String(${W}.document.commandDispatcher.focusedWindow?.location?.href ?? ""))()`);
-    expect(!/devtools/.test(await focused()), `the focus is in DevTools before Ej: ${await focused()}`);
-    await press_keys("Ej");
+    expect(!/devtools/.test(await focused()), `the focus is in DevTools before ED: ${await focused()}`);
+    await press_keys("ED");
     await poll_until("the focus to move into DevTools", async () => /devtools/.test(await focused()));
   });
 

@@ -431,13 +431,12 @@ test("the E group is named Pane and binds the split commands that gp and gP also
   const normal = DEFAULT_KEYMAP.normal! as Record<string, { id: string; args?: Record<string, unknown> }>;
   assert.deepEqual([normal.Ep!.id, normal.Es!.id], ["tab.split_other", "tab.split_swap"]);
   const keys = Object.keys(normal).filter((key) => key.startsWith("E"));
-  assert.deepEqual(keys.sort(), ["ED", "EN", "ES", "E<", "E>", "E=", "Eh", "Ej", "Ek", "El", "Ep", "Es", "Eu", "Ex", "En"].sort());
+  assert.deepEqual(keys.sort(), ["ED", "EN", "ES", "E<", "E>", "E=", "Eh", "Ek", "El", "Ep", "Es", "Eu", "Ex", "En"].sort());
   const bound = (key: string) => `${normal[key]!.id} ${JSON.stringify(normal[key]!.args ?? {})}`;
   assert.equal(bound("En"), 'pane.split {"with":"new"}');
   assert.equal(bound("EN"), 'pane.split {"with":"next"}');
   assert.equal(bound("E<"), 'pane.resize {"direction":"narrow"}');
   assert.equal(bound("E>"), 'pane.resize {"direction":"widen"}');
-  assert.equal(bound("Ej"), 'pane.focus {"region":"devtools"}');
   assert.equal(bound("Ek"), 'pane.focus {"region":"page"}');
   assert.equal(bound("ES"), 'pane.focus {"region":"sidebar"}');
   assert.equal(bound("E="), "pane.equalize {}");
@@ -483,4 +482,13 @@ test("the default keymap gives the browser module one sidebar row per sidebar ke
     "l sidebar.expand",
     "/ sidebar.filter",
   ].sort());
+});
+
+test("which-key reads Focus left and Focus right for Eh and El, with the order in the intent", () => {
+  const { compiled } = compile(DEFAULT_KEYMAP);
+  const rows = panel_after_prefix(compiled.modes.normal, ["E"], (id) => registry.get(id) as never).rows;
+  assert.equal(rows.find((row) => row.keys === "h")?.command, "Focus left");
+  assert.equal(rows.find((row) => row.keys === "l")?.command, "Focus right");
+  assert.equal(rows.find((row) => row.keys === "j"), undefined);
+  assert.match(rows.find((row) => row.keys === "h")!.description, /^Focus the other pane, then DevTools, then the sidebar there\./);
 });

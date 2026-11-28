@@ -85,7 +85,7 @@ define("pane.equalize", {
 
 define("pane.focus_side", {
   label: "Focus left or right",
-  intent: "Focus the pane, DevTools or sidebar on that side. Needs the browser module.",
+  intent: "Focus the other pane, then DevTools, then the sidebar there. Needs the browser module.",
   params: [{ name: "direction", type: "enum", values: PANE_DIRECTIONS, description: { left: "Focus what is on the left.", right: "Focus what is on the right." } }],
   bridge: false,
   runs_in: "background",
