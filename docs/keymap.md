@@ -244,8 +244,8 @@ bound: 558 (normal 284, media 26, item 26, item_visual 18, tab_visual 20, grab 1
 | `,,` | `anything` (prompts) | Find anything | yes |
 | `,b` | `page.blur` | Blur |  |
 | `,e` | `pane.focus sidebar` | Focus the sidebar | yes |
-| `,?` | `help.whichkey` | Which key |  |
-| `<A-?>` | `help.whichkey` | Show the keys |  |
+| `,?` | `help.whichkey` | Which key | yes |
+| `<A-?>` | `help.whichkey` | Show the keys | yes |
 | `,"` | `registers` (prompts) | List registers | yes |
 | `,fs` | `firefox settings` | Firefox settings | yes |
 | `,fa` | `firefox addons` | Firefox add-ons | yes |

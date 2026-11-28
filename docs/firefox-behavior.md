@@ -593,6 +593,13 @@ Facts from the built feature (Firefox 161, key piece `test/key/p54_browser_modul
 - Item mode (`I`) finds no list on these two pages. That is the item finder's rule, not a fault of the sandbox: it gives no list under much prose and skips narrow items (see `src/content/item/finder.ts`). The PDF viewer's sidebar starts closed and its text layer holds no links. The key piece has no item case on these pages.
 - The principal results above hold for the built feature: the page code runs under `[page, extension]` on the PDF viewer and Reader View, and a page script sees none of `desertfox_host`, the transport or `browser` there.
 
+view-source: and the JSON viewer (Firefox 161, key piece `test/key/p54_browser_module_page_kinds.mjs`):
+- view-source: of an http page runs under a content principal whose spec is the view-source: address and whose origin is the source page's, with an empty `addonId`. view-source: of a file: page has the whole view-source:file: address as its origin.
+- view-source: of another extension's page also has an empty `addonId` (remote type `extension`), view-source of about:preferences runs under the system principal in the parent process, and view-source of a data: page under a null principal.
+- The JSON viewer runs under `resource://devtools/client/jsonview/` (origin `resource://devtools`, empty `addonId`) in the web process of the response's site, for http and file: JSON. A moz-extension JSON file does not open in the viewer.
+- `yy` copies the tab's address on the JSON viewer and on view-source: of a file page. view-source: of an http page is no secure context, even on 127.0.0.1 where the http page itself is one, so the page code's clipboard write fails there and `yy` says it could not copy, as on any plain http page.
+- view-source: turns each address in the source into a link with a `view-source:` address.
+
 Not measured: the real `storage.session` channel, a dark theme, scanned, large or form PDFs, real Reader View articles, and an IME.
 
 ## Processes of Firefox's own pages (locked-page-hints)

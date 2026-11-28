@@ -91,7 +91,7 @@ class FakeElement {
   }
 }
 
-type Core = { module_pending(win: unknown): unknown; shut_down(): void; watch_pending(fn: (win: unknown) => void): () => void };
+type Core = { show_root_list(win: unknown): void; hide_root_list(win: unknown): void; module_pending(win: unknown): unknown; shut_down(): void; watch_pending(fn: (win: unknown) => void): () => void };
 
 function make_chrome_window(firefox: ReturnType<typeof create_firefox>, { fail_progress = false, dark = true } = {}) {
   const window = firefox.make_window();
@@ -333,6 +333,133 @@ test("a skipped prefix waits for no delay of its own, as on a page", () => {
   type("o");
   window.run_timers();
   assert.deepEqual(shown()?.rows, rows_of("g o"));
+});
+
+const ROOT_KEYS = ["<A-?>", "?"];
+// The module's own tree holds `?` and `<A-?>` as help.whichkey leaves when the keymap binds them there.
+const bound_tree = (tree: ScopeTree): ScopeTree => ({ ...tree, children: { ...tree.children, "?": { native: "help.whichkey", args: {} } } });
+
+test("help.whichkey shows the root list at once, and the next key, Escape, a tab switch or a load hides it", async () => {
+  for (const key of ROOT_KEYS) {
+    for (const ending of ["j", "Escape", "tab", "load"]) {
+      const { press, shown, window, on_tab, second, load_document, firefox } = started({ written: state({ tree: bound_tree(TREE) }) });
+      press(key, key === "<A-?>" ? { key: "?", altKey: true } : {});
+      assert.deepEqual(shown(), { title: "keys", rows: TABLE.root!.rows.map((row) => `${row.keys}➜${row.command}`), footer: "ESCclose", frame: "frame square" }, key);
+      window.run_timers();
+      // The next key is another event, so the opening key's own notice is over.
+      await Promise.resolve();
+      assert.ok(shown(), `${key}: it stays, the walk has no timeout`);
+      if (ending === "tab") on_tab(second);
+      else if (ending === "load") load_document();
+      else press(ending);
+      assert.equal(shown(), undefined, `${key} then ${ending}`);
+      assert.deepEqual(firefox.errors, []);
+    }
+  }
+});
+
+test("help.whichkey draws nothing without a root panel or when the module may not act", () => {
+  const { press, shown } = started({ written: state({ tree: bound_tree(TREE), which_key: { ...TABLE, root: undefined } }) });
+  press("?");
+  assert.equal(shown(), undefined);
+  const off = started({ written: state({ tree: bound_tree(TREE), enabled: false }) });
+  off.press("?");
+  assert.equal(off.shown(), undefined);
+});
+
+test("the root list draws in the window of the key only, and a key closes only that window's list", async () => {
+  const { firefox, press, shown } = started({ written: state({ tree: bound_tree(TREE) }) });
+  const other = make_chrome_window(firefox);
+  press("?");
+  assert.ok(shown());
+  assert.equal(other.shown(), undefined, "the other window draws nothing");
+  other.press("?");
+  assert.ok(other.shown());
+  await Promise.resolve();
+  press("j");
+  assert.equal(shown(), undefined);
+  assert.ok(other.shown(), "a key in one window leaves the other's list");
+});
+
+test("a prefix panel that is up gives way to the root list from , ? and the list stays after the keys' own notices", async () => {
+  const { type, shown, window, firefox } = started();
+  type(",");
+  window.run_timers();
+  assert.equal(shown()?.title, "+DesertFox");
+  type("?");
+  assert.equal(shown()?.title, "keys");
+  window.run_timers();
+  await Promise.resolve();
+  assert.deepEqual(shown()?.rows, TABLE.root!.rows.map((row) => `${row.keys}➜${row.command}`), "the delay of the , panel drew nothing over the list");
+  type("j");
+  assert.equal(shown(), undefined);
+  assert.deepEqual(firefox.errors, []);
+});
+
+test("show_root_list and hide_root_list open and close the list for a caller outside the key walk, and the next keydown closes it", async () => {
+  const { core, window, shown, press, firefox } = started();
+  const win = vm.runInContext("globalThis", window.win.context!);
+  core.show_root_list(win);
+  assert.equal(shown()?.title, "keys");
+  await Promise.resolve();
+  assert.ok(shown(), "the call's own turn does not close it");
+  core.hide_root_list(win);
+  assert.equal(shown(), undefined);
+  core.show_root_list(win);
+  await Promise.resolve();
+  press("Shift");
+  assert.equal(shown(), undefined, "a keydown the key walk never counts still closes it");
+  press("Shift");
+  core.hide_root_list(win);
+  assert.deepEqual(firefox.errors, []);
+});
+
+test("two shows in one turn leave one closing listener, and a key closes the list and removes it", async () => {
+  const { core, window, shown, press, firefox } = started();
+  const win = vm.runInContext("globalThis", window.win.context!);
+  const base = window.listener_count("keydown");
+  core.show_root_list(win);
+  core.show_root_list(win);
+  await Promise.resolve();
+  assert.equal(window.listener_count("keydown"), base + 1);
+  press("Shift");
+  assert.equal(shown(), undefined);
+  assert.equal(window.listener_count("keydown"), base, "the listener removed itself");
+  core.show_root_list(win);
+  await Promise.resolve();
+  assert.ok(shown(), "a later show still works");
+  assert.deepEqual(firefox.errors, []);
+});
+
+test("hide_root_list leaves a prefix panel alone", () => {
+  const { core, window, shown, type } = started();
+  const win = vm.runInContext("globalThis", window.win.context!);
+  type(",");
+  window.run_timers();
+  assert.equal(shown()?.title, "+DesertFox");
+  core.hide_root_list(win);
+  assert.equal(shown()?.title, "+DesertFox");
+});
+
+test("a start that fails after the list is wired leaves the hello without which_key_root", () => {
+  const { firefox } = started({ fail_progress: true });
+  assert.notEqual((firefox.hello() as { which_key_root?: boolean } | undefined)?.which_key_root, true);
+});
+
+test("the module says which_key_root in its hello, so the extension sends the leaf only to a module that shows the list", () => {
+  const { firefox } = started();
+  assert.equal((firefox.hello() as { which_key_root?: boolean } | undefined)?.which_key_root, true);
+});
+
+test("a hostile root panel leaves the table out, so a prefix draws nothing either", () => {
+  for (const root of [{ title: ["keys"], rows: [] }, { title: ["keys"], rows: [{ keys: "a", command: "x‮y" }] }, "x"]) {
+    const { press, type, shown, window, firefox } = started({ written: state({ tree: bound_tree(TREE), which_key: { ...TABLE, root } }) });
+    press("?");
+    type("g");
+    window.run_timers();
+    assert.equal(shown(), undefined);
+    assert.deepEqual(firefox.errors, []);
+  }
 });
 
 test("a hostile table draws nothing, and text never becomes markup", () => {
