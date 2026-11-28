@@ -9,6 +9,7 @@ import type { GroupDeps, TabActionDeps } from "../background/tab_actions.ts";
 import { add_many_bookmarks } from "./bookmark.ts";
 import { browser_copy_tabs_deps, copy_listed_tabs } from "./copy_tabs.ts";
 import { nearest_tab } from "./tab.ts";
+import { tab_visual } from "./tab_visual.ts";
 import { attach_many_tabs } from "./window.ts";
 
 // The most tabs `close` takes at once. A bigger range is refused until a way to confirm exists.
@@ -95,6 +96,7 @@ const by_index = (a: ActTab, b: ActTab) => a.index - b.index;
 const browser_tab_act_deps: TabActDeps = {
   ...browser_tab_action_deps,
   selected_tabs: async (window_id) => {
+    await tab_visual.idle();
     const selected = (await browser.tabs.query({ windowId: window_id, highlighted: true })).map(to_act_tab);
     return (selected.length > 0 ? selected : (await browser.tabs.query({ windowId: window_id, active: true })).map(to_act_tab)).toSorted(by_index);
   },

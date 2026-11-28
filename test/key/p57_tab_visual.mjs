@@ -11,6 +11,11 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   const highlighted_ids = async () => (await strip()).filter((tab) => tab.highlighted).map((tab) => tab.id);
   const active_id = async () => (await strip()).find((tab) => tab.active).id;
   const expect_highlighted = (wanted, what) => poll_until(what, async () => JSON.stringify(await highlighted_ids()) === JSON.stringify(wanted));
+  // Presses a motion key and waits until the selection holds that many tabs, so an action key never beats the move.
+  const grow = async (keys, size) => {
+    await press_keys(keys);
+    await poll_until(`a range of ${size} tabs`, async () => (await highlighted_ids()).length === size);
+  };
   const activate = async (id) => {
     await background(`browser.tabs.update(${id}, { active: true }).then(() => 0)`);
     await poll_until(`tab ${id} active`, async () => (await active_id()) === id);
@@ -97,7 +102,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     const anchor = ids.at(-4);
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("p");
     await poll_until("both tabs pinned", async () => (await strip()).filter((tab) => tab.pinned).length === 2);
     await expect_badge("NORMAL");
@@ -105,7 +110,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     expect((await active_id()) === anchor, "the active tab changed");
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("p");
     await poll_until("the pins gone", async () => (await strip()).filter((tab) => tab.pinned).length === 0);
     await expect_badge("NORMAL");
@@ -114,12 +119,12 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
   await run_case("m mutes the range", async () => {
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("m");
     await poll_until("both tabs muted", async () => (await strip()).filter((tab) => tab.muted).length === 2);
     await expect_badge("NORMAL");
     await press_keys("gv");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("m");
     await poll_until("the mutes gone", async () => (await strip()).filter((tab) => tab.muted).length === 0);
   });
@@ -129,7 +134,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     for (const id of wanted) await background(`browser.tabs.executeScript(${id}, { code: "document.documentElement.dataset.p57 = 'old'" }).then(() => 0)`);
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("r");
     for (const id of wanted) await poll_until(`tab ${id} reloaded`, async () => (await background(`browser.tabs.executeScript(${id}, { code: "document.documentElement.dataset.p57 ?? 'none'" }).then((result) => result[0])`)) === "none");
     await settle_focus();
@@ -141,7 +146,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await activate(anchor);
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("J");
     await poll_until("the next tab active", async () => (await active_id()) === ids.at(-3));
     await sleep(500);
@@ -154,7 +159,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await activate(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("j");
+    await grow("j", 2);
     await press_keys("ga");
     await poll_until("both tabs in one group", async () => {
       const grouped = (await strip()).filter((tab) => tab.group !== -1);
@@ -168,7 +173,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await activate(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("jj");
+    await grow("jj", 3);
     await background(`browser.tabs.update(${ids[0]}, { active: true }).then(() => 0)`);
     await poll_until("the first tab active", async () => (await active_id()) === ids[0]);
     await expect_highlighted([ids[0]], "the range gone after the switch");
@@ -181,8 +186,8 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
     await in_active_tab(`window.__p57_keys = []; addEventListener("keydown", (event) => window.__p57_keys.push(event.key)); 0`);
-    await press_keys("z");
-    await poll_until("the page saw z", async () => (await in_active_tab(`window.__p57_keys.includes("z")`)) === true);
+    await press_keys("Q");
+    await poll_until("the page saw Q", async () => (await in_active_tab(`window.__p57_keys.includes("Q")`)) === true);
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
   });
@@ -191,8 +196,7 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await activate(ids.at(-4));
     await press_keys("gv");
     await expect_badge("TAB VISUAL");
-    await press_keys("jj");
-    await expect_highlighted([ids.at(-4), ids.at(-3), ids.at(-2)], "three tabs selected");
+    await grow("jj", 3);
     await press_keys("d");
     await poll_until("the range closed", async () => (await strip()).length === ids.length - 3);
     const left = (await strip()).map((tab) => tab.id);

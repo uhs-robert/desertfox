@@ -83,6 +83,8 @@ export function make_tab_visual_handler(deps: TabVisualDeps) {
   return {
     run: (window_id: number, args: { action: VisualAction; count?: number }): Promise<void> =>
       in_turn(() => (args.action === "start" ? start(window_id) : args.action === "end" ? end(window_id) : move(window_id, args.action, args.count ?? 1))),
+    // Settles when every move queued before this call has set the selection, so an action key typed right after a motion sees its range.
+    idle: (): Promise<void> => in_turn(async () => {}),
     forget_window: (window_id: number): Promise<void> => in_turn(() => deps.remove_record(window_id)),
   };
 }
