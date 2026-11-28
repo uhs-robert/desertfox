@@ -41,11 +41,17 @@ const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolea
 };
 export const forwards_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => !has_guard(leaf) && leaf.steps.length > 0 && leaf.steps.every((step) => step.leave !== true && runs_without_page(step, allowed));
 
-// The bare command line key (`:`): the background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`). A line with typed text is left out, because its commands mostly need a page.
-export const opens_line_leaf = (leaf: TreeLeaf): boolean => {
+// A key that opens the command line: the bare `:`, or one with text typed in whose first word is a command of the locked-page set (`tM` types `tab.move --offset=`). The background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`).
+// Text for any other command is left out, because that command needs a page. That keeps `sh` (the heading list reads the page), `;;` and `A` on the page.
+export const opens_line_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => line_text_of(leaf, allowed) !== undefined;
+
+// The text a line key types, or undefined when the leaf opens no line on a locked page.
+export const line_text_of = (leaf: TreeLeaf, allowed: ReadonlySet<string>): string | undefined => {
   const step = leaf.steps.length === 1 ? leaf.steps[0] : undefined;
-  const text = step?.invocation.args?.["text"];
-  return !has_guard(leaf) && step?.invocation.id === "cmdline.open" && step.capture === undefined && step.register === undefined && (text === undefined || text === "");
+  if (has_guard(leaf) || step?.invocation.id !== "cmdline.open" || step.capture !== undefined || step.register !== undefined) return undefined;
+  const text = step.invocation.args?.["text"];
+  if (text === undefined || text === "") return "";
+  return typeof text === "string" && allowed.has(text.split(" ", 1)[0]!) ? text : undefined;
 };
 
 // A leaf of one step that the module runs itself (the protocol's command list), with its args filled and checked by the registry.
@@ -62,8 +68,8 @@ export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): Nativ
 // A leaf that starts hints, which run only in DesertFox's page code.
 export const is_hint_leaf = (leaf: TreeLeaf): boolean => leaf.steps.some((step) => step.invocation.id === "hint.run");
 
-// A forward leaf after which the line opens: the bare `:`, or a key whose command prompts for a value (`o`).
-const prompts_or_opens_line = (leaf: TreeLeaf): boolean => opens_line_leaf(leaf) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
+// A forward leaf after which the line opens: a line key (`:`, `tM`), or a key whose command prompts for a value (`o`).
+const prompts_or_opens_line = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => opens_line_leaf(leaf, allowed) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
 
 type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[] };
 
@@ -72,12 +78,12 @@ function prune_node(node: TreeNode, depth: number, path: readonly string[], prun
     node = without_list_guard(node);
     const native = native_leaf(node, pruning.check_args);
     if (native) return native;
-    if (!forwards_leaf(node, pruning.allowed) && !opens_line_leaf(node)) {
+    if (!forwards_leaf(node, pruning.allowed) && !opens_line_leaf(node, pruning.allowed)) {
       if (is_hint_leaf(node) && !path.includes("")) pruning.hint_keys.push(path.join(" "));
       return undefined;
     }
     // A path through a capture key (the empty token) names no keys the module could match it by.
-    if (prompts_or_opens_line(node) && !path.includes("")) pruning.line_keys.push(path.join(" "));
+    if (prompts_or_opens_line(node, pruning.allowed) && !path.includes("")) pruning.line_keys.push(path.join(" "));
     return "forward";
   }
   if (depth >= MAX_SEQUENCE_KEYS) return undefined;
@@ -139,7 +145,7 @@ export function resolve_run(keymap: CompiledKeymap | undefined, keys_text: strin
     if (result.kind_ === "pending" && !last && result.count === undefined && result.register_keys_ === undefined && result.held_ === undefined) continue;
     if (result.kind_ !== "match" || !last || result.count !== undefined || result.held_ !== undefined || result.keys?.length !== keys.length) return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
     const leaf = without_list_guard(result.leaf);
-    if (!forwards_leaf(leaf, allowed) && !opens_line_leaf(leaf)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(leaf) && { hint: true as const }) };
+    if (!forwards_leaf(leaf, allowed) && !opens_line_leaf(leaf, allowed)) return { ok: false, problem: `${label} needs a page DesertFox runs on`, shown: true, ...(is_hint_leaf(leaf) && { hint: true as const }) };
     return { ok: true, leaf, count: count === 0 ? undefined : count };
   }
   return { ok: false, problem: `${label} is not a key DesertFox runs here`, shown: true };
