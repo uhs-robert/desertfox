@@ -230,7 +230,7 @@ export async function run_cases(context) {
     await poll_until("the DevTools window to close and lose the module", async () => (await module_status()).windows === windows_before, { timeout_ms: 10000 });
   });
 
-  await run_case("a toolbox opened as a tab (about:debugging Inspect) keeps its keys: J and x x change no tab, and j and k move the Inspector tree", async () => {
+  await run_case("a toolbox opened as a tab (about:debugging Inspect) keeps its keys: J switches one tab, x x closes nothing, and j and k move the Inspector tree", async () => {
     await home("bm_dt_tab_toolbox");
     await open_tab(TREE_PAGE);
     const target_id = await chrome(`(async () => ${W}.gBrowser.selectedBrowser.browserId)()`);
