@@ -160,27 +160,29 @@ export async function run_cases(context) {
   await run_case("with vertical tabs gB labels each tab and the tab group's label, a tab label selects the tab and the group label folds the group", async () => {
     await home("ch_vertical");
     await chrome(`(async () => { Services.prefs.setBoolPref("sidebar.verticalTabs", true); })()`);
-    on_teardown(() => chrome(`(async () => Services.prefs.clearUserPref("sidebar.verticalTabs"))()`));
-    await poll_until("the strip to turn vertical", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === true)()`));
-    await context.open_page("page", "ch_vertical_two", { new_tab: true });
-    await make_group();
-    let labels = await start_hints("vertical tabs");
-    const tab_count = await chrome(`(async () => ${W}.gBrowser.tabs.length)()`);
-    for (let index = 0; index < tab_count; index++) expect(labels.some((label) => label.target === "tab:" + index), `no label on tab ${index}: ${labels.map((label) => label.target).join(", ")}`);
-    expect(labels.some((label) => label.target === "group-label"), "no label on the tab group label");
-    expect(labels.every((label) => label.styled), "a label lacks the hint sheet's style");
-    await take_shot("/tmp/desertfox-chrome-hints-vertical.png");
-    await press_keys(...label_of(labels, "group-label").split(""));
-    await poll_until("the group label pick to fold the group", group_collapsed, { timeout_ms: 5000 });
-    await expect_no_layer("the group label pick");
-    // The folded group keeps only the selected tab showing, so the last tab is selected and the first one is picked.
-    await chrome(`(async () => { ${W}.gBrowser.selectedTab = ${W}.gBrowser.tabs.at(-1); })()`);
-    labels = await start_hints("vertical tabs, second start");
-    await press_keys(...label_of(labels, "tab:0").split(""));
-    await poll_until("the tab pick to select the first tab", () => chrome(`(async () => ${W}.gBrowser.tabContainer.selectedIndex === 0)()`));
-    // Later cases expect the horizontal strip.
-    await chrome(`(async () => Services.prefs.clearUserPref("sidebar.verticalTabs"))()`);
-    await poll_until("the strip to turn horizontal", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === false)()`));
+    // Cleared here and not in a teardown, which runs at the end of the piece, so a failing case does not leave the strip vertical for the cases after it.
+    try {
+      await poll_until("the strip to turn vertical", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === true)()`));
+      await context.open_page("page", "ch_vertical_two", { new_tab: true });
+      await make_group();
+      let labels = await start_hints("vertical tabs");
+      const tab_count = await chrome(`(async () => ${W}.gBrowser.tabs.length)()`);
+      for (let index = 0; index < tab_count; index++) expect(labels.some((label) => label.target === "tab:" + index), `no label on tab ${index}: ${labels.map((label) => label.target).join(", ")}`);
+      expect(labels.some((label) => label.target === "group-label"), "no label on the tab group label");
+      expect(labels.every((label) => label.styled), "a label lacks the hint sheet's style");
+      await take_shot("/tmp/desertfox-chrome-hints-vertical.png");
+      await press_keys(...label_of(labels, "group-label").split(""));
+      await poll_until("the group label pick to fold the group", group_collapsed, { timeout_ms: 5000 });
+      await expect_no_layer("the group label pick");
+      // The folded group keeps only the selected tab showing, so the last tab is selected and the first one is picked.
+      await chrome(`(async () => { ${W}.gBrowser.selectedTab = ${W}.gBrowser.tabs.at(-1); })()`);
+      labels = await start_hints("vertical tabs, second start");
+      await press_keys(...label_of(labels, "tab:0").split(""));
+      await poll_until("the tab pick to select the first tab", () => chrome(`(async () => ${W}.gBrowser.tabContainer.selectedIndex === 0)()`));
+    } finally {
+      await chrome(`(async () => Services.prefs.clearUserPref("sidebar.verticalTabs"))()`);
+      await poll_until("the strip to turn horizontal", () => chrome(`(async () => ${W}.gBrowser.tabContainer.verticalMode === false)()`));
+    }
   });
 
   await run_case("with the app menu open, gB labels its rows inside the panel, and a pick runs the row", async () => {
