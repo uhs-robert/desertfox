@@ -22,7 +22,7 @@
 //   on_hello(fn)               In the sandbox: run `fn` each time the module says a new hello to a DesertFox (not a rewrite for a flag), before that DesertFox can push anything, so a feature drops what an earlier DesertFox pushed.
 //   watch_session(keys, fn)    In the sandbox: fn(key, value) on each change of one of `keys` in DesertFox's storage.session, through the core's one storage listener. `value` is undefined once the key is removed.
 //   log_once(text)             One line in the browser console per distinct text.
-//   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
+//   set_hello_flag(name, on)   In the sandbox: say in the hello that a feature runs, for a name on HELLO_FLAGS or HELLO_FEATURES below. The core writes the hello, so it keeps one writer. Returns false for another name or a value that is not a boolean.
 //   take_keys(taker)           In the sandbox: the one feature that matches keys itself (desertfox-commands.js). taker = { key(context), field_key(context)?, reset(win?), pending(win), take_held(win, end)?, ignores(browser)? }. ignores says the tab passes every key to the page, so a taker with no field_key leaves Escape alone there.
 //                              key gets every key the module may take on a page, after the guards, while no text field has the focus: context = { window, browser, tab, event, tree, row_runs, in_field, insert_keys }, `tree` the state's raw tree or undefined,
 //                              `row_runs` whether a single-key row would run the key, `in_field` false here, `insert_keys` the state's insert table as a Map of key token to command id, or undefined. It returns true when it took the key (the core then stops it), false to leave it to the page, undefined to let the rows decide.
@@ -44,6 +44,7 @@
 //   normal_once_keys(win)      In the sandbox: the chords bound to the one-shot normal prefix, or [] whenever may_act(win) is false.
 //   focus_keys(win)            In the sandbox: the tree's key paths whose command moves the focus on purpose, or [] whenever may_act(win) is false.
 //   chrome_hint_keys(win)      In the sandbox: the key token lists of the `hint.browser` bindings, or [] whenever may_act(win) is false.
+//   hint_mode_keys(win)        In the sandbox: a Map of the hint mode keys a session acts on itself, key token to "escape" or "whichkey". Undefined when the extension does not run hint mode keys or may_act(win) is false.
 //   token_of(event)            In the sandbox: the key token of a key event, as a key row names it, or null for a modifier alone.
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
@@ -133,6 +134,8 @@
     const INSERT_KEY_COMMAND_IDS = ["mode.escape", "page.send_key", "help.whichkey"];
     const MAX_CHROME_HINT_BINDINGS = 4;
     const MAX_CHROME_HINT_KEY_TOKENS = 4;
+    const HINT_MODE_KEY_OPS = ["escape", "whichkey"];
+    const MAX_HINT_MODE_KEYS = 16;
     const MAX_STATE_TABS = 1024;
     const MAX_MESSAGES = 16;
     const MAX_MESSAGE_LIST_BYTES = 4096;
@@ -164,13 +167,13 @@
       "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
       "chrome_hints.collect_here": { args: { session: "int", start: "int", colors: "text" }, reply: true, max_bytes: 1024 },
-      "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "chrome_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: 4096 },
       "chrome_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "page_hints.collect": { args: { session: "int", start: "int", action: "page_hint_action", colors: "text" }, reply: true, max_bytes: 1024 },
       "devtools.keys": { args: { keys: "devtools_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
       "devtools_hints.collect": { args: { session: "int", ask: "int", colors: "text" }, reply: true, max_bytes: 1024 },
-      "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text" }, reply: false, max_bytes: 4096 },
+      "devtools_hints.draw": { args: { session: "int", gen: "int", part: "int", parts: "int", typed: "text", labels: "text", query: "optional_text", active: "optional_int", key_line: "optional_int" }, reply: false, max_bytes: 4096 },
       "devtools_hints.pick": { args: { session: "int", id: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.clear": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "devtools.visual_keys": { args: { keys: "devtools_visual_keys" }, reply: false, max_bytes: 1024, max_age_ms: 86400000 },
@@ -184,7 +187,8 @@
       page_gone: { args: { tab_id: "int", document_id: "int" }, reply: false, max_bytes: 256, max_age_ms: 60000 },
       run: { args: { keys: "text", count: "int" }, reply: true, max_bytes: 512 },
       "chrome_hints.targets": { args: { session: "int", part: "int", parts: "int", targets: "text" }, reply: false, max_bytes: 4096 },
-      "chrome_hints.key": { args: { session: "int", seq: "int", key: "text" }, reply: false, max_bytes: 256 },
+      "chrome_hints.key": { args: { session: "int", seq: "int", key: "text", token: "optional_text" }, reply: false, max_bytes: 256 },
+      "chrome_hints.texts": { args: { session: "int", part: "int", parts: "int", texts: "text" }, reply: false, max_bytes: 4096 },
       "chrome_hints.end": { args: { session: "int" }, reply: false, max_bytes: 256 },
       "chrome_hints.want": { args: { start: "int" }, reply: true, max_bytes: 256 },
       "devtools_hints.ask": { args: { ask: "int" }, reply: true, max_bytes: 256 },
@@ -279,7 +283,7 @@
         if (!/^\d{1,10}$/.test(id) || !is_record(tab) || typeof tab.mode !== "string" || typeof tab.live !== "boolean") return undefined;
         tabs.set(id, { mode: tab.mode, live: tab.live });
       }
-      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, normal_once_keys: read_key_list(value.normal_once_keys, MAX_NORMAL_ONCE_KEYS, 1), focus_keys: read_key_list(value.focus_keys, MAX_FOCUS_KEYS, MAX_SEQUENCE_KEYS), insert_keys: read_insert_keys(value.insert_keys) };
+      return { enabled: value.enabled, keys, tabs, blur_on_load: value.blur_on_load === true, tree, sidebar_keys: read_sidebar_keys(value.sidebar_keys), chrome_hint_keys: read_chrome_hint_keys(value.chrome_hint_keys), page_hints: value.page_hints === true, normal_once_keys: read_key_list(value.normal_once_keys, MAX_NORMAL_ONCE_KEYS, 1), focus_keys: read_key_list(value.focus_keys, MAX_FOCUS_KEYS, MAX_SEQUENCE_KEYS), insert_keys: read_insert_keys(value.insert_keys), hint_mode_keys: read_hint_mode_keys(value.hint_mode_keys) };
     }
 
     // normal_once_keys_of and focus_keys_of: a list of key paths of at most `max_tokens` tokens each. A bad list is [] and the rest of the state stays.
@@ -309,6 +313,17 @@
       const joined = value.map((keys) => keys.join(" "));
       if (joined.some((keys, index) => joined.some((other, other_index) => other_index !== index && (other === keys || other.startsWith(`${keys} `))))) return [];
       return value.map((keys) => [...keys]);
+    }
+
+    // hint_mode_keys_of: a bad table leaves sessions to labels and plain Escape, and the rest of the state alone.
+    function read_hint_mode_keys(value) {
+      if (!Array.isArray(value) || value.length > MAX_HINT_MODE_KEYS) return undefined;
+      const rows = new Map();
+      for (const row of value) {
+        if (!is_record(row) || typeof row.key !== "string" || !KEY_TOKEN.test(row.key) || !HINT_MODE_KEY_OPS.includes(row.op) || rows.has(row.key)) return undefined;
+        rows.set(row.key, row.op);
+      }
+      return rows;
     }
 
     // sidebar_keys_of: a bad table leaves the sidebar without keys and the rest of the state alone. Each row's key prefix maps to { prefix: true }.
@@ -341,16 +356,19 @@
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
     const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "devtools_search", "devtools_tools", "page_hints", "firefox_pages", "pane_moves", "which_key_root", "mode_keys"];
+    // A newer feature goes out as its short code in the hello's `f`, the codes joined by one space (HELLO_FEATURES in the protocol), so the hello stays small.
+    const HELLO_FEATURES = { hint_mode_keys: "hk" };
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
     function say_hello(extension, again = false) {
       if (!active || !extension || (hello_for.has(extension) && !again) || !enabled_by_pref()) return;
       hello_for.add(extension);
-      const flags = Object.fromEntries([...hello_flags].map((name) => [name, true]));
+      const flags = Object.fromEntries([...hello_flags].filter((name) => HELLO_FLAGS.includes(name)).map((name) => [name, true]));
+      const features = [...hello_flags].filter((name) => Object.hasOwn(HELLO_FEATURES, name)).map((name) => HELLO_FEATURES[name]);
       // A rewrite for a flag is no new hello: the extension sends the DevTools table once per matched hello, so a feature must keep what it has.
       if (!again) for (const fn of hello_listeners) fn();
-      write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION, ...flags });
+      write_session(extension, HELLO_STORAGE_KEY, { v: PROTOCOL_VERSION, module_version: MODULE_VERSION, ...flags, ...(features.length > 0 && { f: features.join(" ") }) });
     }
 
     function take_back_hello() {
@@ -902,6 +920,7 @@
       if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.includes(value);
       if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.includes(value);
       if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.includes(value);
+      if (kind === "optional_text") return value === undefined || typeof value === "string";
       if (kind === "optional_int" && value === undefined) return true;
       if (kind === "step") return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MAX_RESIZE_STEPS;
       return typeof value === "number" && Number.isFinite(value) && (kind === "number" || Number.isInteger(value));
@@ -1206,7 +1225,7 @@
       },
       log_once,
       set_hello_flag(name, on) {
-        if (!HELLO_FLAGS.includes(name) || typeof on !== "boolean") {
+        if ((!HELLO_FLAGS.includes(name) && !Object.hasOwn(HELLO_FEATURES, name)) || typeof on !== "boolean") {
           log_once(`refused the hello flag ${String(name)}`);
           return false;
         }
@@ -1252,6 +1271,7 @@
       normal_once_keys: (win) => state_for(win)?.normal_once_keys ?? [],
       focus_keys: (win) => state_for(win)?.focus_keys ?? [],
       chrome_hint_keys: (win) => state_for(win)?.chrome_hint_keys ?? [],
+      hint_mode_keys: (win) => state_for(win)?.hint_mode_keys,
       token_of,
       is_field,
       deep_active,

@@ -28,6 +28,7 @@ export const chrome_hints = create_chrome_hints({
   },
   new_session: () => 1 + Math.floor(Math.random() * 0x7ffffffe),
   page_action: async (keys) => page_hint_action_of(await stored_keymap(browser.storage.local), keys),
+  key_line: async () => (await get_config()).settings.hint_key_line !== false,
 });
 
 define("hint.browser", {

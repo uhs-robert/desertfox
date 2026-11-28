@@ -1,8 +1,8 @@
 // The typing side of hints: which keys count, what has been typed, when a label is complete. Pure, so it needs no page.
 
-import { is_chord } from "../../shared/keys/token.ts";
-import { is_hint_char } from "../lib/hint_keys.ts";
-import { narrow } from "../../shared/hints/labels.ts";
+import { is_chord } from "../keys/token.ts";
+import { is_hint_char } from "./hint_keys.ts";
+import { narrow } from "./labels.ts";
 import { rank_items } from "./rank.ts";
 
 export type Typed = { typed: string; still_possible_: number[] };
