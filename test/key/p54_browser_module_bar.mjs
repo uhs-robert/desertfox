@@ -1,5 +1,6 @@
 // The status bar the browser module draws under the page area: it shows the mode, the half-typed keys and the scroll place of a locked page, it takes the corner badge's place, and it leaves with its setting.
 // Set DESERTFOX_SHOT_DIR to also save screenshots of the bar.
+import { createServer } from "node:http";
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["ui", "keys"];
@@ -65,6 +66,23 @@ export async function run_cases(context) {
     await press_keys("j");
     await poll_until("a percent in the bar", async () => (await bar_now())?.right.some((text) => /^\d+%$/.test(text)));
     await shot("locked-scroll");
+    await close_selected_tab();
+  });
+
+  await run_case("the JSON viewer shows its scroll place in the bar", async () => {
+    const server = createServer((_request, response) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(Object.fromEntries(Array.from({ length: 400 }, (_, index) => [`row_${index}`, index])))));
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    on_teardown(() => new Promise((resolve) => server.close(resolve)));
+    await open_tab(`http://127.0.0.1:${server.address().port}/data.json`);
+    await poll_until("Top in the bar on the JSON viewer", async () => (await bar_now())?.right.includes("Top"), { timeout_ms: 8000 });
+    // The JSON panel to its end, then another viewer tab by a click from a sandbox with the page's own principal, which is untrusted like DesertFox's own hint click. in_selected_page runs with the system principal, so a click from it would be trusted. The bar then shows the other panel's place.
+    await in_selected_page(`(win) => { const panel = win.document.querySelector(".jsonPanelBox .panelContent"); panel.scrollTop = panel.scrollHeight; return true; }`);
+    await poll_until("Bot in the bar after the JSON panel scrolled", async () => (await bar_now())?.right.includes("Bot"), { timeout_ms: 8000 });
+    await in_selected_page(`(win) => { const sandbox = Components.utils.Sandbox(win.document.nodePrincipal, { sandboxPrototype: win, wantXrays: false }); Components.utils.evalInSandbox('[...document.querySelectorAll(".tabs-menu a, .tabs a")].find((link) => /raw data/i.test(link.textContent)).click()', sandbox); return true; }`);
+    await poll_until("the Raw Data panel's place (All or Top, not Bot) in the bar", async () => {
+      const right = (await bar_now())?.right ?? [];
+      return right.includes("All") || right.includes("Top");
+    }, { timeout_ms: 8000 });
     await close_selected_tab();
   });
 

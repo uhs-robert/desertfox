@@ -189,11 +189,15 @@
     // The newest report of each of this window's tabs, by <browser>.
     const scrolls = new WeakMap();
 
-    // Runs in each tab. It reports only where DesertFox's page code is absent (about: pages, add-on pages, the PDF viewer, Reader View), so a web page costs no message.
+    // Runs in each tab. It reports only for pages that have no scroll report from DesertFox's page code: about: and add-on pages, view-source:, the PDF viewer, Reader View, blob: pages, the JSON viewer and Firefox's error pages. A web page costs no message.
     function scroll_frame_script() {
       const MESSAGE = "desertfox-statusbar:scroll";
       const PREFS = ["desertfox.browser_module.enabled", "desertfox.browser_module.statusbar"];
-      const LOCKED_SCHEMES = ["about:", "chrome:", "resource:", "moz-extension:", "view-source:"];
+      const LOCKED_SCHEMES = ["about:", "chrome:", "resource:", "moz-extension:", "view-source:", "blob:"];
+      // The JSON viewer shows an http, https or file response under its own principal, and no web page holds a resource: principal.
+      const JSON_VIEWER_PRINCIPAL = "resource://devtools/client/jsonview/";
+      // An error page keeps the failed site's address as its location, so only its about: content principal and its own document address name it. A web page's principal is http or https.
+      const ERROR_ADDRESS = /^about:(?:neterror|certerror|httpsonlyerror|blocked)\?/i;
       const THROTTLE_MS = 100;
       const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
       let timer = 0;
@@ -204,6 +208,18 @@
           return false;
         }
       };
+      // The same test as `page_kind_of` in desertfox-locked-pages.js: the principal, then the document's own address.
+      function is_json_viewer(doc) {
+        return doc.nodePrincipal.spec === JSON_VIEWER_PRINCIPAL && /^(?:https?|file):/.test(doc.documentURI);
+      }
+      // The viewer's document never scrolls. Each tab (JSON, Raw Data, Headers) scrolls its own panel, and only the shown tab's panel has a height.
+      function shown_panel(doc) {
+        return [...doc.querySelectorAll(".panelContent")].find((panel) => panel.clientHeight > 0);
+      }
+      function is_error_page(doc) {
+        const principal = doc.nodePrincipal;
+        return principal.isContentPrincipal === true && !principal.isSystemPrincipal && !principal.addonId && principal.schemeIs("about") && ERROR_ADDRESS.test(String(doc.documentURI ?? ""));
+      }
       function report() {
         timer = 0;
         try {
@@ -211,8 +227,8 @@
           const doc = win?.document;
           if (!doc || !win.windowGlobalChild || !prefs_on()) return;
           const is_pdf = doc.contentType === "application/pdf";
-          if (!is_pdf && !LOCKED_SCHEMES.includes(win.location.protocol)) return;
-          const box = is_pdf ? doc.getElementById("viewerContainer") : doc.scrollingElement;
+          if (!is_pdf && !LOCKED_SCHEMES.includes(win.location.protocol) && !is_json_viewer(doc) && !is_error_page(doc)) return;
+          const box = is_pdf ? doc.getElementById("viewerContainer") : is_json_viewer(doc) ? shown_panel(doc) : doc.scrollingElement;
           if (!box) return;
           sendAsyncMessage(MESSAGE, { inner: win.windowGlobalChild.innerWindowId, top: box.scrollTop, max: box.scrollHeight - box.clientHeight });
         } catch (_) {
@@ -223,7 +239,9 @@
         if (timer) clearTimeout(timer);
         timer = setTimeout(report, THROTTLE_MS);
       };
-      addEventListener("scroll", (event) => (event.target === content?.document || event.target?.id === "viewerContainer") && soon(), true);
+      addEventListener("scroll", (event) => (event.target === content?.document || event.target?.id === "viewerContainer" || event.target?.classList?.contains("panelContent")) && soon(), true);
+      // A tab switch or a tree fold in the viewer changes the shown panel or its height without a scroll. DesertFox's own hint click is untrusted, so the listener asks for untrusted events.
+      for (const type of ["click", "keyup"]) addEventListener(type, () => content?.document && is_json_viewer(content.document) && soon(), true, true);
       for (const type of ["pageshow", "load"]) addEventListener(type, (event) => event.target === content?.document && soon(), true);
       addMessageListener("desertfox-statusbar:report-now", soon);
       soon();
