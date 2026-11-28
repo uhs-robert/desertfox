@@ -117,6 +117,8 @@ export const MODULE_COMMAND_ARGS = {
   "scroll.pages": { fraction: "number", count: "int" },
   "scroll.to": { percent: "number", axis: "axis" },
   "page.stop": {},
+  // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
+  "help.whichkey": {},
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
 // The commands of Firefox's own sidebar. The module runs them only with the focus in the vertical tab strip or in the history, bookmarks or open tabs panel. None takes args.
@@ -169,7 +171,8 @@ export const MAX_TREE_BYTES = 32 * 1024;
 // `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns which-key off, and the field is left out.
 export type WhichKeyTableRow = { keys: string; command: string; more?: true };
 export type WhichKeyTablePanel = { title: string[]; rows: WhichKeyTableRow[] };
-export type WhichKeyTable = { delay_ms: number; skip?: string[]; border: WhichKeyBorder; panels: Record<string, WhichKeyTablePanel> };
+// `root` is the panel of the keys with nothing typed, which `help.whichkey` shows on a locked page. An older module ignores it.
+export type WhichKeyTable = { delay_ms: number; skip?: string[]; border: WhichKeyBorder; panels: Record<string, WhichKeyTablePanel>; root?: WhichKeyTablePanel };
 // The default table is about 8 KB (test/background/browser_module_which_key.test.ts measures it). A table over a limit is left out, and the module draws no panel.
 export const MAX_WHICH_KEY_BYTES = 49_152;
 export const MAX_WHICH_KEY_PANELS = 64;
@@ -361,7 +364,9 @@ export function which_key_table_of(value: unknown): WhichKeyTable | undefined {
     // Defined, not assigned, so a `__proto__` path stays a key and sets no prototype.
     Object.defineProperty(panels, path, { value: panel, enumerable: true, writable: true, configurable: true });
   }
-  return { delay_ms, ...(skip !== undefined && skip.length > 0 && { skip: [...(skip as string[])] }), border: border as WhichKeyBorder, panels };
+  const root = value.root === undefined ? undefined : which_key_panel_of(value.root);
+  if (value.root !== undefined && !root) return undefined;
+  return { delay_ms, ...(skip !== undefined && skip.length > 0 && { skip: [...(skip as string[])] }), border: border as WhichKeyBorder, panels, ...(root && { root }) };
 }
 
 export function validate_module_state(value: unknown): Checked<ModuleState> {

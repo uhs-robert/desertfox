@@ -70,7 +70,9 @@
     "scroll.pixels": { dx: "int", dy: "int" },
     "scroll.pages": { fraction: "number", count: "int" },
     "scroll.to": { percent: "number", axis: "axis" },
-    "page.stop": {}
+    "page.stop": {},
+    // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
+    "help.whichkey": {}
   };
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;

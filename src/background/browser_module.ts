@@ -6,6 +6,7 @@ import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tr
 import type { CompiledKeymap, TreeBranch, TreeNode } from "../shared/prefix_tree.ts";
 import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
+import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
 import type { BarConfig, BarFields, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
@@ -141,19 +142,23 @@ export function which_key_table_of_keymap(keymap: CompiledKeymap | undefined, tr
   const border = keymap?.which_key_border ?? "square";
   const shown = branch_in_scope(normal, tree);
   const panels: Record<string, WhichKeyTablePanel> = {};
+  const table_panel_of = (panel: WhichKeyPanel): WhichKeyTablePanel | undefined => {
+    const rows = panel.rows.slice(0, MAX_WHICH_KEY_ROWS).map(({ keys: row_keys, command, more }) => ({ keys: shown_text(row_keys, MAX_KEY_CHARS), command: shown_text(command, MAX_WHICH_KEY_LABEL_CHARS), ...(more && { more: true as const }) }));
+    return rows.length > 0 ? { title: panel.title.slice(-MAX_WHICH_KEY_TITLE_PARTS).map((part) => shown_text(part, MAX_WHICH_KEY_LABEL_CHARS)), rows } : undefined;
+  };
   const add_panels = (branch: TreeBranch, path: string[]): void => {
     for (const [token, child] of Object.entries(branch.children)) {
       if (child.kind !== "branch" || token === "") continue;
       const keys = [...path, token];
-      const panel = panel_after_prefix(shown, keys, find_command, border);
-      const rows = panel.rows.slice(0, MAX_WHICH_KEY_ROWS).map(({ keys: row_keys, command, more }) => ({ keys: shown_text(row_keys, MAX_KEY_CHARS), command: shown_text(command, MAX_WHICH_KEY_LABEL_CHARS), ...(more && { more: true as const }) }));
-      if (rows.length > 0) panels[keys.join(" ")] = { title: panel.title.slice(-MAX_WHICH_KEY_TITLE_PARTS).map((part) => shown_text(part, MAX_WHICH_KEY_LABEL_CHARS)), rows };
+      const panel = table_panel_of(panel_after_prefix(shown, keys, find_command, border));
+      if (panel) panels[keys.join(" ")] = panel;
       add_panels(child, keys);
     }
   };
   add_panels(shown, []);
   const skip = keymap?.which_key_skip?.slice(0, MAX_WHICH_KEY_SKIP);
-  const table = { delay_ms, ...(skip && skip.length > 0 && { skip }), border, panels };
+  const root = table_panel_of(panel_after_prefix(shown, [], find_command, border));
+  const table = { delay_ms, ...(skip && skip.length > 0 && { skip }), border, panels, ...(root && { root }) };
   const checked = which_key_table_of(table);
   if (!checked) console.warn(`DesertFox: the which-key panels of locked pages were left out, because they are over the limit of ${MAX_WHICH_KEY_PANELS} panels or ${MAX_WHICH_KEY_BYTES} bytes`);
   return checked;

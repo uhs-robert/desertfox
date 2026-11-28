@@ -335,6 +335,49 @@ test("a skipped prefix waits for no delay of its own, as on a page", () => {
   assert.deepEqual(shown()?.rows, rows_of("g o"));
 });
 
+const ROOT_KEYS = ["<A-?>", "?"];
+// The module's own tree holds `?` and `<A-?>` as help.whichkey leaves when the keymap binds them there.
+const bound_tree = (tree: ScopeTree): ScopeTree => ({ ...tree, children: { ...tree.children, "?": { native: "help.whichkey", args: {} } } });
+
+test("help.whichkey shows the root list at once, and the next key, Escape, a tab switch or a load hides it", async () => {
+  for (const key of ROOT_KEYS) {
+    for (const ending of ["j", "Escape", "tab", "load"]) {
+      const { press, shown, window, on_tab, second, load_document, firefox } = started({ written: state({ tree: bound_tree(TREE) }) });
+      press(key, key === "<A-?>" ? { key: "?", altKey: true } : {});
+      assert.deepEqual(shown(), { title: "keys", rows: TABLE.root!.rows.map((row) => `${row.keys}➜${row.command}`), footer: "ESCclose", frame: "frame square" }, key);
+      window.run_timers();
+      // The next key is another event, so the opening key's own notice is over.
+      await Promise.resolve();
+      assert.ok(shown(), `${key}: it stays, the walk has no timeout`);
+      if (ending === "tab") on_tab(second);
+      else if (ending === "load") load_document();
+      else press(ending);
+      assert.equal(shown(), undefined, `${key} then ${ending}`);
+      assert.deepEqual(firefox.errors, []);
+    }
+  }
+});
+
+test("help.whichkey draws nothing without a root panel, in another window, or when the module may not act", () => {
+  const { press, shown } = started({ written: state({ tree: bound_tree(TREE), which_key: { ...TABLE, root: undefined } }) });
+  press("?");
+  assert.equal(shown(), undefined);
+  const off = started({ written: state({ tree: bound_tree(TREE), enabled: false }) });
+  off.press("?");
+  assert.equal(off.shown(), undefined);
+});
+
+test("a hostile root panel leaves the table out, so a prefix draws nothing either", () => {
+  for (const root of [{ title: ["keys"], rows: [] }, { title: ["keys"], rows: [{ keys: "a", command: "x‮y" }] }, "x"]) {
+    const { press, type, shown, window, firefox } = started({ written: state({ tree: bound_tree(TREE), which_key: { ...TABLE, root } }) });
+    press("?");
+    type("g");
+    window.run_timers();
+    assert.equal(shown(), undefined);
+    assert.deepEqual(firefox.errors, []);
+  }
+});
+
 test("a hostile table draws nothing, and text never becomes markup", () => {
   const panel = TABLE.panels["g"]!;
   const hostile = [

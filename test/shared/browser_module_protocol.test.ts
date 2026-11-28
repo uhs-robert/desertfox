@@ -449,6 +449,17 @@ test("a which-key table of known fields is kept, its unknown fields dropped, and
   assert.deepEqual(checked.value.which_key, WHICH_KEY);
 });
 
+test("a which-key root panel rides along when it is valid, and a bad one leaves the whole table out", () => {
+  const root = { title: ["keys"], rows: [{ keys: "g", command: "+Go", more: true as const }] };
+  const checked = validate_module_state(state({ which_key: { ...WHICH_KEY, root: { ...root, extra: 1 } } }));
+  assert.ok(checked.ok);
+  assert.deepEqual(checked.value.which_key, { ...WHICH_KEY, root });
+  for (const bad of [{ title: ["keys"], rows: [] }, { title: "keys", rows: root.rows }, { title: [], rows: [{ keys: "g", command: "a\u202eb" }] }, "x", null]) {
+    const refused = validate_module_state(state({ which_key: { ...WHICH_KEY, root: bad } }));
+    assert.ok(refused.ok && refused.value.which_key === undefined, JSON.stringify(bad));
+  }
+});
+
 test("a bad which-key table is left out whole and never fails the state", () => {
   const panel = WHICH_KEY.panels.g;
   const row = panel.rows[0]!;

@@ -40,6 +40,16 @@ test("the default table has a panel for every branch of the locked-page tree and
   assert.equal(table.border, "square");
 });
 
+test("the table's root panel lists the first keys of the scope tree, as the page's manual list does", () => {
+  const table = table_of()!;
+  const page = panel_after_prefix(DEFAULT_KEYMAP_COMPILED.modes.normal, [], find_command);
+  assert.deepEqual(table.root!.title, ["keys"]);
+  assert.equal(table.root!.rows.length, Object.keys(DEFAULT_TREE.children).filter((token) => token !== "").length + (Object.hasOwn(DEFAULT_TREE.children, "") ? 1 : 0));
+  const page_labels = new Map(page.rows.map((row) => [row.keys, row.command]));
+  for (const row of table.root!.rows) assert.equal(row.command, page_labels.get(row.keys), row.keys);
+  assert.deepEqual(which_key_table_of(table), table);
+});
+
 test("each row is a key of the scope tree under its path, so no hint, caret or other key a locked page cannot run is listed", () => {
   const table = table_of()!;
   for (const [path, panel] of Object.entries(table.panels)) {

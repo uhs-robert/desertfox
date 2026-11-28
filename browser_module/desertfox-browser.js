@@ -31,6 +31,7 @@
 //   module_pending(win)        Anywhere: the keys the taker holds half typed in that window's selected tab, as { keys, count? }, or undefined. The which-key feature reads it.
 //   watch_pending(fn)          Anywhere: fn(win) after each key the taker saw and each reset, with `win` undefined for a reset of every window, so a feature can follow module_pending. Returns the call that stops it.
 //                              A listener that throws is logged and the key goes on.
+//   watch_root_list(fn)        Anywhere: fn(win) when a key ran `help.whichkey` in `win`, which the core defines itself for the which-key feature to answer. Returns the call that stops it.
 //   take_held_keys(win, end)   In the sandbox: after a key that opens the command line the taker holds the window's keys until the line has the focus. This gives the text typed meanwhile, once, and with `end` true ends the hold. "" with no hold.
 //   may_act(win)               In the sandbox: whether the module may act in `win` at all (the pref, DesertFox running, private access, a valid state with the switch on), short of a page.
 //   on_shut_down(fn)           In the sandbox: run `fn` when the module turns off for the session, so a feature takes its own listeners down.
@@ -749,6 +750,19 @@
     const session_watchers = new Map();
     // Every half-typed key change goes through the taker's `key` or `reset`, so the watchers hear it after those.
     const pending_watchers = new Set();
+    const root_list_watchers = new Set();
+    commands.set("help.whichkey", {
+      args: {},
+      run: ({ window }) => {
+        for (const watcher of [...root_list_watchers]) {
+          try {
+            watcher(window);
+          } catch (error) {
+            log_once(`a watcher of the root list failed: ${error}`);
+          }
+        }
+      },
+    });
     const after_pending = (win, result) => {
       for (const watcher of [...pending_watchers]) {
         try {
@@ -1113,6 +1127,10 @@
         pending_watchers.add(fn);
         return () => void pending_watchers.delete(fn);
       },
+      watch_root_list(fn) {
+        root_list_watchers.add(fn);
+        return () => void root_list_watchers.delete(fn);
+      },
       module_pending(win) {
         if (typeof key_taker?.pending !== "function") return undefined;
         return key_taker.pending(win);
@@ -1168,6 +1186,7 @@
         fail_awaited("the module shut down");
         key_taker?.reset();
         pending_watchers.clear();
+        root_list_watchers.clear();
         try {
           take_back_hello();
         } catch (error) {

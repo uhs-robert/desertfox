@@ -11,7 +11,7 @@ import { create_which_key_timer } from "../../src/content/whichkey/timer.ts";
 const scope = globalThis;
 const core = Services.desertfox_browser_module;
 if (typeof scope.gBrowser === "object" && scope.gBrowser !== null && typeof core === "object" && core !== null) {
-  if (typeof core.watch_pending !== "function" || typeof core.module_pending !== "function" || typeof core.may_act !== "function") {
+  if (typeof core.watch_pending !== "function" || typeof core.module_pending !== "function" || typeof core.watch_root_list !== "function" || typeof core.may_act !== "function") {
     core.log_once?.("the core cannot tell a feature the half-typed keys, so the which-key panel stays off");
   } else {
     // A failed start must not reach the loader or the other features. The panel stays off in this window, with nothing left registered.
@@ -105,7 +105,9 @@ function start(win, core, undo) {
       if (!panel) return undefined;
       panels.set(path, panel);
     }
-    return { delay_ms, skip: skip === undefined ? [] : [...skip], border, panels };
+    const root = value.root === undefined ? undefined : read_panel(value.root);
+    if (value.root !== undefined && !root) return undefined;
+    return { delay_ms, skip: skip === undefined ? [] : [...skip], border, panels, root };
   }
 
   // The state is read when a sequence starts, not watched. The extension's bucket keeps the holder it wrote until the next write, so the same holder means the same table.
@@ -183,7 +185,10 @@ function start(win, core, undo) {
     },
     () => sequence_table?.table.skip,
   );
+  // The key that opened the root list reaches the watcher right after the command ran, and must not close it.
+  let opening_root = false;
   const follow_keys = () => {
+    if (opening_root) return;
     const pending = core.module_pending(win);
     if (!pending || pending.keys.length === 0) {
       sequence_table = undefined;
@@ -200,6 +205,18 @@ function start(win, core, undo) {
     sequence_table = undefined;
     follow_prefix(undefined);
   };
+
+  // `help.whichkey`: the root list needs no prefix, so any later key, Escape included, closes it through `follow_keys`.
+  const show_root = (target) => {
+    if (target !== win) return;
+    const shown = table_and_theme();
+    if (!shown?.table?.root) return;
+    end_sequence();
+    draw(shown.table.root, shown.table, shown.theme);
+    opening_root = true;
+    void Promise.resolve().then(() => void (opening_root = false));
+  };
+  undo.push(core.watch_root_list(show_root));
 
   const stop_watching = core.watch_pending((changed) => {
     if (changed === undefined || changed === win) follow_keys();

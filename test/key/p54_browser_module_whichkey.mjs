@@ -95,6 +95,23 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
+  await run_case("on about:preferences alt+? shows the root list, and Escape and a next key hide it", async () => {
+    await home("wk_root");
+    await open_tab("about:preferences");
+    await ready("about:preferences");
+    const root_rows = (await session_value(STATE_KEY)).which_key.root.rows.length;
+    for (const ending of [["-k", "Escape"], ["j"]]) {
+      await press_keys("-M", "alt", "?", "-m", "alt");
+      await poll_until("the root list", async () => (await panel_now())?.rows.length === root_rows, { timeout_ms: 3000 });
+      const panel = await panel_now();
+      expect(panel.title === "keys" && panel.footer === "ESCclose", `the root list reads ${panel.title} / ${panel.footer}`);
+      await shot("about-preferences-root");
+      await press_keys(...ending);
+      await gone(`the root list after ${ending.join(" ")}`);
+    }
+    await close_selected_tab();
+  });
+
   await run_case("a panel that is up follows the next prefix key at once", async () => {
     await home("wk_instant");
     await open_tab("about:preferences");
