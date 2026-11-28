@@ -452,6 +452,17 @@ test("a tree from before the line keys holds nothing", () => {
   assert.deepEqual(runs(), [{ keys: ":", count: 0 }, { keys: "u", count: 0 }]);
 });
 
+test("in a private window / and ? stay with Firefox and start no hold, while n still goes to the extension", () => {
+  const priv = started({ private_window: true, private_access: true });
+  const prevented = [priv.press("/").prevented, priv.press("?", { shiftKey: true }).prevented];
+  assert.deepEqual(prevented, [false, false]);
+  priv.type("n");
+  assert.deepEqual(priv.runs(), [{ keys: "n", count: 0 }]);
+  const normal = started();
+  assert.equal(normal.press("/").prevented, true);
+  assert.deepEqual(normal.runs(), [{ keys: "/", count: 0 }]);
+});
+
 const bar_request = (text: unknown, tab_id?: number) => [{ v: BROWSER_MODULE_PROTOCOL_VERSION, id: "bar1", kind: "address_bar.open", args: { text, ...(tab_id !== undefined && { tab_id }) }, sent_at: Date.now() }];
 const replies = (firefox: ReturnType<typeof create_firefox>) => plain(((firefox.read_holder("desertfox_browser_module_from_module") ?? []) as { reply_to?: string }[]).filter((message) => message.reply_to === "bar1"));
 

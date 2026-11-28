@@ -2,7 +2,8 @@ import { NEEDS_MODULE, browser_module_call } from "../background/browser_module_
 import type { CallResult } from "../background/browser_module_call.ts";
 import { show_toast_on_tab } from "../background/browser_deps.ts";
 import { cleaned_module_selection } from "../background/selection_ask.ts";
-import { MAX_FIND_CHARS } from "../shared/browser_module_protocol.ts";
+import { MAX_FIND_CHARS } from "../shared/find_line.ts";
+import type { FindDirection } from "../shared/find_line.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
 import type { CommandContext, ParamDef } from "../shared/command.ts";
 import { define } from "../shared/registry/builtin.ts";
@@ -46,9 +47,8 @@ define("find.prev", {
 });
 
 // Find on a page the page code does not serve (see `LOCKED_VARIANTS` in shared/browser_module_scope.ts). The text goes through the browser module to Firefox's Finder, which matches plain text: no pattern, no smart case, no incremental highlight.
-const FIND_TEXT_PATTERN = "^[^\\x00-\\x1f\\x7f-\\x9f\\xad\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2064\\ufeff]{1,256}$";
-const FIND_DIRECTIONS = ["forward", "backward"] as const;
-type FindDirection = (typeof FIND_DIRECTIONS)[number];
+const FIND_TEXT_PATTERN = `^[^\\x00-\\x1f\\x7f-\\x9f\\xad\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2064\\ufeff]{1,${MAX_FIND_CHARS}}$`;
+const FIND_DIRECTIONS = ["forward", "backward"] as const satisfies readonly FindDirection[];
 const SHOWN_TEXT_CHARS = 40;
 export const FIND_PRIVATE_REFUSAL = "Find is off in private tabs";
 export const FIND_NEEDS_NEWER_MODULE = "Find needs a newer browser module. Run its install script again";
@@ -100,7 +100,7 @@ export function make_find_page_handlers(deps: FindPageDeps) {
   const refusal_of = (error: string): RuntimeRefusal => {
     if (error === NEEDS_MODULE) return new RuntimeRefusal(`Find on this page ${NEEDS_MODULE.toLowerCase()}`);
     // A module before find refuses the kind, or an arg of it, with the core's fixed words.
-    return new RuntimeRefusal(/allow list|has the wrong shape/.test(error) ? FIND_NEEDS_NEWER_MODULE : error);
+    return new RuntimeRefusal(/allow list|has the wrong shape|no handler/.test(error) ? FIND_NEEDS_NEWER_MODULE : error);
   };
   const show = async (ctx: CommandContext, answer: CallResult, text: string): Promise<void> => {
     if (!answer.ok) throw refusal_of(answer.error);
@@ -140,7 +140,6 @@ export function make_find_page_handlers(deps: FindPageDeps) {
 // `main.ts` wires the panel once it has built it, as it does for the tab insert hold.
 let open_find_line: FindPageDeps["open_find_line"] | undefined;
 export const wire_find_line = (open: FindPageDeps["open_find_line"]): void => void (open_find_line = open);
-export const FIND_PANEL_MODES: Record<FindDirection, string> = { forward: "find_forward", backward: "find_backward" };
 
 const find_page = make_find_page_handlers({
   is_private: async (ctx) => ctx.tab_id !== undefined && (await ignore_refusal(browser.tabs.get(ctx.tab_id)))?.incognito === true,

@@ -80,7 +80,10 @@
             if (options.result === Finding.FIND_PENDING) return;
             result = options.result;
             if (result === Finding.FIND_NOTFOUND || counted) finish();
-            else timer = setTimeout(finish, COUNT_WAIT_MS);
+            else {
+              clearTimeout(timer);
+              timer = setTimeout(finish, COUNT_WAIT_MS);
+            }
           },
           onMatchesCountResult(count) {
             counted = count;
@@ -99,6 +102,14 @@
       });
     }
 
+    // A held n sends one request per key repeat. Two finds on one Finder would each take the other's answer, so each tab's finds run in turn.
+    const turns = new WeakMap();
+    function in_turn(finder, task) {
+      const done = (turns.get(finder) ?? Promise.resolve()).then(task);
+      turns.set(finder, done.then(() => undefined, () => undefined));
+      return done;
+    }
+
     const whole = (value) => (Number.isSafeInteger(value) ? value : -1);
     const reply_of = (found) => ({ ok: true, value: JSON.stringify({ result: whole(found.result), current: whole(found.current), total: whole(found.total), limit: whole(found.limit) }) });
 
@@ -110,23 +121,29 @@
       return ask_finder(finder, () => finder.findAgain(text, true, false, false));
     }
 
+    // Read inside the turn, so an n behind a search repeats that search.
+    function repeat({ finder, win }, reverse) {
+      const earlier = last_search.get(win);
+      if (!earlier) return refuse("No earlier search");
+      const backwards = earlier.backwards !== reverse;
+      // Another tab's Finder holds another search, so the first n there searches again from the top.
+      if (finder.searchString !== earlier.text) return search(finder, win, earlier.text, backwards);
+      return ask_finder(finder, () => finder.findAgain(earlier.text, backwards, false, false));
+    }
+
     core.register_kind("find.search", async ({ tab_id, text, backwards }) => {
       const checked = finder_of(tab_id);
       if (!checked.ok) return checked;
       const chars = [...String(text)];
       if (chars.length === 0 || chars.length > MAX_FIND_CHARS || /[\p{Cc}\p{Cf}]/u.test(text)) return refuse("The search text is not allowed");
-      return reply_of(await search(checked.finder, checked.win, text, backwards === 1));
+      return reply_of(await in_turn(checked.finder, () => search(checked.finder, checked.win, text, backwards === 1)));
     });
 
     core.register_kind("find.again", async ({ tab_id, reverse }) => {
       const checked = finder_of(tab_id);
       if (!checked.ok) return checked;
-      const earlier = last_search.get(checked.win);
-      if (!earlier) return refuse("No earlier search");
-      const backwards = earlier.backwards !== (reverse === 1);
-      // Another tab's Finder holds another search, so the first n there searches again from the top.
-      if (checked.finder.searchString !== earlier.text) return reply_of(await search(checked.finder, checked.win, earlier.text, backwards));
-      return reply_of(await ask_finder(checked.finder, () => checked.finder.findAgain(earlier.text, backwards, false, false)));
+      const found = await in_turn(checked.finder, () => repeat(checked, reverse === 1));
+      return found.ok === false ? found : reply_of(found);
     });
   }
 })(this);

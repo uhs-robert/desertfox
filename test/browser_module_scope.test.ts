@@ -84,6 +84,9 @@ test("the find keys run on a locked page as their background variants, and only 
   for (const keys of ["/", "?", "*", "#", "n", "N"]) assert.equal(node_at(DEFAULT_TREE, [keys]), "forward", keys);
   for (const keys of ["/", "?"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
   for (const keys of ["*", "#", "n", "N"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
+  // A private window leaves the two line keys to Firefox's quick find.
+  assert.deepEqual(DEFAULT_TREE.find_keys, ["/", "?"]);
+  assert.equal(validate_scope_tree({ children: {}, find_keys: ["a  b"] }).ok, false);
   const variants = (keys: string) => {
     const resolved = resolve_run(compiled(), keys, 0, allowed);
     assert.ok(resolved.ok, keys);

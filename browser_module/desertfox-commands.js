@@ -146,7 +146,7 @@
     if (size === void 0) return bad("the tree is not plain data");
     if (size > MAX_TREE_BYTES) return bad("the tree is too large");
     const root = value;
-    const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
+    const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint") ?? key_paths_problem(root.find_keys, "find");
     return problem === void 0 ? { ok: true, value: kept_tree(value) } : bad(problem);
   }
   var MAX_KIND_BYTES = 64 * 1024;
@@ -314,6 +314,7 @@
     }
   }
   function define(core2) {
+    const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
     const IGNORE_TOGGLE_KEY = "<S-Escape>";
     const ADDRESS_BAR_KEY = ":";
     const OMNIBOX_PREFIX = "df ";
@@ -397,7 +398,8 @@
       const parsed = JSON.parse(text);
       const tree = notice === void 0 ? parsed : with_hint_leaves(parsed, notice === PAGE_HINTS ? PAGE_HINT_LEAF : NOTICE_LEAF);
       const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
-      const fresh = { text, notice, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: void 0 };
+      const find_keys = new Set(Array.isArray(tree.find_keys) ? tree.find_keys : []);
+      const fresh = { text, notice, browser: browser2, inner: browser2.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, find_keys, pending: void 0 };
       walks.set(win, fresh);
       return fresh;
     }
@@ -471,7 +473,10 @@
       if (result.kind_ !== "match") return false;
       const leaf = result.leaf.scope;
       if (result.register_keys_ !== void 0) return true;
-      if (leaf === "forward") return forward(result, walk, win);
+      if (leaf === "forward") {
+        if (walk.find_keys.has(path_of(result).join(" ")) && PrivateBrowsingUtils.isWindowPrivate(win)) return false;
+        return forward(result, walk, win);
+      }
       if (leaf === NOTICE_LEAF) return notice_once(result, browser2);
       if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
       return run_native(leaf, result, context);

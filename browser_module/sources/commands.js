@@ -29,6 +29,7 @@ if (typeof core === "object" && core !== null) {
 }
 
 function define(core) {
+  const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
   // The module's own keys. The tree has no mode or command line leaves, because those need DesertFox's page code, so these two are fixed: DesertFox's default for ignore mode both ways, and the command line key.
   const IGNORE_TOGGLE_KEY = "<S-Escape>";
   const ADDRESS_BAR_KEY = ":";
@@ -140,7 +141,8 @@ function define(core) {
     const parsed = JSON.parse(text);
     const tree = notice === undefined ? parsed : with_hint_leaves(parsed, notice === PAGE_HINTS ? PAGE_HINT_LEAF : NOTICE_LEAF);
     const line_keys = new Set(Array.isArray(tree.line_keys) ? tree.line_keys : []);
-    const fresh = { text, notice, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, pending: undefined };
+    const find_keys = new Set(Array.isArray(tree.find_keys) ? tree.find_keys : []);
+    const fresh = { text, notice, browser, inner: browser.innerWindowID, matcher: create_matcher(matcher_keymap_of(tree)), line_keys, find_keys, pending: undefined };
     walks.set(win, fresh);
     return fresh;
   }
@@ -228,7 +230,11 @@ function define(core) {
     const leaf = result.leaf.scope;
     // A register means nothing to the commands a locked page runs, so the keys do nothing.
     if (result.register_keys_ !== undefined) return true;
-    if (leaf === "forward") return forward(result, walk, win);
+    if (leaf === "forward") {
+      // Find is refused in private tabs, so Firefox keeps the key and its quick find works there.
+      if (walk.find_keys.has(path_of(result).join(" ")) && PrivateBrowsingUtils.isWindowPrivate(win)) return false;
+      return forward(result, walk, win);
+    }
     if (leaf === NOTICE_LEAF) return notice_once(result, browser);
     if (leaf === PAGE_HINT_LEAF) return start_page_hints(result, context);
     return run_native(leaf, result, context);

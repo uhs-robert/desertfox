@@ -1,6 +1,6 @@
 // Find on locked pages (browser_module/desertfox-find.js): `/` opens a find line in the command line panel, Enter selects the first match through Firefox's Finder, and the status bar shows the place among the matches.
 // The text is plain: a regular expression finds nothing. n and N repeat the search, * and # search the selected text of a parent-process about: page, and a private tab is refused.
-import { module_steps, panel_steps } from "./browser_module_steps.mjs";
+import { module_steps, NO_EFFECT_MS, panel_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["keys", "cmdline"];
 
@@ -162,7 +162,7 @@ export async function run_cases(context) {
     await close_others();
   });
 
-  await run_case("a private tab is refused with a toast and no search", async () => {
+  await run_case("in a private window / stays with Firefox and n and * are refused with a toast", async () => {
     const private_access = () => chrome(`(async () => WebExtensionPolicy.getByID("${EXTENSION_ID}").privateBrowsingAllowed)()`);
     const set_private_access = (allowed) =>
       chrome(`(async () => {
@@ -185,10 +185,15 @@ export async function run_cases(context) {
     await focus_page();
     await clear_notices();
     on_teardown(clear_notices);
+    // Firefox's own quick find keeps `/`, so no line opens and no key is held back.
     await press_keys("/");
-    await message_matches(/^Find is off in private tabs$/, "the refusal");
-    await sleep(500);
+    await sleep(NO_EFFECT_MS);
     expect((await panel.state()).state === "none", "a find line opened over a private tab");
+    expect((await bar_message()) === null || (await bar_message()) === "", "the bar showed a message for /");
+    await press_keys("-k", "Escape");
+    await focus_page();
+    await press_keys("n");
+    await message_matches(/^Find is off in private tabs$/, "the refusal");
     await close_private_windows();
   });
 }

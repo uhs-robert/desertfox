@@ -65,7 +65,7 @@ const opens_find_line = (step: LeafStep): boolean => step.invocation.id === "fin
 // A forward leaf after which the line opens: the bare `:`, a find key, or a key whose command prompts for a value (`o`).
 const prompts_or_opens_line = (leaf: TreeLeaf): boolean => opens_line_leaf(leaf) || leaf.steps.some((step) => step.invocation.prompt !== undefined || opens_find_line(step));
 
-type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[] };
+type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[]; find_keys: string[] };
 
 function prune_node(node: TreeNode, depth: number, path: readonly string[], pruning: Pruning): ScopeNode | undefined {
   if (node.kind === "leaf") {
@@ -77,6 +77,7 @@ function prune_node(node: TreeNode, depth: number, path: readonly string[], prun
     }
     // A path through a capture key (the empty token) names no keys the module could match it by.
     if (prompts_or_opens_line(node) && !path.includes("")) pruning.line_keys.push(path.join(" "));
+    if (node.steps.some(opens_find_line) && !path.includes("")) pruning.find_keys.push(path.join(" "));
     return "forward";
   }
   if (depth >= MAX_SEQUENCE_KEYS) return undefined;
@@ -95,9 +96,9 @@ function prune_children(branch: TreeBranch, depth: number, path: readonly string
 export function scope_tree_of(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): ScopeTree {
   // A tree of an older format has another shape, so it gives no keys until the background recompiles.
   const root = current_keymap(keymap)?.modes.normal;
-  const pruning: Pruning = { allowed, check_args, line_keys: [], hint_keys: [] };
+  const pruning: Pruning = { allowed, check_args, line_keys: [], hint_keys: [], find_keys: [] };
   const children = root ? prune_children(root, 1, [], pruning) : {};
-  return { children, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }) };
+  return { children, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }), ...(pruning.find_keys.length > 0 && { find_keys: pruning.find_keys }) };
 }
 
 // The scope tree in the shape `create_matcher` walks, for the module's bundle. A leaf keeps its scope node in `scope`, and a forward leaf has no steps.

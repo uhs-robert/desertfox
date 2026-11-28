@@ -181,3 +181,49 @@ test("a count that never comes ends the reply at the time limit with no place", 
   assert.ok(reply.ok, reply.error ?? "no error");
   assert.deepEqual(counted(reply), { result: 0, current: -1, total: -1, limit: -1 });
 });
+
+test("finds on one Finder run in turn, so a held n takes no other find's answer", async () => {
+  const { firefox, a, ids, give_finder } = world();
+  const { finder } = give_finder(a, []);
+  const listeners = new Set<Listener>();
+  const asked: string[] = [];
+  const answers: (() => void)[] = [];
+  finder.addResultListener = (listener: Listener) => listeners.add(listener);
+  finder.removeResultListener = (listener: Listener) => listeners.delete(listener);
+  const hold = (name: string) => () => {
+    asked.push(name);
+    answers.push(() => {
+      for (const listener of listeners) {
+        listener.onFindResult({ result: 0 });
+        listener.onMatchesCountResult({ current: asked.length, total: 9, limit: 1000 });
+      }
+    });
+  };
+  const held_search = hold("search");
+  finder.fastFind = () => {
+    finder.searchString = "word";
+    held_search();
+  };
+  finder.findAgain = hold("again");
+  const flush = async () => {
+    for (let turn = 0; turn < 8; turn++) await new Promise((resolve) => setImmediate(resolve));
+  };
+  const now = Date.now();
+  firefox.extension_writes(BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY, [
+    { v: 1, id: "h1", kind: "find.search", args: { tab_id: ids.a, text: "word", backwards: 0 }, sent_at: now },
+    { v: 1, id: "h2", kind: "find.again", args: { tab_id: ids.a, reverse: 0 }, sent_at: now },
+    { v: 1, id: "h3", kind: "find.again", args: { tab_id: ids.a, reverse: 0 }, sent_at: now },
+  ]);
+  await flush();
+  assert.deepEqual(asked, ["search"], "the repeats wait for the search");
+  for (const expected of [["search", "again"], ["search", "again", "again"]]) {
+    answers.shift()!();
+    await flush();
+    assert.deepEqual(asked, expected);
+  }
+  answers.shift()!();
+  await flush();
+  const replies = (firefox.read_holder(BROWSER_MODULE_FROM_MODULE_STORAGE_KEY) ?? []) as (Reply & { reply_to: string })[];
+  const place = (id: string) => counted(plain(replies.find((each) => each.reply_to === id)) as Reply).current;
+  assert.deepEqual(["h1", "h2", "h3"].map(place), [1, 2, 3]);
+});

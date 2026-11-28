@@ -9,6 +9,7 @@ import type { CompiledKeymap, TreeLeaf } from "../shared/prefix_tree.ts";
 import { check_args_shape } from "../shared/registry/check_shape.ts";
 import { parse_command_line } from "../shared/registry/command_line.ts";
 import type { CmdlineOpened, PanelCmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages/index.ts";
+import { cleaned_find_text, find_direction_of } from "../shared/find_line.ts";
 import { TAB_MODEL_PORT_NAME } from "../shared/tab_model_port.ts";
 import { RANK_PORT_NAME } from "../shared/rank_port.ts";
 import type { RankPush } from "../shared/rank_port.ts";
@@ -107,7 +108,7 @@ async function panel_line(): Promise<void> {
     ask_background<PanelCmdlineOpened | undefined>({ type: "open_panel_cmdline" }),
   ]);
   if (!opened) return window.close();
-  const search = opened.mode === "find_forward" ? "forward" : opened.mode === "find_backward" ? "backward" : undefined;
+  const search = find_direction_of(opened.mode);
   // Firefox sizes the panel to the page's height, so the page takes only the height of its line and list.
   for (const element of [document.documentElement, document.body]) element.style.height = "auto";
   let to_line: ((message: HostToPage) => void) | undefined;
@@ -121,8 +122,8 @@ async function panel_line(): Promise<void> {
       void ask_background({ type: "run", invocations: [message.invocation], mode: "normal", from_line: true });
       window.close();
     } else if (message.kind === "find_commit") {
-      const direction = search === "backward" ? "backward" : "forward";
-      void ask_background({ type: "run", invocations: [{ id: "find.page_text", args: { text: input.value, direction } }], mode: "normal", from_line: true });
+      const text = cleaned_find_text(input.value);
+      if (text !== "") void ask_background({ type: "run", invocations: [{ id: "find.page_text", args: { text, direction: search } }], mode: "normal", from_line: true });
       window.close();
     } else if (message.kind === "list_headings") to_line?.({ kind: "headings", items: [] });
   };

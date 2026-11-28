@@ -47,7 +47,7 @@ const MAX_BYTES = {
   // The sink of tab range mode.
   "tab_visual.js": 1 * 1024,
   // The command line page: completion for every setting, the registry validator, and the key-capture matcher. Opened by the first `:`.
-  "cmdline_page.js": 63 * 1024,
+  "cmdline_page.js": 63 * 1024 + 128,
   // The regex page search Worker.
   "find_worker.js": 2 * 1024,
   // The history rank Worker. Loads once per background start, never in a page.

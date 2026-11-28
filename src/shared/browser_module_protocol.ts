@@ -170,8 +170,9 @@ export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: R
 export type NativeLeaf = { native: ModuleCommandId; args: ModuleArgs; count_rule?: "repeat" | { param: string } };
 export type ScopeNode = "forward" | NativeLeaf | ScopeTree;
 // `line_keys`, on the root only: the key paths (tokens joined by one space) of the forward leaves that open the command line. After one of them the module holds the keys that follow until the line has the focus, so they never run on the page. An older module ignores the field.
+// `find_keys`, on the root only: the key paths of the forward leaves that open the find line (`/` and `?`). In a private window the module leaves them to Firefox, so its own quick find works there, because DesertFox find is refused in private tabs. An older module ignores the field.
 // `hint_keys`, on the root only: the key paths of the hint leaves, which need page code and so are not in the tree. Where hints cannot run now, the module claims them and sends the first one as a `run`, so the extension says why. An older module ignores the field.
-export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[] };
+export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: string[]; hint_keys?: string[]; find_keys?: string[] };
 // The longest key sequence the tree holds and a run request names. A count is no key of it.
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
@@ -288,8 +289,8 @@ export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   const size = json_bytes(value);
   if (size === undefined) return bad("the tree is not plain data");
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
-  const root = value as { line_keys?: unknown; hint_keys?: unknown };
-  const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
+  const root = value as { line_keys?: unknown; hint_keys?: unknown; find_keys?: unknown };
+  const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint") ?? key_paths_problem(root.find_keys, "find");
   return problem === undefined ? { ok: true, value: kept_tree(value as ScopeTree) } : bad(problem);
 }
 
@@ -489,8 +490,7 @@ const SELECTION_REPLY_BYTES = 8192;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
 const PANEL_CALL_BYTES = 256;
-// The search text of a find: at most MAX_FIND_CHARS characters at up to 6 bytes each as JSON escapes, with the envelope.
-export const MAX_FIND_CHARS = 256;
+// The search text of a find: at most MAX_FIND_CHARS (find_line.ts) characters at up to 6 bytes each as JSON escapes, with the envelope.
 const FIND_BYTES = 2048;
 // The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
 export const CHROME_HINT_PART_BYTES = 4096;
