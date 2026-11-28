@@ -19,7 +19,7 @@ define("mode.set", {
   bridge: true,
   runs_in: "content",
   repeatable: false,
-  modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line", "item", "item_visual"],
+  modes: ["normal", "insert", "ignore", "caret", "visual", "visual_line", "item", "item_visual", "tab_visual"],
 });
 
 // The mode itself is a column of a site table row, so this command takes the mode's name and no list of values. A name the page's rows lack does nothing.
@@ -52,11 +52,11 @@ define("mode.insert", {
 define("mode.escape", {
   completion: "hidden",
   label: "Escape",
-  intent: "Return to normal mode. It works from insert, hint, command line, caret, both visual modes, media mode and item mode, and from visual item mode back to item mode, where it also leaves fullscreen, and drops the focus from the field.",
+  intent: "Return to normal mode. It works from insert, hint, command line, caret, both visual modes, media mode, item mode and tab range mode, and from visual item mode back to item mode, where it also leaves fullscreen, and drops the focus from the field.",
   bridge: true,
   runs_in: "content",
   repeatable: false,
-  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual", "visual_line", "media", "item", "item_visual"],
+  modes: ["normal", "insert", "hint", "cmdline", "caret", "visual", "visual_line", "media", "item", "item_visual", "tab_visual"],
 });
 
 define("mode.pass_next", {
