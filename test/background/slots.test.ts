@@ -123,19 +123,20 @@ async function started(tag: string, files: Files = { "settings.toml": "" }) {
 }
 const set_browser = (startup: Startup, browser_edits: Record<string, string>) => startup.change_layers("keymap", (current) => ({ ...current, browser: browser_edits }));
 
-const DEFAULTS = { "<A-j>": "slot_1", "<A-k>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4" };
+const DEFAULTS = { "<A-j>": "slot_1", "<A-k>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4", "<A-o>": "slot_5" };
 
 test("the first publish stores the map the old order gave, and saves race on nothing", async () => {
   const { startup, local } = await started("race");
   assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], DEFAULTS);
   // Two saves started together: the second reads the map the first stored.
   await Promise.all([set_browser(startup, { "<A-x>": "tab.close" }), set_browser(startup, { "<A-x>": "tab.close", "<A-y>": "tab.next" })]);
-  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_5", "<A-y>": "slot_6" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_6", "<A-y>": "slot_7" });
   // Removing a default frees slot_1, and the next chord takes it.
+  const { "<A-j>": _freed, ...kept } = DEFAULTS;
   await set_browser(startup, { "<A-j>": "", "<A-y>": "tab.next" });
-  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { "<A-k>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4", "<A-y>": "slot_6" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...kept, "<A-y>": "slot_7" });
   await set_browser(startup, { "<A-j>": "", "<A-y>": "tab.next", "<A-z>": "tab.close" });
-  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { "<A-k>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4", "<A-y>": "slot_6", "<A-z>": "slot_1" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...kept, "<A-y>": "slot_7", "<A-z>": "slot_1" });
 });
 
 test("a failed publish puts the stored map back with the layers", async () => {
@@ -151,14 +152,14 @@ test("a failed publish puts the stored map back with the layers", async () => {
   assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], before);
   // The next save plans from the restored map: the failed save's chord left no slot taken.
   await set_browser(startup, { "<A-x>": "tab.close", "<A-y>": "tab.next", "<A-v>": "tab.close" });
-  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_5", "<A-y>": "slot_6", "<A-v>": "slot_7" });
+  assert.deepEqual(local[SLOT_MAP_STORAGE_KEY], { ...DEFAULTS, "<A-x>": "slot_6", "<A-y>": "slot_7", "<A-v>": "slot_8" });
 });
 
 test("a failed reload puts the stored map back before the rollback publish", async () => {
   const host = { files: { "settings.toml": "" } as Files };
   const { local, fake } = install_fake_browser(host);
   // Slots the keymap order would not give: the rollback plan alone cannot rebuild them.
-  const stored = { "<A-k>": "slot_1", "<A-j>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4" };
+  const stored = { "<A-k>": "slot_1", "<A-j>": "slot_2", "<A-,>": "slot_3", "<A-l>": "slot_4", "<A-o>": "slot_5" };
   local[SLOT_MAP_STORAGE_KEY] = structuredClone(stored);
   const startup = fresh_config_service();
   await startup.get_config();

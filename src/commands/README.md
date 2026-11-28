@@ -16,7 +16,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `cmdline.ts`: the `cmdline.*` commands, `list.act` and `list.select`. The code sits in the `cmdline` bundle.
 - `command.ts`: `command.repeat`, which replays the stored request through a router that `main.ts` wires in.
 - `config.ts`: `config.reload` and `debug.restart`.
-- `copy.ts`: `copy.url` and `copy.links`.
+- `copy.ts`: `copy.url` and `copy.links`, and `copy.page`, the background variant of `copy.url` that a locked page runs.
 - `copy_tabs.ts`: `copy.tabs` (`yT`), which lists the open web tabs in the link-list formats.
 - `engine.ts`: `engine.show`.
 - `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.
@@ -36,7 +36,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `mark.ts`: `mark.add`, `mark.jump` and `mark.step`, in the `page` bundle.
 - `mark_list.ts`: `mark.list`, `mark.delete` and `mark.clear`. Typing the command is the confirmation, and `.` never replays `all`.
 - `media.ts`: `media.act` (`media`), which runs the frame fan-out in `src/background/media_actions.ts`.
-- `mode.ts`: the mode commands (`mode.set`, `mode.site`, `mode.insert`, `mode.escape`, `mode.pass_next`) and `page.focus_input` and `page.blur`.
+- `mode.ts`: the mode commands (`mode.set`, `mode.site`, `mode.insert`, `mode.escape`, `mode.pass_next`, `mode.normal_once`) and `page.focus_input` and `page.blur`.
 - `native.ts`: `native.install`, `native.update`, `permissions.grant` and `browser.open_firefox_page`.
 - `open.ts`: `open.url`, `open.search`, `open.clipboard` and `open.anything`.
 - `open_target.ts`: the `where` and `container` params, `open_in`, the container lookup and `typed_url_target` for typed text.

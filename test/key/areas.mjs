@@ -19,7 +19,7 @@ const shared_files = [
   "src/content/page/copy.ts",
   "src/shared/{browser_bar_lists,command,index,key_test_build,load_commands,swallow}.ts",
   "src/shared/messages/*.ts",
-  "src/shared/copy/link_escape.ts",
+  "src/shared/copy/{link_escape,page_link}.ts",
   "src/shared/site/{site_columns,page_keymap_resolve,item_select_rewrite}.ts",
   "src/shared/registry/{builtin,define,index}.ts",
 ];
