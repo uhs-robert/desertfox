@@ -18,11 +18,13 @@ The Locked pages column of the normal table marks the keys that also work on pag
 
 With the browser module installed, `gB` labels the controls of Firefox itself (toolbars, tabs, menus, permission prompts, the downloads panel, dialogs, the Library and Page Info), and `j`, `k`, `h` and `l` walk open menus and panels as the arrow keys do. Only `gB` has a row below, because the walk letters are fixed. A hint pick that grants something, such as Allow on a permission prompt or opening a download, marks the control and waits for you to press Enter. A script cannot press it for you. See [the browser module design](design/browser_module.md#popup-walk).
 
+`<A-o>` in the `browser` table is the one-shot normal prefix (`mode.normal_once`). It works in every mode a web page has, a field and ignore mode included: the next whole key sequence, count and multi-key keys included, runs as a normal-mode command, and the which-key panel lists the normal keys at once. The frame then goes back to its mode, and a command that opens a mode (`v`, `f`, `:`) goes back when that mode ends, focusing the field again. In hint mode it ends the session first, and in the command line it closes the line and drops its text. Escape or `<A-o>` again drops it. A localized Firefox can give one of its menus the access key O. That menu can then take Alt+O where DesertFox does not catch the key first, such as about: pages and the address bar. Rebind the prefix in the `browser` table then.
+
 A note "(prompts)" means the binding sets a `prompt` for a param, so the command line asks for it.
 
 <!-- BEGIN generated -->
 
-bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
+bound: 535 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 5)
 
 ### normal
 
@@ -670,5 +672,6 @@ Every key of item mode that this table does not bind also works here: it switche
 | `<A-k>` | `tab.prev` | Previous tab |
 | `<A-,>` | `browser.focus_page` | Focus page |
 | `<A-l>` | `mode.site --toggle arrow` | Arrow mode |
+| `<A-o>` | `mode.normal_once` | One normal command |
 
 <!-- END generated -->

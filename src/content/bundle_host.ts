@@ -173,6 +173,8 @@ export function create_bundle_host() {
       current_mode = next;
       sinks.get(left)?.exit(next);
       sinks.get(next)?.enter?.();
+      // The page bundle takes the frame back to the mode a one-shot normal command came from. Only a loaded bundle hears, so its start reads the mode it missed.
+      void handlers.get("once.mode")?.({ mode_: next });
     },
     // The tab or page went away. A mode with a sink ends and the page returns to normal mode.
     page_hidden_: (): void => {

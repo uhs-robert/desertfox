@@ -52,3 +52,8 @@ export const mode_escape: ContentHandler = {
 export const mode_pass_next: ContentHandler = {
   run: () => page_mode.arm_pass_next_(),
 };
+
+// The key flow reads the next sequence as normal mode. The which-key panel lists the normal keys at once.
+export const mode_normal_once: ContentHandler = {
+  run: () => page_mode.arm_once_(),
+};

@@ -90,7 +90,7 @@ test("mode.site run during a replay keeps key order: the keys behind it run unde
     blur_window_open_: () => false,
     escape_to_page_: () => false,
     get_mode_: state.get_mode_,
-    take_pass_next_: state.take_pass_next_,
+    take_pass_next_: state.take_pass_next_, take_once_: state.take_once_,
     // `n.v` stands for mode.site visual, which runs synchronously inside the key flow.
     run_leaf_: (leaf) => {
       const name = String(leaf.steps[0]?.invocation.id);

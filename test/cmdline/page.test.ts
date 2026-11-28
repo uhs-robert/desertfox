@@ -355,6 +355,18 @@ test("a forwarded Enter ends the line, so keys typed in the frame before the hos
   assert.deepEqual([host.submits(), late_keys_of(host.received)], [submit_of("my.jira"), ["j"]]);
 });
 
+test("the one-shot normal prefix closes the line, drops its text and goes back to the host ahead of the keys after it", async (t) => {
+  const keymap = { ...KEYMAP, modes: { ...KEYMAP.modes, browser: { kind: "branch", children: { "<A-o>": { ...leaf("mode.normal_once"), any_mode: true } } } } };
+  const { post_start, press } = await load_page(t, "normal_once", { keymap });
+  const host = post_start(TICKET, "jira", ["<A-o>"]);
+  await host.opened();
+  press("j");
+  host.port.postMessage({ desertfox_cmdline: { kind: "drain" } });
+  await until(() => late_keys_of(host.received) !== undefined);
+  assert.deepEqual([host.submits(), late_keys_of(host.received)], [[], ["<A-o>", "j"]]);
+  assert.ok(host.received.some((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "close"));
+});
+
 test("Enter on a command that lacks a value shows the error, keeps the line open and sends nothing", async (t) => {
   const { input, to_background, post_start, press_enter } = await load_page(t, "precheck_missing");
   const host = post_start(TICKET, "fetch ");

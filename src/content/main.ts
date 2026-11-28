@@ -54,7 +54,7 @@ function refresh_mode_indicator(): void {
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
   // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
   const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
-  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
+  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.key_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
   bar_flags = { ...(pass_next_armed && { pass: true as const }), ...(site_label && { site: site_label }) };
   report_bar();
 }
@@ -94,7 +94,8 @@ let which_key_skip: readonly string[] | undefined;
 const follow_prefix = (prefix: PendingPrefix | undefined, at_once?: boolean) => {
   bar_pending = prefix;
   report_bar();
-  follow_which_key(bundles, prefix?.typed_.length ? prefix : undefined, at_once, which_key_delay_ms, which_key_skip);
+  // A bare count has no keys to list. The root, with no count, lists the first keys.
+  follow_which_key(bundles, prefix?.typed_.length || !prefix?.count_ ? prefix : undefined, at_once, which_key_delay_ms, which_key_skip);
 };
 
 // While a macro records, a leaf starts after the one before it has ended and sent its step, so a stop key cannot overtake a step still running. A hint pick waits on the user and sends its step when it begins, so the next leaf, which may be the Escape that ends the pick, never waits for it. A replay can wait on a pick too, and its own hold keeps a later stop key behind it.
@@ -106,24 +107,32 @@ let escape_to_page = false;
 
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
-  get_mode_: page_mode.get_mode_,
+  get_mode_: page_mode.key_mode_,
   take_pass_next_: page_mode.take_pass_next_,
+  take_once_: page_mode.take_once_,
   run_leaf_: (bound_leaf, count, repeat) => {
     const leaf = leaf_for_page(bound_leaf, document.activeElement, document.body, document);
     // No leaf runs when every guard fails and nothing is left to fall back to: the page keeps the key.
     if (!leaf) return true;
+    // Read before the leaf runs, which can change all three.
+    const after_prefix = page_mode.is_once_armed_();
+    const mode = page_mode.get_mode_();
+    const focused = deepest_focused_element();
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
     const ran = (leaf_ran = recording === undefined ? run() : last_leaf.then(run));
     if (!leaf.steps.some((step) => /^(hint\.run|macro\.play)$/.test(step.invocation.id))) last_leaf = ran;
+    // The page bundle takes the frame back to `mode` once a mode the leaf opens ends.
+    if (after_prefix) void bundles.run_command_("once.start", "page", { mode_: mode, focused_: focused, ended_: ran }, "", false);
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {
     page_mode.escape();
     blur_focused_element();
   },
-  in_editable_field_: () => is_editable_element(deepest_focused_element()),
+  // The one-shot normal prefix reads the keys as normal ones, in a field too.
+  in_editable_field_: () => !page_mode.is_once_armed_() && is_editable_element(deepest_focused_element()),
   user_input_seen_: () => user_input_seen,
   blur_window_open_: () => Date.now() < blur_ends_ms,
   escape_to_page_: () => escape_to_page,
@@ -502,7 +511,11 @@ function start(): void {
     document,
   );
 
-  page_mode.listen_display_(refresh_mode_indicator);
+  page_mode.listen_display_(() => {
+    refresh_mode_indicator();
+    // The which-key panel lists the normal keys as soon as the one-shot normal prefix is armed.
+    if (page_mode.is_once_armed_()) follow_prefix({ mode: "normal", typed_: [] }, true);
+  });
 
   const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
 
