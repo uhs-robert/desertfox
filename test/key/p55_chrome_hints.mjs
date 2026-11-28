@@ -521,26 +521,21 @@ export async function run_cases(context) {
     const url = await chrome(`(async () => ${W}.gBrowser.currentURI.spec)()`);
     on_teardown(() => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); const found = await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} }); if (found) await PlacesUtils.bookmarks.remove(found); })()`));
     const bookmarked = () => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); return !!(await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} })); })()`);
-    // Firefox closes this panel a few seconds after it shows unless the user touches it, so the timer stops once the panel is up.
-    const stop_auto_close = () => chrome(`(async () => { const ui = ${W}.StarUI; clearTimeout(ui._autoCloseTimer); ui._autoCloseTimerEnabled = false; })()`);
-    try {
-      await open_panel("editBookmarkPanel", `await w.PlacesCommandHook.bookmarkPage();`);
-      await stop_auto_close();
-      await poll_until("the bookmark to be made", bookmarked, { timeout_ms: 5000 });
-      await chrome(`(async () => { ${W}.document.getElementById("editBookmarkPanelDoneButton").focus(); })()`);
-      const labels = await hints_in_panel("the bookmark panel");
-      expect(labels.every((label) => label.panel), `a label is outside the panel: ${JSON.stringify(labels.slice(0, 4))}`);
-      const text = await label_of_element(labels, `${W}.document.getElementById("editBookmarkPanelRemoveButton")`);
-      expect(text !== undefined, `no label on Remove bookmark: ${JSON.stringify(labels)}`);
-      await press_keys(...text.split(""));
-      await confirm_mark_shows("Remove bookmark");
-      expect(await bookmarked(), "the pick removed the bookmark with no Enter");
-      await sleep(700);
-      await press_keys("-k", "Return");
-      await poll_until("Enter to remove the bookmark", async () => !(await bookmarked()), { timeout_ms: 5000 });
-    } finally {
-      await chrome(`(async () => { ${W}.StarUI._autoCloseTimerEnabled = true; })()`);
-    }
+    // A page that is already bookmarked gets the edit panel with no auto close, which Firefox gives only a new bookmark.
+    await chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); await PlacesUtils.bookmarks.insert({ parentGuid: PlacesUtils.bookmarks.unfiledGuid, url: ${JSON.stringify(url)}, title: "panel mark" }); })()`);
+    await poll_until("the bookmark to be made", bookmarked, { timeout_ms: 5000 });
+    await open_panel("editBookmarkPanel", `await w.PlacesCommandHook.bookmarkPage();`);
+    await chrome(`(async () => { ${W}.document.getElementById("editBookmarkPanelDoneButton").focus(); })()`);
+    const labels = await hints_in_panel("the bookmark panel");
+    expect(labels.every((label) => label.panel), `a label is outside the panel: ${JSON.stringify(labels.slice(0, 4))}`);
+    const text = await label_of_element(labels, `${W}.document.getElementById("editBookmarkPanelRemoveButton")`);
+    expect(text !== undefined, `no label on Remove bookmark: ${JSON.stringify(labels)}`);
+    await press_keys(...text.split(""));
+    await confirm_mark_shows("Remove bookmark");
+    expect(await bookmarked(), "the pick removed the bookmark with no Enter");
+    await sleep(700);
+    await press_keys("-k", "Return");
+    await poll_until("Enter to remove the bookmark", async () => !(await bookmarked()), { timeout_ms: 5000 });
   });
 
   await run_case("with the tab group editor open, gB labels it, a swatch picks at once and Delete group waits for Enter", async () => {
