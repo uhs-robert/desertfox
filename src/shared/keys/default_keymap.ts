@@ -195,7 +195,6 @@ const BASE_SECTIONS: KeymapConfig = {
     ED: { id: "pane.focus", args: { region: "devtools" }, label: "Focus DevTools" },
     EH: { id: "pane.move", args: { direction: "left" }, label: "Move left" },
     EL: { id: "pane.move", args: { direction: "right" }, label: "Move right" },
-    EJ: { id: "pane.move", args: { direction: "down" }, label: "Dock DevTools at the bottom" },
     gF: { id: "frame.exit" },
     gB: { id: "hint.browser" },
     g0: { id: "tab.goto", args: { index: 1 }, label: "First tab" },

@@ -1,4 +1,4 @@
-// The pane keys on the browser module (desertfox-panes.js): En opens a split with a new tab, EN splits with the next tab, Eu unsplits, E> and E< resize the left pane, E= makes the panes equal, Eh and El move between panes, EH and EL swap the panes, EJ refuses from the page, E<Space> holds the group, ED and ES focus DevTools and the sidebar, and Ex closes both tabs.
+// The pane keys on the browser module (desertfox-panes.js): En opens a split with a new tab, EN splits with the next tab, Eu unsplits, E> and E< resize the left pane, E= makes the panes equal, Eh and El move between panes, EH and EL swap the panes, E<Space> holds the group, ED and ES focus DevTools and the sidebar, and Ex closes both tabs.
 // Each key runs in the extension, which sends the request to the module, so every case also crosses the from-extension and from-module lists in a real Firefox.
 import { module_steps } from "./browser_module_steps.mjs";
 
@@ -119,7 +119,12 @@ export async function run_cases(context) {
   await run_case("EL and EH swap the split panes, keep the moved pane selected and focused, and refuse the side it is on", async () => {
     await select_page("p55_a");
     expect(!(await a_is_right()), "the first page does not start on the left");
+    const reply_before = (await last_reply())?.reply_to;
     await press_keys("EL");
+    await poll_until("the module to answer EL with ok", async () => {
+      const reply = await last_reply();
+      return reply?.reply_to !== reply_before && reply?.ok === true;
+    });
     await poll_until("the first page to show on the right", a_is_right);
     await poll_until("the moved pane to keep the selection and the focus", async () => {
       const a = await pane_of("p55_a");
@@ -142,12 +147,6 @@ export async function run_cases(context) {
     await press_keys("H");
     await poll_until("the first page to show on the left again", async () => !(await a_is_right()));
     await press_keys("-k", "Escape");
-  });
-
-  await run_case("EJ from the page is refused, as only DevTools docks at the bottom", async () => {
-    await select_page("p55_a");
-    await press_keys("EJ");
-    await poll_until("the module's refusal", async () => (await last_reply())?.error === "Focus DevTools first");
   });
 
   await run_case("ED puts the focus in the docked toolbox", async () => {

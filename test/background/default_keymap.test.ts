@@ -431,7 +431,7 @@ test("the E group is named Pane and binds the split commands that gp and gP also
   const normal = DEFAULT_KEYMAP.normal! as Record<string, { id: string; args?: Record<string, unknown> }>;
   assert.deepEqual([normal.Ep!.id, normal.Es!.id], ["tab.split_other", "tab.split_swap"]);
   const keys = Object.keys(normal).filter((key) => key.startsWith("E"));
-  assert.deepEqual(keys.sort(), ["ED", "EH", "EJ", "EL", "EN", "ES", "E<", "E>", "E=", "Eh", "Ek", "El", "Ep", "Es", "Eu", "Ex", "En"].sort());
+  assert.deepEqual(keys.sort(), ["ED", "EH", "EL", "EN", "ES", "E<", "E>", "E=", "Eh", "Ek", "El", "Ep", "Es", "Eu", "Ex", "En"].sort());
   const bound = (key: string) => `${normal[key]!.id} ${JSON.stringify(normal[key]!.args ?? {})}`;
   assert.equal(bound("En"), 'pane.split {"with":"new"}');
   assert.equal(bound("EN"), 'pane.split {"with":"next"}');
@@ -444,7 +444,7 @@ test("the E group is named Pane and binds the split commands that gp and gP also
   assert.equal(bound("El"), 'pane.focus_side {"direction":"right"}');
   assert.equal(bound("EH"), 'pane.move {"direction":"left"}');
   assert.equal(bound("EL"), 'pane.move {"direction":"right"}');
-  assert.equal(bound("EJ"), 'pane.move {"direction":"down"}');
+  assert.equal(normal.EJ, undefined);
   assert.equal(normal.EK, undefined);
 });
 
@@ -500,11 +500,11 @@ test("which-key reads Focus left and Focus right for Eh and El, with the order i
   assert.match(rows.find((row) => row.keys === "h")!.description, /^Focus the other pane, then DevTools, then the sidebar there\./);
 });
 
-test("which-key reads Move left, Move right and Dock DevTools at the bottom for EH, EL and EJ, and EK stays free", () => {
+test("which-key reads Move left and Move right for EH and EL, and EJ and EK stay free", () => {
   const { compiled } = compile(DEFAULT_KEYMAP);
   const rows = panel_after_prefix(compiled.modes.normal, ["E"], (id) => registry.get(id) as never).rows;
   assert.equal(rows.find((row) => row.keys === "H")?.command, "Move left");
   assert.equal(rows.find((row) => row.keys === "L")?.command, "Move right");
-  assert.equal(rows.find((row) => row.keys === "J")?.command, "Dock DevTools at the bottom");
+  assert.equal(rows.find((row) => row.keys === "J"), undefined);
   assert.equal(rows.find((row) => row.keys === "K"), undefined);
 });
