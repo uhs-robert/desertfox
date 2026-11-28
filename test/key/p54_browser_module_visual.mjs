@@ -27,6 +27,9 @@ export async function run_cases(context) {
     // The search box takes the focus as the page opens, so the focus goes to the page body first.
     await chrome(`(async () => { ${W}.gBrowser.selectedBrowser.focus(); ${W}.gBrowser.selectedBrowser.contentDocument?.activeElement?.blur?.(); })()`);
     await press_keys("v");
+    await poll_until("caret browsing on", caret_pref, { timeout_ms: 5000 }).catch(async (error) => {
+      throw new Error(`${error.message}; module ${JSON.stringify(await steps.module_status())}; tree ${JSON.stringify(await steps.session_value("desertfox_browser_module_state").then((state) => state?.tree?.children?.v ?? null))}; hello ${JSON.stringify(await steps.session_value("desertfox_browser_module_hello"))}; bar ${await bar_mode()}`);
+    });
     await poll_until("CARET in the bar", mode_is("CARET"), { timeout_ms: 8000 });
     await poll_until("caret browsing on", caret_pref);
     await press_keys("Escape");

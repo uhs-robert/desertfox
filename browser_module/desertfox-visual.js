@@ -113,6 +113,9 @@
 
     const is_target = (target) => typeof target === "object" && target !== null && target.nodeType === ELEMENT_NODE && !!target.ownerDocument?.defaultView;
 
+    // Fractions of the view, tried in turn for text to start visual mode on.
+    const START_POINTS = [[0.25, 0.25], [0.5, 0.3], [0.3, 0.5], [0.5, 0.5], [0.2, 0.15], [0.6, 0.2], [0.4, 0.7], [0.15, 0.4]];
+
     // Puts Firefox's own selection where visual mode starts: the target's contents, the selection that exists, or the text at a point of the view. Gives false when there is none, so no mode starts.
     function select_for_visual(doc, target, line) {
       const selection = doc.defaultView.getSelection();
@@ -120,12 +123,20 @@
         selection.selectAllChildren(target);
         return !selection.isCollapsed;
       }
-      if (selection.rangeCount === 0) {
-        const view = doc.defaultView;
-        const place = doc.caretPositionFromPoint?.(view.innerWidth / 4, view.innerHeight / 4);
-        if (!place) return false;
+      if (selection.rangeCount > 0) return extend_here(selection, line);
+      // Nothing is selected: try a few points of the view until one has text to extend over.
+      const view = doc.defaultView;
+      for (const [x, y] of START_POINTS) {
+        const place = doc.caretPositionFromPoint?.(view.innerWidth * x, view.innerHeight * y);
+        if (!place) continue;
         selection.collapse(place.offsetNode, place.offset);
+        if (extend_here(selection, line)) return true;
       }
+      return false;
+    }
+
+    // Takes the line, or one character, from the caret. A collapsed selection stays collapsed where there is no text.
+    function extend_here(selection, line) {
       if (line) {
         selection.modify("move", "backward", "lineboundary");
         selection.modify("extend", "forward", "lineboundary");
