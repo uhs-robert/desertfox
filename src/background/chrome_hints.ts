@@ -124,9 +124,9 @@ export function token_of_key(args: ModuleArgs): string | undefined {
 }
 
 // What a typed key does, by the rules of hints on a page: the earlier `tokens` replay into a fresh picker, then `token` goes in. `texts` holds the text of each label's target, by the label's index.
-// Undefined: nothing changes, so the key is not kept. `/` with no text to type against is such a key, as is any key once the session kept MAX_TOKENS.
+// Undefined: nothing changes, so the key is not kept. `/` with no text to type against is such a key, as is any key once the session kept MAX_TOKENS besides the Tabs at the end.
 export function key_step(labels: readonly LabelRow[], texts: readonly (string | undefined)[], tokens: readonly string[], token: string): KeyStep {
-  if (tokens.length >= MAX_TOKENS) return undefined;
+  if (tokens.length - turns_at_end(tokens) >= MAX_TOKENS) return undefined;
   const picker = create_picker(labels.map(([, label]) => label), () => texts);
   const id_of = (index: number): number => labels[index]![0];
   let before: HintView = { typed: "", ids: labels.map(([id]) => id) };
@@ -145,7 +145,19 @@ export function key_step(labels: readonly LabelRow[], texts: readonly (string | 
   const after = view_after(token);
   if (typeof after === "number") return { pick: after };
   if (after === undefined || JSON.stringify(after) === JSON.stringify(before)) return undefined;
-  return { view: after, tokens: [...tokens, token] };
+  return { view: after, tokens: kept_after(tokens, token, after.ids.length) };
+}
+
+const is_turn = (token: string): boolean => token === "<Tab>" || token === "<S-Tab>";
+const turns_at_end = (tokens: readonly string[]): number => tokens.length - (tokens.findLastIndex((token) => !is_turn(token)) + 1);
+
+// Tab and Shift-Tab only move the active match round the `matches`, and the next key kept after them sets it back to the best one. So the history keeps the Tabs only at its end, as the shortest run to the same match.
+function kept_after(tokens: readonly string[], token: string, matches: number): string[] {
+  const before_turns = tokens.slice(0, tokens.length - turns_at_end(tokens));
+  if (!is_turn(token)) return [...before_turns, token];
+  const forward = [...tokens.slice(before_turns.length), token].reduce((sum, turn) => sum + (turn === "<Tab>" ? 1 : -1), 0);
+  const net = ((forward % matches) + matches) % matches;
+  return [...before_turns, ...(net <= matches / 2 ? Array<string>(net).fill("<Tab>") : Array<string>(matches - net).fill("<S-Tab>"))];
 }
 
 // The texts by label, once every part came. A target with no text is undefined, which text mode skips.

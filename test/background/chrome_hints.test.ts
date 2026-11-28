@@ -82,6 +82,28 @@ test("a key narrows, drops a letter that continues no label, takes one back on B
   assert.equal(key_step(labels, none, [], "/"), undefined, "text mode opened with no text to type against");
 });
 
+test("a long run of Tab in text mode never fills the kept keys, so Enter, Backspace and typing still work after it", () => {
+  // 70 targets whose texts all match the empty text, so Tab walks them in page order.
+  const labels: LabelRow[] = Array.from({ length: 70 }, (_, index) => [index + 1, `l${index}`]);
+  const texts = labels.map(([id]) => `item ${id}`);
+  const press = (tokens: string[], ...keys: string[]) => {
+    for (const key of keys) {
+      const step = key_step(labels, texts, tokens, key);
+      assert.ok(step && "view" in step, `${key} after ${tokens.length} kept keys changed nothing`);
+      tokens = step.tokens;
+    }
+    return tokens;
+  };
+  const tabbed = press(["/"], ...Array<string>(100).fill("<Tab>"));
+  assert.ok(tabbed.length <= 36, `the kept keys grew to ${tabbed.length}`);
+  assert.deepEqual(key_step(labels, texts, tabbed, "<Enter>"), { pick: 31 }, "Enter did not pick the 101st match counted round the 70");
+  const back = press(tabbed, ...Array<string>(5).fill("<S-Tab>"));
+  assert.deepEqual(key_step(labels, texts, back, "<Enter>"), { pick: 26 });
+  assert.ok(key_step(labels, texts, tabbed, "<Backspace>"), "Backspace was dropped");
+  const typed = press(tabbed, "1");
+  assert.deepEqual(typed, ["/", "1"], "Tabs that typing reset stayed kept");
+});
+
 test("a start sends one collect, and the labels go out once every part of the targets is in, in any order", async () => {
   const { hints, called, session, draws, shown } = make();
   assert.deepEqual(await hints.start(7), { ok: true });
