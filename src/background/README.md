@@ -66,7 +66,7 @@ The detail of the long entries moved to the "Background files" section of the `d
 - `site_zoom.ts`: the `zoom` setting, applied on a tab's load through `tabs.setZoom`.
 - `list_keys.ts`: answers which-key: the title and a row per next key under a typed prefix, for the active page.
 - `bundle_loader.ts`: injects a bundle into a frame when the content script asks, once per document.
-- `selection_ask.ts`: reads the selection of a frame for a `selection` context source (through the browser module on a parent-process about: page), and the scroll offset of the top frame for a command with the `jumps` flag.
+- `selection_ask.ts`: reads a frame's selection for a `selection` source (the browser module on about: pages) and the top frame's scroll offset for a `jumps` command.
 - `issue_report.ts`: the body and the URL of the `:issue` report.
 - `load_log.ts`: the last 20 bundle loads in storage, which the key test reads. Writes run one at a time and a storage failure is dropped, so the log never fails a load. Pure.
 - `timing_log.ts`, `timing_summary.ts`, `timing_browser.ts`: the last 300 timings in `storage.session`, and the pure summary that `debug.perf` copies.
