@@ -158,7 +158,7 @@ export async function run_cases(context) {
     }
     expect(previous === "reload-button", `Tab never reached Reload, the match of "re": ${previous}`);
     await press_keys("-k", "Tab");
-    await poll_until("Tab to leave Reload", async () => (await active()) !== "reload-button", { timeout_ms: 3000 });
+    await poll_until("Tab to leave Reload", async () => { const now = await active(); return typeof now === "string" && now !== "reload-button"; }, { timeout_ms: 3000 });
     await take_shot("/tmp/desertfox-chrome-hints-text-mode.png");
     await press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
     await poll_until("Shift-Tab to come back to Reload", async () => (await active()) === "reload-button", { timeout_ms: 3000 });

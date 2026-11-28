@@ -565,7 +565,7 @@ test("with hint mode keys each target's text goes out cut and stripped, a field 
   run.hint_key();
   await run.collect(5);
   const texts = run.pushes("chrome_hints.texts");
-  assert.ok(protocol.validate_message_list(run.from_module(), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
+  for (const message of run.from_module()) assert.ok(protocol.validate_message(message, protocol.MODULE_TO_EXTENSION_KINDS).ok, `a ${(message as { kind?: string }).kind} message failed the extension's check`);
   assert.deepEqual(texts.map(({ part, parts }) => [part, parts]), [[0, 1]]);
   const by_id = new Map(JSON.parse(texts[0]!.texts as string) as [number, string][]);
   assert.equal(by_id.get(run.id_of(5, save)!), "Save changes");

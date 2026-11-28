@@ -582,7 +582,7 @@ test("with hint mode keys a toolbar session sends its buttons' names as texts, i
   await collect(1);
   const parts = pushes("chrome_hints.texts");
   assert.equal(parts.length, protocol.MAX_CHROME_HINT_TEXT_PARTS, "texts past the cap went out, or the cap was not reached");
-  assert.ok(protocol.validate_message_list(from_module(), protocol.MODULE_TO_EXTENSION_KINDS, Date.now()).ok);
+  for (const message of from_module()) assert.ok(protocol.validate_message(message, protocol.MODULE_TO_EXTENSION_KINDS).ok, `a ${(message as { kind?: string }).kind} message failed the extension's check`);
   const rows = parts.flatMap((args) => JSON.parse(args.texts as string) as [number, string][]);
   assert.deepEqual(rows[0], [target_ids()[0], "Back"]);
   assert.ok(rows.length < 400);

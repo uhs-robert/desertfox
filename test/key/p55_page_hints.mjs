@@ -366,7 +366,7 @@ export async function run_cases(context) {
     expect(first !== null, "text mode shows no active match");
     await take_shot("/tmp/desertfox-page-hints-text-mode.png");
     await press_keys("-k", "Tab");
-    await poll_until("Tab to move the active match", async () => (await chrome(active_label))?.text !== first.text, { timeout_ms: 3000 });
+    await poll_until("Tab to move the active match", async () => { const now = await chrome(active_label); return now !== null && now !== undefined && now.text !== first.text; }, { timeout_ms: 3000 });
     await press_keys("-M", "shift", "-k", "Tab", "-m", "shift");
     await poll_until("Shift-Tab to move it back", async () => (await chrome(active_label))?.text === first.text, { timeout_ms: 3000 });
     await chrome(watch_pick);
