@@ -66,6 +66,8 @@ test("a hint key says why hints do not run: the setting on the PDF viewer and Re
   };
   for (const url of ["https://example.org/paper.pdf", "file:///tmp/paper.pdf", "about:reader?url=https%3A%2F%2Fexample.org%2F"]) assert.equal(await said(url, false), "Hints here need :set browser_module_pages true", url);
   for (const url of ["about:preferences", "about:addons", undefined]) assert.equal(await said(url, false), "Hints do not run on this page", String(url));
+  for (const url of ["about:privatebrowsing", "about:home", "about:newtab", "about:home?x=1"]) assert.equal(await said(url, false), "Hints on this page are not ready, try again", url);
+  assert.equal(await said("about:homepage", false), "Hints do not run on this page", "a name that only starts like a start page");
   assert.equal(await said("about:reader?url=x", true), "Hints do not run on this page", "the setting is on already");
   assert.equal(await said("about:preferences", false), "Hints do not run on this page");
   await assert.rejects(run({ keys: "i", count: 0 }));

@@ -23,10 +23,11 @@ const SEEN_MS = 300;
 const AREA = box(0, 80, 1200, 700);
 
 type Principal = { isContentPrincipal: boolean; isSystemPrincipal: boolean; addonId: string; asciiHost: string; spec: string; schemeIs(scheme: string): boolean };
+const about_principal = (spec: string): Principal => ({ isContentPrincipal: false, isSystemPrincipal: true, addonId: "", asciiHost: "", spec, schemeIs: (name: string) => name === "about" });
 const web_principal = (host: string, scheme = "https", patch: Partial<Principal> = {}): Principal => ({ isContentPrincipal: true, isSystemPrincipal: false, addonId: "", asciiHost: host, spec: `${scheme}://${host}/`, schemeIs: (name: string) => name === scheme, ...patch });
 
 type Sent = { name: string; data: Record<string, unknown> };
-type Options = { host?: string; scheme?: string; remote_type?: string; principal?: Principal; content_dpr?: number; chrome_dpr?: number; child_remote_type?: string; pref?: string | undefined };
+type Options = { host?: string; scheme?: string; remote_type?: string; principal?: Principal; content_dpr?: number; chrome_dpr?: number; child_remote_type?: string; pref?: string | undefined; about?: string; private_window?: boolean; private_access?: boolean };
 
 // An element of the page with a box in the page's own pixels.
 const el = (local_name: string, left: number, top: number, props: Partial<Node> & Record<string, unknown> = {}, attrs: Record<string, string> = {}) => {
@@ -52,14 +53,16 @@ function listing() {
 }
 
 function restricted_window(firefox: Firefox, options: Options, build: (root: Node) => void) {
-  const { host = "addons.mozilla.org", scheme = "https", remote_type = "privilegedmozilla", content_dpr = 1, chrome_dpr = 1 } = options;
-  const principal = options.principal ?? web_principal(host, scheme);
+  const { host = "addons.mozilla.org", scheme = "https", about, remote_type = about ? "privilegedabout" : "privilegedmozilla", content_dpr = 1, chrome_dpr = 1 } = options;
+  const principal = options.principal ?? (about ? about_principal(about) : web_principal(host, scheme));
+  const address = about ?? `${scheme}://${host}/`;
   const to_child: Sent[] = [];
   const browser = Object.assign(new Node("browser", { box: AREA }), {
     isRemoteBrowser: true,
     remoteType: remote_type,
     innerWindowID: 10,
-    browsingContext: { currentWindowGlobal: { documentPrincipal: principal, documentURI: { spec: `${scheme}://${host}/` } } },
+    browsingContext: { currentWindowGlobal: { documentPrincipal: principal, documentURI: { spec: address } } },
+    private_browser: options.private_window === true,
     messageManager: { sendAsyncMessage: (name: string, data: Record<string, unknown>) => void to_child.push({ name, data: structuredClone(data) }) },
   });
   const opened: { address: string; options: { inBackground: boolean; triggeringPrincipal: unknown } }[] = [];
@@ -69,11 +72,11 @@ function restricted_window(firefox: Firefox, options: Options, build: (root: Nod
     addTab: (address: string, tab_options: (typeof opened)[number]["options"]) => (opened.push({ address, options: tab_options }), { opened: address }),
   };
   const window = chrome_window(firefox, "navigator:browser", (root) => root.append(button("reload-button", 10), browser));
-  Object.assign(window.win, { gBrowser: tabs, devicePixelRatio: chrome_dpr });
+  Object.assign(window.win, { gBrowser: tabs, devicePixelRatio: chrome_dpr, private_window: options.private_window === true });
   const page_root = new Node("html");
   build(page_root);
-  const content = { location: { href: `${scheme}://${host}/addon/one/` }, devicePixelRatio: content_dpr, innerWidth: AREA.width / (content_dpr / chrome_dpr), innerHeight: AREA.height / (content_dpr / chrome_dpr), windowGlobalChild: { innerWindowId: 10 } } as Record<string, unknown>;
-  const page = chrome_document(page_root, content, `${scheme}://${host}/`);
+  const content = { location: { href: about ?? `${scheme}://${host}/addon/one/` }, devicePixelRatio: content_dpr, innerWidth: AREA.width / (content_dpr / chrome_dpr), innerHeight: AREA.height / (content_dpr / chrome_dpr), windowGlobalChild: { innerWindowId: 10 } } as Record<string, unknown>;
+  const page = chrome_document(page_root, content, address);
   Object.assign(page.document, { nodePrincipal: principal, visibilityState: "visible" });
   page.own();
   content.document = page.document;
@@ -136,6 +139,7 @@ function start_on(options: Options = {}, build = listing().build, { state_hints 
     },
     { state: { v: 1, enabled: true, keys: [], tabs: {}, ...(state_hints && { page_hints: true }) }, files: [FILE, ...files] },
   );
+  run.firefox.extension!.privateBrowsingAllowed = options.private_access === true;
   const copied: string[] = [];
   run.firefox.Components.classes["@mozilla.org/widget/clipboardhelper;1"] = { getService: () => ({ copyString: (text: string) => copied.push(text) }) };
   Object.assign(run.firefox.Components.interfaces, { nsIClipboardHelper: {} });
@@ -148,7 +152,7 @@ function start_on(options: Options = {}, build = listing().build, { state_hints 
       },
     },
   });
-  const child = frame_child(run.firefox, chrome, { remote_type: options.child_remote_type ?? options.remote_type ?? "privilegedmozilla" });
+  const child = frame_child(run.firefox, chrome, { remote_type: options.child_remote_type ?? options.remote_type ?? (options.about ? "privilegedabout" : "privilegedmozilla") });
   const core = run.firefox.Services.desertfox_browser_module as {
     page_hints(): { handles(browser: unknown): boolean; start(args: unknown): boolean };
     content_pages(): { labels(browser: unknown): string | undefined; refuses(browser: unknown): boolean };
@@ -708,4 +712,151 @@ test("a route change of the page during the mark refuses the confirmed pick, eve
   await run.flush();
   assert.deepEqual(run.child_picks().map(({ confirmed }) => confirmed), [true]);
   assert.equal(remove.clicks, 0, "a button on another route was clicked");
+});
+
+// A start page as Firefox shows it: top sites and a learn more link, the search box's handoff button, a field, and the buttons that pin, dismiss, remove and toggle.
+function start_page() {
+  const parts = {
+    top_site: link("https://example.com/", 20, 20, { class: "top-site-button" }),
+    learn_more: link("https://support.mozilla.org/kb/private-browsing", 200, 20),
+    handoff: el("button", 20, 100, {}, { class: "search-handoff-button" }),
+    pin: el("button", 400, 20, {}, { class: "context-menu-item" }),
+    dismiss: el("button", 500, 20),
+    toggle: el("button", 400, 100, {}, { role: "switch" }),
+    settings: el("div", 500, 100, {}, { role: "button" }),
+    internal: link("about:preferences", 600, 20),
+  };
+  return { parts, build: (root: Node) => root.append(...Object.values(parts)) };
+}
+const START_NAMES = ["about:privatebrowsing", "about:home", "about:newtab"];
+const START_KINDS = ["privatebrowsing", "home", "newtab"];
+
+test("each start page is labelled in the privilegedabout process only, by its own about: address, and the new tab override stays with the content script", () => {
+  const kind = (options: Options) => {
+    const run = start_on(options, start_page().build);
+    return { labels: run.core.content_pages().labels(run.chrome.browser), refuses: run.core.content_pages().refuses(run.chrome.browser), handles: run.core.page_hints().handles(run.chrome.browser) };
+  };
+  START_NAMES.forEach((about, index) => {
+    assert.deepEqual(kind({ about }), { labels: START_KINDS[index], refuses: false, handles: true }, about);
+    assert.equal(kind({ about: `${about}?x=1` }).labels, START_KINDS[index], `${about} with a query`);
+    assert.equal(kind({ about: about.toUpperCase() }).labels, START_KINDS[index], `${about} in capitals`);
+  });
+  // The override page of a normal window: the address bar says about:newtab, the page is DesertFox's, in the extension's process.
+  const override = kind({ about: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/newtab.html", remote_type: "extension" });
+  assert.equal(override.labels, undefined, "the override page took the module route");
+  for (const options of [
+    { about: "about:newtab", remote_type: "extension" },
+    { about: "about:newtab", remote_type: "web" },
+    { about: "about:home", remote_type: "privilegedmozilla" },
+    { about: "about:home", remote_type: "file" },
+    { about: "about:logins" },
+    { about: "about:protections" },
+    { about: "about:privatebrowsingx" },
+    { about: "about:blank" },
+    { about: "about:home", principal: about_principal("about:home") && { ...about_principal("about:home"), addonId: "x@y" } },
+  ] as Options[]) {
+    assert.equal(kind(options).labels, undefined, JSON.stringify(options));
+  }
+  const run = start_on({ about: "about:home" }, start_page().build);
+  run.chrome.browser.isRemoteBrowser = false;
+  assert.equal(run.core.content_pages().labels(run.chrome.browser), undefined, "a page in the parent process took the content route");
+});
+
+test("the frame script's copy of the start page rule agrees with the parent's on every case", () => {
+  const cases: [Options, string][] = [
+    ...START_NAMES.flatMap((about, index) => [[{ about }, START_KINDS[index]!], [{ about: `${about}#top` }, START_KINDS[index]!]] as [Options, string][]),
+    [{ about: "about:newtab", remote_type: "extension" }, "newtab"],
+    [{ about: "about:newtab", remote_type: "web" }, "newtab"],
+    [{ about: "about:logins" }, "home"],
+    [{ about: "about:home" }, "newtab"],
+    [{ about: "about:home", principal: { ...about_principal("about:home"), addonId: "x@y" } }, "home"],
+    [{}, "home"],
+  ];
+  for (const [options, asked] of cases) {
+    const run = start_on(options, start_page().build);
+    const parent = run.core.content_pages().labels(run.chrome.browser) === asked;
+    run.child.ask("collect", { req: 1, inner: 10, kind: asked, action: "follow" });
+    const answer = run.child.sent.find((message) => message.name === `${PREFIX}targets`)!.data;
+    assert.equal(answer.error !== "not_here", parent, `the copies disagree on ${JSON.stringify(options)} as ${asked}: ${JSON.stringify(answer)}`);
+  }
+  // A page that is not the start page named: the frame script keeps nothing.
+  const run = start_on({ about: "about:privatebrowsing" }, start_page().build);
+  run.child.ask("collect", { req: 1, inner: 10, kind: "home", action: "follow" });
+  assert.equal(run.child.sent.at(-1)!.data.error, "not_here");
+  assert.equal(run.child.listening(), 0);
+});
+
+test("on a start page a link and the search handoff act at once on the spelled label, and every other control only marks until the user's own Enter", async () => {
+  for (const about of START_NAMES) {
+    const { parts, build } = start_page();
+    const run = start_on({ about }, build);
+    const { pick } = await labelled(run, 5);
+    assert.equal((await pick(parts.top_site))?.ok, true, `${about} top site`);
+    assert.equal(parts.top_site.clicks, 1);
+    assert.deepEqual(run.child_picks().map(({ confirmed }) => confirmed), [false]);
+    for (const name of ["learn_more", "handoff"] as const) {
+      const each = start_page();
+      const again = start_on({ about }, each.build);
+      const second = await labelled(again, 6);
+      assert.equal((await second.pick(each.parts[name]))?.ok, true, `${about} ${name}`);
+      assert.equal(each.parts[name].clicks, 1, `${about} ${name} did not act at once`);
+    }
+    for (const name of ["pin", "dismiss", "toggle", "settings", "internal"] as const) {
+      const each = start_page();
+      const again = start_on({ about }, each.build);
+      const second = await labelled(again, 6);
+      const target = each.parts[name];
+      assert.equal((await second.pick(target))?.ok, true);
+      assert.equal(target.clicks, 0, `${about} ${name} acted with no Enter`);
+      assert.ok(again.marked(), `${about} ${name} has no mark`);
+      assert.equal(again.child_picks().length, 0);
+      again.chrome.press("Enter", { isTrusted: false });
+      await again.flush();
+      assert.equal(target.clicks, 0, `${about} ${name} took an Enter a script made`);
+      again.chrome.clock.now += DWELL_MS;
+      again.chrome.press("Enter");
+      await again.flush();
+      assert.equal(target.clicks, 1, `${about} ${name}: the user's Enter did not click`);
+      assert.deepEqual(again.child_picks().map(({ confirmed }) => confirmed), [true]);
+    }
+  }
+});
+
+test("the frame script of a start page refuses a state-changing control sent without confirmed, and an about: link never leaves as an address", async () => {
+  const { parts, build } = start_page();
+  const run = start_on({ about: "about:home" }, build);
+  for (const part of [parts.pin, parts.dismiss, parts.toggle, parts.settings, parts.internal]) {
+    // A pick ends its session, so each control gets a fresh one.
+    run.child.ask("collect", { req: 3, inner: 10, kind: "home", action: "follow" });
+    const rows = run.child.sent.at(-1)!.data.rows as number[][];
+    const row = rows.find((each) => each[1] === part.box.left && each[2] === part.box.top)!;
+    assert.equal(row[5]! & 1, 1, "a control does not wait for Enter");
+    run.child.ask("pick", { req: 4, inner: 10, session: 3, id: row[0], confirmed: false });
+    assert.deepEqual(run.child.sent.at(-1)!.data, { req: 4, inner: 10, ok: false, error: "needs_enter" });
+  }
+  assert.ok([parts.pin, parts.dismiss, parts.toggle, parts.settings, parts.internal].every((part) => part.clicks === 0));
+  // A link action labels links to the web only: the about: link has no label.
+  const links = start_on({ about: "about:home" }, start_page().build);
+  links.child.ask("collect", { req: 5, inner: 10, kind: "home", action: "copy" });
+  const link_rows = links.child.sent.at(-1)!.data.rows as number[][];
+  assert.equal(link_rows.length, 2, "the link action labelled more than the two web links");
+});
+
+test("a start page in a private window gets hints only with the extension's private window access", async () => {
+  for (const about of ["about:privatebrowsing", "about:home"]) {
+    const without = start_on({ about, private_window: true, private_access: false }, start_page().build, { files: [LOCKED_FILE] });
+    assert.equal(without.hint_key(), false, `${about}: hints started in a private window without access`);
+    assert.equal(without.core.locked_page_rule().hint_notice(without.chrome.browser, without.chrome.win), "not_here");
+    assert.equal(without.page_layers().length, 0);
+    assert.equal(without.child.sent.length, 0, "the frame script heard of a refused start");
+
+    const parts = start_page();
+    const granted = start_on({ about, private_window: true, private_access: true }, parts.build, { files: [LOCKED_FILE] });
+    assert.equal(granted.core.locked_page_rule().hint_notice(granted.chrome.browser, granted.chrome.win), "page_hints");
+    const { pick } = await labelled(granted, 5);
+    assert.equal((await pick(parts.parts.top_site))?.ok, true, `${about} with access`);
+    assert.equal(parts.parts.top_site.clicks, 1);
+  }
+  const normal = start_on({ about: "about:home" }, start_page().build, { files: [LOCKED_FILE] });
+  assert.equal(normal.core.locked_page_rule().hint_notice(normal.chrome.browser, normal.chrome.win), "page_hints", "a normal window needs no access");
 });

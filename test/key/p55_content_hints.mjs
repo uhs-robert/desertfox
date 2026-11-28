@@ -278,6 +278,51 @@ export async function run_cases(context) {
     await clear_notices();
   });
 
+  // Firefox's start pages run in the privilegedabout process, which the route labels by the page's own about: address.
+  const EXTENSION_ID = "desertfox@uhs-robert";
+  const route_kind = `(async () => Services.desertfox_browser_module.content_pages()?.labels(${W}.gBrowser.selectedBrowser) ?? null)()`;
+  async function expect_start_page_labels(page, kind, shot) {
+    await poll_until(`${page} to be the selected page in privilegedabout`, async () => (await chrome(`(async () => { const b = ${W}.gBrowser.selectedBrowser; return b.currentURI.spec === "${page}" && b.remoteType === "privilegedabout"; })()`)), { timeout_ms: 10000 });
+    await focus_page();
+    expect((await chrome(route_kind)) === kind, `${page} is not a ${kind} page of the route`);
+    await start_hints("f", `f on ${page}`);
+    const shown = await chrome(label_count);
+    expect(shown >= 1, `${page} got no labels`);
+    await take_shot(shot);
+    await press_keys("-k", "Escape");
+    await expect_ended(`Escape on ${page}`);
+  }
+
+  await tab_case("about:home in a normal window gets module labels in the window's layer", async () => {
+    await home("ch_home");
+    await open_tab("about:home");
+    await expect_start_page_labels("about:home", "home", "/tmp/desertfox-content-hints-about-home.png");
+  });
+
+  await run_case("about:privatebrowsing in a private window gets module labels when the extension may run there", async () => {
+    const policy = `WebExtensionPolicy.getByID("${EXTENSION_ID}")`;
+    const was_allowed = await chrome(`(async () => ${policy}.privateBrowsingAllowed)()`);
+    const set_access = (allowed) =>
+      chrome(`(async () => {
+        const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
+        const { extension } = ${policy};
+        const change = { permissions: ["internal:privateBrowsingAllowed"], origins: [] };
+        await (${allowed} ? ExtensionPermissions.add("${EXTENSION_ID}", change, extension) : ExtensionPermissions.remove("${EXTENSION_ID}", change, extension));
+      })()`);
+    const close_private = () => chrome(`(async () => { const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs"); for (const w of [...Services.wm.getEnumerator("navigator:browser")]) if (PrivateBrowsingUtils.isWindowPrivate(w)) w.close(); })()`);
+    on_teardown(close_private);
+    on_teardown(() => set_access(was_allowed));
+    await set_access(true);
+    await poll_until("DesertFox to gain private window access", async () => (await chrome(`(async () => ${policy}.privateBrowsingAllowed)()`)) === true);
+    await chrome(`(async () => {
+      const w = Services.wm.getMostRecentWindow("navigator:browser").OpenBrowserWindow({ private: true });
+      await new Promise((resolve) => Services.obs.addObserver(function seen(subject) { if (subject === w) { Services.obs.removeObserver(seen, "browser-delayed-startup-finished"); resolve(); } }, "browser-delayed-startup-finished"));
+    })()`);
+    await poll_until("the private window to show about:privatebrowsing", async () => (await selected_spec()) === "about:privatebrowsing", { timeout_ms: 10000 });
+    await expect_start_page_labels("about:privatebrowsing", "privatebrowsing", "/tmp/desertfox-content-hints-about-privatebrowsing.png");
+    await close_private();
+  });
+
   const online = process.env.KEY_TEST_NETWORK === "1" && (await fetch(AMO_LISTING, { method: "HEAD", signal: AbortSignal.timeout(3000) }).then((response) => response.ok, () => false));
   if (!online) console.log("content hints: the real addons.mozilla.org case is skipped (set KEY_TEST_NETWORK=1 with a network)");
   else {
