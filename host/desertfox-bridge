@@ -21,7 +21,7 @@ It also owns a Unix socket, $XDG_RUNTIME_DIR/desertfox/bridge.sock, mode 0600. W
 owns the socket and the state file: the first host wins, and a second one waits LOCK_WAIT_S for the lock, then exits
 without saying ready. The socket speaks one JSON object per line, one reply line per request. It answers `ping`,
 `state`, `run`, `list`, `theme`, the Firefox tab verbs `tabs`, `activate`, `clear_preface`, `close` and `capture`, the
-Thunderbird mail reads `folders`, `messages`, `message` and `attachments`, and the Thunderbird mail writes `draft` and
+Thunderbird mail reads `folders`, `messages`, `message`, `attachments` and `contacts`, and the Thunderbird mail writes `draft` and
 `act` (see MAIL_WRITE_VERBS). Each but `ping` and `state` goes to the
 extension as {"verb", "request_id", ...fields}, and the extension decides what runs: it holds the bridge field, the
 never-list, the argument validator, the bridge_share_tabs opt-in and the private-window filter. The host only
@@ -950,15 +950,29 @@ TAB_VERBS = ("tabs", "activate", "clear_preface", "close", "capture")
 # The mail reads. The add-on checks its share settings and builds each reply. The host checks the request fields, sends
 # only those, and passes the reply on as it came. A reply frame over MAX_MESSAGE_BYTES is skipped unread, so a read
 # whose answer passes 1 MiB fails as unanswered.
-MAIL_READ_VERBS = ("folders", "messages", "message", "attachments")
+MAIL_READ_VERBS = ("folders", "messages", "message", "attachments", "contacts")
 MAX_FOLDER_ID_CHARS = 1024
 MAX_MESSAGES_LIMIT = 200
+# The add-on counts a query in UTF-16 units and owns the per word rules (2 characters each, 5 words at most), so the
+# host checks only the shape that keeps the frame small and free of control characters.
+MAX_CONTACTS_QUERY_UNITS = 100
+MAX_CONTACTS_LIMIT = 20
 
 
 def mail_read_fields(verb, request):
     """The fields that go to the add-on for a mail read, or a refusal text for a request of the wrong shape."""
     if verb == "folders":
         return {}
+    if verb == "contacts":
+        query = request.get("query")
+        if not (is_header_text(query, MAX_CONTACTS_QUERY_UNITS) and 0 < len(query.encode("utf-16-le")) // 2 <= MAX_CONTACTS_QUERY_UNITS):
+            return "contacts needs a query of 1 to %d characters with no control character" % MAX_CONTACTS_QUERY_UNITS
+        fields = {"query": query}
+        if "limit" in request:
+            if not (is_int(request["limit"]) and 1 <= request["limit"] <= MAX_CONTACTS_LIMIT):
+                return "limit is a whole number from 1 to %d" % MAX_CONTACTS_LIMIT
+            fields["limit"] = request["limit"]
+        return fields
     if verb in ("message", "attachments"):
         return {"id": request["id"]} if is_int(request.get("id")) else "%s needs a whole message id" % verb
     folder = request.get("folder")
