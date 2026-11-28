@@ -180,7 +180,7 @@
     function read_table(value) {
       if (!is_record(value) || !is_record(value.panels) || byte_size(value) > MAX_WHICH_KEY_BYTES) return void 0;
       const { delay_ms, skip, border } = value;
-      if (!Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return void 0;
+      if (!Number.isInteger(delay_ms) || delay_ms < 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return void 0;
       if (skip !== void 0 && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return void 0;
       const paths = Object.keys(value.panels);
       if (paths.length > MAX_WHICH_KEY_PANELS) return void 0;
@@ -275,16 +275,34 @@
       sequence_table = void 0;
       follow_prefix(void 0);
     };
-    const show_root = (target) => {
+    let stop_root_close;
+    const close_root = () => {
+      stop_root_close?.();
+      stop_root_close = void 0;
+    };
+    const show_root = (target, shown_now) => {
       if (target !== win) return;
+      if (!shown_now) {
+        close_root();
+        return end_sequence();
+      }
       const shown = table_and_theme();
       if (!shown?.table?.root) return;
       end_sequence();
+      close_root();
       draw(shown.table.root, shown.table, shown.theme);
       opening_root = true;
-      void Promise.resolve().then(() => void (opening_root = false));
+      void Promise.resolve().then(() => {
+        opening_root = false;
+        if (!surface?.host.parentNode) return;
+        const close_on_key = () => (close_root(), hide());
+        win.addEventListener("keydown", close_on_key, true);
+        stop_root_close = () => win.removeEventListener("keydown", close_on_key, true);
+      });
     };
     undo.push(core2.watch_root_list(show_root));
+    undo.push(close_root);
+    core2.set_hello_flag("which_key_root", true);
     const stop_watching = core2.watch_pending((changed) => {
       if (changed === void 0 || changed === win) follow_keys();
     });

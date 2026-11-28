@@ -460,12 +460,22 @@ test("a which-key root panel rides along when it is valid, and a bad one leaves 
   }
 });
 
+test("a which-key table with a delay of 0 is kept, for the root list alone", () => {
+  const root = { title: ["keys"], rows: [{ keys: "g", command: "+Go", more: true as const }] };
+  assert.deepEqual(which_key_table_of({ delay_ms: 0, border: "square", panels: {}, root }), { delay_ms: 0, border: "square", panels: {}, root });
+});
+
+test("the hello keeps which_key_root only when it is true", () => {
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", which_key_root: true }), { ok: true, value: { v: V, module_version: "1", which_key_root: true } });
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", which_key_root: "yes" }), { ok: true, value: { v: V, module_version: "1" } });
+});
+
 test("a bad which-key table is left out whole and never fails the state", () => {
   const panel = WHICH_KEY.panels.g;
   const row = panel.rows[0]!;
   const bad_tables = [
     "x",
-    { ...WHICH_KEY, delay_ms: 0 },
+    { ...WHICH_KEY, delay_ms: -1 },
     { ...WHICH_KEY, delay_ms: 1.5 },
     { ...WHICH_KEY, delay_ms: 600_000 },
     { ...WHICH_KEY, border: "dotted" },

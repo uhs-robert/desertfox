@@ -45,6 +45,7 @@ import {
   validate_message_list,
   validate_module_state,
   validate_scope_tree,
+  ROOT_LIST_COMMAND_ID,
   MAX_KEY_CHARS,
   MAX_WHICH_KEY_BYTES,
   MAX_WHICH_KEY_DELAY_MS,
@@ -138,7 +139,7 @@ const shown_text = (text: string, max_chars: number): string => text.replace(/[\
 export function which_key_table_of_keymap(keymap: CompiledKeymap | undefined, tree: ScopeTree, find_command: (id: string) => CommandMeta | undefined): WhichKeyTable | undefined {
   const normal = current_keymap(keymap)?.modes.normal;
   const delay_ms = Math.min(Math.round(keymap?.which_key_delay_ms ?? 0), MAX_WHICH_KEY_DELAY_MS);
-  if (!normal || !(delay_ms > 0)) return undefined;
+  if (!normal || !(delay_ms >= 0)) return undefined;
   const border = keymap?.which_key_border ?? "square";
   const shown = branch_in_scope(normal, tree);
   const panels: Record<string, WhichKeyTablePanel> = {};
@@ -155,7 +156,8 @@ export function which_key_table_of_keymap(keymap: CompiledKeymap | undefined, tr
       add_panels(child, keys);
     }
   };
-  add_panels(shown, []);
+  // A delay of 0 turns the prefix panels off. The root list stays, as on a page, where the command ignores the delay.
+  if (delay_ms > 0) add_panels(shown, []);
   const skip = keymap?.which_key_skip?.slice(0, MAX_WHICH_KEY_SKIP);
   const root = table_panel_of(panel_after_prefix(shown, [], find_command, border));
   const table = { delay_ms, ...(skip && skip.length > 0 && { skip }), border, panels, ...(root && { root }) };
@@ -265,6 +267,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   let bar_seen = false;
   // What the last hello said, kept so that a sync needs no hello read: the hello has its own limiter.
   let hello_bar = false;
+  // Whether the last hello said the module shows the root list. An older module refuses a whole tree that holds the `help.whichkey` leaf, so the leaf goes only to one that says so.
+  let hello_root_list = false;
   // The module keeps the DevTools key table in memory only, so each new hello gets it again.
   let devtools_keys_sent = false;
   // Counts each reset of `devtools_keys_sent`, so a send that a newer hello overtook does not mark the newer hello as served.
@@ -282,6 +286,10 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const bar_built = (stored_hello: unknown): boolean => {
     const hello = validate_module_hello(stored_hello);
     return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.bar === true;
+  };
+  const root_list_built = (stored_hello: unknown): boolean => {
+    const hello = validate_module_hello(stored_hello);
+    return hello.ok && hello.value.v === BROWSER_MODULE_PROTOCOL_VERSION && hello.value.which_key_root === true;
   };
   // A change of the answer tells the pages to ask again. The bar going away also drops what the tabs reported, which would otherwise show again, stale, when the bar returns.
   const set_bar_seen = (now: boolean): boolean => {
@@ -388,7 +396,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     }
     // The rewrite takes the dropped reports out of the state too.
     hello_bar = bar_built(hello);
-    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar)) await sync_now();
+    const root_list_changed = hello_root_list !== root_list_built(hello);
+    hello_root_list = root_list_built(hello);
+    if (set_bar_seen(!!(await deps.read_bar_config?.()) && hello_bar) || root_list_changed) await sync_now();
   };
 
   const read_messages = async (): Promise<void> => {
@@ -401,6 +411,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const sync_now = async (): Promise<void> => {
     if (!(await deps.is_on())) {
       hello_bar = false;
+      hello_root_list = false;
       devtools_keys_sent = false;
       hello_generation++;
       set_bar_seen(false);
@@ -421,12 +432,19 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const blur_on_load = (await deps.read_blur_on_load?.()) === true;
     const keymap = disabled ? undefined : await deps.read_keymap();
     // A tree over its cap is left out, and the module falls back to the single keys, which stay.
-    const tree = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, deps.check_args);
-    const fits = tree && validate_scope_tree(tree).ok;
-    const which_key = fits && deps.find_command ? which_key_table_of_keymap(keymap, tree, deps.find_command) : undefined;
+    // The root list keys stay with the page until the module says it shows the list and the table carries the list.
+    const locked_keys = (check_args: CheckCommandArgs) => {
+      const scope = keymap && deps.locked_commands && scope_tree_of(keymap, deps.locked_commands, check_args);
+      const fits = scope && validate_scope_tree(scope).ok ? scope : undefined;
+      return { fits, which_key: fits && deps.find_command ? which_key_table_of_keymap(keymap, fits, deps.find_command) : undefined, check_args };
+    };
+    const without_root_list: CheckCommandArgs = (id, args) => (id === ROOT_LIST_COMMAND_ID ? undefined : deps.check_args(id, args));
+    let locked = locked_keys(hello_root_list ? deps.check_args : without_root_list);
+    if (hello_root_list && !locked.which_key?.root) locked = locked_keys(without_root_list);
+    const { fits, which_key } = locked;
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, deps.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree }), page_hints: true, ...(which_key && { which_key }) });
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }) });
     request_hello_read();
     request_messages_read();
   };

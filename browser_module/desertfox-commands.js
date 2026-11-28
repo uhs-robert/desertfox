@@ -63,6 +63,7 @@
     }
     return void 0;
   }
+  var ROOT_LIST_COMMAND_ID = "help.whichkey";
   var MODULE_COMMAND_ARGS = {
     "tab.next": {},
     "tab.prev": {},
@@ -72,7 +73,7 @@
     "scroll.to": { percent: "number", axis: "axis" },
     "page.stop": {},
     // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
-    "help.whichkey": {}
+    [ROOT_LIST_COMMAND_ID]: {}
   };
   var MODULE_COMMAND_IDS = Object.keys(MODULE_COMMAND_ARGS);
   var MAX_SEQUENCE_KEYS = 8;
@@ -114,6 +115,7 @@
       if (token !== "" && !is_key_token(token)) return "a tree key is not a key token";
       if (child === "forward") continue;
       if (is_record(child) && "native" in child) {
+        if (typeof child.native === "string" && !is_module_command_id(child.native)) continue;
         if (!is_module_command_id(child.native) || !check_module_args(child.native, child.args).ok) return "a native leaf names a command the module does not run";
         const rule = child.count_rule;
         if (rule !== void 0 && rule !== "repeat" && !(is_record(rule) && typeof rule.param === "string" && Object.hasOwn(MODULE_COMMAND_ARGS[child.native], rule.param))) return "a native leaf has a bad count rule";
@@ -123,6 +125,14 @@
       if (problem !== void 0) return problem;
     }
     return void 0;
+  }
+  function kept_tree(node) {
+    const children = Object.fromEntries(Object.entries(node.children).flatMap(([token, child]) => {
+      if (typeof child === "string") return [[token, child]];
+      if ("native" in child) return is_module_command_id(child.native) ? [[token, child]] : [];
+      return [[token, kept_tree(child)]];
+    }));
+    return { ...node, children };
   }
   function key_paths_problem(paths, name) {
     if (paths === void 0) return void 0;
@@ -135,7 +145,7 @@
     if (size > MAX_TREE_BYTES) return bad("the tree is too large");
     const root = value;
     const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
-    return problem === void 0 ? { ok: true, value } : bad(problem);
+    return problem === void 0 ? { ok: true, value: kept_tree(value) } : bad(problem);
   }
   var MAX_KIND_BYTES = 64 * 1024;
   function json_bytes(value) {
@@ -373,7 +383,7 @@
       let text = tree_texts.get(tree);
       if (text === void 0) {
         const checked = validate_scope_tree(tree);
-        text = checked.ok ? JSON.stringify(tree) : "";
+        text = checked.ok ? JSON.stringify(checked.value) : "";
         if (!checked.ok) core2.log_once(`the key tree was refused: ${checked.problem}`);
         tree_texts.set(tree, text);
       }

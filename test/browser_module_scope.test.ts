@@ -142,7 +142,7 @@ test("the module's matcher walks the tree: sequences, counts and the any-key chi
 });
 
 test("the tree check refuses junk, depth, size and a native leaf the module does not run", () => {
-  for (const junk of [undefined, null, 3, "forward", [], { children: [] }, { children: { a: "run" } }, { children: { "a b": "forward" } }, { children: { a: { native: "tab.close", args: {} } } }, { children: { a: { native: "scroll.lines", args: { count: "x" } } } }, { children: { a: { native: "tab.next", args: {}, count_rule: { param: "evil" } } } }]) {
+  for (const junk of [undefined, null, 3, "forward", [], { children: [] }, { children: { a: "run" } }, { children: { "a b": "forward" } }, { children: { a: { native: "scroll.lines", args: { count: "x" } } } }, { children: { a: { native: "tab.next", args: {}, count_rule: { param: "evil" } } } }]) {
     assert.equal(validate_scope_tree(junk).ok, false, JSON.stringify(junk));
   }
   let deep: ScopeTree = { children: { a: "forward" } };
@@ -156,6 +156,15 @@ test("the tree check refuses junk, depth, size and a native leaf the module does
   assert.deepEqual(carried.ok && carried.value.tree, DEFAULT_TREE);
   assert.equal(validate_module_state({ ...state, tree: { children: { a: 1 } } }).ok, false);
   assert.ok(validate_module_state(state).ok);
+});
+
+test("a native leaf of a command the module does not know is dropped and the rest of the tree stays, so an older module keeps its other keys", () => {
+  const tree = { children: { a: "forward", b: { native: "tab.close", args: {} }, "<A-?>": { native: "help.whichkey", args: {} }, g: { children: { c: { native: "tab.next", args: {} }, d: { native: "later.command", args: {} } } } }, line_keys: ["a"] };
+  const checked = validate_scope_tree(tree);
+  assert.deepEqual(checked.ok && checked.value, { children: { a: "forward", "<A-?>": { native: "help.whichkey", args: {} }, g: { children: { c: { native: "tab.next", args: {} } } } }, line_keys: ["a"] });
+  assert.equal(validate_scope_tree({ children: { b: { native: "tab.next", args: { extra: 1 }, count_rule: { param: "evil" } } } }).ok, false, "a known command with a bad rule still fails the tree");
+  const state = validate_module_state({ v: 1, enabled: true, keys: [], tabs: {}, tree });
+  assert.ok(state.ok && state.value.tree?.children.b === undefined);
 });
 
 test("a run request's keys are matched again against the full tree", () => {

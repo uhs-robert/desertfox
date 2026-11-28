@@ -108,6 +108,8 @@ function devtools_visual_keys_problem(value: unknown): string | undefined {
 }
 const devtools_visual_rows_of = (value: unknown): DevtoolsVisualRow[] => (value as Record<string, unknown>[]).map((row) => ({ key: row.key as string, op: row.op as DevtoolsVisualOp }));
 
+// The command that shows the which-key root list. Its leaf goes only to a module whose hello says `which_key_root`.
+export const ROOT_LIST_COMMAND_ID = "help.whichkey";
 // The commands the module may run and the shape of each arg. The command schema owns limits and defaults: the extension fills and checks them through the one validator (`check_args`) before it writes a row, so a row always holds every arg. The module checks the shape only.
 export const MODULE_COMMAND_ARGS = {
   "tab.next": {},
@@ -118,7 +120,7 @@ export const MODULE_COMMAND_ARGS = {
   "scroll.to": { percent: "number", axis: "axis" },
   "page.stop": {},
   // Shows the which-key root list (`WhichKeyTable.root`). The core itself defines it, because the panel is drawn by the which-key file in each window.
-  "help.whichkey": {},
+  [ROOT_LIST_COMMAND_ID]: {},
 } as const satisfies Record<string, Record<string, ArgKind>>;
 
 // The commands of Firefox's own sidebar. The module runs them only with the focus in the vertical tab strip or in the history, bookmarks or open tabs panel. None takes args.
@@ -168,7 +170,7 @@ export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
 // The which-key panel of each branch of the tree, keyed by its path (tokens joined by one space), the root left out. Built from the same rows the page's panel shows (`panel_after_prefix`), so the module draws text and never learns a command. A row has no description: the page shows it on hover, and the module's panel takes no pointer.
-// `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns which-key off, and the field is left out.
+// `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns the prefix panels off: `panels` is then empty and only `root` shows.
 export type WhichKeyTableRow = { keys: string; command: string; more?: true };
 export type WhichKeyTablePanel = { title: string[]; rows: WhichKeyTableRow[] };
 // `root` is the panel of the keys with nothing typed, which `help.whichkey` shows on a locked page. An older module ignores it.
@@ -183,7 +185,7 @@ export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
 // `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true };
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; which_key_root?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -245,6 +247,8 @@ function tree_problem(node: unknown, depth: number): string | undefined {
     if (token !== "" && !is_key_token(token)) return "a tree key is not a key token";
     if (child === "forward") continue;
     if (is_record(child) && "native" in child) {
+      // A command this module does not know (a newer extension's) is dropped by `kept_tree`, and the rest of the tree stays.
+      if (typeof child.native === "string" && !is_module_command_id(child.native)) continue;
       if (!is_module_command_id(child.native) || !check_module_args(child.native, child.args).ok) return "a native leaf names a command the module does not run";
       const rule = child.count_rule;
       if (rule !== undefined && rule !== "repeat" && !(is_record(rule) && typeof rule.param === "string" && Object.hasOwn(MODULE_COMMAND_ARGS[child.native], rule.param))) return "a native leaf has a bad count rule";
@@ -254,6 +258,16 @@ function tree_problem(node: unknown, depth: number): string | undefined {
     if (problem !== undefined) return problem;
   }
   return undefined;
+}
+
+// The tree without the native leaves of commands this module does not know, so a command added later takes no key away from an older module.
+function kept_tree(node: ScopeTree): ScopeTree {
+  const children = Object.fromEntries(Object.entries(node.children).flatMap(([token, child]): [string, ScopeNode][] => {
+    if (typeof child === "string") return [[token, child]];
+    if ("native" in child) return is_module_command_id(child.native) ? [[token, child]] : [];
+    return [[token, kept_tree(child)]];
+  }));
+  return { ...node, children };
 }
 
 function key_paths_problem(paths: unknown, name: string): string | undefined {
@@ -268,7 +282,7 @@ export function validate_scope_tree(value: unknown): Checked<ScopeTree> {
   if (size > MAX_TREE_BYTES) return bad("the tree is too large");
   const root = value as { line_keys?: unknown; hint_keys?: unknown };
   const problem = tree_problem(value, 0) ?? key_paths_problem(root.line_keys, "line") ?? key_paths_problem(root.hint_keys, "hint");
-  return problem === undefined ? { ok: true, value: value as ScopeTree } : bad(problem);
+  return problem === undefined ? { ok: true, value: kept_tree(value as ScopeTree) } : bad(problem);
 }
 
 const is_color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
@@ -350,7 +364,7 @@ export function which_key_table_of(value: unknown): WhichKeyTable | undefined {
   if (!is_record(value) || !is_record(value.panels)) return undefined;
   if ((json_bytes(value) ?? Number.POSITIVE_INFINITY) > MAX_WHICH_KEY_BYTES) return undefined;
   const { delay_ms, skip, border } = value;
-  if (typeof delay_ms !== "number" || !Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS) return undefined;
+  if (typeof delay_ms !== "number" || !Number.isInteger(delay_ms) || delay_ms < 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS) return undefined;
   if (!(WHICH_KEY_BORDERS as readonly unknown[]).includes(border)) return undefined;
   if (skip !== undefined && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return undefined;
   const paths = Object.keys(value.panels);
@@ -421,7 +435,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.which_key_root === true && { which_key_root: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.

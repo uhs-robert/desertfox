@@ -94,7 +94,7 @@ function start(win, core, undo) {
   function read_table(value) {
     if (!is_record(value) || !is_record(value.panels) || byte_size(value) > MAX_WHICH_KEY_BYTES) return undefined;
     const { delay_ms, skip, border } = value;
-    if (!Number.isInteger(delay_ms) || delay_ms <= 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return undefined;
+    if (!Number.isInteger(delay_ms) || delay_ms < 0 || delay_ms > MAX_WHICH_KEY_DELAY_MS || !WHICH_KEY_BORDERS.includes(border)) return undefined;
     if (skip !== undefined && !(Array.isArray(skip) && skip.length <= MAX_WHICH_KEY_SKIP && skip.every((typed) => is_shown_text(typed, MAX_KEY_CHARS * MAX_SEQUENCE_KEYS)))) return undefined;
     const paths = Object.keys(value.panels);
     if (paths.length > MAX_WHICH_KEY_PANELS) return undefined;
@@ -206,17 +206,38 @@ function start(win, core, undo) {
     follow_prefix(undefined);
   };
 
-  // `help.whichkey`: the root list needs no prefix, so any later key, Escape included, closes it through `follow_keys`.
-  const show_root = (target) => {
+  // The root list needs no prefix. The walk's own key reaches `follow_keys` right after the command ran, so that one notice is ignored.
+  // A caller outside the walk has no such notice, so the next keydown in the window closes the list too.
+  let stop_root_close;
+  const close_root = () => {
+    stop_root_close?.();
+    stop_root_close = undefined;
+  };
+  const show_root = (target, shown_now) => {
     if (target !== win) return;
+    if (!shown_now) {
+      close_root();
+      return end_sequence();
+    }
     const shown = table_and_theme();
     if (!shown?.table?.root) return;
     end_sequence();
+    close_root();
     draw(shown.table.root, shown.table, shown.theme);
     opening_root = true;
-    void Promise.resolve().then(() => void (opening_root = false));
+    // A listener added now would also hear the key that opened the list, so it waits one microtask.
+    void Promise.resolve().then(() => {
+      opening_root = false;
+      if (!surface?.host.parentNode) return;
+      const close_on_key = () => (close_root(), hide());
+      win.addEventListener("keydown", close_on_key, true);
+      stop_root_close = () => win.removeEventListener("keydown", close_on_key, true);
+    });
   };
   undo.push(core.watch_root_list(show_root));
+  undo.push(close_root);
+  // Said only once the list can show, so an extension that sees the flag may send the leaf. Left on by a closing window, as the other windows still show it.
+  core.set_hello_flag("which_key_root", true);
 
   const stop_watching = core.watch_pending((changed) => {
     if (changed === undefined || changed === win) follow_keys();

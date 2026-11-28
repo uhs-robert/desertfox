@@ -5,7 +5,7 @@ import { compile_config } from "../../src/background/compile.ts";
 import { create_browser_module, which_key_table_of_keymap } from "../../src/background/browser_module.ts";
 import { DEFAULT_SITE_ROWS } from "../../src/background/default_site_rows.ts";
 import { panel_after_prefix } from "../../src/background/list_keys.ts";
-import { BROWSER_MODULE_STATE_STORAGE_KEY, MAX_WHICH_KEY_BYTES, which_key_table_of } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_HELLO_STORAGE_KEY, BROWSER_MODULE_STATE_STORAGE_KEY, HELLO_MIN_INTERVAL_MS, MAX_WHICH_KEY_BYTES, which_key_table_of } from "../../src/shared/browser_module_protocol.ts";
 import type { ModuleState, ScopeTree, WhichKeyTable } from "../../src/shared/browser_module_protocol.ts";
 import { locked_page_command_ids, scope_tree_of } from "../../src/shared/browser_module_scope.ts";
 import { empty_config } from "../../src/shared/config/config_load.ts";
@@ -44,7 +44,7 @@ test("the table's root panel lists the first keys of the scope tree, as the page
   const table = table_of()!;
   const page = panel_after_prefix(DEFAULT_KEYMAP_COMPILED.modes.normal, [], find_command);
   assert.deepEqual(table.root!.title, ["keys"]);
-  assert.equal(table.root!.rows.length, Object.keys(DEFAULT_TREE.children).filter((token) => token !== "").length + (Object.hasOwn(DEFAULT_TREE.children, "") ? 1 : 0));
+  assert.deepEqual(table.root!.rows.map((row) => row.keys).sort(), Object.keys(DEFAULT_TREE.children).filter((token) => token !== "").sort());
   const page_labels = new Map(page.rows.map((row) => [row.keys, row.command]));
   for (const row of table.root!.rows) assert.equal(row.command, page_labels.get(row.keys), row.keys);
   assert.deepEqual(which_key_table_of(table), table);
@@ -83,8 +83,11 @@ test("the default table stays small beside its cap", () => {
   assert.ok(bytes < MAX_WHICH_KEY_BYTES / 4);
 });
 
-test("no table when which-key is off, and the skip list and the border follow the settings", () => {
-  assert.equal(table_of({ ...DEFAULT_KEYMAP_COMPILED, which_key_delay_ms: 0 }), undefined);
+test("which-key off sends only the root list, and the skip list and the border follow the settings", () => {
+  const off = table_of({ ...DEFAULT_KEYMAP_COMPILED, which_key_delay_ms: 0 })!;
+  assert.deepEqual([off.delay_ms, off.panels], [0, {}], "no prefix panels, as the page draws none");
+  assert.deepEqual(off.root, table_of()!.root, "the root list ships, as the page's command ignores the delay");
+  assert.deepEqual(which_key_table_of(off), off);
   assert.equal(which_key_table_of_keymap(undefined, DEFAULT_TREE, find_command), undefined);
   const table = table_of({ ...DEFAULT_KEYMAP_COMPILED, which_key_skip: ["g"], which_key_border: "chamfer", which_key_delay_ms: 450 })!;
   assert.deepEqual([table.skip, table.border, table.delay_ms], [["g"], "chamfer", 450]);
@@ -112,9 +115,11 @@ test("a table over a limit is left out with one warning", (t) => {
 });
 
 // The state the background writes, with the default keymap and the locked-page commands.
-function setup({ which_key_delay_ms = DEFAULT_KEYMAP_COMPILED.which_key_delay_ms, on = true, disabled = false, with_lookup = true } = {}) {
+function setup({ which_key_delay_ms = DEFAULT_KEYMAP_COMPILED.which_key_delay_ms, on = true, disabled = false, with_lookup = true, hello = { v: 1, module_version: "1", which_key_root: true } as Record<string, unknown> | null } = {}) {
   const data = new Map<string, unknown>();
-  const config = { keymap: { ...DEFAULT_KEYMAP_COMPILED, which_key_delay_ms } as CompiledKeymap, on, disabled };
+  const timers: (() => void)[] = [];
+  if (hello) data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, hello);
+  const config = { keymap: { ...DEFAULT_KEYMAP_COMPILED, which_key_delay_ms } as CompiledKeymap, on, disabled, now: 0 };
   const module = create_browser_module({
     session: {
       get: async (key: string | string[]) => Object.fromEntries([key].flat().filter((name) => data.has(name)).map((name) => [name, data.get(name)])),
@@ -129,11 +134,16 @@ function setup({ which_key_delay_ms = DEFAULT_KEYMAP_COMPILED.which_key_delay_ms
     locked_commands: LOCKED,
     ...(with_lookup && { find_command }),
     handlers: {},
-    now: () => 0,
-    later: () => undefined,
+    now: () => config.now,
+    later: (run: () => void) => void timers.push(run),
   });
   const state = () => data.get(BROWSER_MODULE_STATE_STORAGE_KEY) as ModuleState | undefined;
-  return { module, config, state };
+  // A sync asks for a hello read behind itself, and a hello that changed the leaf asks for another sync.
+  const sync = async () => {
+    await module.sync();
+    for (let turn = 0; turn < 4; turn++) await module.tab_changed("0", undefined);
+  };
+  return { module: { ...module, sync }, config, state, data, timers };
 }
 
 test("the state carries the table beside the tree, and a keymap change rewrites it", async () => {
@@ -145,7 +155,7 @@ test("the state carries the table beside the tree, and a keymap change rewrites 
   assert.equal((state()?.which_key as WhichKeyTable).border, "round");
   config.keymap = { ...config.keymap, which_key_delay_ms: 0 };
   await module.sync();
-  assert.equal(state()?.which_key, undefined, "which-key off, no table");
+  assert.deepEqual([state()?.which_key?.delay_ms, state()?.which_key?.panels], [0, {}], "which-key off, the root list only");
 });
 
 test("no table while DesertFox is switched off, with no registry lookup, or once the setting is off", async () => {
@@ -161,4 +171,41 @@ test("no table while DesertFox is switched off, with no registry lookup, or once
   consent.config.on = false;
   await consent.module.sync();
   assert.equal(consent.state(), undefined, "the setting off removes the state and the table with it");
+});
+
+const root_leaf_keys = (state: ModuleState | undefined) => Object.entries(state?.tree?.children ?? {}).filter(([, node]) => typeof node === "object" && "native" in node && node.native === "help.whichkey").map(([token]) => token);
+
+test("the help.whichkey leaf goes only to a module whose hello says it shows the root list, so an older module keeps its whole tree", async () => {
+  const old = setup({ hello: { v: 1, module_version: "1" } });
+  await old.module.sync();
+  assert.deepEqual(root_leaf_keys(old.state()), []);
+  assert.ok(Object.keys(old.state()?.tree?.children ?? {}).length > 10, "the other keys stay");
+  assert.equal(old.state()?.keys.some((row) => row.id === "help.whichkey"), false);
+  const none = setup({ hello: null });
+  await none.module.sync();
+  assert.deepEqual(root_leaf_keys(none.state()), []);
+  const current = setup();
+  await current.module.sync();
+  assert.deepEqual(root_leaf_keys(current.state()), ["<A-?>"]);
+  assert.ok(Object.hasOwn((current.state()?.tree?.children["," ] as ScopeTree).children, "?"));
+});
+
+test("the leaf stays out when no root ships, so the key stays with the page", async () => {
+  const no_lookup = setup({ with_lookup: false });
+  await no_lookup.module.sync();
+  assert.deepEqual(root_leaf_keys(no_lookup.state()), []);
+});
+
+test("a hello that gains the flag rewrites the state with the leaf, and one that loses it takes the leaf out", async () => {
+  const { module, state, config, data, timers } = setup({ hello: null });
+  await module.sync();
+  assert.deepEqual(root_leaf_keys(state()), []);
+  for (const [hello, leaf_keys] of [[{ v: 1, module_version: "1", which_key_root: true }, ["<A-?>"]], [{ v: 1, module_version: "2" }, []]] as const) {
+    data.set(BROWSER_MODULE_HELLO_STORAGE_KEY, hello);
+    config.now += HELLO_MIN_INTERVAL_MS + 1;
+    timers.splice(0).forEach((run) => run());
+    module.read_hello();
+    for (let turn = 0; turn < 4; turn++) await module.tab_changed("0", undefined);
+    assert.deepEqual(root_leaf_keys(state()), leaf_keys);
+  }
 });
