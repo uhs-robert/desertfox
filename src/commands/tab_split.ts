@@ -1,9 +1,9 @@
 import { define } from "../shared/registry/builtin.ts";
 import { browser_tab_split_deps, focus_other_pane, swap_panes } from "../background/tab_split.ts";
-import { browser_module_call } from "../background/browser_module_call.ts";
+import { browser_module_call, read_module_hello } from "../background/browser_module_call.ts";
 import type { ModuleArgs } from "../shared/browser_module_protocol.ts";
 import { RuntimeRefusal } from "../shared/command.ts";
-import { BROWSER_MODULE_HELLO_STORAGE_KEY, MAX_RESIZE_STEPS, PANE_DIRECTIONS, PANE_MOVE_DIRECTIONS, PANE_REGIONS, validate_module_hello } from "../shared/browser_module_protocol.ts";
+import { MAX_RESIZE_STEPS, PANE_DIRECTIONS, PANE_MOVE_DIRECTIONS, PANE_REGIONS } from "../shared/browser_module_protocol.ts";
 import { require_tab_id } from "./open_target.ts";
 
 define("tab.split_other", {
@@ -94,8 +94,8 @@ define("pane.focus_side", {
 
 // A module from before `pane.move` does not know the kind, so the extension refuses for it with a clear reason. With no hello at all, the call gives the usual "Needs the browser module".
 async function module_moves_panes(): Promise<boolean> {
-  const hello = validate_module_hello((await browser.storage.session.get(BROWSER_MODULE_HELLO_STORAGE_KEY))[BROWSER_MODULE_HELLO_STORAGE_KEY]);
-  return !hello.ok || hello.value.pane_moves === true;
+  const hello = await read_module_hello();
+  return hello === undefined || hello.pane_moves === true;
 }
 
 define("pane.move", {
