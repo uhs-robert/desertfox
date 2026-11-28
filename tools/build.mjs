@@ -44,6 +44,8 @@ const MAX_BYTES = {
   "next_page.js": 20 * 1024,
   // Keyboard drag.
   "grab.js": 6.5 * 1024,
+  // The sink of tab range mode.
+  "tab_visual.js": 1 * 1024,
   // The command line page: completion for every setting, the registry validator, and the key-capture matcher. Opened by the first `:`.
   "cmdline_page.js": 63 * 1024,
   // The regex page search Worker.
