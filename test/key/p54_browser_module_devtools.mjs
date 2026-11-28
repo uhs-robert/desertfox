@@ -471,7 +471,14 @@ export async function run_cases(context) {
     await focus_in_devtools();
     await stays(["t", "T"], async () => (await tools_now())[0], "t and T with no g before them");
     await stays(["g", "x", "t"], async () => (await tools_now())[0], "g x t: a key between ends the hold");
-    await stays(["g", "-M", "ctrl", "t", "-m", "ctrl"], async () => (await tools_now())[0], "g then Ctrl+t");
+    // Ctrl+t is Firefox's new tab, so the case keeps the tab it has and closes the new one.
+    await chrome(`(async () => { Services.desertfox_key_test_tab = ${W}.gBrowser.selectedTab; })()`);
+    await press_keys("g", "-M", "ctrl", "t", "-m", "ctrl");
+    await sleep(NO_EFFECT_MS);
+    await chrome(`(async () => { const w = ${W}; const own = Services.desertfox_key_test_tab; delete Services.desertfox_key_test_tab; if (w.gBrowser.selectedTab !== own) { w.gBrowser.removeTab(w.gBrowser.selectedTab); w.gBrowser.selectedTab = own; } })()`);
+    expect((await tools_now())[0] === "inspector", "g then Ctrl+t switched the tool");
+    await markup_on_section();
+    await focus_in_devtools();
     // The console input is a field: g and t type there.
     await press_keys("-k", "Escape");
     await poll_until("Escape to open the split console", () => chrome(`(async () => { ${TOOLBOX} return tb.splitConsole === true && !!tb.getPanel("webconsole")?.hud; })()`), { timeout_ms: 5000 });
