@@ -87,7 +87,7 @@ export class Node {
     return selector.split(",").some((part) => {
       const one = part.trim();
       const child = one.lastIndexOf(">");
-      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child)) ?? false);
+      if (child >= 0) return this.matches(one.slice(child + 1)) && (this.parentNode?.matches(one.slice(0, child).trim()) ?? false);
       if (one.startsWith("#")) return this.id === one.slice(1);
       if (one.startsWith(".")) return this.classList.contains(one.slice(1));
       const bare_attribute = /^\[([a-z-]+)\]$/.exec(one)?.[1];

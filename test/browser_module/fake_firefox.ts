@@ -363,7 +363,19 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       }
     };
     const add_tab = () => {
-      const browser = { localName: "browser", innerWindowID: 10, browserId: ++next_browser_id, stops: 0, stop: () => void browser.stops++, messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) } };
+      const attributes = new Map<string, string>();
+      const browser = {
+        localName: "browser",
+        innerWindowID: 10,
+        browserId: ++next_browser_id,
+        stops: 0,
+        stop: () => void browser.stops++,
+        attributes,
+        setAttribute: (name: string, value: string) => void attributes.set(name, value),
+        getAttribute: (name: string) => attributes.get(name) ?? null,
+        removeAttribute: (name: string) => void attributes.delete(name),
+        messageManager: { sendAsyncMessage: (name: string, data: unknown) => sent_to_frames.push({ browser, name, data }) },
+      };
       const tab = { browser, linkedBrowser: browser };
       tabs.set(tab, tab);
       tab_of_browser.set(browser, tab);
@@ -430,7 +442,42 @@ export function create_firefox({ pref = true as boolean | string | null, extra_f
       });
       return { element, dispatched };
     };
-    return { win, load, add_tab, select, press, close, fire, fire_tab_select, run_timers, timer_count: () => timers.size, open, open_while_loading, finish_loading, devtools_document, tab_moves, address_bar, listener_count: (type: string) => listeners.get(type)?.size ?? 0 };
+    // A toolbox opened as a tab, as about:debugging Inspect does: the toolbox page is the tab's top document in this process, and a panel is a chrome frame under it. Both are content browsing contexts of the tab browser. `uri` and `system` let a test spoof the page.
+    const devtools_tab_document = ({ uri = "about:devtools-toolbox?type=tab&id=1", system = true } = {}) => {
+      const { browser } = add_tab();
+      const dispatched: { type: string; key: string; keyCode: number; trusted: boolean }[] = [];
+      class KeyboardEvent {
+        type: string;
+        key: string;
+        keyCode: number;
+        isTrusted = false;
+        constructor(type: string, init: { key: string; keyCode: number }) {
+          this.type = type;
+          this.key = init.key;
+          this.keyCode = init.keyCode;
+        }
+      }
+      const browsing_context = { isContent: true, top: { embedderElement: browser }, embedderElement: browser };
+      const toolbox_doc: { documentURI: string; nodePrincipal: { isSystemPrincipal: boolean }; defaultView: unknown } = {
+        documentURI: uri,
+        nodePrincipal: { isSystemPrincipal: system },
+        defaultView: { KeyboardEvent, frameElement: null, browsingContext: browsing_context },
+      };
+      const panel_doc = {
+        documentURI: "chrome://devtools/content/inspector/index.xhtml",
+        nodePrincipal: { isSystemPrincipal: true },
+        defaultView: { KeyboardEvent, frameElement: { classList: { contains: () => false }, ownerDocument: toolbox_doc }, browsingContext: browsing_context },
+      };
+      const element = (owner: unknown, localName: string) => ({
+        localName,
+        isContentEditable: false,
+        ownerDocument: owner,
+        closest: () => null,
+        dispatchEvent: (event: KeyboardEvent) => dispatched.push({ type: event.type, key: event.key, keyCode: event.keyCode, trusted: event.isTrusted }),
+      });
+      return { browser, dispatched, toolbox_element: element(toolbox_doc, "div"), panel_element: element(panel_doc, "div") };
+    };
+    return { win, load, add_tab, select, press, close, fire, fire_tab_select, run_timers, timer_count: () => timers.size, open, open_while_loading, finish_loading, devtools_document, devtools_tab_document, tab_moves, address_bar, listener_count: (type: string) => listeners.get(type)?.size ?? 0 };
   };
 
   // A frame script's `sendAsyncMessage` as the parent hears it.

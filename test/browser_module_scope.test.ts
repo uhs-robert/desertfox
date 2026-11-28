@@ -5,7 +5,7 @@ import { compile_config } from "../src/background/compile.ts";
 import { DEFAULT_SITE_ROWS } from "../src/background/default_site_rows.ts";
 import { MAX_COUNT, MAX_SEQUENCE_KEYS, MAX_TREE_BYTES, validate_module_state, validate_scope_tree } from "../src/shared/browser_module_protocol.ts";
 import type { ScopeNode, ScopeTree } from "../src/shared/browser_module_protocol.ts";
-import { counted_steps, locked_page_command_ids, matcher_keymap_of, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
+import { counted_steps, locked_page_command_ids, matcher_keymap_of, native_allowed_by, page_hint_action_of, resolve_run, runs_on_locked_pages, scope_tree_of } from "../src/shared/browser_module_scope.ts";
 import type { MatcherLeaf } from "../src/shared/browser_module_scope.ts";
 import { empty_config } from "../src/shared/config/config_load.ts";
 import type { KeymapConfig } from "../src/shared/keymap.ts";
@@ -60,8 +60,13 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.equal(node_at(DEFAULT_TREE, ["@", ""]), "forward");
   // A page swaps the record key for macro.stop while a macro records, which the stored tree cannot follow, so `q` stays with the page.
   assert.equal(node_at(DEFAULT_TREE, ["q"]), undefined);
-  // Hints, find, the command line, marks and insert mode need DesertFox's page code.
-  for (const keys of [["f"], ["/"], ["i"], ["m"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  // The mode keys run in the module: insert, ignore in every spelling, and pass-next. A mode that needs the page code stays out.
+  assert.deepEqual(node_at(DEFAULT_TREE, ["i"]), { native: "mode.insert", args: {} });
+  for (const keys of [["<S-Escape>"], ["<S-Insert>"], ["<AC-Escape>"], ["<AC-`>"], [",", "i"]]) assert.deepEqual(node_at(DEFAULT_TREE, keys), { native: "mode.set", args: { mode: "ignore" } }, keys.join(""));
+  assert.deepEqual(node_at(DEFAULT_TREE, ["<C-v>"]), { native: "mode.pass_next", args: {} });
+  assert.equal(node_at(DEFAULT_TREE, ["v"]), undefined, "caret mode needs the page code");
+  // Hints, find, marks and the page's own Escape need DesertFox's page code.
+  for (const keys of [["f"], ["/"], ["m"], [";"], ["<Esc>"], ["<Escape>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   // The bare command line key stays, so the background opens the line as a panel. A line with typed text stays only when its command runs with no page (`tM`), not for `A`, `sh` or `;;`.
   assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
   assert.equal(node_at(DEFAULT_TREE, ["t", "M"]), "forward");
@@ -232,6 +237,21 @@ test("a hint key on one of Firefox's own pages maps to the page action of its bi
   for (const keys of [";", "f f"]) assert.deepEqual(action(keys), refused, keys);
   assert.equal(page_hint_action_of(keymap, "a b".repeat(9)).ok, false);
   assert.equal(page_hint_action_of(undefined, "f").ok, false);
+});
+
+test("the mode commands are in the tree only for a hello that says mode_keys, and every other native leaf stays", () => {
+  const without = scope_tree_of(compiled(), allowed, real_check, native_allowed_by(undefined));
+  const older = scope_tree_of(compiled(), allowed, real_check, native_allowed_by({}));
+  const newer = scope_tree_of(compiled(), allowed, real_check, native_allowed_by({ mode_keys: true }));
+  for (const keys of [["i"], ["<S-Escape>"], ["<S-Insert>"], ["<AC-Escape>"], ["<AC-`>"], ["<C-v>"], [",", "i"]]) {
+    assert.equal(node_at(without, keys), undefined, `${keys.join("")} without a hello`);
+    assert.equal(node_at(older, keys), undefined, `${keys.join("")} with an older hello`);
+    assert.notEqual(node_at(newer, keys), undefined, `${keys.join("")} with mode_keys`);
+  }
+  assert.deepEqual(node_at(without, ["J"]), node_at(newer, ["J"]));
+  assert.deepEqual(node_at(without, ["g", "g"]), node_at(newer, ["g", "g"]));
+  assert.deepEqual(scope_tree_of(compiled(), allowed, real_check), newer, "no filter is every command");
+  assert.ok(validate_scope_tree(without).ok && validate_scope_tree(newer).ok);
 });
 
 test("the guarded default j and k stay on locked pages as their scroll fallback", () => {

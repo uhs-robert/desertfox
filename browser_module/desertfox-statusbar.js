@@ -290,6 +290,16 @@
       return report !== undefined && report.inner === browser.innerWindowID && report.listeners === 0 && report.field;
     }
 
+    // The commands feature sets these on the tab's <browser> while the tab is in insert or ignore mode or has pass-next armed. The document id says which load it was set in, so a flag a load ended shows nothing.
+    const MODULE_MODE_ATTRIBUTE = "desertfox-module-mode";
+    const MODULE_DOCUMENT_ATTRIBUTE = "desertfox-module-document";
+    function module_mode_of(browser, record) {
+      if (record?.live === true) return undefined;
+      const mode = browser.getAttribute(MODULE_MODE_ATTRIBUTE);
+      if (mode !== "insert" && mode !== "ignore" && mode !== "pass") return undefined;
+      return browser.getAttribute(MODULE_DOCUMENT_ATTRIBUTE) === String(browser.innerWindowID) ? mode : undefined;
+    }
+
     // ---- The model: what each widget says now. No DOM and no layout read.
 
     function container_of(tab) {
@@ -526,8 +536,12 @@
       const scroll = scrolls.get(browser);
       const now = Date.now();
       const view = tab_view(record, now);
+      // The module's own mode wins over the field inference: INSERT from `i` stays with no field, and IGNORE shows at all.
+      const held = module_mode_of(browser, record);
       if (view.mode === "normal" && page_hints_shown()) view.mode = "hint";
+      else if (view.mode === "normal" && (held === "insert" || held === "ignore")) view.mode = held;
       else if (view.mode === "normal" && field_has_focus(browser, record)) view.mode = "insert";
+      if (held === "pass") view.pass = true;
       return {
         enabled: view_state.enabled,
         view,
@@ -755,6 +769,13 @@
       const layers = new win.MutationObserver(schedule);
       layers.observe(doc.documentElement, { childList: true });
       undo.push(() => layers.disconnect());
+    }
+    // The commands feature marks a tab's mode on its <browser>, so a change of the attribute draws.
+    const tab_panels = win.gBrowser.tabpanels;
+    if (typeof win.MutationObserver === "function" && tab_panels) {
+      const modes = new win.MutationObserver(schedule);
+      modes.observe(tab_panels, { attributes: true, subtree: true, attributeFilter: [MODULE_MODE_ATTRIBUTE, MODULE_DOCUMENT_ATTRIBUTE] });
+      undo.push(() => modes.disconnect());
     }
     const tab_events = ["TabSelect", "TabOpen", "TabClose", "TabMove", "TabAttrModified", "TabShow", "TabHide", "SSTabRestoring"];
     for (const type of tab_events) {

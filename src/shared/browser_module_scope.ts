@@ -4,7 +4,8 @@
 import type { CommandDef } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
 import type { NativeLeaf, PageHintAction, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
-import { check_module_args, is_module_command_id, MAX_COUNT, MAX_SEQUENCE_KEYS } from "./browser_module_protocol.ts";
+import { check_module_args, is_module_command_id, MAX_COUNT, MAX_SEQUENCE_KEYS, MODE_KEY_COMMAND_IDS } from "./browser_module_protocol.ts";
+import type { ModuleHello } from "./browser_module_protocol.ts";
 import { create_matcher } from "./keys/matcher.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "./prefix_tree.ts";
 import type { CompiledKeymap, LeafStep, TreeBranch, TreeLeaf, TreeNode } from "./prefix_tree.ts";
@@ -54,11 +55,16 @@ export const line_text_of = (leaf: TreeLeaf, allowed: ReadonlySet<string>): stri
   return typeof text === "string" && allowed.has(text.split(" ", 1)[0]!) ? text : undefined;
 };
 
+// Whether the module that said this hello runs a native command. A command added after the first module version waits for its hello flag, so an older module never gets a tree with a command it does not define (it refuses the whole tree for one). With no hello yet only the first commands are on.
+export type NativeAllowed = (id: string) => boolean;
+export const native_allowed_by = (hello: Pick<ModuleHello, "mode_keys"> | undefined): NativeAllowed => (id) => hello?.mode_keys === true || !(MODE_KEY_COMMAND_IDS as readonly string[]).includes(id);
+const ALL_NATIVE: NativeAllowed = () => true;
+
 // A leaf of one step that the module runs itself (the protocol's command list), with its args filled and checked by the registry.
-export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): NativeLeaf | undefined {
+export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs, allowed: NativeAllowed = ALL_NATIVE): NativeLeaf | undefined {
   if (has_guard(leaf) || leaf.steps.length !== 1) return undefined;
   const { invocation, capture, register, count_rule } = leaf.steps[0]!;
-  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !is_module_command_id(invocation.id)) return undefined;
+  if (capture !== undefined || register !== undefined || invocation.prompt !== undefined || !is_module_command_id(invocation.id) || !allowed(invocation.id)) return undefined;
   const filled = check_args(invocation.id, invocation.args);
   const args = filled && check_module_args(invocation.id, filled);
   if (!args?.ok) return undefined;
@@ -71,12 +77,12 @@ export const is_hint_leaf = (leaf: TreeLeaf): boolean => leaf.steps.some((step) 
 // A forward leaf after which the line opens: a line key (`:`, `tM`), or a key whose command prompts for a value (`o`).
 const prompts_or_opens_line = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => opens_line_leaf(leaf, allowed) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
 
-type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[] };
+type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; native_allowed: NativeAllowed; line_keys: string[]; hint_keys: string[] };
 
 function prune_node(node: TreeNode, depth: number, path: readonly string[], pruning: Pruning): ScopeNode | undefined {
   if (node.kind === "leaf") {
     node = without_list_guard(node);
-    const native = native_leaf(node, pruning.check_args);
+    const native = native_leaf(node, pruning.check_args, pruning.native_allowed);
     if (native) return native;
     if (!forwards_leaf(node, pruning.allowed) && !opens_line_leaf(node, pruning.allowed)) {
       if (is_hint_leaf(node) && !path.includes("")) pruning.hint_keys.push(path.join(" "));
@@ -99,10 +105,10 @@ function prune_children(branch: TreeBranch, depth: number, path: readonly string
 }
 
 // The normal tree with only the leaves a locked page can run. A key that leads only to other leaves is left out, so the page or Firefox keeps it. The bare command line key stays, as a forward leaf. Site rules do not apply: a locked page matches none.
-export function scope_tree_of(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs): ScopeTree {
+export function scope_tree_of(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): ScopeTree {
   // A tree of an older format has another shape, so it gives no keys until the background recompiles.
   const root = current_keymap(keymap)?.modes.normal;
-  const pruning: Pruning = { allowed, check_args, line_keys: [], hint_keys: [] };
+  const pruning: Pruning = { allowed, check_args, native_allowed, line_keys: [], hint_keys: [] };
   const children = root ? prune_children(root, 1, [], pruning) : {};
   return { children, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }) };
 }

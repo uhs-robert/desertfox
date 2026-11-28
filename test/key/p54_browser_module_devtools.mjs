@@ -1,4 +1,4 @@
-// The browser module's DevTools tree keys: j, k, h and l in the Inspector markup, the Debugger sources, Storage and Network, docked and in a DevTools window.
+// The browser module's DevTools tree keys: j, k, h and l in the Inspector markup, the Debugger sources, Storage and Network, docked, in a DevTools window and in a toolbox tab.
 // Also what it leaves to DevTools: every other key, Escape (the split console), the console input, and every key with the setting browser_module off.
 // And hints in DevTools: f labels the tool tabs and the markup lines, a label picks, Escape ends them, docked and in a DevTools window, with a module that does not say devtools_hints and with a lost ask.
 import { module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
@@ -228,6 +228,42 @@ export async function run_cases(context) {
     await close_menu();
     await chrome(`(async () => { ${TOOLBOX} Services.desertfox_key_test_host = tb.switchHost("bottom").then(() => "bottom", (error) => String(error)); })()`);
     await poll_until("the DevTools window to close and lose the module", async () => (await module_status()).windows === windows_before, { timeout_ms: 10000 });
+  });
+
+  await run_case("a toolbox opened as a tab (about:debugging Inspect) keeps its keys: J switches one tab, x x closes nothing, and j and k move the Inspector tree", async () => {
+    await home("bm_dt_tab_toolbox");
+    await open_tab(TREE_PAGE);
+    const target_id = await chrome(`(async () => ${W}.gBrowser.selectedBrowser.browserId)()`);
+    on_teardown(() => chrome(`(async () => { ${DT} const w = ${W}; for (const tb of gDevTools.getToolboxes()) await tb.destroy(); w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); w.focus(); w.gBrowser.selectedBrowser.focus(); })()`));
+    await open_tab(`about:devtools-toolbox?type=tab&id=${target_id}`, { wait_load: false });
+    // The toolbox of a tab host is not the toolbox of a page tab, so it is found by its host.
+    const TAB_TOOLBOX = `${DT} const tb = gDevTools.getToolboxes().find((one) => one.hostType === "page");`;
+    await poll_until("the toolbox in its own tab to show the Inspector", () => chrome(`(async () => { ${TAB_TOOLBOX} if (!tb?.isReady) return false; if (tb.currentToolId !== "inspector") { tb.selectTool("inspector"); return false; } return !!tb.getPanel("inspector")?.markup; })()`), { timeout_ms: 20000 });
+    const tabs_before = await chrome(`(async () => { const w = ${W}; return [w.gBrowser.tabs.length, w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab)]; })()`);
+    const tab_state = () => chrome(`(async () => { const w = ${W}; return [w.gBrowser.tabs.length, w.gBrowser.tabs.indexOf(w.gBrowser.selectedTab)]; })()`);
+    const tree_state = () => chrome(`(async () => { ${TAB_TOOLBOX} const inspector = tb.getPanel("inspector"); const node = inspector.selection.nodeFront; return [node?.displayName ?? null, inspector.markup.getContainer(node)?.expanded ?? null]; })()`);
+    await poll_until("the section to have a markup container", () =>
+      chrome(`(async () => {
+        ${TAB_TOOLBOX}
+        const inspector = tb.getPanel("inspector");
+        const node = await inspector.walker.querySelector(inspector.walker.rootNode, "section");
+        await inspector.selection.setNodeFront(node, { reason: "test" });
+        if (!inspector.markup.getContainer(node)) return false;
+        await inspector.markup.collapseNode(node);
+        ${W}.focus();
+        inspector.markup.doc.defaultView.focus();
+        inspector.markup.getContainer(node).focus();
+        return true;
+      })()`),
+    { timeout_ms: 10000 });
+    await focus_in_devtools();
+    await moves("j", tree_state, ["p", false], "in a toolbox tab: j moves down past the collapsed section");
+    await moves("k", tree_state, ["section", false], "in a toolbox tab: k moves back up");
+    await press_keys("x", "x");
+    await sleep(NO_EFFECT_MS);
+    expect(JSON.stringify(await tab_state()) === JSON.stringify(tabs_before), `x x changed the tabs: ${JSON.stringify(tabs_before)} to ${JSON.stringify(await tab_state())}`);
+    // J is the DevTools row that switches the browser tab, as in a docked toolbox, so it switches one tab here too.
+    await switches_one("J in a toolbox tab");
   });
 
   await run_case("with the setting browser_module off DevTools gets every key, and turned on again the module gets the table again", async () => {
