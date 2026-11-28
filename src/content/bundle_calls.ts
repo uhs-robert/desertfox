@@ -73,6 +73,10 @@ type BundleCalls = {
   // Callers pass fields that may be undefined (tree reads them from its own args), which `exactOptionalPropertyTypes` refuses on ItemArgs itself.
   "page.item": { bundle: "item"; args: { [Key in keyof ItemArgs]: ItemArgs[Key] | undefined } };
 
+  // A one-shot normal command started, and every mode change after it (`page/once_return.ts`).
+  "once.start": { bundle: "page"; args: { mode_: Mode; focused_: Element | null } };
+  "once.mode": { bundle: "page"; args: { mode_: Mode } };
+
   "page.send_key": { bundle: "site_actions"; args: SendKeyArgs };
   "page.clipboard": { bundle: "site_actions"; args: ClipboardArgs };
 };
