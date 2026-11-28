@@ -8,7 +8,7 @@ import type { CommandMeta } from "../shared/command.ts";
 import { panel_after_prefix } from "./list_keys.ts";
 import type { WhichKeyPanel } from "../shared/messages/content.ts";
 import { CONFIG_STATUS_STORAGE_KEY, DISABLED_STORAGE_KEY, TAB_MODE_STORAGE_PREFIX } from "../shared/config/storage_keys.ts";
-import type { BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, HintModeKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
+import type { AddressTree, BarConfig, BarFields, BarToast, InsertKeyCommandId, InsertKeyRow, HintModeKeyRow, KeyRow, KindTable, SidebarKeyRow, ModuleArgs, ModuleMessage, ModuleReply, ModuleRequest, ModuleState, ModuleStatus, ScopeTree, TabState, WhichKeyTable, WhichKeyTablePanel } from "../shared/browser_module_protocol.ts";
 import {
   BROWSER_MODULE_HELLO_STORAGE_KEY,
   BROWSER_MODULE_PROTOCOL_VERSION,
@@ -70,7 +70,7 @@ import {
 } from "../shared/browser_module_protocol.ts";
 import { DEFAULT_SETTINGS, DEFAULT_TOAST_ERROR_MS, DEFAULT_TOAST_MS } from "../shared/default_settings.ts";
 import type { ToastKind } from "../shared/messages/tab.ts";
-import { native_allowed_by, native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
+import { address_trees_of_keymap, native_allowed_by, native_leaf, scope_tree_of } from "../shared/browser_module_scope.ts";
 import type { CheckCommandArgs } from "../shared/browser_module_scope.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
 import { is_reply } from "../shared/browser_module_protocol.ts";
@@ -544,13 +544,15 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     let locked = locked_keys(hello_root_list ? deps.check_args : without_root_list);
     if (hello_root_list && !locked.which_key?.root) locked = locked_keys(without_root_list);
     const { fits, which_key } = locked;
+    // The pages of site rules take the same checked leaves, so the root list leaf follows the same hello rule there.
+    const address_trees = fits && deps.locked_commands ? address_trees_of_keymap(keymap, deps.locked_commands, locked.check_args, native_allowed_by({ ...(hello_mode_keys && { mode_keys: true as const }) })) : [];
     const sidebar_keys = sidebar_rows_of(keymap, deps.check_args);
     const chrome_hint_keys = chrome_hint_keys_of_keymap(keymap);
     const normal_once_keys = normal_once_keys_of_keymap(keymap);
     const focus_keys = fits ? focus_keys_of_keymap(keymap, fits) : [];
     const insert_keys = insert_rows_of(keymap, deps.check_args);
     const hint_mode_keys = hint_mode_keys_of_keymap(keymap);
-    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), page_hints: true, ...(which_key && { which_key }), ...(insert_keys && { insert_keys }), hint_mode_keys });
+    await write_state({ v: BROWSER_MODULE_PROTOCOL_VERSION, enabled: !disabled, keys: key_rows_of(keymap, locked.check_args), tabs, ...(sidebar_keys.length > 0 && { sidebar_keys }), ...(normal_once_keys.length > 0 && { normal_once_keys }), ...(focus_keys.length > 0 && { focus_keys }), ...(chrome_hint_keys.length > 0 && { chrome_hint_keys }), ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(blur_on_load ? { blur_on_load } : {}), ...(fits && { tree: fits }), ...(address_trees.length > 0 && { address_trees }), page_hints: true, ...(which_key && { which_key }), ...(insert_keys && { insert_keys }), hint_mode_keys });
     request_hello_read();
     request_messages_read();
   };
@@ -655,6 +657,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   return {
     // Run at each background start, and after anything that changes the setting, the keymap or the switch.
     sync,
+    // The about: trees in the state the module reads now, for the run check.
+    published_address_trees: async (): Promise<readonly AddressTree[]> => (await read_state())?.address_trees ?? [],
     tab_changed,
     bar_report: (tab_id: number, frame_id: number, incognito: boolean, raw: Record<string, unknown>) => enqueue(() => bar_report_now(String(tab_id), frame_id, incognito, raw)),
     bar_focus: (tab_id: number, frame_id: number) => enqueue(() => bar_focus_now(String(tab_id), frame_id)),

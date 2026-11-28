@@ -10,6 +10,7 @@ import { BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, BROWSER_MODULE_SNAPSHOT_KEY
 import { BROWSER_BAR_BORDERS, BROWSER_BAR_WIDGETS } from "./browser_bar_lists.ts";
 import { MODULE_FIREFOX_PAGES } from "./firefox_pages.ts";
 import type { WhichKeyBorder } from "./config.ts";
+import { about_pattern_of } from "./match_pattern.ts";
 
 // The major version. It moves only for a breaking change, and a different value means the module claims nothing. Anything added later is an optional field that validators ignore when they do not know it.
 export const BROWSER_MODULE_PROTOCOL_VERSION = 1;
@@ -209,7 +210,7 @@ export type BarConfig = { left: BarWidget[]; right: BarWidget[]; border: (typeof
 // `page_hints` says the extension answers `page_hints.want`, so the module may start hints on Firefox's own pages. Without it the hint keys there keep the notice.
 // `which_key` holds the which-key panels of the tree, drawn by the module where no DesertFox page code runs.
 // `hint_mode_keys` says the extension runs a module session's keys through the hint mode picker (`/`, Tab, Shift-Tab, Enter), and holds the rows of HintModeKeyRow. An older module ignores it, and a module that finds none keeps to labels.
-export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable; normal_once_keys?: string[]; focus_keys?: string[]; insert_keys?: InsertKeyRow[]; hint_mode_keys?: HintModeKeyRow[] };
+export type ModuleState = { v: number; enabled: boolean; keys: KeyRow[]; tabs: Record<string, TabState>; bar_theme?: BarTheme; bar?: BarConfig; blur_on_load?: boolean; tree?: ScopeTree; address_trees?: AddressTree[]; sidebar_keys?: SidebarKeyRow[]; chrome_hint_keys?: string[][]; page_hints?: true; which_key?: WhichKeyTable; normal_once_keys?: string[]; focus_keys?: string[]; insert_keys?: InsertKeyRow[]; hint_mode_keys?: HintModeKeyRow[] };
 // `normal_once_keys`: the chords bound to `mode.normal_once`, so the module starts the one-shot prefix in the sidebar on the keydown itself, before a key typed fast behind it. An older module ignores the field and waits for `sidebar.normal_once`.
 // `focus_keys`: the key paths of the tree's forward leaves whose command moves the focus on purpose (a pane focus), so the module leaves the focus where the command put it. An older module ignores the field.
 export const MAX_NORMAL_ONCE_KEYS = 4;
@@ -226,6 +227,10 @@ export type ScopeTree = { children: Record<string, ScopeNode>; line_keys?: strin
 export const MAX_SEQUENCE_KEYS = 8;
 // The default keymap's tree is about 4 KB as JSON and one with 400 more three-key sequences about 18 KB (test/browser_module_scope.test.ts measures both). The cap leaves room above that.
 export const MAX_TREE_BYTES = 32 * 1024;
+// The tree of the about: pages that site rules name, in place of `tree` there. `sites` are the rule patterns the tree serves (`about:name` or `about:name*`, see `about_pattern_of`), and the module takes the longest one that covers the tab's address. `off` says the rules turn DesertFox off on those pages, so the module takes no key there. The state holds at most MAX_ADDRESS_TREES of them, one per distinct tree: a page past them keeps `tree`. An older module ignores the field and keeps `tree` everywhere, and no private tab uses one.
+export type AddressTree = { sites: string[]; tree: ScopeTree; off?: true };
+export const MAX_ADDRESS_TREES = 8;
+export const MAX_ADDRESS_TREE_SITES = 32;
 // The which-key panel of each branch of the tree, keyed by its path (tokens joined by one space), the root left out. Built from the same rows the page's panel shows (`panel_after_prefix`), so the module draws text and never learns a command. A row has no description: the page shows it on hover, and the module's panel takes no pointer.
 // `delay_ms` and `skip` are the settings `which_key_delay_ms` and `which_key_skip`, `border` is `which_key_border`. A delay of 0 turns the prefix panels off: `panels` is then empty and only `root` shows.
 export type WhichKeyTableRow = { keys: string; command: string; more?: true };
@@ -504,6 +509,18 @@ export function which_key_table_of(value: unknown): WhichKeyTable | undefined {
   return { delay_ms, ...(skip !== undefined && skip.length > 0 && { skip: [...(skip as string[])] }), border: border as WhichKeyBorder, panels, ...(root && { root }) };
 }
 
+// Each entry that fails is left out and its pages keep the global tree, the keys the module took before site rules reached about: pages. Entries past the cap are left out too.
+export function address_trees_of(value: unknown): AddressTree[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const kept = value.slice(0, MAX_ADDRESS_TREES).flatMap((entry): AddressTree[] => {
+    if (!is_record(entry) || !Array.isArray(entry.sites) || entry.sites.length === 0 || entry.sites.length > MAX_ADDRESS_TREE_SITES) return [];
+    if (!entry.sites.every((site) => typeof site === "string" && about_pattern_of(site) !== undefined)) return [];
+    const tree = validate_scope_tree(entry.tree);
+    return tree.ok ? [{ sites: entry.sites as string[], tree: tree.value, ...(entry.off === true && { off: true as const }) }] : [];
+  });
+  return kept.length > 0 ? kept : undefined;
+}
+
 export function validate_module_state(value: unknown): Checked<ModuleState> {
   if (!is_record(value)) return bad("state must be a table");
   if (value.v !== BROWSER_MODULE_PROTOCOL_VERSION) return bad("state has another protocol version");
@@ -538,6 +555,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   // A bad tree fails the state, as a bad key row does: the module must not take keys from half a tree.
   const tree = value.tree === undefined ? undefined : validate_scope_tree(value.tree);
   if (tree && !tree.ok) return tree;
+  const address_trees = address_trees_of(value.address_trees);
   const sidebar_keys = sidebar_keys_of(value.sidebar_keys);
   const chrome_hint_keys = chrome_hint_keys_of(value.chrome_hint_keys);
   const which_key = which_key_table_of(value.which_key);
@@ -545,7 +563,7 @@ export function validate_module_state(value: unknown): Checked<ModuleState> {
   const focus_keys = focus_keys_of(value.focus_keys);
   const insert_keys = insert_keys_of(value.insert_keys);
   const hint_mode_keys = hint_mode_keys_of(value.hint_mode_keys);
-  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }), ...(normal_once_keys && { normal_once_keys }), ...(focus_keys && { focus_keys }), ...(insert_keys && { insert_keys }), ...(hint_mode_keys && { hint_mode_keys }) } };
+  return { ok: true, value: { v: value.v, enabled: value.enabled, keys, tabs, ...(bar_theme && { bar_theme }), ...(bar && { bar }), ...(value.blur_on_load === undefined ? {} : { blur_on_load: value.blur_on_load }), ...(tree && { tree: tree.value }), ...(address_trees && { address_trees }), ...(sidebar_keys && { sidebar_keys }), ...(chrome_hint_keys && { chrome_hint_keys }), ...(value.page_hints === true && { page_hints: true as const }), ...(which_key && { which_key }), ...(normal_once_keys && { normal_once_keys }), ...(focus_keys && { focus_keys }), ...(insert_keys && { insert_keys }), ...(hint_mode_keys && { hint_mode_keys }) } };
 }
 
 // What the module writes. The value comes from chrome code, so the extension treats it as foreign input: a size cap first, then the fields it reads. An older or newer module may send more fields, which are ignored.

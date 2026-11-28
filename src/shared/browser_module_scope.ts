@@ -3,8 +3,10 @@
 
 import type { CommandDef } from "./command.ts";
 import type { BoundInvocation } from "./invocation.ts";
-import type { NativeLeaf, PageHintAction, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
-import { check_module_args, is_module_command_id, MAX_COUNT, MAX_SEQUENCE_KEYS, MODE_KEY_COMMAND_IDS } from "./browser_module_protocol.ts";
+import type { AddressTree, NativeLeaf, PageHintAction, ScopeNode, ScopeTree } from "./browser_module_protocol.ts";
+import { check_module_args, is_module_command_id, MAX_ADDRESS_TREES, MAX_ADDRESS_TREE_SITES, MAX_COUNT, MAX_SEQUENCE_KEYS, MODE_KEY_COMMAND_IDS, validate_scope_tree } from "./browser_module_protocol.ts";
+import { about_pattern_of, matches_about_pattern } from "./match_pattern.ts";
+import { normal_tree_for, unguarded_columns_for } from "./site/site_columns.ts";
 import type { ModuleHello } from "./browser_module_protocol.ts";
 import { create_matcher } from "./keys/matcher.ts";
 import { COMPILED_KEYMAP_VERSION, current_keymap } from "./prefix_tree.ts";
@@ -104,13 +106,65 @@ function prune_children(branch: TreeBranch, depth: number, path: readonly string
   }));
 }
 
-// The normal tree with only the leaves a locked page can run. A key that leads only to other leaves is left out, so the page or Firefox keeps it. The bare command line key stays, as a forward leaf. Site rules do not apply: a locked page matches none.
-export function scope_tree_of(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): ScopeTree {
-  // A tree of an older format has another shape, so it gives no keys until the background recompiles.
-  const root = current_keymap(keymap)?.modes.normal;
+// The leaves of one normal tree that a locked page can run. The global tree and the tree of each about: address both go through here, so a rule that maps a leaf for locked pages maps it on every tree. A key that leads only to other leaves is left out, so the page or Firefox keeps it. The bare command line key stays, as a forward leaf.
+function scope_tree_from(root: TreeBranch | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed): ScopeTree {
   const pruning: Pruning = { allowed, check_args, native_allowed, line_keys: [], hint_keys: [] };
   const children = root ? prune_children(root, 1, [], pruning) : {};
   return { children, register_keys: true, ...(pruning.line_keys.length > 0 && { line_keys: pruning.line_keys }), ...(pruning.hint_keys.length > 0 && { hint_keys: pruning.hint_keys }) };
+}
+
+// The global tree: the normal tree with no site rule applied. A tree of an older format has another shape, so it gives no keys until the background recompiles.
+export const scope_tree_of = (keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): ScopeTree => scope_tree_from(current_keymap(keymap)?.modes.normal, allowed, check_args, native_allowed);
+
+// The normal tree of an about: address under the site rules that match it, or undefined when the rules turn DesertFox off there. Never used for a private tab.
+export function normal_tree_at(keymap: CompiledKeymap | undefined, address: string): TreeBranch | undefined | "off" {
+  const current = current_keymap(keymap);
+  if (!current) return undefined;
+  const page = normal_tree_for(current.modes.normal, unguarded_columns_for(current, address));
+  return page.all_off ? "off" : page.tree;
+}
+
+// The entry the module takes for an address: the longest pattern that covers it, an exact pattern before a prefix pattern of the same length. The module has a copy of this rule (`address_entry` in desertfox-browser.js).
+export function address_entry_of(entries: readonly AddressTree[], address: string): AddressTree | undefined {
+  let best: { entry: AddressTree; length: number; exact: boolean } | undefined;
+  for (const entry of entries) {
+    for (const site of entry.sites) {
+      const about = about_pattern_of(site);
+      if (!about || !matches_about_pattern(site, address)) continue;
+      const [length, exact] = [about.base.length, !about.prefix];
+      if (!best || length > best.length || (length === best.length && exact && !best.exact)) best = { entry, length, exact };
+    }
+  }
+  return best?.entry;
+}
+
+// The keymap a run request is matched against for the page the key came from. `published` is the list of trees last written to the module's state, so the run check and the module cut the caps at the same pages. On an about: address in a normal tab that has a published entry, it holds the normal tree under that address's site rules. Any other page, and a page with no entry, get the keymap as it is, as the module takes the global tree there.
+export function keymap_for_page(keymap: CompiledKeymap | undefined, page: { url: string | undefined; incognito: boolean } | undefined, published: readonly AddressTree[]): CompiledKeymap | undefined {
+  const current = current_keymap(keymap);
+  if (!current || !page?.url?.startsWith("about:") || page.incognito) return keymap;
+  if (!address_entry_of(published, page.url)) return keymap;
+  const root = normal_tree_at(current, page.url);
+  const normal = root === "off" ? { kind: "branch" as const, children: {} } : root;
+  const { normal: _, ...others } = current.modes;
+  return { ...current, modes: { ...others, ...(normal && { normal }) } };
+}
+
+// One tree for each distinct outcome of the about: site rules, with every rule pattern that gives it. An exact pattern is judged at its own address and a prefix pattern at its base plus `?`, an address that no exact rule covers, so the two never share a tree by accident. The module takes the entry `address_entry_of` names. Past MAX_ADDRESS_TREES distinct trees the later patterns keep the global tree, in the module and in the run check alike.
+export function address_trees_of_keymap(keymap: CompiledKeymap | undefined, allowed: ReadonlySet<string>, check_args: CheckCommandArgs, native_allowed: NativeAllowed = ALL_NATIVE): AddressTree[] {
+  const groups = new Map<string, AddressTree>();
+  for (const site of new Set((current_keymap(keymap)?.site_rules ?? []).map((rule) => rule.site))) {
+    const about = about_pattern_of(site);
+    if (!about) continue;
+    const root = normal_tree_at(keymap, about.prefix ? `${about.base}?` : about.base);
+    const tree = root === "off" ? { children: {} } : scope_tree_from(root, allowed, check_args, native_allowed);
+    if (!validate_scope_tree(tree).ok) continue;
+    const key = JSON.stringify([tree, root === "off"]);
+    const group = groups.get(key);
+    if (group) {
+      if (group.sites.length < MAX_ADDRESS_TREE_SITES) group.sites.push(site);
+    } else if (groups.size < MAX_ADDRESS_TREES) groups.set(key, { sites: [site], tree, ...(root === "off" && { off: true as const }) });
+  }
+  return [...groups.values()];
 }
 
 // The scope tree in the shape `create_matcher` walks, for the module's bundle. A leaf keeps its scope node in `scope`, and a forward leaf has no steps.
