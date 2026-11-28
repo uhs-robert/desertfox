@@ -172,7 +172,7 @@ const copy_page_links = make_copy_page_links_handler({
 
 define("copy.page_links", {
   label: "Copy page links",
-  intent: "Copy the web links of the tab's page with no page code, as the browser module reads them. A locked page takes it in place of Copy links.",
+  intent: "Copy the page's links through the browser module.",
   params: COPY_LINKS_PARAMS,
   completion: "hidden",
   bridge: false,
