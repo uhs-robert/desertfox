@@ -6,7 +6,7 @@ import type { WhichKeyPanel } from "../../shared/messages/content.ts";
 
 // The modes whose keys are a keymap worth listing. The check sits here and not in content.js, which has no spare bytes.
 // Insert and hint mode show the panel only on request: their half-typed sequences would pop it up after every typed letter.
-const MODES_WITH_PAUSE_PANEL: readonly string[] = ["normal", "caret", "visual", "visual_line", "media", "item", "item_visual"];
+const MODES_WITH_PAUSE_PANEL: readonly string[] = ["normal", "caret", "visual", "visual_line", "media", "item", "item_visual", "tab_visual"];
 const MODES_WITH_PANEL: readonly string[] = [...MODES_WITH_PAUSE_PANEL, "insert", "hint"];
 
 export function create_which_key_session(
