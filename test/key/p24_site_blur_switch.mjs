@@ -55,8 +55,13 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     const start = order.indexOf(await in_active_tab(`new URLSearchParams(location.search).get("id")`));
     for (let step = 1; step <= order.length; step++) {
       const page_id = order[(start + step) % order.length];
+      const mark = events.length;
       await switch_by_key("J", page_id);
-      if (field_ids.includes(page_id)) await expect_blurred(page_id);
+      // A page may focus its field some 300 ms after the show. The j that checks the keys ends the blur window, so j must wait for that focus and its blur, or the late focus keeps the field and the next J types into it.
+      if (field_ids.includes(page_id)) {
+        await with_state(page_id, wait_event(mark, focused_since(mark, page_id), "the page to focus its field on the show", 3000));
+        await expect_blurred(page_id);
+      }
       await expect_keys_work(page_id);
     }
   };
@@ -257,7 +262,7 @@ export async function run_cases({ config_copy, load_config_dir, setup, run_case,
     for (let attempt = 0; !events.slice(mark).some((event) => event.type === "keydown" && event.page_id === "blur_key" && event.key === "F2"); attempt++) {
       if (attempt >= 5) throw new Error(`the page never saw F2: ${await page_state("blur_key")}`);
       await press_keys("-k", "F2");
-      await sleep(100);
+      await wait_event(mark, (event) => event.type === "keydown" && event.page_id === "blur_key" && event.key === "F2", "the page to report F2", 600).catch(() => {});
     }
     expect(Date.now() - shown_at < BLUR_WINDOW_MS, `F2 came ${Date.now() - shown_at} ms after the switch, too late to test the window`);
     await sleep(BLUR_WINDOW_MS);
