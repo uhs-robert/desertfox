@@ -658,6 +658,13 @@ Measured in Firefox 161 in the key test (`test/key/p57_tab_visual.mjs`), and rea
 - The tabs of a collapsed group stay in `tabs.query`, so the range reads `tabGroups.query({ collapsed: true })` to skip them. `j` from the tab before a collapsed group selects the tab after it and leaves the group's tabs out (p57).
 - `pinTab` puts the tab after the pinned tabs, and `unpinTab` puts it before the other tabs. Unpinning [A, B] in that order gives [B, A]. Pinning in strip order and unpinning in reverse, one tab at a time, keeps the order (p57, the `p` round trip).
 
+## Escape in the console input and the Inspector search box (devtools-keys)
+
+- With `devtools.editor.keymap` set to `vim` (Firefox 161), Escape never reaches CodeMirror's Vim keymap in the console input: `i a b Escape x` leaves `abx`, and Ctrl+C leaves insert mode. Measured by `p54_browser_module_devtools_search`.
+- The cause: the console's editor maps Escape to nothing (`Esc: false` in `JSTerm.js`). Read from Firefox 161 code, not measured.
+- With DesertFox's Inspector search keys on, Escape in the Search HTML box stops in the parent, so the box keeps its text and the split console does not open. Measured by `p54_browser_module_devtools_search`.
+- Without DesertFox, the box clears and Escape toggles the split console (`toolbox.js`). Read from Firefox 161 code, not measured.
+
 ## Visual mode in DevTools (devtools-keys)
 
 Question: can chrome code select and copy text in DevTools panels with keys, and where does the focus sit when it starts?

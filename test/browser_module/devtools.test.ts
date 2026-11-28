@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BROWSER_MODULE_PROTOCOL_VERSION, DEVTOOLS_TREE_KEYS } from "../../src/shared/browser_module_protocol.ts";
+import { BROWSER_MODULE_PROTOCOL_VERSION, DEVTOOLS_TREE_KEYS, MAX_DEVTOOLS_KEY_ROWS } from "../../src/shared/browser_module_protocol.ts";
 import { BROWSER_MODULE_FROM_EXTENSION_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import { create_firefox, key_event } from "./fake_firefox.ts";
 
@@ -117,7 +117,7 @@ test("a bad table is dropped and the last good one stays: a long key, Escape, a 
     [{ key: " ", action: "tree.up" }],
     [{ key: "x", action: "click" }],
     [{ key: "x", action: "tree.down" }, { key: "x", action: "tree.up" }],
-    Array.from({ length: 9 }, (_, index) => ({ key: String(index), action: "tree.down" })),
+    Array.from({ length: MAX_DEVTOOLS_KEY_ROWS + 1 }, (_, index) => ({ key: "abcdefghijklmnopqrstuvwxyz"[index]!, action: "tree.down" })),
     [],
     "j=tree.down",
   ];
