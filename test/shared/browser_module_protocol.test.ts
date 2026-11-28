@@ -6,6 +6,7 @@ import {
   BROWSER_MODULE_PROTOCOL_VERSION as V,
   ABSENT_TAB,
   DEVTOOLS_ACTIONS,
+  DEVTOOLS_TOOL_KEYS,
   DEVTOOLS_FLAGGED_KEYS,
   DEVTOOLS_HINT_KEY,
   DEVTOOLS_SEARCH_KEYS,
@@ -451,6 +452,17 @@ test("an older module never gets a table it refuses, and a newer module takes th
   assert.ok(older_takes(table_for(older_hello)), "the table for an older module's hello");
   assert.equal(older_takes(table_for({ ...older_hello, devtools_search: true })), false, "the reason for the flag");
   assert.ok(validate_message({ v: V, id: "d1", kind: "devtools.keys", args: { keys: table_for(older_hello) } }, EXTENSION_TO_MODULE_KINDS).ok);
+});
+
+test("the tool and tab rows are behind devtools_tools, so a module that knows the search rows but not these keeps a table it takes", () => {
+  assert.deepEqual(DEVTOOLS_TOOL_KEYS, [{ key: "g", action: "tool.prefix" }, { key: "J", action: "tab.next" }, { key: "K", action: "tab.prev" }]);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_tools: true }), { ok: true, value: { v: V, module_version: "1", devtools_tools: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_tools: flag }), { ok: true, value: { v: V, module_version: "1" } });
+  const with_search_only: readonly string[] = DEVTOOLS_ACTIONS.filter((action) => !["tool.prefix", "tab.next", "tab.prev"].includes(action));
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+  const search_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true };
+  assert.ok(table_for(search_hello).every(({ action }) => with_search_only.includes(action)));
+  assert.equal(table_for({ ...search_hello, devtools_tools: true }).every(({ action }) => with_search_only.includes(action)), false, "the reason for the flag");
 });
 
 test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {
