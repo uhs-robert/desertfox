@@ -294,10 +294,11 @@ test("nothing is taken with the module off, without a sidebar table, or while a 
   focus(panel_row(panel_doc));
   const popups: Record<string, unknown>[] = [];
   main_doc.querySelectorAll = (selector: string) => (selector === "menupopup, panel" ? (popups as unknown as FakeNode[]) : main_doc.nodes);
-  const popup = (localName: string, id: string, attributes: Record<string, string> = {}, multiview = false) => ({ localName, id, state: "open", hasAttribute: (name: string) => name in attributes, querySelector: () => (multiview ? {} : null) });
+  const popup = (localName: string, id: string, attributes: Record<string, string> = {}, multiview = false) => ({ localName, id, state: "open", hasAttribute: (name: string) => name in attributes, getAttribute: (name: string) => attributes[name] ?? null, querySelector: () => (multiview ? {} : null) });
   popups.push(popup("menupopup", "ignores", { ignorekeys: "true" }), popup("panel", "identity-popup"));
   assert.ok(press("j").prevented, "a menu that ignores keys or a plain panel took the key away");
-  for (const owner of [popup("menupopup", "contentAreaContextMenu"), popup("panel", "appMenu-popup", {}, true), popup("panel", "unified-extensions-panel", {}, true), popup("panel", "downloadsPanel")]) {
+  // Firefox's select popup sets "false" once its search box blurs, and "shortcuts" on Windows. It takes keys with either.
+  for (const owner of [popup("menupopup", "contentAreaContextMenu"), popup("menupopup", "ContentSelectDropdownPopup", { ignorekeys: "false" }), popup("menupopup", "ContentSelectDropdownPopup", { ignorekeys: "shortcuts" }), popup("panel", "appMenu-popup", {}, true), popup("panel", "unified-extensions-panel", {}, true), popup("panel", "downloadsPanel")]) {
     popups.push(owner);
     assert.equal(press("j").prevented, false, `j was taken under ${owner.id}`);
     popups.pop();
