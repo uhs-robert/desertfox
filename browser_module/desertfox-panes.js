@@ -1,4 +1,4 @@
-// DesertFox browser module, the pane feature: it answers the extension's pane.* requests (split, unsplit, close both, resize, equal widths, focus a region or a side) in the focused browser window. See docs/design/interfaces_tabs.md, "Split view".
+// DesertFox browser module, the pane feature: it answers the extension's pane.* requests (split, unsplit, close both, resize, equal widths, focus a region or a side, move what has the focus) in the focused browser window. See docs/design/interfaces_tabs.md, "Split view".
 // The core (desertfox-browser.js, which sorts first) reads and checks the requests. In a window this file asks the core to load it into the core sandbox, where it registers its kinds once per process.
 // Each handler reaches Firefox internals only when it runs and feature-detects each one, so a Firefox that changed them gets a refusal, never a module turned off at start.
 
@@ -26,6 +26,8 @@
     // A resize step, as a share of the panel area. pane.resize in src/commands/tab_split.ts says the same.
     const STEP_SHARE = 0.05;
     const DOCKED_HOSTS = ["bottom", "left", "right"];
+    // DevTools' switchHost settles on its own "host-changed" event, which never comes when the move fails inside DevTools. The extension stops waiting at 2 s.
+    const SWITCH_HOST_WAIT_MS = 1500;
 
     const NOT_SUPPORTED = "Not supported in this Firefox version";
     const refuse = (error) => ({ ok: false, error });
@@ -300,6 +302,97 @@
       return at_start !== win.RTL_UI ? "left" : "right";
     }
 
+    // ---- Moves. Where the focus is comes from the window when the move runs, never from the request: the focus can change between the key and the move.
+
+    const SIDE_WORDS = { left: "on the left", right: "on the right", down: "at the bottom" };
+
+    async function move({ direction }) {
+      const where = focused_window();
+      if (where.problem) return refuse(where.problem);
+      const place = focus_place(where);
+      if (place.problem) return refuse(place.problem);
+      if (place.toolbox) return redock(where.win, place.toolbox, direction);
+      if (place.sidebar) return move_sidebar(where.win, direction);
+      if (direction === "down") return refuse("Focus DevTools first");
+      return swap_pane(where, direction);
+    }
+
+    // { toolbox } with the focus in docked DevTools, { sidebar: true } in the sidebar, {} anywhere else, which moves the selected tab's pane.
+    function focus_place({ win, tab }) {
+      if (!has_function(core, "focused_element")) return { problem: NOT_SUPPORTED };
+      const element = core.focused_element(win);
+      if (in_toolbox_frame(win, element)) return docked_toolbox(tab);
+      return in_sidebar(win, element) ? { sidebar: true } : {};
+    }
+
+    // The core's DevTools key guard reads it the same way: a document under the frame that DevTools docks in a tab.
+    function in_toolbox_frame(win, element) {
+      let doc = element?.ownerDocument;
+      for (let depth = 0; doc && doc !== win.document && depth < 8; depth++) {
+        // frameElement is null across the <browser> that holds a docked toolbox, so its embedder names that frame.
+        const frame = doc.defaultView?.frameElement ?? doc.defaultView?.browsingContext?.embedderElement;
+        if (!frame) return false;
+        if (frame.classList?.contains("devtools-toolbox-iframe")) return true;
+        doc = frame.ownerDocument;
+      }
+      return false;
+    }
+
+    // The sidebar panel's document, the launcher (its buttons sit in a shadow root) or the vertical tab strip.
+    function in_sidebar(win, element) {
+      if (!element) return false;
+      if (element.ownerDocument === win.SidebarController?.browser?.contentDocument) return true;
+      if (element.ownerDocument !== win.document) return false;
+      const selector = win.gBrowser.tabContainer?.verticalMode === true ? "#sidebar-box, sidebar-main, #tabbrowser-tabs" : "#sidebar-box, sidebar-main";
+      for (let node = element, depth = 0; node && depth < 8; node = node.getRootNode?.()?.host, depth++) {
+        if (node.closest?.(selector)) return true;
+      }
+      return false;
+    }
+
+    // DevTools gives the focus back to its tool once the host changed.
+    async function redock(win, toolbox, direction) {
+      const host = direction === "down" ? "bottom" : direction;
+      if (toolbox.hostType === host) return refuse(`DevTools is already docked ${SIDE_WORDS[direction]}`);
+      if (!has_function(toolbox, "switchHost") || !has_function(win, "setTimeout")) return refuse(NOT_SUPPORTED);
+      let timer;
+      try {
+        const gave_up = new Promise((resolve) => (timer = win.setTimeout(() => resolve("gave up"), SWITCH_HOST_WAIT_MS)));
+        if ((await Promise.race([toolbox.switchHost(host), gave_up])) === "gave up") return refuse("DevTools did not finish moving");
+      } catch (error) {
+        core.log_once(`DevTools refused to dock ${host}: ${error}`);
+        return refuse(`DevTools could not dock ${SIDE_WORDS[direction]}`);
+      } finally {
+        win.clearTimeout?.(timer);
+      }
+      return toolbox.hostType === host ? done() : refuse(`DevTools could not dock ${SIDE_WORDS[direction]}`);
+    }
+
+    // reversePosition flips the global pref `sidebar.position_start`, so every window's sidebar moves. Only a focus in the sidebar reaches it.
+    function move_sidebar(win, direction) {
+      if (direction === "down") return refuse("The sidebar moves only left or right");
+      const sidebar = win.SidebarController;
+      const side = sidebar_side_of(win);
+      if (side === undefined || !has_function(sidebar, "reversePosition")) return refuse(NOT_SUPPORTED);
+      if (side === direction) return refuse(`The sidebar is already ${SIDE_WORDS[direction]}`);
+      sidebar.reversePosition();
+      return sidebar_side_of(win) === direction ? done() : refuse("The sidebar did not move");
+    }
+
+    // Firefox's own swap reorders the two tabs and shows the panels again. The selected tab stays selected, and its page gets the focus back.
+    function swap_pane({ win, tab }, direction) {
+      if (!split_supported(tab)) return refuse(NOT_SUPPORTED);
+      const split = tab.splitview;
+      if (!split) return refuse("This tab is not in a split view");
+      const pane = pane_toward(win, tab, direction);
+      if (pane.problem) return refuse(pane.problem);
+      if (!pane.tab) return refuse(`This pane is already ${SIDE_WORDS[direction]}`);
+      if (!has_function(split, "reverseTabs") || !has_function(tab.linkedBrowser, "focus")) return refuse(NOT_SUPPORTED);
+      split.reverseTabs();
+      tab.linkedBrowser.focus();
+      return pane_toward(win, tab, direction).tab ? refuse("The panes did not swap") : done();
+    }
+
     const focus_by_region = { page: focus_page, split: focus_split, sidebar: focus_sidebar, devtools: focus_devtools };
 
     core.register_kind("pane.split_new_tab", split_new_tab);
@@ -309,6 +402,9 @@
     core.register_kind("pane.resize", resize);
     core.register_kind("pane.equalize", equalize);
     core.register_kind("pane.focus_direction", focus_direction);
+    core.register_kind("pane.move", move);
     core.register_kind("pane.focus_region", ({ region }) => (Object.hasOwn(focus_by_region, region) ? focus_by_region[region]() : refuse(NOT_SUPPORTED)));
+    // An older core has no flag for it, and the extension then refuses the move itself.
+    if (has_function(core, "set_hello_flag")) core.set_hello_flag("pane_moves", true);
   }
 })(this);

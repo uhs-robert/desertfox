@@ -38,11 +38,13 @@ export const MESSAGE_MIN_GAP_MS = 50;
 // `text` is any string. The kind's `max_bytes` bounds it.
 // `optional_int` is a whole number or absent, so a kind row can grow an arg an older sender leaves out.
 // `firefox_page` is a name from MODULE_FIREFOX_PAGES. `optional_open_where` is absent, "tab" or "here".
-type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where";
+type ArgKind = "int" | "optional_int" | "number" | "axis" | "text" | "step" | "region" | "direction" | "page_hint_action" | "devtools_keys" | "devtools_visual_keys" | "firefox_page" | "optional_open_where" | "move_direction";
 
 export const PANE_REGIONS = ["sidebar", "page", "split", "devtools"] as const;
 export const MAX_RESIZE_STEPS = 20;
 export const PANE_DIRECTIONS = ["left", "right"] as const;
+// Where `pane.move` sends what has the focus. Down only docks DevTools at the bottom.
+export const PANE_MOVE_DIRECTIONS = ["left", "right", "down"] as const;
 // What a pick does in a hint session on one of Firefox's own pages: click or focus the target, or, for a link to a web address only, open it in a tab or a background tab, or copy it. The module reads the address itself, so none crosses the channel.
 export const PAGE_HINT_ACTIONS = ["follow", "tab", "background", "yank"] as const;
 export type PageHintAction = (typeof PAGE_HINT_ACTIONS)[number];
@@ -179,8 +181,8 @@ export const MAX_WHICH_KEY_LABEL_CHARS = 60;
 export const MAX_WHICH_KEY_SKIP = 64;
 export const MAX_WHICH_KEY_DELAY_MS = 60_000;
 export const WHICH_KEY_BORDERS = ["square", "round", "chamfer"] as const satisfies readonly WhichKeyBorder[];
-// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`.
-export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true };
+// `bar` says the module built its status bar. `devtools_hints` says it runs hints in DevTools, so it may get the `hints.start` row. `devtools_visual` says it runs visual mode there, so it may get the `visual.start` row and the visual table. `page_hints` says it runs hints on Firefox's own pages. `firefox_pages` says it answers `firefox_page.open`. `pane_moves` says it answers `pane.move`.
+export type ModuleHello = { v: number; module_version: string; bar?: true; devtools_hints?: true; devtools_visual?: true; page_hints?: true; firefox_pages?: true; pane_moves?: true };
 
 // What the module takes for a tab id the state does not list.
 export const ABSENT_TAB: TabState = { mode: "normal", live: false };
@@ -202,6 +204,7 @@ function arg_problem(kind: ArgKind, value: unknown): string | undefined {
   if (kind === "axis") return value === "x" || value === "y" ? undefined : "must be x or y";
   if (kind === "region") return PANE_REGIONS.some((region) => region === value) ? undefined : `must be one of ${PANE_REGIONS.join(", ")}`;
   if (kind === "direction") return PANE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_DIRECTIONS.join(", ")}`;
+  if (kind === "move_direction") return PANE_MOVE_DIRECTIONS.some((direction) => direction === value) ? undefined : `must be one of ${PANE_MOVE_DIRECTIONS.join(", ")}`;
   if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.some((action) => action === value) ? undefined : `must be one of ${PAGE_HINT_ACTIONS.join(", ")}`;
   if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.some((page) => page === value) ? undefined : "must be a page from the list";
   if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.some((where) => where === value) ? undefined : `must be one of ${FIREFOX_PAGE_WHERE.join(", ")}`;
@@ -416,7 +419,7 @@ export function validate_module_hello(value: unknown): Checked<ModuleHello> {
   if (typeof value.v !== "number" || !Number.isInteger(value.v)) return bad("v must be a whole number");
   const version = value.module_version;
   if (typeof version !== "string" || version.length === 0 || version.length > MAX_MODULE_VERSION_CHARS || /[\p{Cc}\p{Cf}]/u.test(version)) return bad("module_version must be text of 1 to 32 characters");
-  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }) } };
+  return { ok: true, value: { v: value.v, module_version: version, ...(value.bar === true && { bar: true as const }), ...(value.devtools_hints === true && { devtools_hints: true as const }), ...(value.devtools_visual === true && { devtools_visual: true as const }), ...(value.page_hints === true && { page_hints: true as const }), ...(value.firefox_pages === true && { firefox_pages: true as const }), ...(value.pane_moves === true && { pane_moves: true as const }) } };
 }
 
 // What the settings page shows. `waiting`: no valid hello yet.
@@ -487,6 +490,8 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: PANE_CALL_BYTES },
   "pane.equalize": { args: {}, reply: true, max_bytes: PANE_CALL_BYTES },
+  // Sent only to a module whose hello says `pane_moves`. The module reads where the focus is when the move runs, so the request names only the direction.
+  "pane.move": { args: { direction: "move_direction" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // A key asks for a value and the tab has no command line: the module opens the address bar of the active window with `df ` and `text` typed in. The text is the printed command, which the user reads and edits there. The module only puts it in the field.
   // `tab_id` names the tab that asked. The module refuses when that tab is no longer the selected tab of the focused window, so the text never lands in a window the user switched to. An older extension leaves it out.
   "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: ADDRESS_BAR_BYTES },

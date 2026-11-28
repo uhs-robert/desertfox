@@ -144,6 +144,7 @@
       "pane.focus_region": { args: { region: "region" }, reply: true, max_bytes: 256 },
       "pane.focus_direction": { args: { direction: "direction" }, reply: true, max_bytes: 256 },
       "pane.equalize": { args: {}, reply: true, max_bytes: 256 },
+      "pane.move": { args: { direction: "move_direction" }, reply: true, max_bytes: 256 },
       "address_bar.open": { args: { text: "text", tab_id: "optional_int" }, reply: true, max_bytes: 4096 },
       "cmdline_panel.open": { args: { tab_id: "int" }, reply: true, max_bytes: 256 },
       "chrome_hints.collect": { args: { session: "int", window_id: "int", colors: "text" }, reply: true, max_bytes: 1024 },
@@ -300,7 +301,7 @@
     const write_session = (extension, key, value) => extensionStorageSession.set(extension, { [key]: ExtensionStorage.serialize(key, key, value) });
 
     // The flags a feature may set in the hello. Only a true flag is written: validate_module_hello reads each flag only when it is true.
-    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages"];
+    const HELLO_FLAGS = ["bar", "devtools_hints", "devtools_visual", "page_hints", "firefox_pages", "pane_moves"];
     const hello_flags = new Set();
 
     // The hello goes once to each extension object, only while the module is on, and again when a flag changes. The extension reads it as foreign input.
@@ -780,6 +781,7 @@
       if (kind === "text") return typeof value === "string";
       if (kind === "region") return PANE_REGIONS.includes(value);
       if (kind === "direction") return value === "left" || value === "right";
+      if (kind === "move_direction") return value === "left" || value === "right" || value === "down";
       if (kind === "page_hint_action") return PAGE_HINT_ACTIONS.includes(value);
       if (kind === "firefox_page") return MODULE_FIREFOX_PAGES.includes(value);
       if (kind === "optional_open_where") return value === undefined || FIREFOX_PAGE_WHERE.includes(value);
