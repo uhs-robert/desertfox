@@ -202,9 +202,12 @@
 
     // Escape ends the mode and goes no further. A key the core or the page already used, such as an Escape that left a field, leaves the mode as it is.
     // The key came from the mode's own page: its document, or the tab's <browser> when no document has the focus. The address bar, the find bar, DevTools, a subdialog and a menu keep their own Escape.
+    // With the focus on no element of the page, the key targets the <browser> or the window's own frame.
+    const NO_FOCUS_TARGETS = new Set(["browser", "tabbrowser", "tabpanels", "body", "window"]);
     const from_page = (record, event) => {
       const target = event.originalTarget ?? event.target;
-      return target === record.browser || target?.ownerDocument === record.doc || target?.ownerDocument === record.top_doc;
+      if (target === record.browser || target?.ownerDocument === record.doc || target?.ownerDocument === record.top_doc) return true;
+      return target?.ownerDocument === record.win.document && (target === record.win.document.documentElement || NO_FOCUS_TARGETS.has(target?.localName));
     };
 
     function on_key(win, event) {

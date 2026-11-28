@@ -255,6 +255,10 @@ test("an Escape from outside the mode's page keeps Firefox's own: the address ba
     assert.equal(event.prevented || event.stopped, false);
     assert.equal(w.firefox.read_pref(CARET), true, "the mode stays");
   }
+  const panels = { ownerDocument: w.window.win.document, localName: "tabpanels" };
+  const unfocused = w.window.press(key_event("Escape", { target: panels, originalTarget: panels } as never));
+  assert.ok(unfocused.prevented, "an Escape with the focus on no element is the page's");
+  w.run("mode.caret");
   const from_browser = w.window.press(key_event("Escape", { target: w.a.browser, originalTarget: w.a.browser } as never));
   assert.ok(from_browser.prevented);
   assert.equal(w.firefox.read_pref(CARET), undefined);
