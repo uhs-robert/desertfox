@@ -15,6 +15,7 @@
 // It also labels a few of Firefox's own pages that run in this process (PAGE_HINT_PAGES), which no content script reaches. The key taker (desertfox-commands.js) calls the start it lends through the core's `share_page_hints` on the user's own hint key there.
 // That start makes a token as a chrome-focus start does and pushes page_hints.want. The extension names the action and answers with page_hints.collect. Draw, key, pick and clear then go on the chrome_hints kinds.
 // A pick there runs only when the picked label is the one the user's own keys spelled, as forwarded from here: the extension names the target, the module checks it.
+// A page in a content process that the content hints route labels (desertfox-content-hints.js, through the core's `share_content_pages`) runs the same session. Its targets carry no element: the route's frame script holds them, and a pick goes to it.
 
 (function desertfox_browser_module_chrome_hints(scope) {
   "use strict";
@@ -304,6 +305,15 @@
       return page_row(doc) ? doc : undefined;
     }
 
+    // The kind of the tab's page in a content process, when the content hints route labels it.
+    const content_kind = (browser) => (browser?.isRemoteBrowser === true ? core.content_pages?.()?.labels(browser) : undefined);
+    // Takes the route's session out of a page, so the end of the session or the mark that held it no longer clears it.
+    function take_remote(page) {
+      const remote = page?.remote;
+      if (page) page.remote = undefined;
+      return remote;
+    }
+
     // Beside the dialog controls: a page's links and its newer link and button rows. Text fields too, which a pick focuses. The custom fields (moz-input-search, moz-select) are not matched, so their own input or select inside gets the label.
     const PAGE_CONTROLS = `${CONTROLS}, a[href], moz-box-button, moz-box-link`;
     const PAGE_FIELDS = "input, textarea, select";
@@ -528,10 +538,8 @@
       starting.undo.push(() => core.release_keys(win, KEY_OWNER));
       for (const type of ["mousedown", "deactivate", "unload"]) listen(starting, win, type, end_start);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(starting, frame_win, type, end_start);
-      if (page) {
-        listen(starting, win, "TabSelect", end_start);
-        for (const type of ["mousedown", "pagehide"]) listen(starting, page.doc.defaultView, type, end_start);
-      }
+      if (page) listen(starting, win, "TabSelect", end_start);
+      if (page?.doc) for (const type of ["mousedown", "pagehide"]) listen(starting, page.doc.defaultView, type, end_start);
       const timer = win.setTimeout(end_start, START_TOKEN_MS);
       starting.undo.push(() => win.clearTimeout(timer));
       const refused = (reply) => !reply.ok && starting?.token === token && end_start();
@@ -543,8 +551,9 @@
     function start_page({ window: win, browser, event, keys, count }) {
       if (event?.isTrusted !== true || typeof keys !== "string" || !Number.isInteger(count)) return false;
       const doc = page_document(browser);
-      if (!doc || tabs_of(win)?.selectedBrowser !== browser) return false;
-      begin_start(win, { page: { browser, inner: browser.innerWindowID, doc, keys, count } });
+      const kind = doc ? undefined : content_kind(browser);
+      if ((!doc && !kind) || tabs_of(win)?.selectedBrowser !== browser) return false;
+      begin_start(win, { page: { browser, inner: browser.innerWindowID, doc, kind, keys, count } });
       return starting?.win === win;
     }
 
@@ -627,7 +636,7 @@
 
     function add_session_parts(win, found, style_url, theme, panel, frame_win, page) {
       const doc = win.document;
-      for (const target of found) session.targets.set(next_target_id++, { ...target, kind: kind_of(target.element) });
+      for (const target of found) session.targets.set(next_target_id++, { ...target, kind: target.element ? kind_of(target.element) : "remote" });
       const window_layer = make_layer(doc, style_url, theme, true, page ? PAGE_HOST_CLASS : HOST_CLASS);
       doc.documentElement.append(window_layer.host);
       session.layers.window = window_layer;
@@ -646,9 +655,12 @@
         listen(session, frame_win, "mousedown", end_told);
         listen(session, win, "TabSelect", end_told);
       }
-      if (page) {
-        listen(session, win, "TabSelect", end_told);
-        for (const type of ["mousedown", "pagehide"]) listen(session, page.doc.defaultView, type, end_told);
+      if (page) listen(session, win, "TabSelect", end_told);
+      if (page?.doc) for (const type of ["mousedown", "pagehide"]) listen(session, page.doc.defaultView, type, end_told);
+      // A click, a scroll or a load in a page of another process reaches chrome only as the route's word that the page went.
+      if (page?.remote) {
+        session.undo.push(page.remote.on_gone(end_told));
+        session.undo.push(() => take_remote(page)?.clear());
       }
       listen(session, win, "mousedown", end_told);
       listen(session, win, "deactivate", end_told);
@@ -739,7 +751,8 @@
     // A start the user's hint key asked for on a page of Firefox's own. As with collect_here, the token is spent whatever the answer, and it opens only on the page it was typed on, still shown in its tab.
     function page_collect({ session: tag, start, action, colors }) {
       const asked = starting;
-      if (!asked || asked.token !== start) return { ok: false, error: "The hint key is stale" };
+      if (!asked || asked.token !== start || asked.collecting) return { ok: false, error: "The hint key is stale" };
+      if (asked.page?.kind) return content_page_collect(asked, tag, action, colors);
       end_start();
       if (!asked.page) return { ok: false, error: "The hint key is stale" };
       const refused = asked_problem(asked);
@@ -748,6 +761,34 @@
       const { browser, inner, doc } = asked.page;
       if (tabs_of(win)?.selectedBrowser !== browser || browser.innerWindowID !== inner || page_document(browser) !== doc) return { ok: false, error: "The page changed" };
       return open_session(tag, win, page_targets(win, doc, action), colors, { page: { doc, action }, early_keys: asked.early_keys, keyed: true });
+    }
+
+    // The same start on a page in a content process. The start keeps the window's keys while the page answers, so a key typed meanwhile reaches neither the page nor another feature. Its token is spent at once.
+    async function content_page_collect(asked, tag, action, colors) {
+      asked.collecting = true;
+      const { win } = asked;
+      const { browser, inner, kind } = asked.page;
+      const changed = () => (tabs_of(win)?.selectedBrowser !== browser || browser.innerWindowID !== inner || content_kind(browser) !== kind ? "The page changed" : undefined);
+      const refused = asked_problem(asked) ?? changed();
+      if (refused) {
+        end_start();
+        return { ok: false, error: refused };
+      }
+      const collected = await core.content_pages().collect(win, browser, action);
+      // A click, a tab switch or the token's time ended the start meanwhile.
+      const still_asked = starting === asked;
+      if (still_asked) end_start();
+      const problem = still_asked ? (collected.error ?? asked_problem(asked) ?? changed()) : "The hint key is stale";
+      if (problem) {
+        collected.remote?.clear();
+        return { ok: false, error: problem };
+      }
+      try {
+        return open_session(tag, win, collected.targets, colors, { page: { action, browser, inner, remote: collected.remote }, early_keys: asked.early_keys, keyed: true });
+      } catch (error) {
+        collected.remote.clear();
+        throw error;
+      }
     }
 
     // ---- Draw.
@@ -784,7 +825,8 @@
       const origin = session.layers.panel?.host.getBoundingClientRect();
       for (const [id, text] of rows) {
         const target = session.targets.get(id);
-        target.drawn = window_box(session.win, target.element);
+        // A target in a content process has the box the route mapped, at its collect.
+        target.drawn = target.element ? window_box(session.win, target.element) : target.box;
         const node = label_node(doc, text, typed_length);
         if (session.page) {
           node.style.cssText = PAGE_LABEL_STYLE;
@@ -969,9 +1011,11 @@
     const READY = "ready";
     const WAITS = "waits";
     const GONE = "gone";
-    function confirm_state({ win, target, identity }) {
+    function confirm_state({ win, target, identity, page }) {
       const { element, drawn } = target;
       if (win.closed || Services.focus.activeWindow !== win || !enabled_by_pref() || !core.may_act(win) || core.keys_held_by(win) !== KEY_OWNER) return GONE;
+      // The route's frame script checks the element itself when the confirmed pick reaches it.
+      if (!element) return page?.remote && tabs_of(win)?.selectedBrowser === page.browser && page.browser.innerWindowID === page.inner ? READY : GONE;
       if (!element.isConnected || element.hidden || !element.checkVisibility()) return GONE;
       const now = identity_of(win, element);
       if (now.notification !== identity.notification || now.download !== identity.download || now.text !== identity.text || moved(win, element, drawn)) return GONE;
@@ -988,7 +1032,7 @@
     function begin_confirm(win, target, look) {
       end_confirm();
       const shown_at = time_now(win);
-      confirming = { win, target, identity: identity_of(win, target.element), shown_at, counts_at: shown_at + security_delay_ms(), undo: [] };
+      confirming = { win, target, page: look.page, identity: target.element ? identity_of(win, target.element) : undefined, shown_at, counts_at: shown_at + security_delay_ms(), undo: [] };
       if (!core.hold_keys(win, KEY_OWNER)) {
         end_confirm();
         return false;
@@ -1010,8 +1054,10 @@
       if (in_panel) panel.view.prepend(layer.host);
       else doc.documentElement.append(layer.host);
       confirming.undo.push(() => layer.host.remove());
-      const box = window_box(win, target.element);
+      const box = target.element ? window_box(win, target.element) : target.drawn;
       const origin = in_panel ? layer.host.getBoundingClientRect() : { left: 0, top: 0 };
+      // The note over a target in a content process stays inside the tab's content area, as its labels do, so it never covers the toolbars.
+      const min_top = target.element ? 0 : Math.round(page.browser.getBoundingClientRect().top);
       const position = in_panel ? "absolute" : "fixed";
       const left = Math.round(box.left - origin.left);
       const top = Math.round(box.top - origin.top);
@@ -1021,18 +1067,25 @@
       const note = label_node(doc, CONFIRM_TEXT, 0);
       // nowrap: the layer inside a panel has no width, so a note that may wrap breaks after each word.
       // Above the control, inside the panel or dialog it sits in: below it the panel's edge cuts the note, and on it the note hides what Enter grants.
-      note.style.cssText = `position: ${position}; left: ${Math.max(0, left)}px; top: ${Math.max(0, top - NOTE_PX)}px; ${CONFIRM_NOTE_STYLE}`;
+      note.style.cssText = `position: ${position}; left: ${Math.max(0, left)}px; top: ${Math.max(min_top, top - NOTE_PX)}px; ${CONFIRM_NOTE_STYLE}`;
       layer.box.replaceChildren(frame, note);
 
       const ends = () => end_confirm();
       for (const type of ["mousedown", "deactivate", "resize", "unload", "TabSelect"]) listen(confirming, win, type, ends);
       if (frame_win) for (const type of ["mousedown", "unload"]) listen(confirming, frame_win, type, ends);
       // A click in the page lands in its own document, as in a dialog.
-      if (page) for (const type of ["mousedown", "pagehide"]) listen(confirming, page.doc.defaultView, type, ends);
+      if (page?.doc) for (const type of ["mousedown", "pagehide"]) listen(confirming, page.doc.defaultView, type, ends);
+      if (page?.remote) {
+        confirming.undo.push(page.remote.on_gone(ends));
+        confirming.undo.push(() => take_remote(page)?.clear());
+      }
       if (panel) listen(confirming, panel.panel, "popuphidden", (event) => event.target === panel.panel && end_confirm(), false);
+      const timer = win.setTimeout(ends, CONFIRM_MS);
+      confirming.undo.push(() => win.clearTimeout(timer));
+      const { element } = target;
+      if (!element) return;
       // A download that finishes or is unblocked elsewhere changes its row, and a doorhanger reuses its element for the next prompt.
       const observer = new win.MutationObserver(ends);
-      const { element } = target;
       const row = closest_of(element, (at) => at.localName === "richlistitem");
       if (row === element) observer.observe(element, { attributes: true, attributeFilter: ["state", "verdict", "hidden"] });
       else {
@@ -1042,8 +1095,6 @@
       const prompt = prompt_of(element);
       if (prompt) observer.observe(prompt, { attributes: true, attributeFilter: ["popupid", "hidden"] });
       confirming.undo.push(() => observer.disconnect());
-      const timer = win.setTimeout(ends, CONFIRM_MS);
-      confirming.undo.push(() => win.clearTimeout(timer));
     }
 
     // While a grant waits, each key in its window is the confirm's: Enter confirms, any other key cancels, and none goes on to Firefox or the page.
@@ -1059,8 +1110,13 @@
       const asked = confirming;
       const state = confirm_state(asked);
       if (state === WAITS) return;
+      // The only `confirmed: true` the route ever sends: this Enter of the user's own.
+      const remote = state === READY && !asked.target.element ? take_remote(asked.page) : undefined;
       end_confirm();
-      if (state === READY) run_target(asked.win, asked.target);
+      if (remote) {
+        void remote.pick(asked.target.remote_id, true).then((picked) => picked.ok || core.log_once(`a confirmed pick in a page did not run: ${picked.error}`));
+        remote.clear();
+      } else if (state === READY && asked.target.element) run_target(asked.win, asked.target);
     }
 
     // ---- Pick.
@@ -1080,11 +1136,16 @@
       const { element, drawn } = target;
       const { win, look, keyed, page } = session;
       const named_by_keys = !page || spelled(session, id);
+      const remote = element ? undefined : take_remote(page);
       end_session(false);
-      if (!named_by_keys) return { ok: false, error: "The keys typed do not name this hint" };
+      if (!named_by_keys) {
+        remote?.clear();
+        return { ok: false, error: "The keys typed do not name this hint" };
+      }
+      if (!element) return content_pick(win, target, look, page, remote);
       if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
       if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
-      if (page && page.action !== "follow") return run_link(win, element, page.action);
+      if (page && page.action !== "follow") return run_link(win, web_address(element), page.action);
       if (grants(win, element)) {
         // A control can come to grant after the collect, as when a prompt's Remember is ticked.
         if (!keyed) return { ok: false, error: "Type the hint key to pick this" };
@@ -1094,6 +1155,22 @@
       if (prompt_waits(element)) return { ok: false, error: "The prompt is not ready yet" };
       run_target(win, target);
       return { ok: true };
+    }
+
+    // A pick of a target in a content process: the route's frame script checks and runs it, and a link action brings back the link's address. A grant only marks it here.
+    async function content_pick(win, target, look, page, remote) {
+      if (!remote) return { ok: false, error: "The hints have ended" };
+      if (target.grants && page.action === "follow") {
+        if (begin_confirm(win, target, { ...look, page: { ...page, remote } })) return { ok: true };
+        remote.clear();
+        return { ok: false, error: "Another feature holds the window's keys" };
+      }
+      const reply = remote.pick(target.remote_id, false);
+      remote.clear();
+      const picked = await reply;
+      if (!picked.ok || page.action === "follow") return { ok: picked.ok, ...(picked.error !== undefined && { error: picked.error }) };
+      if (tabs_of(win)?.selectedBrowser !== page.browser) return { ok: false, error: "The page changed" };
+      return run_link(win, picked.href, page.action);
     }
 
     const box_moved = (drawn, now) => Math.abs(now.left - drawn.left) > MOVED_PX || Math.abs(now.top - drawn.top) > MOVED_PX;
@@ -1128,8 +1205,7 @@
     }
 
     // A new tab loads the address as a link the user opened would, with no principal of the page or of chrome behind it.
-    function run_link(win, element, action) {
-      const address = web_address(element);
+    function run_link(win, address, action) {
       if (address === undefined) return { ok: false, error: "The link has no web address" };
       if (action === "yank") {
         Components.classes["@mozilla.org/widget/clipboardhelper;1"].getService(Components.interfaces.nsIClipboardHelper).copyString(address);
@@ -1255,7 +1331,7 @@
     core.register_kind("chrome_hints.pick", pick);
     core.register_kind("chrome_hints.clear", clear);
     core.register_kind("page_hints.collect", page_collect);
-    core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined, start: start_page });
+    core.share_page_hints({ handles: (browser) => page_document(browser) !== undefined || content_kind(browser) !== undefined, start: start_page });
     core.set_hello_flag("page_hints", true);
     // The DevTools hints draw with these, so their label checks and layer stay one code.
     core.share_hint_drawing({ MAX_TARGETS, label_style_url, theme_text, make_layer, label_node, whole_draw, target_parts, drawn_target, box_moved });
