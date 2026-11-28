@@ -19,7 +19,7 @@ The rules for a definition and the notes per module are in "Commands files for t
 - `copy.ts`: `copy.url` and `copy.links`, and `copy.page`, the background variant of `copy.url` that a locked page runs.
 - `copy_tabs.ts`: `copy.tabs` (`yT`), which lists the open web tabs in the link-list formats.
 - `engine.ts`: `engine.show`.
-- `find.ts`: `find.open`, `find.next` and `find.prev`, the page text search. The code sits in the `caret` bundle.
+- `find.ts`: the page text search (`find.open`, `find.next`, `find.prev`, code in the `caret` bundle) and its locked-page variants `find.page*`.
 - `firefox_page.ts`: the handler of `browser.open_firefox_page`: the route order (browser module, native host, clipboard) and the rule for when a module refusal falls back.
 - `grab.ts`: the keys of grab mode (`grab.move`, `grab.step`, `grab.drop`, `grab.cancel`). The `grab` bundle runs them.
 - `sidebar.ts`: the `sidebar.*` commands of the sidebar mode. The browser module runs them in Firefox's own sidebar. The extension refuses them.

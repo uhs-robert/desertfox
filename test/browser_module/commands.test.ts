@@ -91,9 +91,9 @@ test("a count past the cap repeats a native command 100 times", () => {
   assert.equal(window.tab_moves.length, 100);
 });
 
-test("keys the tree leaves out reach the page: f, / and i", () => {
+test("keys the tree leaves out reach the page: f, m and i", () => {
   const { press, runs } = started();
-  for (const key of ["f", "/", "i"]) assert.equal(press(key).prevented, false, key);
+  for (const key of ["f", "m", "i"]) assert.equal(press(key).prevented, false, key);
   assert.deepEqual(runs(), []);
 });
 

@@ -97,7 +97,7 @@ async function open_line(start: Start, port: MessagePort): Promise<void> {
 }
 
 // The panel over a locked page: no host and no page under the line, so this page plays the host's part. It ends the line by closing its window, which closes the panel.
-// The background answers only the panel it asked the browser module for, once. A command line only: a locked page has no text to search.
+// The background answers only the panel it asked the browser module for, once. A find line (`find_forward`, `find_backward`) takes plain text, and Enter sends it as a `find.page_text` run for the tab the line opened over.
 async function panel_line(): Promise<void> {
   // Keys typed before the line has its data land in the field, and the line starts with them.
   const input = document.querySelector<HTMLInputElement>("#line")!;
@@ -107,6 +107,7 @@ async function panel_line(): Promise<void> {
     ask_background<PanelCmdlineOpened | undefined>({ type: "open_panel_cmdline" }),
   ]);
   if (!opened) return window.close();
+  const search = opened.mode === "find_forward" ? "forward" : opened.mode === "find_backward" ? "backward" : undefined;
   // Firefox sizes the panel to the page's height, so the page takes only the height of its line and list.
   for (const element of [document.documentElement, document.body]) element.style.height = "auto";
   let to_line: ((message: HostToPage) => void) | undefined;
@@ -119,9 +120,13 @@ async function panel_line(): Promise<void> {
     else if (message.kind === "submit") {
       void ask_background({ type: "run", invocations: [message.invocation], mode: "normal", from_line: true });
       window.close();
+    } else if (message.kind === "find_commit") {
+      const direction = search === "backward" ? "backward" : "forward";
+      void ask_background({ type: "run", invocations: [{ id: "find.page_text", args: { text: input.value, direction } }], mode: "normal", from_line: true });
+      window.close();
     } else if (message.kind === "list_headings") to_line?.({ kind: "headings", items: [] });
   };
-  start_line({ kind: "start", ticket: "", text: opened.text + input.value, tokens: [], mode: opened.mode }, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
+  start_line({ kind: "start", ticket: "", text: opened.text + input.value, tokens: [], mode: opened.mode, ...(search && { search }) }, opened, stored[COMPILED_KEYMAP_STORAGE_KEY] as CompiledKeymap | undefined, (on_message) => {
     to_line = on_message;
   });
 }

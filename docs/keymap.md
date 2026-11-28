@@ -14,7 +14,7 @@ A register prefix `"<reg>` and a count go before any command in normal, caret, v
 
 The `caret`, `visual` and `cmdline` rows bind placeholder commands that refuse until their piece builds them.
 
-The Locked pages column of the normal table marks the keys that also work on pages DesertFox cannot reach, such as about:addons, when the browser module is installed. A key that prompts there opens the address bar with `df ` and the command typed in. The column comes from the same derivation as the module's key tree (`src/shared/browser_module_scope.ts`). It covers pages with no page code. With `browser_module_pages` on, the PDF viewer and Reader View run DesertFox's own page code, so the keys of the tables work there, not only the marked ones, except the routes `LOCKED_PAGE_ROUTES` refuses (see [Page code on locked pages](design/browser_module.md#page-code-on-locked-pages)). While it is off, a hint key there shows a notice once per page that names the setting. On about:preferences, about:addons, about:downloads and about:config the module labels the page itself for a plain click (`f`), a new or background tab (`F`) and a link copy (`;yl`) (see [Hints on Firefox's own pages](design/browser_module.md#hints-on-firefoxs-own-pages)). On other about: pages a hint key shows a notice that hints do not run there.
+The Locked pages column of the normal table marks the keys that also work on pages DesertFox cannot reach, such as about:addons, when the browser module is installed. A key that prompts there opens the address bar with `df ` and the command typed in. The column comes from the same derivation as the module's key tree (`src/shared/browser_module_scope.ts`). It covers pages with no page code. With `browser_module_pages` on, the PDF viewer and Reader View run DesertFox's own page code, so the keys of the tables work there, not only the marked ones, except the routes `LOCKED_PAGE_ROUTES` refuses (see [Page code on locked pages](design/browser_module.md#page-code-on-locked-pages)). While it is off, a hint key there shows a notice once per page that names the setting. On about:preferences, about:addons, about:downloads and about:config the module labels the page itself for a plain click (`f`), a new or background tab (`F`) and a link copy (`;yl`) (see [Hints on Firefox's own pages](design/browser_module.md#hints-on-firefoxs-own-pages)). On other about: pages a hint key shows a notice that hints do not run there. Find (`/`, `?`, `*`, `#`, `n`, `N`) works there through Firefox's own Finder, which differs from the page's find: the text is typed in the command line panel and searched on Enter, it is plain text with no regular expression and no smart case, a toast shows the place (`3/12`), `*` and `#` read the selected text of a parent-process about: page only, and a private tab is refused (see [Find on locked pages](design/browser_module.md#find-on-locked-pages)).
 
 With the browser module installed, `gB` labels the controls of Firefox itself (toolbars, tabs, menus, permission prompts, the downloads panel, dialogs, the Library and Page Info), and `j`, `k`, `h` and `l` walk open menus and panels as the arrow keys do. Only `gB` has a row below, because the walk letters are fixed. A hint pick that grants something, such as Allow on a permission prompt or opening a download, marks the control and waits for you to press Enter. A script cannot press it for you. See [the browser module design](design/browser_module.md#popup-walk).
 
@@ -305,12 +305,12 @@ bound: 537 (normal 283, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `;gg` | `hint --grab --draggable` | Grab an element and drop it on a target |  |
 | `;Gg` | `hint --grab-move --draggable` | Grab an element and move it with the keys |  |
 | `:` | `cmdline.open` | Command line | yes |
-| `/` | `find` | Find forward |  |
-| `?` | `find --backward` | Find backward |  |
-| `*` | `find --word` | Find word forward |  |
-| `#` | `find --backward --word` | Find word backward |  |
-| `n` | `find.next` | Next match |  |
-| `N` | `find.prev` | Previous match |  |
+| `/` | `find` | Find forward | yes |
+| `?` | `find --backward` | Find backward | yes |
+| `*` | `find --word` | Find word forward | yes |
+| `#` | `find --backward --word` | Find word backward | yes |
+| `n` | `find.next` | Next match | yes |
+| `N` | `find.prev` | Previous match | yes |
 | `g?` | `help` | Help | yes |
 | `gV` | `mode caret` | Set mode |  |
 

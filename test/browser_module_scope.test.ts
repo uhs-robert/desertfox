@@ -36,7 +36,7 @@ test("the locked-page set: background commands that need no page, minus the deny
   assert.deepEqual([...allowed].sort(), [
     "bookmark.add", "bookmark.edit_url", "bookmark.move", "bookmark.open", "bookmark.open_folder", "bookmark.remove", "bookmark.rename",
     "browser.close_all", "browser.focus_page", "browser.open_firefox_page", "command.repeat", "config.reload", "copy.page", "copy.tabs", "debug.perf", "debug.restart", "engine.show",
-    "help.issue", "help.key", "help.open", "hint.browser", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
+    "find.page", "find.page_next", "find.page_prev", "find.page_text", "help.issue", "help.key", "help.open", "hint.browser", "history.open", "macro.play", "macro.stop", "mark.clear", "mark.delete", "mark.list",
     "native.install", "native.update", "open.anything", "open.clipboard", "open.search", "open.url",
     "page.back", "page.forward", "page.home", "page.print", "page.reader", "page.reload", "page.save_pdf",
     "pane.close_both", "pane.equalize", "pane.focus", "pane.focus_side", "pane.move", "pane.resize", "pane.split", "pane.unsplit", "permissions.grant",
@@ -60,8 +60,8 @@ test("the default tree keeps the background keys and leaves the page's keys to t
   assert.equal(node_at(DEFAULT_TREE, ["@", ""]), "forward");
   // A page swaps the record key for macro.stop while a macro records, which the stored tree cannot follow, so `q` stays with the page.
   assert.equal(node_at(DEFAULT_TREE, ["q"]), undefined);
-  // Hints, find, the command line, marks and insert mode need DesertFox's page code.
-  for (const keys of [["f"], ["/"], ["i"], ["m"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+  // Hints, marks and insert mode need DesertFox's page code.
+  for (const keys of [["f"], ["i"], ["m"], [";"], ["<Esc>"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
   // The bare command line key stays, so the background opens the line as a panel. A line with typed text (`A`, `tM`) does not.
   assert.equal(node_at(DEFAULT_TREE, [":"]), "forward");
   for (const keys of [["A"], ["t", "M"]]) assert.equal(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
@@ -78,6 +78,21 @@ test("the page yanks run on a locked page as their background variant, with thei
   const bound = resolve_run(compiled({ normal: { e: { id: "copy.url", args: { format: "title", register: "a" } } } } as KeymapConfig), "e", 0, allowed);
   assert.ok(bound.ok);
   assert.deepEqual(counted_steps(bound.leaf.steps, undefined).map(({ id, args }) => ({ id, ...args })), [{ id: "copy.page", format: "title", register: "a" }]);
+});
+
+test("the find keys run on a locked page as their background variants, and only / and ? hold the keys for the line", () => {
+  for (const keys of ["/", "?", "*", "#", "n", "N"]) assert.equal(node_at(DEFAULT_TREE, [keys]), "forward", keys);
+  for (const keys of ["/", "?"]) assert.ok(DEFAULT_TREE.line_keys?.includes(keys), keys);
+  for (const keys of ["*", "#", "n", "N"]) assert.equal(DEFAULT_TREE.line_keys?.includes(keys), false, keys);
+  const variants = (keys: string) => {
+    const resolved = resolve_run(compiled(), keys, 0, allowed);
+    assert.ok(resolved.ok, keys);
+    return counted_steps(resolved.leaf.steps, undefined).map(({ id, args }) => ({ id, ...args }));
+  };
+  assert.deepEqual(variants("/"), [{ id: "find.page", direction: "forward", source: "typed" }]);
+  assert.deepEqual(variants("#"), [{ id: "find.page", direction: "backward", source: "word" }]);
+  assert.deepEqual(variants("n"), [{ id: "find.page_next" }]);
+  assert.deepEqual(variants("N"), [{ id: "find.page_prev" }]);
 });
 
 test("the tree names the hint keys of the user's keymap, which the module claims where hints cannot run now", () => {
@@ -195,7 +210,7 @@ test("a forged, stale or page key, a typed count or register and junk are refuse
   // Not bound, a prefix only, a sequence broken and retried as a first key, past the leaf.
   for (const keys of ["Q Q Q", "g", "g J", "x x x", "<C-S-F12>"]) assert.equal(refused(keys)?.shown, true, keys);
   // Bound, but to page code: hints, find, the command line, a mark.
-  for (const keys of ["f", "/", "A", "m a"]) assert.match(refused(keys)!.problem, /needs a page/, keys);
+  for (const keys of ["f", "A", "m a"]) assert.match(refused(keys)!.problem, /needs a page/, keys);
   // A count, a register or a hold belong in `count`, never in the keys.
   for (const keys of ["5 x x", "\" a x x", "t <Space> n"]) refused(keys);
   // Junk keys text is no sequence and is not shown.

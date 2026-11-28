@@ -48,6 +48,11 @@ const EXPECTED_REFUSALS: Record<string, RegExp[]> = {
   "pane.focus_side": [/Needs the browser module/],
   "pane.move": [/Needs the browser module/],
   "hint.browser": [/Needs the browser module/],
+  // Find goes through the browser module's Finder, which the stub lacks.
+  "find.page": [/needs the browser module's command line panel/, /Only about: pages the browser module can read/],
+  "find.page_text": [/needs the browser module/i],
+  "find.page_next": [/needs the browser module/i],
+  "find.page_prev": [/needs the browser module/i],
   // The browser module runs these in the sidebar. The extension has no focus there.
   "sidebar.down": [/Works only with focus in the sidebar/],
   "sidebar.up": [/Works only with focus in the sidebar/],

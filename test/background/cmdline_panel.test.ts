@@ -46,6 +46,15 @@ test("open asks the module with the tab id only, then records the panel at its p
   assert.equal((long.store.get(CMDLINE_PANEL_STORAGE_KEY) as { text: string }).text.length, 64);
 });
 
+test("a find line records its mode, and the page that claims it gets the mode and the keys typed meanwhile", async () => {
+  const { panel, store, lines } = make({ answers: [opened_with(KEY, "wor")] });
+  assert.equal(await panel.open(7, "", "find_backward"), true);
+  assert.equal((store.get(CMDLINE_PANEL_STORAGE_KEY) as { mode: string }).mode, "find_backward");
+  const opened = await panel.opened({ id: ID, url: PANEL.url });
+  assert.deepEqual({ mode: opened?.mode, text: opened?.text }, { mode: "find_backward", text: "wor" });
+  assert.deepEqual(lines, [[7, PANEL_FRAME_ID, "find_backward"]]);
+});
+
 test("a refusal, a module with no handler or a bad answer records nothing and keeps the record before it, so the caller falls back to the address bar", async () => {
   const { panel, store } = make({ answers: [opened_with(KEY), { ok: false, error: "The command line is already open" }, { ok: true }, opened_with("../popup.html"), { ok: true, value: "not json" }] });
   await panel.open(7, "first");

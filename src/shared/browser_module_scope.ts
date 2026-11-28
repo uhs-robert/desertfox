@@ -29,7 +29,7 @@ const has_guard = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || 
 
 // A content command with a background command of the same params that does the same from what the browser lists of the tab. On a locked page the leaf runs the variant, so the keymap binds one command and the page code runs where it exists.
 // `copy.page` cannot read the page's canonical or short link, so those two formats give the address.
-export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page" };
+export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page", "find.open": "find.page", "find.next": "find.page_next", "find.prev": "find.page_prev" };
 
 // Every step is a command of the set or has a variant in it, so the router runs the whole leaf with no page. A step that prompts opens the address bar (`address_bar.open`), which needs no page either.
 const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolean => {
@@ -59,8 +59,11 @@ export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): Nativ
 // A leaf that starts hints, which run only in DesertFox's page code.
 export const is_hint_leaf = (leaf: TreeLeaf): boolean => leaf.steps.some((step) => step.invocation.id === "hint.run");
 
-// A forward leaf after which the line opens: the bare `:`, or a key whose command prompts for a value (`o`).
-const prompts_or_opens_line = (leaf: TreeLeaf): boolean => opens_line_leaf(leaf) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
+// `/` and `?` open the find line. `*` and `#` search the selected text and open nothing.
+const opens_find_line = (step: LeafStep): boolean => step.invocation.id === "find.open" && step.invocation.args?.["source"] !== "word";
+
+// A forward leaf after which the line opens: the bare `:`, a find key, or a key whose command prompts for a value (`o`).
+const prompts_or_opens_line = (leaf: TreeLeaf): boolean => opens_line_leaf(leaf) || leaf.steps.some((step) => step.invocation.prompt !== undefined || opens_find_line(step));
 
 type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[] };
 

@@ -470,6 +470,9 @@ const SELECTION_REPLY_BYTES = 8192;
 // The command text a prompt key prints, with a selection or clipboard text it may take.
 const ADDRESS_BAR_BYTES = 4096;
 const PANEL_CALL_BYTES = 256;
+// The search text of a find: at most MAX_FIND_CHARS characters at up to 6 bytes each as JSON escapes, with the envelope.
+export const MAX_FIND_CHARS = 256;
+const FIND_BYTES = 2048;
 // The hints over Firefox's own UI. The module sends target ids and boxes in parts and the extension sends label rows in parts, each part JSON text within this. The module reads only ids it collected in the session and labels of hint letters.
 export const CHROME_HINT_PART_BYTES = 4096;
 // The most parts a session's targets or one draw may come in. The module keeps the same number.
@@ -542,6 +545,10 @@ export const EXTENSION_TO_MODULE_KINDS: KindTable = {
   "firefox_page.open": { args: { page: "firefox_page", where: "optional_open_where", tab_id: "optional_int" }, reply: true, max_bytes: PANE_CALL_BYTES },
   // The text selected on a parent-process about: page, where no content script runs, as the reply value. The module caps and cleans it too, and the extension checks it again. An older module refuses the kind and the extension reads no selection there.
   "selection.read": { args: { tab_id: "int" }, reply: true, max_bytes: SELECTION_REPLY_BYTES },
+  // Plain-text find through Firefox's Finder on the selected tab, for a tab the page code does not serve. `text` is data, never a pattern or an address. `backwards` is 1 for a search up the page, else 0. The reply value is JSON text of whole numbers (`result`, `current`, `total`, `limit`), checked again by the extension. A private tab is refused. An older module refuses the kind and the extension says so.
+  "find.search": { args: { tab_id: "int", text: "text", backwards: "int" }, reply: true, max_bytes: FIND_BYTES },
+  // n and N: the module repeats the window's last search the way it started, or the other way with `reverse` 1. The module keeps the text and the direction, so nothing but the tab and the turn crosses.
+  "find.again": { args: { tab_id: "int", reverse: "int" }, reply: true, max_bytes: PANEL_CALL_BYTES },
 };
 
 // The module core's fixed refusal of a request whose arg has the wrong shape (`checked_message` in browser_module/desertfox-browser.js). An older module that knows the kind but not a newer value of an arg answers with it.

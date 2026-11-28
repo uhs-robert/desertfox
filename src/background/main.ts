@@ -51,6 +51,7 @@ import { create_macro_replay, wire_macro_replay } from "./macro_replay.ts";
 import { check_play_step } from "../commands/macro.ts";
 import { wire_repeat } from "../commands/command.ts";
 import { wire_tab_insert } from "../commands/mode.ts";
+import { FIND_PANEL_MODES, wire_find_line } from "../commands/find.ts";
 import { wire_before_own_load } from "../commands/open_target.ts";
 import { create_media_quality } from "./media_quality.ts";
 import { ask_quality_in_tab, frame_address, inject_probe_about_blank, inject_probe_for_rule, inject_quality_into_frame, quality_rows } from "./quality_levels.ts";
@@ -153,6 +154,7 @@ const cmdline_panel = create_cmdline_panel({
     return cmdline.open(await cmdline.issue_ticket(tab.tab_id), tab.tab_id, frame_id, tab.window_id, tab, tab.incognito, mode);
   },
 });
+wire_find_line((tab_id, direction) => cmdline_panel.open(tab_id, "", FIND_PANEL_MODES[direction]));
 const router_deps = { ...make_router_deps(get_config, repeat_memory, cmdline_panel.open), record_step };
 const router = create_router(router_deps);
 const watch_tab = (tab_id: number) =>
