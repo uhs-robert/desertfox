@@ -1,4 +1,4 @@
-// DesertFox browser module, the content hints route: hints on pages in a content process that no content script reaches, the hosts of Firefox's restricted list (extensions.webextensions.restrictedDomains) and Firefox's start pages (about:privatebrowsing, about:home, about:newtab in the privilegedabout process).
+// DesertFox browser module, the content hints route: hints on pages in a content process that no content script reaches, the hosts of Firefox's restricted list (extensions.webextensions.restrictedDomains) and Firefox's start pages (about:privatebrowsing, about:home, about:newtab in the privilegedabout process) and its error pages (about:neterror, about:certerror, about:httpsonlyerror, about:blocked in a web process).
 // Chrome hints (desertfox-chrome-hints.js) run the session there as on its own pages: the start token, the spelled label, the window layer, the Enter of a grant and the key hold. This file lends them the page rule and the transport through the core's `share_content_pages`.
 //
 // The trust rule: the frame script below collects the page's targets and keeps them in its own map. It sends chrome only an id, a box, a flag mask and a short text per target, and for a link action one link address.
@@ -90,6 +90,16 @@
     }
     const start_row = (name) => ({ kind: name, kind_of: (browser) => (start_page_of(browser) === name ? name : undefined) });
 
+    // Firefox's error pages run in the web process of the failed site (remote type `webIsolated=<origin>`), so the process alone names no error page: any web page has that type. The page is one only when its own principal is a content principal with the about: scheme and no add-on, and its document's address is one of these names. A web page's principal has the http or https scheme and so never passes. The tab's address stays the failed site's, so only the document's address says which page this is.
+    const ERROR_ADDRESS = /^about:(?:neterror|certerror|httpsonlyerror|blocked)\?/i;
+    function error_page_of(browser) {
+      if (browser?.isRemoteBrowser !== true || !web_process(browser.remoteType)) return false;
+      const global = browser.browsingContext?.currentWindowGlobal;
+      const principal = global?.documentPrincipal;
+      if (principal?.isContentPrincipal !== true || principal.isSystemPrincipal || principal.addonId || !principal.schemeIs("about")) return false;
+      return ERROR_ADDRESS.test(String(global.documentURI?.spec ?? ""));
+    }
+
     // `kind_of(browser)`: the row's kind for a page it labels, EXCLUDED for a page of it the route never labels, else undefined.
     const EXCLUDED = "excluded";
     const CONTENT_PAGES = [
@@ -103,6 +113,7 @@
         },
       },
       ...START_PAGES.map(start_row),
+      { kind: "error_page", kind_of: (browser) => (error_page_of(browser) ? "error_page" : undefined) },
     ];
     function page_kind(browser) {
       for (const row of CONTENT_PAGES) {
@@ -355,6 +366,13 @@
     // The start pages again, on this process's own view: the process and the document's own address.
     const START_ADDRESS = /^about:(privatebrowsing|home|newtab)(?:[?#]|$)/i;
     const start_page = (name) => (doc) => Services.appinfo.remoteType === "privilegedabout" && !doc?.nodePrincipal?.addonId && START_ADDRESS.exec(String(doc?.documentURI ?? ""))?.[1]?.toLowerCase() === name;
+    // The error pages again, on this process's own view: a web process, an about: content principal and the document's own address. The buttons are `moz-button` elements, each a button in a shadow root, and `deep_all` reaches them.
+    const ERROR_ADDRESS = /^about:(?:neterror|certerror|httpsonlyerror|blocked)\?/i;
+    function error_page(doc) {
+      const principal = doc?.nodePrincipal;
+      if (principal?.isContentPrincipal !== true || principal.isSystemPrincipal || principal.addonId || !principal.schemeIs("about") || !web_process(Services.appinfo.remoteType)) return false;
+      return ERROR_ADDRESS.test(String(doc.documentURI ?? ""));
+    }
     // The search box of a start page is a button that hands the typing to the address bar.
     const search_handoff = (element) => element.localName === "button" && String(element.getAttribute("class") ?? "").split(/\s+/).includes("search-handoff-button");
     const start_acts_at_once = (element) => plain_link(element) || text_field(element) || search_handoff(element);
@@ -365,6 +383,8 @@
       privatebrowsing: { matches: start_page("privatebrowsing"), acts_at_once: start_acts_at_once },
       home: { matches: start_page("home"), acts_at_once: start_acts_at_once },
       newtab: { matches: start_page("newtab"), acts_at_once: start_acts_at_once },
+      // Only a plain link acts at once. Try Again, Go Back, Advanced, Accept the Risk and Continue to HTTP Site all wait for Enter.
+      error_page: { matches: error_page, acts_at_once: plain_link },
     };
 
     // The text text mode matches, as chrome hints read it in their own process: the shown text, else the name. A field's own text is what the user typed, so a field has only its name.

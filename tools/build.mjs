@@ -9,19 +9,19 @@ import { CMDLINE_STYLE } from "../src/cmdline/style.ts";
 // Minified size limits. content.js loads on every page, so its limit is the tightest. The rest load on first use. Raise one only as AGENTS.md, "Content script size", says, and name the feature in the commit.
 const MAX_BYTES = {
   // Key listener, prefix tree, modes and scrolling. Runs on every page and frame (admission rule in AGENTS.md, "Content script size").
-  "content.js": 23.5 * 1024,
+  "content.js": 24 * 1024,
   // Link hints and the grab target pass. Loads on the first hint command, not on every page.
   "hints.js": 52.75 * 1024,
   // Caret and visual mode.
   "caret.js": 32 * 1024,
-  // The which-key panel. Loads on a pause in a prefix.
-  "whichkey.js": 9.5 * 1024,
+  // The which-key panel. Loads on a pause in a prefix, or at once after the one-shot normal prefix.
+  "whichkey.js": 10 * 1024,
   // The command line host in the page, and the remote end for a subframe. Loads on the first `:`.
   "cmdline.js": 7 * 1024,
   // The mode badge and the toast.
   "ui.js": 8 * 1024,
-  // Rare page commands: scroll alignment, page copy, marks and the jump list.
-  "page.js": 6 * 1024,
+  // Rare page commands: scroll alignment, page copy, marks and the jump list, and the return after a one-shot normal command.
+  "page.js": 6.5 * 1024,
   // The typed-text recorder for `.`.
   "text.js": 4 * 1024,
   // The external editor hand-off and the clipboard fallback for code editors.

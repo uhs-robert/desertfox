@@ -110,6 +110,8 @@
       { root: "#toolbar-menubar", take: "menubar > menu" },
       { root: "#sidebar-button", take: "" },
       { root: "sidebar-main", take: "moz-button, button", shadow: true },
+      // `deep`: the bar's close button sits in its shadow root.
+      { root: "notification-message", take: "button.notification-button, .notification-link, moz-button.close", deep: true },
     ];
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
     // `layer_in`: where in the shown view the labels go, when not the view itself. Firefox reads the doorhanger panel's first child as a prompt, so its labels go inside the prompt shown.
@@ -211,7 +213,7 @@
         for (const root of doc.querySelectorAll(group.root)) {
           const scope_root = group.shadow ? root.shadowRoot : root;
           if (!scope_root) continue;
-          const elements = group.take === "" ? [root] : [...scope_root.querySelectorAll(group.take)];
+          const elements = group.take === "" ? [root] : group.deep ? [...deep_all(scope_root, group.take), ...(shadow_of(root) ? deep_all(shadow_of(root), group.take) : [])] : [...scope_root.querySelectorAll(group.take)];
           for (const element of elements) {
             if (seen.has(element) || !usable(element)) continue;
             seen.add(element);
@@ -825,11 +827,17 @@
       if (refused) return { ok: false, error: refused };
       const opened = open_panels(win.document)[0];
       if (opened?.row.user_start_only) return { ok: false, error: "Type the hint key in the panel" };
-      const { found, places } = opened ? panel_place(opened) : { found: window_targets(win), places: {} };
-      const labels_a_grant = found.some(({ element }) => grants(win, element));
+      const { found: all_found, places } = opened ? panel_place(opened) : { found: window_targets(win), places: {} };
+      let found = all_found;
+      let keyed = found.some(({ element }) => grants(win, element));
       // A compromised extension could otherwise mark Allow with no key from the user, and the user's next lone Enter would grant.
-      if (labels_a_grant && !take_start_key(win)) return { ok: false, error: "Type the hint key to label the prompt" };
-      return open_session(tag, win, found, colors, { ...places, keyed: labels_a_grant });
+      if (keyed && !take_start_key(win)) {
+        if (opened) return { ok: false, error: "Type the hint key to label the prompt" };
+        // The window's controls carry no grant of their own but a notification bar's, so the rest still get labels and the bar's waiting buttons stay bare.
+        found = found.filter(({ element }) => !grants(win, element));
+        keyed = false;
+      }
+      return open_session(tag, win, found, colors, { ...places, keyed });
     }
 
     // Why the start `asked` may not open a session now, or undefined.
@@ -1087,6 +1095,7 @@
       return null;
     }
     const prompt_of = (element) => closest_of(element, (at) => at.localName === "popupnotification");
+    const bar_of = (element) => closest_of(element, (at) => at.localName === "notification-message");
     const notification_of = (prompt) => prompt.notification ?? prompt.wrappedJSObject?.notification;
 
     // Whether a pick of `element` grants something, so it waits for Enter. On a surface that can grant (a doorhanger, the downloads lists, Page Info's permissions, the two grant dialogs and the two permission list dialogs), a control the table does not name grants.
@@ -1094,6 +1103,8 @@
       if (page_row(element.ownerDocument)?.grants?.(element)) return true;
       const prompt = prompt_of(element);
       if (prompt) return prompt_grants(prompt, element);
+      const bar = bar_of(element);
+      if (bar) return bar_grants(bar, element);
       if (closest_of(element, (at) => at.id === "downloadsListBox" || at.id === "downloadsPanel")) return download_grants(win, element);
       if (closest_of(element, (at) => at.id === "permList")) return !(element.localName === "radio" && DENYING_STATE.test(element.id));
       const url = String(element.ownerDocument?.documentURI ?? "");
@@ -1113,6 +1124,12 @@
       if (has_class(element, "popup-notification-secondary-button")) return !DENYING_PROMPTS.has(prompt.getAttribute("popupid")) || remembers(prompt);
       return true;
     }
+
+    // The popup-blocked bar's Options button waits too: its open menu takes the window's keys, and the accesskey of Allow pop-ups would grant on a stray key. The close button and the links dismiss the bar, run a callback that grants nothing in Firefox 161, or open a help page.
+    const bar_grants = (_bar, element) => element.classList.contains("notification-button");
+
+    // Firefox disables a bar's buttons for a moment after it shows and on each window focus. A pick then says so, as it does for a doorhanger. The click is never replaced by the button's callback, so Firefox's own check stays.
+    const bar_waits = (element) => element.disabled === true && bar_of(element) !== null;
 
     const remembers = (prompt) => prompt.querySelector(".popup-notification-checkbox")?.hasAttribute("checked") ?? false;
 
@@ -1176,10 +1193,12 @@
       const prompt = prompt_of(element);
       const row = closest_of(element, (at) => at.localName === "richlistitem");
       const in_blocked_view = closest_of(element, (at) => at.id === "downloadsPanel-blockedSubview");
+      const bar = bar_of(element);
       return {
+        bar,
         notification: prompt ? notification_of(prompt) : undefined,
         download: in_blocked_view ? win.document.getElementById("downloadsListBox")?.selectedItem : undefined,
-        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), row?.getAttribute("state"), row?.getAttribute("verdict")]),
+        text: JSON.stringify([element.id, element.className, element.getAttribute("command"), element.getAttribute("dlgtype"), prompt?.getAttribute("popupid"), bar?.getAttribute("value"), row?.getAttribute("state"), row?.getAttribute("verdict")]),
       };
     }
 
@@ -1193,7 +1212,7 @@
       if (!element) return page?.remote && tabs_of(win)?.selectedBrowser === page.browser && page.browser.innerWindowID === page.inner ? READY : GONE;
       if (!element.isConnected || element.hidden || !element.checkVisibility()) return GONE;
       const now = identity_of(win, element);
-      if (now.notification !== identity.notification || now.download !== identity.download || now.text !== identity.text || moved(win, element, drawn)) return GONE;
+      if (now.bar !== identity.bar || now.notification !== identity.notification || now.download !== identity.download || now.text !== identity.text || moved(win, element, drawn)) return GONE;
       // A dialog keeps its accept button disabled for a moment, as a doorhanger ignores its own: Enter then does nothing, and the next Enter tries again.
       if (!usable(element) || prompt_waits(element)) return WAITS;
       return READY;
@@ -1269,6 +1288,8 @@
       }
       const prompt = prompt_of(element);
       if (prompt) observer.observe(prompt, { attributes: true, attributeFilter: ["popupid", "hidden"] });
+      const bar = bar_of(element);
+      if (bar) observer.observe(bar, { attributes: true, attributeFilter: ["value", "hidden"] });
       confirming.undo.push(() => observer.disconnect());
     }
 
@@ -1320,7 +1341,9 @@
         return { ok: false, error: "The keys typed do not name this hint" };
       }
       if (!element) return content_pick(win, target, look, page, remote);
-      if (win.closed || !element.isConnected || !usable(element)) return { ok: false, error: "The hint's target is gone" };
+      if (win.closed || !element.isConnected) return { ok: false, error: "The hint's target is gone" };
+      if (bar_waits(element)) return { ok: false, error: "The prompt is not ready yet" };
+      if (!usable(element)) return { ok: false, error: "The hint's target is gone" };
       if (moved(win, element, drawn)) return { ok: false, error: "The hint's target moved" };
       if (page && page.action !== "follow") return run_link(win, web_address(element), page.action);
       if (grants(win, element)) {

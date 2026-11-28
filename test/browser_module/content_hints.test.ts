@@ -920,3 +920,138 @@ test("a text pick on a restricted host goes to the frame script only for a targe
   assert.equal((await again.pick(6, again.id_of(6, parts.other)!))?.ok, true);
   assert.equal(parts.other.clicks, 1);
 });
+
+// An error page as Firefox shows it in a web process: its own principal is a content principal with the about: scheme, and the remote type names the failed site.
+const ERROR_NAMES = ["about:neterror", "about:certerror", "about:httpsonlyerror", "about:blocked"];
+const error_address = (name: string) => `${name}?e=nssBadCert&u=https%3A//127.0.0.1%3A1/&c=UTF-8`;
+const error_principal = (spec: string, patch: Partial<Principal> = {}): Principal => ({ isContentPrincipal: true, isSystemPrincipal: false, addonId: "", asciiHost: "", spec, schemeIs: (name: string) => name === "about", ...patch });
+const error_options = (name = "about:neterror", patch: Options = {}): Options => ({ about: error_address(name), remote_type: "webIsolated=https://127.0.0.1", principal: error_principal(error_address(name)), ...patch });
+
+function error_page() {
+  const parts = {
+    try_again: el("button", 20, 20, {}, { id: "tryAgainButton" }),
+    go_back: el("button", 200, 20, {}, { id: "returnButton" }),
+    advanced: el("button", 400, 20, {}, { id: "advanced-button" }),
+    accept: el("button", 20, 100, {}, { id: "exception-button" }),
+    insecure: el("button", 300, 100, {}, { id: "openInsecure" }),
+    learn_more: link("https://support.mozilla.org/kb/connection-not-secure", 500, 100),
+  };
+  return { parts, build: (root: Node) => root.append(...Object.values(parts)) };
+}
+
+test("an error page is labelled by its own about: principal and document address in a web process, and a web page with the same process type is not", () => {
+  const kind = (options: Options) => {
+    const run = start_on(options, error_page().build);
+    return { labels: run.core.content_pages().labels(run.chrome.browser), refuses: run.core.content_pages().refuses(run.chrome.browser), handles: run.core.page_hints().handles(run.chrome.browser) };
+  };
+  for (const name of ERROR_NAMES) {
+    assert.deepEqual(kind(error_options(name)), { labels: "error_page", refuses: false, handles: true }, name);
+    assert.equal(kind(error_options(name.toUpperCase())).labels, "error_page", `${name} in capitals`);
+  }
+  for (const remote_type of ["web", "webCOOP+COEP=https://127.0.0.1", "privilegedmozilla"]) assert.equal(kind(error_options("about:neterror", { remote_type })).labels, "error_page", remote_type);
+  const address = error_address("about:neterror");
+  for (const options of [
+    // The error page's name without its query, or as another page's name.
+    { ...error_options(), about: "about:neterror" },
+    { ...error_options(), about: "about:neterrorx?e=1" },
+    { ...error_options(), about: "about:certificate?e=1" },
+    { ...error_options(), about: "about:logins" },
+    // Another process: a privileged one, an extension's, the file process.
+    error_options("about:neterror", { remote_type: "privilegedabout" }),
+    error_options("about:neterror", { remote_type: "extension" }),
+    error_options("about:neterror", { remote_type: "file" }),
+    // A principal that is the system's, an add-on's, not a content principal, or not an about: one.
+    error_options("about:neterror", { principal: error_principal(address, { isSystemPrincipal: true }) }),
+    error_options("about:neterror", { principal: error_principal(address, { addonId: "x@y" }) }),
+    error_options("about:neterror", { principal: error_principal(address, { isContentPrincipal: false }) }),
+    // An ordinary web page, which has the same remote type, whatever its address says.
+    error_options("about:neterror", { principal: web_principal("127.0.0.1") }),
+    { ...error_options(), principal: web_principal("example.com"), remote_type: "webIsolated=https://example.com", about: address },
+  ] as Options[]) {
+    assert.notEqual(kind(options).labels, "error_page", JSON.stringify(options));
+  }
+  const parent = start_on(error_options(), error_page().build);
+  parent.chrome.browser.isRemoteBrowser = false;
+  assert.equal(parent.core.content_pages().labels(parent.chrome.browser), undefined, "a page in the parent process took the content route");
+});
+
+test("the frame script's copy of the error page rule agrees with the parent's on every case", () => {
+  const address = error_address("about:certerror");
+  const cases: Options[] = [
+    ...ERROR_NAMES.map((name) => error_options(name)),
+    error_options("about:neterror", { remote_type: "web" }),
+    error_options("about:neterror", { remote_type: "privilegedabout" }),
+    error_options("about:neterror", { remote_type: "extension" }),
+    error_options("about:neterror", { principal: error_principal(address, { addonId: "x@y" }) }),
+    error_options("about:neterror", { principal: error_principal(address, { isSystemPrincipal: true }) }),
+    error_options("about:neterror", { principal: web_principal("127.0.0.1") }),
+    { ...error_options(), about: "about:neterror" },
+    { ...error_options(), about: "about:home" },
+  ];
+  for (const options of cases) {
+    const run = start_on(options, error_page().build);
+    const parent = run.core.content_pages().labels(run.chrome.browser) === "error_page";
+    run.child.ask("collect", { req: 1, inner: 10, kind: "error_page", action: "follow" });
+    const answer = run.child.sent.find((message) => message.name === `${PREFIX}targets`)!.data;
+    assert.equal(answer.error !== "not_here", parent, `the copies disagree on ${JSON.stringify(options)}: ${JSON.stringify(answer)}`);
+  }
+  // An ordinary web page asking for the error page row: the frame script keeps nothing.
+  const run = start_on({ host: "example.com", remote_type: "webIsolated=https://example.com" }, error_page().build);
+  run.child.ask("collect", { req: 1, inner: 10, kind: "error_page", action: "follow" });
+  assert.equal(run.child.sent.at(-1)!.data.error, "not_here");
+  assert.equal(run.child.listening(), 0);
+});
+
+test("on an error page only a plain link acts at once, and Try Again, Go Back, Advanced, Accept the Risk and Continue to HTTP Site wait for the user's own Enter", async () => {
+  for (const name of ERROR_NAMES) {
+    const link_run = error_page();
+    const linked = start_on(error_options(name), link_run.build);
+    const first = await labelled(linked, 5);
+    assert.equal((await first.pick(link_run.parts.learn_more))?.ok, true);
+    assert.equal(link_run.parts.learn_more.clicks, 1, `${name} link did not act at once`);
+    assert.deepEqual(linked.child_picks().map(({ confirmed }) => confirmed), [false]);
+    for (const part of ["try_again", "go_back", "advanced", "accept", "insecure"] as const) {
+      const each = error_page();
+      const run = start_on(error_options(name), each.build);
+      const { pick } = await labelled(run, 6);
+      const target = each.parts[part];
+      assert.equal((await pick(target))?.ok, true);
+      assert.equal(target.clicks, 0, `${name} ${part} acted with no Enter`);
+      assert.ok(run.marked(), `${name} ${part} has no mark`);
+      assert.equal(run.child_picks().length, 0);
+      run.chrome.press("Enter", { isTrusted: false });
+      await run.flush();
+      assert.equal(target.clicks, 0, `${name} ${part} took an Enter a script made`);
+      run.chrome.clock.now += DWELL_MS;
+      run.chrome.press("Enter");
+      await run.flush();
+      assert.equal(target.clicks, 1, `${name} ${part}: the user's Enter did not click`);
+      assert.deepEqual(run.child_picks().map(({ confirmed }) => confirmed), [true]);
+    }
+  }
+});
+
+test("the frame script of an error page refuses Accept the Risk and Continue to HTTP Site sent without confirmed", () => {
+  const { parts, build } = error_page();
+  const run = start_on(error_options("about:certerror"), build);
+  for (const part of [parts.accept, parts.insecure, parts.try_again]) {
+    run.child.ask("collect", { req: 3, inner: 10, kind: "error_page", action: "follow" });
+    const rows = run.child.sent.at(-1)!.data.rows as number[][];
+    const row = rows.find((each) => each[1] === part.box.left && each[2] === part.box.top)!;
+    assert.equal(row[5]! & 1, 1, "a button does not wait for Enter");
+    run.child.ask("pick", { req: 4, inner: 10, session: 3, id: row[0], confirmed: false });
+    assert.deepEqual(run.child.sent.at(-1)!.data, { req: 4, inner: 10, ok: false, error: "needs_enter" });
+  }
+  assert.ok([parts.accept, parts.insecure, parts.try_again].every((part) => part.clicks === 0));
+});
+
+test("the hint key reaches an error page once the extension answers page hints, and keeps the notice before that", () => {
+  const notice = (options: Options, state_hints: boolean) => {
+    const run = start_on(options, error_page().build, { files: [LOCKED_FILE], state_hints });
+    return run.core.locked_page_rule().hint_notice(run.chrome.browser, run.chrome.win);
+  };
+  for (const name of ERROR_NAMES) {
+    assert.equal(notice(error_options(name), true), "page_hints", name);
+    assert.equal(notice(error_options(name), false), "not_here", `${name} without page_hints`);
+  }
+});
