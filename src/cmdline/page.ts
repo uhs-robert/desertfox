@@ -339,11 +339,12 @@ function start_line(start: Start, opened: CmdlineOpened, keymap: CompiledKeymap 
       late_keys.push(token);
       return true;
     }
-    // The one-shot normal prefix closes the line and drops its text. It goes back to the page with the late keys, and the page's key flow runs it and the keys after it on the tab.
+    // The one-shot normal prefix closes the line and drops its text, and the keys held for rows too, which came before it. It goes back to the page ahead of the keys after it, and the page's key flow runs them on the tab.
     if ((keymap?.modes.browser?.children[token] as TreeLeaf | undefined)?.any_mode) {
+      held = [];
       close_sources();
       end_line({ kind: "close" });
-      late_keys!.push(token);
+      late_keys!.unshift(token);
       return true;
     }
     if (held.length > 0 && waits_behind_held(token)) {

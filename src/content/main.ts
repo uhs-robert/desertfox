@@ -114,17 +114,13 @@ const key_flow = create_key_flow({
     const leaf = leaf_for_page(bound_leaf, document.activeElement, document.body, document);
     // No leaf runs when every guard fails and nothing is left to fall back to: the page keeps the key.
     if (!leaf) return true;
-    // Read before the leaf runs, which can change all three.
-    const after_prefix = page_mode.is_once_armed_();
-    const mode = page_mode.get_mode_();
-    const focused = deepest_focused_element();
+    // Before the leaf runs, which can change the mode and the focus. The page bundle takes the frame back to this mode once a mode the leaf opens ends.
+    if (page_mode.is_once_armed_()) void bundles.run_command_("once.start", "page", { mode_: page_mode.get_mode_(), focused_: deepest_focused_element() }, "", false);
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
     const ran = (leaf_ran = recording === undefined ? run() : last_leaf.then(run));
     if (!leaf.steps.some((step) => /^(hint\.run|macro\.play)$/.test(step.invocation.id))) last_leaf = ran;
-    // The page bundle takes the frame back to `mode` once a mode the leaf opens ends.
-    if (after_prefix) void bundles.run_command_("once.start", "page", { mode_: mode, focused_: focused, ended_: ran }, "", false);
     if (holds_keys_after(leaf, is_editable_element(document.activeElement))) bundles.api.hold_keys_until_(ran.then(() => []), true);
   },
   leave_insert_: () => {

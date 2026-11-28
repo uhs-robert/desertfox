@@ -123,7 +123,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
     show_prefix(undefined);
   };
 
-  const any_mode_chord = (token: string) => (browser_chords?.children[token] as TreeLeaf | undefined)?.any_mode;
+  // Before the first keymap read, the default prefix stands for any-mode chords, so a field's keys behind it wait too.
+  const any_mode_chord = (token?: string) => (browser_chords ? (browser_chords.children[token!] as TreeLeaf | undefined)?.any_mode : token === "<A-o>");
   // The `browser` chords run in normal and insert mode only, and an any-mode chord (the one-shot normal prefix) in every mode. In every other mode the chord is Firefox's.
   const browser_chord_in = (mode: Mode, token: string) => (mode === "normal" || mode === "insert" || any_mode_chord(token) ? browser_chords?.children[token] : undefined);
 
@@ -132,9 +133,11 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const run_browser_chord = (token: string): boolean => {
     const node = browser_chord_in(deps.get_mode_(), token);
     if (node?.kind !== "leaf") return false;
-    const drops_prefix = deps.take_once_() && node.any_mode;
-    reset_sequence_();
-    if (!drops_prefix) deps.run_leaf_(node, undefined, false);
+    if (deps.take_once_() && node.any_mode) reset_sequence_();
+    else {
+      reset_sequence_();
+      deps.run_leaf_(node, undefined, false);
+    }
     return true;
   };
 
@@ -146,8 +149,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
   const layout_token = (token: string, physical: string | null | undefined, ahead: readonly string[] = held_tokens()): string =>
     physical && layout_fallback && matcher && !deps.sink_of_(deps.get_mode_()) && !matcher.binds_after_(deps.get_mode_(), ahead, token) ? physical : token;
 
-  // A held any-mode chord can arm the one-shot normal prefix on replay, and that changes the mode every key after it reads.
-  const arm_held = () => held_keys.some((held) => any_mode_chord(held.token_));
+  // A held any-mode chord can arm the one-shot normal prefix on replay, and that changes the mode every key after it reads. `token` counts as held too.
+  const arm_held = (token?: string) => [...held_tokens(), token].some(any_mode_chord);
 
   // The held keys are not fed yet, so the check reads ahead through them. It cannot read through Backspace, which edits the sequence, an insert mode Escape, which leaves the mode on replay, or an any-mode chord, so those keys and every key after them wait.
   const waits_for_replay = (active: Matcher, mode: Mode, token: string): boolean =>
@@ -168,7 +171,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
     const typed_token = token;
     token = layout_token(token, physical);
     // Keys in a field never wait, except an any-mode chord and the keys behind it, which it may make normal keys. A chord waits only when the keymap binds it, so a bound chord runs after the load and does not reach Firefox's own shortcut. A waiting key is cancelled, so the page does not act on it twice.
-    if ((deps.in_editable_field_() && !any_mode_chord(token) && !arm_held()) || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
+    if ((deps.in_editable_field_() && !arm_held(token)) || (is_chord(token) && matcher?.binds_after_(mode, held_tokens(), token) === false && !browser_chord_in(mode, token))) return "pass";
     // Before the keymap is read nothing is known to bind, so every key waits, and a default chord such as <C-o> must not reach Firefox's own shortcut (Open File). A chord outside the default keymap passes at once, because a held one replays as a synthetic key and loses its Firefox action.
     if (!matcher && is_chord(token) && !DEFAULT_CHORDS.test(token)) return "pass";
     if (!matcher || browser_chord_in(mode, token) || waits_for_replay(matcher, mode, token)) {
@@ -229,7 +232,7 @@ export function create_key_flow(deps: KeyFlowDeps) {
 
   const decide = (active: Matcher, token: string, repeat: boolean, physical?: string | null): KeyDecision => {
     // Escape drops a waiting argument or the one-shot normal prefix and nothing else, so the mode stays. The sink must not take it: the next Escape does what Escape does.
-    if ((token === "<Escape>" || token === "<C-[>") && (deps.take_once_() || (awaiting_argument && deps.get_mode_() !== "insert"))) {
+    if (/^<(Escape|C-\[)>$/.test(token) && (deps.take_once_() || (awaiting_argument && deps.get_mode_() !== "insert"))) {
       reset_sequence_();
       return "cancel";
     }
@@ -241,9 +244,8 @@ export function create_key_flow(deps: KeyFlowDeps) {
       return "cancel";
     }
     const decision = step(active, token, repeat);
-    // The one-shot normal prefix covers one whole sequence, so a count or a group keeps it until the sequence ends.
-    if (!sequence_in_progress) deps.take_once_();
-    return decision;
+    // The one-shot normal prefix covers one whole sequence, so a count or a group keeps it until the sequence ends. A key it reads that binds nothing goes nowhere, not into the field or the page.
+    return !sequence_in_progress && deps.take_once_() ? "cancel" : decision;
   };
 
   // A replayed key can start another load, and the keys behind it wait for that load too.

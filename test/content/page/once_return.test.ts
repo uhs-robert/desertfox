@@ -16,19 +16,22 @@ const tick = () => new Promise((resolve) => setTimeout(resolve));
 
 function make(start_mode: Mode) {
   const state = { mode: start_mode, focused_editable: false, set: [] as Mode[] };
+  // The last leaf's end, as content.js's `leaf_end_` gives it.
+  let end!: () => void;
+  const leaf_ended = new Promise<void>((resolve) => (end = resolve));
   const tracker = create_once_return({
     get_mode: () => state.mode,
     set_mode_: (mode) => void state.set.push(mode),
     focused_: () => null,
     is_editable_: () => state.focused_editable,
+    leaf_end_: () => leaf_ended,
   });
   // As bundle_host's enter_mode_: every change reaches the tracker.
   const change = (mode: Mode) => {
     state.mode = mode;
     tracker.mode_changed_(mode);
   };
-  let end!: () => void;
-  const start = (focused: unknown = null) => tracker.start_(state.mode, focused as Element | null, new Promise<void>((resolve) => (end = resolve)));
+  const start = (focused: unknown = null) => tracker.start_(state.mode, focused as Element | null);
   const settle = async () => (end(), await tick());
   return { state, change, start, settle, tracker };
 }
@@ -124,7 +127,7 @@ test("a mode that returns to the old mode by itself ends the return (hint mode f
 test("a change made before the bundle loaded counts: the start reads the mode now", async () => {
   const { change, state, tracker } = make("hint");
   // The command began in ignore mode, and hint mode had started by the time the start arrived.
-  tracker.start_("ignore", null, new Promise(() => {}));
+  tracker.start_("ignore", null);
   change("normal");
   await tick();
   assert.deepEqual(state.set, ["ignore"]);

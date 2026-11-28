@@ -47,7 +47,7 @@ if (!page.desertfox_page_ready && host) {
   host.register_handler_("page.jump", (args) => ask_at_scroll(host, watch, { type: "jump_step", step: (args.direction === "older" ? -1 : 1) * (args.steps as number), ...arrival_of(args) }));
   host.register_handler_("copy.url", (args) => copy_page_url(args.format as CopyFormat, args.register as string | undefined, host.show_toast_));
   const once_return = create_once_return(host);
-  host.register_handler_("once.start", (args) => once_return.start_(args.mode_, args.focused_, args.ended_));
+  host.register_handler_("once.start", (args) => once_return.start_(args.mode_, args.focused_));
   host.register_handler_("once.mode", (args) => once_return.mode_changed_(args.mode_));
   // Returns nothing for every other message, so the listener in content.js answers those.
   browser.runtime.onMessage.addListener((message: BackgroundToContent) => {

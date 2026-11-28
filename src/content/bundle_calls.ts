@@ -74,7 +74,7 @@ type BundleCalls = {
   "page.item": { bundle: "item"; args: { [Key in keyof ItemArgs]: ItemArgs[Key] | undefined } };
 
   // A one-shot normal command started, and every mode change after it (`page/once_return.ts`).
-  "once.start": { bundle: "page"; args: { mode_: Mode; focused_: Element | null; ended_: Promise<unknown> } };
+  "once.start": { bundle: "page"; args: { mode_: Mode; focused_: Element | null } };
   "once.mode": { bundle: "page"; args: { mode_: Mode } };
 
   "page.send_key": { bundle: "site_actions"; args: SendKeyArgs };

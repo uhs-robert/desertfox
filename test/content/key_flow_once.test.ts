@@ -93,10 +93,16 @@ test("a count and a two-key sequence are one command", () => {
   assert.equal(state.is_once_armed_(), false);
 });
 
-test("a key that binds nothing in normal mode ends the prefix, and the next key reads the frame's own mode", () => {
+test("a key that binds nothing in normal mode ends the prefix and goes nowhere, and the next key reads the frame's own mode", () => {
+  for (const [mode, in_field] of [["insert", true], ["ignore", false]] as const) {
+    const { flow, state } = make_flow(mode, { in_field });
+    flow.handle_token_(PREFIX);
+    assert.equal(flow.handle_token_("Q"), "cancel", `${mode}: Q neither types nor reaches the page`);
+    assert.equal(state.is_once_armed_(), false);
+  }
   const { flow, state, ids } = make_flow("insert", { in_field: true });
   flow.handle_token_(PREFIX);
-  assert.equal(flow.handle_token_("<F13>"), "pass");
+  assert.equal(flow.handle_token_("<F13>"), "cancel");
   assert.equal(state.is_once_armed_(), false);
   assert.equal(flow.handle_token_("j"), "pass", "j is typing again");
   assert.deepEqual(ids(), ["mode.normal_once"]);
@@ -178,6 +184,35 @@ test("keys typed after the prefix while a bundle loads wait and replay as normal
   assert.deepEqual(ids(), ["mode.normal_once", normal_id("j")]);
   assert.equal(state.get_mode_(), "insert");
   assert.equal(state.is_once_armed_(), false);
+});
+
+test("the prefix and the keys after it in a field wait for the first keymap read, then run as normal keys", () => {
+  const state = create_mode_state("insert");
+  const ran: string[] = [];
+  const flow = create_key_flow({
+    user_input_seen_: () => true,
+    blur_window_open_: () => false,
+    in_editable_field_: () => !state.is_once_armed_(),
+    escape_to_page_: () => false,
+    get_mode_: state.key_mode_,
+    take_pass_next_: state.take_pass_next_,
+    take_once_: state.take_once_,
+    run_leaf_: (leaf) => {
+      const id = leaf.steps[0]!.invocation.id;
+      ran.push(id);
+      if (id === "mode.normal_once") state.arm_once_();
+    },
+    leave_insert_: () => {},
+    is_loading_: () => false,
+    loading_sink_bundles_: () => [],
+    sink_of_: () => undefined,
+    on_prefix_: () => {},
+  });
+  assert.equal(flow.handle_token_(PREFIX, false, () => assert.fail("the prefix must not reach the page")), "cancel");
+  assert.equal(flow.handle_token_("G", false, () => assert.fail("G must not type in the field")), "cancel");
+  flow.set_matcher_(create_matcher(compiled), compiled.modes.browser);
+  assert.deepEqual(ran, ["mode.normal_once", normal_id("G")]);
+  assert.equal(state.get_mode_(), "insert");
 });
 
 test("without a held prefix, a key in a field still passes at once during a load", () => {

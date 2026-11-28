@@ -174,7 +174,7 @@ async function load_page(t: TestContext, tag: string, { keymap = KEYMAP, with_ta
   };
   const press_enter = () => input_listeners.keydown!({ isTrusted: true, isComposing: false, key: "Enter", code: "Enter", preventDefault: () => {} });
   // Returns whether the page cancelled the key, which keeps the browser from acting on it.
-  const press = (key: string, modifiers: { ctrlKey?: boolean; shiftKey?: boolean } = {}) => {
+  const press = (key: string, modifiers: { ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) => {
     let cancelled = false;
     input_listeners.keydown!({ isTrusted: true, isComposing: false, key, code: key, ...modifiers, preventDefault: () => void (cancelled = true) });
     return cancelled;
@@ -365,6 +365,23 @@ test("the one-shot normal prefix closes the line, drops its text and goes back t
   await until(() => late_keys_of(host.received) !== undefined);
   assert.deepEqual([host.submits(), late_keys_of(host.received)], [[], ["<A-o>", "j"]]);
   assert.ok(host.received.some((data) => (data as { desertfox_cmdline: { kind: string } }).desertfox_cmdline.kind === "close"));
+});
+
+test("the one-shot normal prefix drops the keys held for rows before it, so the page gets only the prefix and the keys after it", async (t) => {
+  const keymap = { ...KEYMAP, modes: { ...KEYMAP.modes, browser: { kind: "branch", children: { "<A-o>": { ...leaf("mode.normal_once"), any_mode: true } } } } };
+  const page = await load_page(t, "normal_once_held", { keymap, extra_commands: [OPEN_COMMAND] });
+  const host = page.post_start(TICKET, "open git");
+  await host.opened();
+  host.port.postMessage({ desertfox_cmdline: { kind: "focused" } });
+  await until(() => page.model_ports.some((port) => port.name === "desertfox_rank" && port.posted.length > 0));
+  // Tab waits for the rows, and D waits behind it: both are line keys typed before the prefix.
+  page.press("Tab");
+  page.press("D");
+  page.press("o", { altKey: true });
+  page.press("j");
+  host.port.postMessage({ desertfox_cmdline: { kind: "drain" } });
+  await until(() => late_keys_of(host.received) !== undefined);
+  assert.deepEqual(late_keys_of(host.received), ["<A-o>", "j"]);
 });
 
 test("Enter on a command that lacks a value shows the error, keeps the line open and sends nothing", async (t) => {

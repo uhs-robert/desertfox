@@ -54,6 +54,9 @@ export const mode_pass_next: ContentHandler = {
 };
 
 // The key flow reads the next sequence as normal mode. The which-key panel lists the normal keys at once.
+// A Firefox shortcut fires it while the focus is in the address bar, the sidebar or DevTools too. A page without the focus hears no blur that would drop the arm, so it does not arm.
 export const mode_normal_once: ContentHandler = {
-  run: () => page_mode.arm_once_(),
+  run: () => {
+    if (document.hasFocus()) page_mode.arm_once_();
+  },
 };

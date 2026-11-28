@@ -3,7 +3,7 @@
 import type { Mode } from "../../shared/command.ts";
 import type { PageHostApi } from "../bundle_host.ts";
 
-export function create_once_return(host: Pick<PageHostApi, "get_mode" | "set_mode_" | "focused_" | "is_editable_">) {
+export function create_once_return(host: Pick<PageHostApi, "get_mode" | "set_mode_" | "focused_" | "is_editable_" | "leaf_end_">) {
   let from: [mode: Mode, focused: Element | null] | undefined;
   let opened = false;
 
@@ -25,13 +25,16 @@ export function create_once_return(host: Pick<PageHostApi, "get_mode" | "set_mod
   };
 
   return {
-    // `ended` settles when the command has run. The command may have changed the mode before this bundle loaded, so the mode now counts as its first change.
-    start_: (mode: Mode, focused: Element | null, ended: Promise<unknown>) => {
+    // Called as the command starts, or once this bundle loaded. By then the command may have changed the mode, so the mode now counts as its first change.
+    start_: (mode: Mode, focused: Element | null) => {
       if (mode === "normal") return;
       const mine = (from = [mode, focused]);
       opened = false;
       if (host.get_mode() !== mode) mode_changed(host.get_mode());
-      void ended.then(() => from === mine && !opened && (from = undefined));
+      // A microtask later, content.js has made the command the last leaf. A command that opened no mode by its end leaves nothing to go back to.
+      void Promise.resolve()
+        .then(host.leaf_end_)
+        .then(() => from === mine && !opened && (from = undefined));
     },
     mode_changed_: mode_changed,
   };
