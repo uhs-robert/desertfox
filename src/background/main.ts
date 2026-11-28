@@ -68,7 +68,7 @@ import { create_browser_module, read_bar_config, module_setting_on, stored_setti
 import { check_args } from "../shared/registry/check_args.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY, current_keymap } from "../shared/prefix_tree.ts";
 import type { CompiledKeymap } from "../shared/prefix_tree.ts";
-import { has_content_script, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
+import { has_content_script, reach_bar_toasts, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_browser_module_rpc, pages_setting_on } from "./browser_module_rpc.ts";
 import { create_module_run } from "./browser_module_run.ts";
 import { create_cmdline_panel } from "./cmdline_panel.ts";
@@ -345,7 +345,11 @@ browser.storage.onChanged.addListener((changes, area) => browser_module_rpc.stor
 browser.tabs.onUpdated.addListener((tab_id, change) => {
   if (change.url !== undefined) browser_module_rpc.tab_url_changed(tab_id, change.url);
 }, { properties: ["url"] });
-browser.tabs.onRemoved.addListener((tab_id) => void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed")));
+// A locked tab has no mode record, so its close writes no storage change that would clear its bar entry and toast. The module is built further down, but a close comes after the first turn.
+browser.tabs.onRemoved.addListener((tab_id) => {
+  void browser_module_rpc.tab_removed(tab_id).catch(warn_and_go("browser_module_rpc.tab_removed"));
+  void browser_module.tab_changed(String(tab_id), undefined).catch(warn_and_go("browser_module.tab_removed"));
+});
 void get_config().then(() => browser_module_rpc.sync()).catch(warn_and_go("browser_module_rpc.sync"));
 const locked_commands = locked_page_command_ids(registry.list());
 const browser_module = create_browser_module({
@@ -381,6 +385,7 @@ const browser_module = create_browser_module({
   later: (run, ms) => void setTimeout(run, ms),
 });
 attach_browser_module(browser_module);
+reach_bar_toasts(browser_module);
 browser.storage.onChanged.addListener((changes, area) => browser_module.storage_changed(changes, area));
 void get_config().then(() => browser_module.sync()).catch(warn_and_go("browser_module.sync"));
 const bridge = start_bridge(tab_modes.recall, router_deps, snippets.is_snippet, set_desktop_theme, host_update.bridge_ready);
