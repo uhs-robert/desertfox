@@ -281,6 +281,9 @@ test("the bar theme needs both schemes with every role as a color, else it is le
   const ok = validate_module_state(state({ bar_theme: { dark: { ...COLORS, extra: "#fff" }, light: COLORS } }));
   assert.ok(ok.ok);
   assert.deepEqual(ok.value.bar_theme, { dark: COLORS, light: COLORS });
+  const with_command = validate_module_state(state({ bar_theme: { dark: { ...COLORS, mode_command: "#7fcf78" }, light: { ...COLORS, mode_command: "red; x" } } }));
+  assert.ok(with_command.ok);
+  assert.deepEqual(with_command.value.bar_theme, { dark: { ...COLORS, mode_command: "#7fcf78" }, light: COLORS }, "the optional role is kept when a color and dropped otherwise");
   for (const bar_theme of [{ dark: COLORS }, { dark: COLORS, light: { ...COLORS, mode_item: "red; x" } }, "x", { dark: COLORS, light: { ...COLORS, bg_core: undefined } }]) {
     const checked = validate_module_state(state({ bar_theme }));
     assert.ok(checked.ok && checked.value.bar_theme === undefined, JSON.stringify(bar_theme));

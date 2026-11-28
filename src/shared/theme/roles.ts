@@ -25,6 +25,7 @@ export const ROLES = [
   "mode_visual",
   "mode_item",
   "mode_media",
+  "mode_command",
   "search_bg",
   "search_fg",
   "search_current_bg",
