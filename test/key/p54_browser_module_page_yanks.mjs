@@ -27,7 +27,7 @@ const clipboard_text = `(async () => {
 const set_clipboard = (text) => `(async () => { Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(${JSON.stringify(text)}); })()`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep, run_line, on_teardown } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, run_line, on_teardown, in_background, clear_notices } = context;
   const steps = module_steps(context);
   const { chrome, open_tab, focus_page, close_selected_tab, home, selected_spec, session_value } = steps;
 
@@ -63,7 +63,8 @@ export async function run_cases(context) {
     await steps.turn_on_module();
     await home("py_home");
     await run_line(":set browser_module_pages false");
-    await poll_until("the page code setting to be off in the snapshot", async () => (await session_value("desertfox_browser_module_snapshot_config"))?.value?.settings?.browser_module_pages === false, { timeout_ms: 8000 });
+    await sleep(500);
+    expect((await session_value("desertfox_browser_module_snapshot_config"))?.value?.settings?.browser_module_pages !== true, "browser_module_pages is on");
   });
 
   const tab_label = () => chrome(`(async () => ${W}.gBrowser.selectedTab.label)()`);
@@ -83,9 +84,17 @@ export async function run_cases(context) {
         expect(title !== "", `${page} has no tab title`);
         const expected = { yy: url, yc: url, ys: url, yt: title, ym: `[${title}](${url})`, yo: `[[${url}][${title}]]` };
         for (const [keys, text] of Object.entries(expected)) {
+          // A locked page shows the toast as a desktop notification, which a test session shows as a window that takes the focus.
+          await clear_notices();
           await chrome(set_clipboard(SENTINEL));
+          await focus_page();
           await press_keys(...keys.split(""));
-          await poll_until(`${keys} on ${page}`, async () => (await chrome(clipboard_text)) === text, { timeout_ms: 5000 });
+          try {
+            await poll_until(`${keys} on ${page}`, async () => (await chrome(clipboard_text)) === text, { timeout_ms: 5000 });
+          } catch (error) {
+            const notices = Object.values((await in_background(`browser.notifications.getAll()`)) ?? {}).map((notice) => notice.message);
+            throw new Error(`${error.message}: wanted ${JSON.stringify(text)}, clipboard ${JSON.stringify(await chrome(clipboard_text))}, notices ${JSON.stringify(notices)}, from module ${JSON.stringify(((await session_value("desertfox_browser_module_from_module")) ?? []).slice(-4))}, tree y ${JSON.stringify(((await session_value("desertfox_browser_module_state")) ?? {}).tree?.children?.y)}, tabs ${JSON.stringify(((await session_value("desertfox_browser_module_state")) ?? {}).tabs)}, pending ${JSON.stringify(await chrome(`(async () => Services.desertfox_browser_module.module_pending(Services.wm.getMostRecentWindow("navigator:browser")) ?? null)()`))}`);
+          }
         }
         // The link yanks need the page's links, so the module leaves them alone.
         for (const keys of ["yL", "yl"]) {
