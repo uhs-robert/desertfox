@@ -383,7 +383,9 @@ function with_defaults(settings: Record<string, unknown>) {
   return compiled;
 }
 const key_at = async (compiled: CompiledKeymap, url: string, key: string) => {
-  const leaf = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+  const found = (await ask(compiled, url))!.keymap.modes.normal?.children[key];
+  // The default j and k guard a focused list item, so on a page with none the key runs its fallback step.
+  const leaf = found?.kind === "leaf" && found.when_present !== undefined && found.otherwise ? found.otherwise : found;
   return leaf?.kind === "leaf" ? (leaf.steps[0]?.invocation.args as Record<string, unknown> | undefined)?.key ?? leaf.steps[0]?.invocation.id : undefined;
 };
 

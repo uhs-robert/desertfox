@@ -57,6 +57,8 @@ const VISUAL_KEYS: ModeBindings = {
 };
 
 // Hints every list and grid, one list starts at once, and the pick starts item mode on it. The landing walks the picked list.
+// j and k walk a site's own list when an option or menu item holds the focus, and scroll otherwise.
+const FOCUSED_LIST_ITEM = ":is([role=option],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox],[role=listbox],[role=menu]):focus";
 const PICK_LIST: KeyBinding = [{ id: "hint.run", args: { filter: "lists" }, label: "Pick a list for item mode" }, { id: "page.item", args: { direction: "current" } }];
 
 const BASE_SECTIONS: KeymapConfig = {
@@ -117,8 +119,8 @@ const BASE_SECTIONS: KeymapConfig = {
   normal: {
     h: { id: "scroll.pixels", args: { dx: -50 }, label: "Scroll left" },
     l: { id: "scroll.pixels", args: { dx: 50 }, label: "Scroll right" },
-    j: { id: "scroll.lines", args: { count: 10 }, label: "Scroll down" },
-    k: { id: "scroll.lines", args: { count: -10 }, label: "Scroll up" },
+    j: { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 }, when_present: FOCUSED_LIST_ITEM, label: "Scroll down", fallback: { id: "scroll.lines", args: { count: 10 }, label: "Scroll down" } },
+    k: { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 }, when_present: FOCUSED_LIST_ITEM, label: "Scroll up", fallback: { id: "scroll.lines", args: { count: -10 }, label: "Scroll up" } },
     gg: { id: "scroll.to", args: { percent: 0 }, label: "Scroll to top" },
     G: { id: "scroll.to", args: { percent: 100 }, label: "Scroll to bottom" },
     $: { id: "scroll.to", args: { percent: 100, axis: "x" }, label: "Scroll to right edge" },
@@ -481,6 +483,8 @@ const BASE_SECTIONS: KeymapConfig = {
     "<C-r>": { id: "register.paste", label: "Paste register" },
     "<C-o>": { id: "text.edit_external", label: "Edit the field in the external editor" },
     "<A-Escape>": { id: "page.send_key", args: { key: "Escape", key_code: 27 }, label: "Send Escape to the page" },
+    "<C-j>": { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 }, label: "Next suggestion" },
+    "<C-k>": { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 }, label: "Previous suggestion" },
   },
   ignore: {
     "<S-Escape>": { id: "mode.set", args: { mode: "normal" } },

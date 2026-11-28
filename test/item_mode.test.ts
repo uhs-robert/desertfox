@@ -264,7 +264,11 @@ test("every item key runs a command that allows item mode, and compiling the def
 
 test("normal mode j and k scroll again with the setting on, and item mode walks the items", () => {
   const compiled = compiled_with({ item_navigator: true });
-  const first_step = (mode: "normal" | "item", key: string) => (compiled.modes[mode]!.children[key] as { steps: { invocation: { id: string } }[] }).steps[0]!.invocation.id;
+  // j and k guard a focused site list item and fall back to the scroll, so the scroll is the step of the leaf's `otherwise`.
+  const first_step = (mode: "normal" | "item", key: string) => {
+    const leaf = compiled.modes[mode]!.children[key] as { steps: { invocation: { id: string } }[]; otherwise?: { steps: { invocation: { id: string } }[] } };
+    return (mode === "normal" ? (leaf.otherwise ?? leaf) : leaf).steps[0]!.invocation.id;
+  };
   assert.deepEqual(["j", "k", "h", "l"].map((key) => first_step("normal", key)), ["scroll.lines", "scroll.lines", "scroll.pixels", "scroll.pixels"]);
   assert.deepEqual(["j", "k", "h", "l"].map((key) => first_step("item", key)), ["page.item", "page.item", "page.tree", "page.tree"]);
   assert.deepEqual(["h", "l"].map((key) => (compiled.modes.item!.children[key] as { otherwise?: { steps: { invocation: { id: string } }[] } }).otherwise?.steps[0]?.invocation.id), ["page.item", "page.item"], "the item moves stay behind the tree guard");
