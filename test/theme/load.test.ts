@@ -24,6 +24,14 @@ test("a local theme with an empty or non-hex role value is not used", () => {
   }
 });
 
+test("a stored local table from before mode_command loads, with the role derived", () => {
+  const { mode_command: _dark, ...old_dark } = colors;
+  const { mode_command: _light, ...old_light } = colors;
+  const loaded = load_theme("mine", 3, { mine: { dark: old_dark as typeof colors, light: old_light as typeof colors } });
+  assert.ok(loaded, "the table is kept, not replaced by the default theme");
+  assert.equal(loaded.dark.mode_command, loaded.dark.warn);
+});
+
 test("light_intensity picks the light set and leaves dark alone", () => {
   const light_bg = (intensity: 1 | 2 | 3 | 4 | 5) => load_theme("oasis_moonlight", intensity)!.light.bg_core;
   assert.equal(light_bg(1), "#f3f2eb");
@@ -79,7 +87,7 @@ function lab_of(hex: string): [number, number, number] {
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
 
-const BADGE_ROLES = ["mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"] as const;
+const BADGE_ROLES = ["mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "mode_command"] as const;
 const MIN_BADGE_DISTANCE = 12;
 
 test("every built-in theme keeps every pair of badge colors a CIE76 distance of 12 apart, at every light level", () => {

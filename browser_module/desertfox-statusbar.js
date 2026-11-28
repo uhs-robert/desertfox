@@ -41,10 +41,10 @@
     // Copies of the lists in src/shared/browser_module_protocol.ts and src/shared/settings_table.ts. A name that is not here is not drawn.
     const WIDGETS = ["mode", "pending", "recording", "container", "scroll", "tabs", "url"];
     const BORDERS = ["none", "auto", "square", "round", "chamfer"];
-    const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media"];
+    const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "mode_command"];
     // The label of each mode, as src/shared/ui/mode_label.ts has it. Hint and command line mode get a label here because the bar overlaps nothing.
     const MODE_LABELS = { normal: "NORMAL", insert: "INSERT", ignore: "IGNORE", caret: "CARET", visual: "VISUAL", visual_line: "V-LINE", media: "MEDIA", grab: "GRAB", item: "ITEM", item_visual: "VISUAL", hint: "HINT", cmdline: "COMMAND" };
-    const MODE_ROLES = { normal: "normal", insert: "insert", ignore: "ignore", caret: "caret", visual: "visual", visual_line: "visual", media: "media", grab: "normal", item: "item", item_visual: "item", hint: "normal", cmdline: "normal", pass: "ignore", site: "visual" };
+    const MODE_ROLES = { normal: "normal", insert: "insert", ignore: "ignore", caret: "caret", visual: "visual", visual_line: "visual", media: "media", grab: "normal", item: "item", item_visual: "item", hint: "normal", cmdline: "command", pass: "ignore", site: "visual" };
     const IDENTITY_COLORS = ["blue", "turquoise", "green", "yellow", "orange", "red", "pink", "purple", "toolbar"];
     // What a narrow bar drops first. The mode label is never dropped.
     const DROP_ORDER = ["url", "container", "scroll", "tabs", "recording", "pending"];
@@ -380,6 +380,7 @@
 #${BAR_ID} .dfx-mode[data-role="visual"] { background: var(--desertfox-mode-visual); }
 #${BAR_ID} .dfx-mode[data-role="item"] { background: var(--desertfox-mode-item); }
 #${BAR_ID} .dfx-mode[data-role="media"] { background: var(--desertfox-mode-media); }
+#${BAR_ID} .dfx-mode[data-role="command"] { background: var(--desertfox-mode-command, var(--desertfox-mode-normal)); }
 #${BAR_ID} .dfx-recording { color: var(--desertfox-mode-insert); }
 #${BAR_ID} .dfx-url[data-security="ok"] { color: var(--desertfox-mode-media); }
 #${BAR_ID} .dfx-url[data-security="warn"] { color: var(--desertfox-mode-visual); }

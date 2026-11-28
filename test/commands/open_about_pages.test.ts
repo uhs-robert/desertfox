@@ -98,3 +98,28 @@ test("another about: address keeps its refusal and names :firefox, and about:bla
   assert.deepEqual(opened, ["about:blank"]);
   assert.deepEqual(requests, []);
 });
+
+test("an about: address read from a source such as @clipboard never maps, typed or not", async () => {
+  const run = registry.get("open.url")!.run as (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>;
+  for (const [from_page, from_line] of [[false, false], [true, true]]) {
+    requests.length = 0;
+    opened.length = 0;
+    const ctx = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal", from_source: true, ...(from_page && { from_page: true }), ...(from_line && { from_line: true }) };
+    await assert.rejects(run(ctx, { url: "about:addons", where: "tab" }), /DesertFox does not open about: addresses/);
+    assert.deepEqual(requests, []);
+  }
+});
+
+test("about:logins read from a source is refused and opens nothing, from a page and from a privileged page", async () => {
+  const run = registry.get("open.url")!.run as (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>;
+  for (const origin of [{ from_page: true, from_line: true }, { from_page: true }, {}]) {
+    for (const where of ["here", "tab", "background", "window"]) {
+      requests.length = 0;
+      opened.length = 0;
+      const ctx = { tab_id: 1, window_id: 1, frame_id: 0, mode: "normal", from_source: true, ...origin };
+      await assert.rejects(run(ctx, { url: "about:logins", where }), /DesertFox does not open about: addresses/);
+      assert.deepEqual(requests, []);
+      assert.deepEqual(opened, []);
+    }
+  }
+});

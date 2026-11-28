@@ -597,7 +597,16 @@ Not measured: the real `storage.session` channel, a dark theme, scanned, large o
 
 Firefox 161, the key-test copy, read from each tab's `<browser>` (key piece `test/key/p55_page_hints.mjs`):
 - In the parent process (`isRemoteBrowser` false, no `remoteType`): about:preferences, about:settings, about:addons, about:downloads, about:config and about:support. Chrome code reads their DOM directly.
-- In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there would need a collector in a frame script.
+- In a content process (`remoteType` `privilegedabout`): about:protections, about:logins and about:newtab. Chrome code cannot read their DOM, so hints there run through the module's frame script (#1045). It labels about:privatebrowsing, about:home and about:newtab, and still skips about:protections and about:logins.
+
+## Restricted hosts (restricted-domain-hints)
+
+Firefox 161, the key-test copy, offline (key piece `test/key/p55_content_hints.mjs`, a test host added to `extensions.webextensions.restrictedDomains` and pointed at a local server with `network.dns.localDomains`):
+- `network.dns.localDomains` resolves the test host to the local server with no restart.
+- A host added to `extensions.webextensions.restrictedDomains` at run time counts at once: `WebExtensionPolicy.isRestrictedURI` matches it on http, and DesertFox's content script does not run on a page loaded after the change.
+- The pref reads the same in the content process, and the module's `data:` frame script runs in the web content process of that page.
+- The parent's `preventDefault` on a keydown in the browser window keeps the key from the remote page: the page saw no Enter that confirmed a mark.
+- Read from the default prefs, not measured: `browser.tabs.remote.separatedMozillaDomains` lists addons.mozilla.org and accounts.firefox.com, and `browser.tabs.remote.separatePrivilegedMozillaWebContentProcess` is true, so those hosts load in the `privilegedmozilla` process.
 
 ## Keys in DevTools (devtools-keys)
 

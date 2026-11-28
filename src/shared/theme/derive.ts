@@ -40,6 +40,7 @@ const DERIVATIONS: [Exclude<Role, RequiredRole>, (colors: RoleColors, variant: V
   ["mode_visual", (colors) => colors.warn],
   ["mode_item", (colors) => colors.info],
   ["mode_media", (colors) => colors.error],
+  ["mode_command", (colors) => colors.warn],
   ["search_bg", (colors) => mix(colors.bg_core, colors.fg_core, 0.3)],
   ["search_fg", (colors) => colors.fg_core],
   ["search_current_bg", (colors) => colors.warn],

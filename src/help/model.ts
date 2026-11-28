@@ -319,6 +319,7 @@ const ROLE_MEANINGS: Record<Role, string> = {
   mode_visual: "Mode badge in visual mode",
   mode_item: "Mode badge in item mode",
   mode_media: "Mode badge in media mode",
+  mode_command: "Mode badge on the status bar in command mode",
   search_bg: "Background of every match of a / search and of the f and t targets",
   search_fg: "Text on those matches",
   search_current_bg: "Background of the current match",

@@ -12,10 +12,11 @@ export const areas = ["tabs", "scroll", "keys", "cmdline"];
 const W = `Services.wm.getMostRecentWindow("navigator:browser")`;
 const STATE_KEY = "desertfox_browser_module_state";
 const SHIFT_ESCAPE = ["-M", "shift", "-k", "Escape", "-m", "shift"];
+const CONFIG_SNAPSHOT_KEY = "desertfox_browser_module_snapshot_config";
 const TOGGLE = ["-M", "ctrl", "-M", "alt", "d", "-m", "alt", "-m", "ctrl"];
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep, on_teardown, config_copy, config_dir, load_config_dir } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, on_teardown, run_line, config_copy, config_dir, load_config_dir } = context;
   const steps = module_steps(context);
   const panel = panel_steps(context, steps);
   const { chrome, session_value, open_tab, wait_loaded, focus_page, switches_one, switches_none, selected_spec, in_selected_page, close_selected_tab, home } = steps;
@@ -60,6 +61,12 @@ export async function run_cases(context) {
     await poll_until("the state to hold the key tree", async () => !!(await session_value(STATE_KEY))?.tree?.children?.x);
     const status = await steps.module_status();
     expect(status.features.includes("desertfox-commands.js"), `the module loaded ${status.features.join(", ")}`);
+  });
+
+  // These cases cover the module's own key path, so the page code stays off on the PDF viewer and Reader View. The case near the end covers the setting on.
+  await setup("turn browser_module_pages off", async () => {
+    await run_line(":set browser_module_pages false");
+    await poll_until("the config snapshot with the setting off", async () => (await session_value(CONFIG_SNAPSHOT_KEY))?.value?.settings?.browser_module_pages !== true);
   });
 
   for (const [page, url] of [
@@ -273,6 +280,42 @@ export async function run_cases(context) {
     expect((await tab_count()) === tabs - 1, `xx closed ${tabs - (await tab_count())} tabs`);
     await chrome(`(async () => { const w = ${W}; w.gBrowser.selectedTab = w.gBrowser.tabs[0]; for (const tab of [...w.gBrowser.tabs].slice(1)) w.gBrowser.removeTab(tab); })()`);
   });
+  await run_case("with browser_module_pages on, zi and : still work on the PDF viewer and Reader View", async () => {
+    on_teardown(() => chrome(`(async () => { for (const w of Services.wm.getEnumerator("navigator:browser")) for (const tab of w.gBrowser.tabs) w.FullZoom.reset(tab.linkedBrowser); })()`));
+    await run_line(":set browser_module_pages true");
+    on_teardown(() => run_line(":set browser_module_pages false"));
+    await poll_until("the config snapshot with the setting on", async () => (await session_value(CONFIG_SNAPSHOT_KEY))?.value?.settings?.browser_module_pages === true);
+    for (const [page, url] of [["the PDF viewer", pdf_url], ["Reader View", reader_url]]) {
+      await home(`bmc_pages_on_${page.replace(/\W+/g, "_")}`);
+      await open_tab(url);
+      await page_ready(page);
+      const zoom_before = await zoom();
+      await press_keys("zi");
+      if (page === "the PDF viewer") {
+        // The browser's zoom does not reach the PDF viewer's own scale, so the case reads the page code's run of zoom.by and DesertFox's answer.
+        const sent = async () => ((await session_value("desertfox_browser_module_from_module")) ?? []).find((message) => message.kind === "page_call" && message.args.message.includes("zoom.by"));
+        await poll_until("the page code to send zi", async () => !!(await sent()));
+        const id = (await sent()).id;
+        const reply = async () => ((await session_value("desertfox_browser_module_from_extension")) ?? []).find((message) => message.reply_to === id);
+        await poll_until("DesertFox to answer zi", async () => !!(await reply()));
+        expect((await reply()).ok === true, `DesertFox refused zi on the PDF viewer: ${JSON.stringify(await reply())}`);
+      } else {
+        await poll_until(`zi to zoom in ${page}`, async () => (await zoom()) > zoom_before);
+      }
+      await chrome(`(async () => ${W}.FullZoom.reset(${W}.gBrowser.selectedBrowser))()`);
+      await focus_page();
+      // With the setting on, the page code draws the command line in the page, not in the module's panel.
+      await steps.watch_switches();
+      await press_keys(":");
+      await press_keys("tab.next");
+      await press_keys("-k", "Return");
+      await poll_until(`: on ${page} to take a command that switches the tab`, async () => (await steps.switch_count()) === 1, { timeout_ms: 5000 });
+      expect((await panel.state()).state === "none", `: on ${page} opened the module's panel`);
+      await close_selected_tab();
+    }
+    await run_line(":set browser_module_pages false");
+  });
+
   await run_case("last, as the config stays remapped to the end of the piece: a key remapped in the config follows on about:support, and the key it freed leaves the tree", async () => {
     await home("bmc_remap");
     const dir = config_copy();

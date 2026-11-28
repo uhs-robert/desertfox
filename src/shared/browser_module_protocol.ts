@@ -142,8 +142,10 @@ export type TabState = { mode: Mode; live: boolean } & BarFields;
 // The roles the bar's mode badge takes from the theme, for the dark and the light scheme.
 // The which-key panel takes `bg_core`, `fg_core`, `primary` and `secondary`. An older module reads only the roles it knows.
 export const BAR_ROLES = ["bg_core", "mode_normal", "mode_insert", "mode_ignore", "mode_caret", "mode_visual", "mode_item", "mode_media", "fg_core", "primary", "secondary"] as const;
+// `mode_command` is optional so a state from an older extension still validates. The module falls back to the normal color without it.
+export const BAR_OPTIONAL_ROLES = ["mode_command"] as const;
 export type BarRole = (typeof BAR_ROLES)[number];
-export type BarColors = Record<BarRole, string>;
+export type BarColors = Record<BarRole, string> & { mode_command?: string };
 export type BarTheme = { dark: BarColors; light: BarColors };
 // What the settings say about the bar. The state carries it only while `browser_bar` is on, so its absence tells the module not to draw.
 export type BarWidget = (typeof BROWSER_BAR_WIDGETS)[number];
@@ -283,7 +285,7 @@ export function bar_fields_of(value: Record<string, unknown>): BarFields {
 
 function bar_colors_of(value: unknown): BarColors | undefined {
   if (!is_record(value) || !BAR_ROLES.every((role) => is_color(value[role]))) return undefined;
-  return Object.fromEntries(BAR_ROLES.map((role) => [role, value[role]])) as BarColors;
+  return Object.fromEntries([...BAR_ROLES, ...BAR_OPTIONAL_ROLES.filter((role) => is_color(value[role]))].map((role) => [role, value[role]])) as BarColors;
 }
 
 export function bar_theme_of(value: unknown): BarTheme | undefined {

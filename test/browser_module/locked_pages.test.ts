@@ -258,9 +258,26 @@ test("the rule it lends the key taker: the PDF viewer and Reader View need the s
     { principal: SYSTEM_PRINCIPAL, uri: "about:devtools-toolbox?id=x&type=extension", inner: 5 },
     { principal: SYSTEM_PRINCIPAL, uri: "about:DevTools", inner: 5 },
     { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/help.html", addonId: "desertfox@uhs-robert" }, uri: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/help.html", inner: 5 },
-    { principal: { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", addonId: "other@example" }, uri: "about:x", inner: 5 },
   ];
   for (const page of no_notice) assert.equal(notice_on(page), undefined, page.uri);
+  // Pages no page code reaches yet: the notice says hints do not run there.
+  const other_extension = { ...PDF_PRINCIPAL, spec: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", addonId: "other@example" };
+  const web = { ...PDF_PRINCIPAL, spec: "https://a.test/" };
+  const no_hints: Page[] = [
+    { principal: other_extension, uri: "moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", inner: 5 },
+    { principal: other_extension, uri: "view-source:moz-extension://0123abcd-0000-4000-8000-00000000cafe/about.html", inner: 5 },
+    { principal: web, uri: "view-source:https://a.test/", inner: 5 },
+    { principal: web, uri: "VIEW-SOURCE:https://a.test/", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" }, uri: "https://a.test/x.json", inner: 5 },
+    { principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/" }, uri: "file:///tmp/x.json", inner: 5 },
+    { principal: web, uri: "blob:https://a.test/1234", inner: 5 },
+  ];
+  for (const page of no_hints) assert.equal(notice_on(page), "not_here", page.uri);
+  // DesertFox's content script runs on a data: page, so its hint keys go on.
+  assert.equal(notice_on({ principal: { ...PDF_PRINCIPAL, spec: "moz-nullprincipal:{1}" }, uri: "data:text/html,hi", inner: 5 }), undefined);
+  // The test is exact: a page that only mentions these names has no notice.
+  for (const uri of ["https://a.test/view-source:x", "https://a.test/?u=data:text/html,x"]) assert.equal(notice_on({ principal: web, uri, inner: 5 }), undefined, uri);
+  assert.equal(notice_on({ principal: { ...PDF_PRINCIPAL, spec: "resource://devtools/client/jsonview/x" }, uri: "https://a.test/", inner: 5 }), undefined, "only the exact JSON viewer principal");
   // The setting turns on: the PDF viewer and Reader View step aside for page code at once, and about: pages still say no.
   firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_CONFIG_STORAGE_KEY, ON_CONFIG);
   firefox.extension_writes(BROWSER_MODULE_SNAPSHOT_KEYMAP_STORAGE_KEY, KEYMAP);

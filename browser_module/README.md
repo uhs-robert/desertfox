@@ -18,6 +18,7 @@ The browser module: plain scripts that Firefox loads with browser privileges fro
 - `desertfox-sidebar.js`: the sidebar keys. It runs the extension's sidebar table in the vertical tab strip and the history, bookmarks and open tabs panels, and Escape goes back to the page. It attaches to browser windows itself.
 - `desertfox-statusbar.js`: the status bar. It runs in each window, draws from the state and never loads into the core's sandbox. Behavior: the design's status bar section.
 - `desertfox-chrome-hints.js`: hints over Firefox's UI, panels, prompts, dialogs, the Library, Page Info and the allowlisted about: pages: collect, draw, pick, a grant's Enter, `hint.browser`, and the drawing DevTools hints share.
+- `desertfox-content-hints.js`: hints on the hosts of Firefox's restricted list, in a content process: the page rule, the frame script that collects and picks there, and its transport.
 - `install.sh`: `sudo browser_module/install.sh [--uninstall]` copies or removes every `desertfox-*.js` file here.
 
 Rules:

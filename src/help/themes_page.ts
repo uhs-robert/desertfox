@@ -11,7 +11,7 @@ import { FILES_SOURCE_STORAGE_KEY } from "../shared/config/storage_keys.ts";
 
 type StorageChangedEvents = { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void; removeListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void };
 
-const MODE_BADGES: [label: string, role: string][] = [["NORMAL", "mode-normal"], ["INSERT", "mode-insert"], ["IGNORE", "mode-ignore"], ["CARET", "mode-caret"], ["VISUAL", "mode-visual"], ["ITEM", "mode-item"], ["MEDIA", "mode-media"]];
+const MODE_BADGES: [label: string, role: string][] = [["NORMAL", "mode-normal"], ["INSERT", "mode-insert"], ["IGNORE", "mode-ignore"], ["CARET", "mode-caret"], ["VISUAL", "mode-visual"], ["ITEM", "mode-item"], ["MEDIA", "mode-media"], ["COMMAND", "mode-command"]];
 const TOASTS: [kind: string, text: string][] = [["success", "Saved the setting"], ["info", "3 tabs closed"], ["warning", "The page has no links"], ["error", "That command needs a tab"]];
 const WHICH_KEY_ROWS: [key: string, label: string, group: boolean][] = [["g", "go to", true], ["t", "new tab", false], ["x", "close tab", false], ["/", "search page", false]];
 
