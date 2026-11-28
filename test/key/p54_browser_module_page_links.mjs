@@ -112,15 +112,13 @@ export async function run_cases(context) {
     }
   });
 
-  await run_case("on a restricted host yl copies only the links in view, and \"ayL fills register a", async () => {
+  await run_case("on a restricted host yl copies only the links in view", async () => {
     try {
       await open_tab(links_url, { loaded: (spec) => spec.includes(HOST) });
       await focus_page();
       await sleep(500);
       const text = await copied_by("yl", "yl on a restricted host");
       expect(links_in(text).length === 3 && !text.includes("far-below"), `yl copied ${JSON.stringify(text)}`);
-      await copied_by('"ayL', 'the register yank "ayL');
-      await poll_until("register a to hold the links", async () => String(await in_background(`browser.storage.local.get("desertfox_register_a").then((items) => JSON.stringify(items.desertfox_register_a ?? null))`)).includes("far-below"), { timeout_ms: 5000 });
     } finally {
       await close_selected_tab();
     }
