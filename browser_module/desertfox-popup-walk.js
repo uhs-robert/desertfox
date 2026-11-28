@@ -1,4 +1,5 @@
 // DesertFox browser module, the popup walk feature: in an open menu or panel, the Library, Page Info and Picture-in-Picture, j, k, h and l move as the arrow keys do. See docs/design/browser_module.md.
+// In the address bar's and the search bar's results, j and k move down and up once Tab or an arrow key moved into them.
 // Firefox does all the moving. The feature takes the letter and types the matching arrow key into the same window once the letter's event is over, so each menu, panel, tree and list handles it as its own arrow key.
 // It also closes the Library on Escape when the focus is in one of its trees and the search box is empty, since Firefox binds no Escape there.
 // In a window it asks the core to load it into the core sandbox, where it starts once per process and attaches to every chrome window of these types, open or opened later.
@@ -27,6 +28,8 @@
     if (missing) throw new Error(`the core has no ${missing}`);
     // The fixed translation. The letters are the walk's own, not key rows of the extension: a menu has no DesertFox mode or keymap.
     const WALK_KEYS = { j: "ArrowDown", k: "ArrowUp", h: "ArrowLeft", l: "ArrowRight" };
+    // The letters that walk the address bar's results. h and l stay the bar's, for its caret.
+    const RESULT_KEYS = { j: "ArrowDown", k: "ArrowUp" };
     const BROWSER = "navigator:browser";
     const LIBRARY = "Places:Organizer";
     // In these windows every list, tree and radio group walks, so no open popup is needed.
@@ -83,16 +86,39 @@
     }
 
     // An open menu takes every key from the window, even with the focus in a field or another extension's popup: the field gets no letter meanwhile.
-    // A menu that lets keys through to its field (`ignorekeys`) is the field's.
-    const takes_keys = (popup) => popup.localName === "menupopup" && !popup.hasAttribute("ignorekeys");
+    // A menu that lets keys through to its field is the field's. Firefox reads only `ignorekeys="true"` and "shortcuts" as such, and "shortcuts" (the select popup on Windows) still takes the arrow keys, so only "true" counts.
+    const takes_keys = (popup) => popup.localName === "menupopup" && popup.getAttribute("ignorekeys") !== "true";
+
+    // The address bar or the search bar with the focus in it and its results open, else undefined.
+    function focused_results(win) {
+      const focused = core.focused_element(win);
+      const bar = [win.gURLBar, win.document.getElementById("searchbar-new")].find((each) => each?.inputField != null && each.inputField === focused);
+      return bar?.view?.isOpen === true ? bar : undefined;
+    }
+    // Firefox sets `userSelectionBehavior` when Tab or an arrow key moves the selection into the results, and sets it back to "none" on each edit of the text and each opening of the view.
+    // So it tells a user who moved into the results from one typing: only the first walks on j and k.
+    const MOVED_INTO_RESULTS = new Set(["tab", "arrow"]);
+    const moved_into_results = (bar) => MOVED_INTO_RESULTS.has(bar.controller?.userSelectionBehavior);
+
+    // Moves the bar's selection as Firefox's own arrow key does there (`UrlbarChildController.handleKeyNavigation`): it marks an arrow selection, then selects by one.
+    // Firefox's own selection call needs no typed key, so the core's field guard stays as it is. Returns false with the results closed.
+    function select_result(bar, arrow) {
+      if (bar.view?.isOpen !== true) return false;
+      if (bar.controller) bar.controller.userSelectionBehavior = "arrow";
+      bar.view.selectBy(1, { reverse: arrow === "ArrowUp" });
+      return true;
+    }
 
     // Why the walk takes this key here, or undefined to leave the key alone. `still_holds` must still be true when the arrow key goes out.
     // `menu_owns_keys` marks the open menu that takes the window's keys, a focused field's too.
+    // `select` walks the address bar's results through Firefox's own selection, in place of a typed arrow key.
     // `in_hint_place` marks a focus where chrome hints can start, as their `chrome_place` reads it: the Library, Page Info, a dialog frame or inside an open panel.
     function walk_reason(win, record, event) {
       const popups = open_popups(record);
       const menu = popups.find(takes_keys);
       if (menu) return { still_holds: () => is_open(menu), menu_owns_keys: true };
+      const bar = focused_results(win);
+      if (bar && moved_into_results(bar) && Object.hasOwn(RESULT_KEYS, event.key)) return { select: () => select_result(bar, RESULT_KEYS[event.key]) };
       const focused = core.focused_element(win);
       if (in_field(win, event.originalTarget) || in_extension_popup(event.target) || in_extension_popup(focused)) return undefined;
       const panel = popups.find(walking_panel);
@@ -116,7 +142,7 @@
       const arrow = Object.hasOwn(WALK_KEYS, event.key) ? WALK_KEYS[event.key] : undefined;
       if (arrow) {
         const reason = walk_reason(win, record, event);
-        return reason && { act: () => walk(win, arrow, reason), in_hint_place: reason.in_hint_place === true };
+        return reason && { act: () => (reason.select ? reason.select() : walk(win, arrow, reason)), in_hint_place: reason.in_hint_place === true };
       }
       if (event.key !== "Escape" || event.shiftKey || record.type !== LIBRARY) return undefined;
       if (in_field(win, event.originalTarget) || !library_closes_on_escape(win, record)) return undefined;

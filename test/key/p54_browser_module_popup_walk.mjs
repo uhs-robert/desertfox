@@ -1,4 +1,5 @@
-// The browser module's popup walk with real keys: j, k, h and l in the app menu, a context menu, a menu bar menu, the Library and Page Info, and the keys it leaves alone.
+// The browser module's popup walk with real keys: j, k, h and l in the app menu, a context menu, a menu bar menu, a select popup, the Library and Page Info, and the keys it leaves alone.
+// Also j and k in the address bar's results once Tab or Down moved into them.
 import { module_steps, NO_EFFECT_MS } from "./browser_module_steps.mjs";
 
 export const areas = ["keys"];
@@ -258,6 +259,89 @@ export async function run_cases(context) {
       await walk_menu_over(name, INJECTED_POINT, item);
     });
   }
+
+  // Puts `markup` at the page's top left and clicks it until the window's input state says a field has the focus, or until `focused` says so.
+  async function click_into(markup, focused = () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`)) {
+    await steps.in_selected_page(`(win) => {
+      const holder = win.document.createElement("div");
+      holder.innerHTML = ${JSON.stringify(markup)};
+      win.document.body.prepend(holder);
+      return true;
+    }`);
+    await poll_until("the field to be laid out", () => steps.in_selected_page(`(win) => !!win.document.getElementById("field")?.getBoundingClientRect().width`));
+    await poll_until("the click to focus the field", async () => {
+      await click_at(INJECTED_POINT);
+      return poll_until("the focus to show", focused, { timeout_ms: 600, expected_timeout: true }).then(() => true, () => false);
+    }, { timeout_ms: 10000 });
+  }
+
+  const SELECT_POPUP = "#ContentSelectDropdownPopup";
+  const SELECT_MARKUP = `<select id="field" style="${FIELD_BOX}"><option>alpha</option><option>bravo</option><option>charlie</option><option>jay</option><option>kay</option></select>`;
+  // `ignorekeys` is what Firefox leaves on its select popup once the popup's search box (dom.forms.selectSearch, over 40 options) loses the focus: "false" on Linux.
+  for (const ignorekeys of [null, "false"]) {
+    await walk_case(`a select popup${ignorekeys === null ? "" : ` with ignorekeys="${ignorekeys}"`} is walked by j and k, not searched by them`, async () => {
+      await home(`pw_select_${ignorekeys ?? "plain"}`);
+      await focus_page();
+      try {
+        await click_into(SELECT_MARKUP, async () => (await menu_item(SELECT_POPUP)).state === "open");
+        await sleep(300);
+        if (ignorekeys !== null) await chrome(`(async () => { ${W}.document.querySelector(${JSON.stringify(SELECT_POPUP)}).setAttribute("ignorekeys", ${JSON.stringify(ignorekeys)}); })()`);
+        expect((await menu_item(SELECT_POPUP)).active === "alpha", `the select popup opened on ${(await menu_item(SELECT_POPUP)).active}`);
+        for (const [key, row] of [["j", "bravo"], ["j", "charlie"], ["k", "bravo"]]) {
+          await press_keys(key);
+          await poll_until(`${key} to move the select popup to ${row}`, async () => (await menu_item(SELECT_POPUP)).active === row);
+        }
+        await press_keys("-k", "Escape");
+        await poll_until("Escape to close the select popup", async () => (await menu_item(SELECT_POPUP)).state === "closed");
+      } finally {
+        await chrome(`(async () => { ${W}.document.querySelector(${JSON.stringify(SELECT_POPUP)})?.removeAttribute("ignorekeys"); })()`);
+      }
+    });
+  }
+
+  // Three bookmarks give the results rows to walk, with no network. Their titles go on with the "xj" the case types, so the rows stay.
+  const RESULT_WORD = "jkwalk";
+  const results = () => chrome(`(async () => { const bar = ${W}.gURLBar; return { open: bar.view.isOpen, row: bar.view.selectedRowIndex, rows: bar.view.visibleRowCount, value: bar.value, behavior: bar.controller.userSelectionBehavior }; })()`);
+
+  await walk_case("in the address bar j and k type until Tab or Down moves into the results, then walk them", async () => {
+    await home("pw_results");
+    await chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); for (const n of [1, 2, 3]) await PlacesUtils.bookmarks.insert({ parentGuid: PlacesUtils.bookmarks.unfiledGuid, url: "https://example.com/${RESULT_WORD}-" + n, title: "${RESULT_WORD}xj " + n }); })()`);
+    try {
+      await chrome(`(async () => { const w = ${W}; w.gURLBar.focus(); w.gURLBar.value = ""; })()`);
+      await sleep(300);
+      await press_keys(RESULT_WORD);
+      await poll_until("the results to show the bookmarks", async () => {
+        const now = await results();
+        return now.open && now.rows >= 4 && now.value === RESULT_WORD;
+      }).catch(async (error) => {
+        throw new Error(`${error.message}: ${JSON.stringify(await results())}`);
+      });
+      const step = async (keys, what, check) => {
+        await press_keys(...keys);
+        await poll_until(what, async () => check(await results())).catch(async (error) => {
+          throw new Error(`${error.message}: ${JSON.stringify(await results())}`);
+        });
+      };
+      await step(["-k", "Tab"], "Tab to move into the results", (now) => now.row === 1);
+      await step(["j"], "j to walk down the results", (now) => now.row === 2);
+      await step(["k"], "k to walk back up", (now) => now.row === 1);
+      // Back on the first row the address shows the typed word again, so the edit below still matches the bookmarks.
+      await step(["-k", "Up"], "Up to move back to the first row", (now) => now.row === 0 && now.value === RESULT_WORD);
+      await step(["x"], "x to edit the address", (now) => now.open && now.value.endsWith("x") && now.behavior === "none");
+      await step(["j"], "j to type after an edit", (now) => now.value.endsWith("xj"));
+      const typed_row = (await results()).row;
+      await step(["-k", "Down"], "Down to move into the results from typing", (now) => now.row === typed_row + 1);
+      await step(["j"], "j to walk on after Down", (now) => now.row === typed_row + 2);
+      await step(["-k", "Escape"], "Escape to close the results", (now) => !now.open);
+    } finally {
+      await chrome(`(async () => {
+        const w = ${W};
+        const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");
+        w.gURLBar.value = ""; w.gURLBar.handleRevert?.(); w.gBrowser.selectedBrowser.focus();
+        for (const n of [1, 2, 3]) await PlacesUtils.bookmarks.remove(await PlacesUtils.bookmarks.fetch({ url: "https://example.com/${RESULT_WORD}-" + n }));
+      })()`);
+    }
+  });
 
   await walk_case("in a menu bar menu j moves and l opens a submenu that h closes", async () => {
     await home("pw_menubar");

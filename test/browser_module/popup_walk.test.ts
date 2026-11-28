@@ -524,3 +524,84 @@ test("the walk leaves a window's keys alone while another feature holds them in 
   run_timers();
   assert.deepEqual(typed.map(({ key }) => key), ["ArrowDown"]);
 });
+
+// ---- The address bar's results, walked by j and k after Tab.
+
+// A bar (the address bar or the new search bar) with the focus in its input and its results open, after `behavior` (Firefox's `userSelectionBehavior`). It records each selection call.
+function results_bar(walk: ReturnType<typeof setup>, behavior: string | undefined = "none") {
+  const input_field = { localName: "input", type: "text" };
+  const selections: string[] = [];
+  const bar = {
+    inputField: input_field,
+    controller: { userSelectionBehavior: behavior },
+    view: { isOpen: true, selectBy: (amount: number, { reverse = false } = {}) => void selections.push(`${reverse ? "up" : "down"} ${amount}`) },
+  };
+  walk.browser.focus(input_field);
+  return { bar, selections };
+}
+function address_bar(walk: ReturnType<typeof setup>, behavior?: string) {
+  const made = results_bar(walk, behavior);
+  Object.assign((walk.browser.win as unknown as { gURLBar: object }).gURLBar, made.bar);
+  return made;
+}
+
+test("in the address bar j and k select through Firefox's own results once Tab or an arrow key moved into them, and type before that", () => {
+  const walk = setup();
+  const { bar, selections } = address_bar(walk);
+  assert.equal(walk.browser.press("j").prevented, false, "j was taken while the user typed");
+  assert.equal(walk.browser.press("k").prevented, false, "k was taken while the user typed");
+  for (const behavior of ["tab", "arrow"]) {
+    bar.controller.userSelectionBehavior = behavior;
+    const event = walk.browser.press("j");
+    assert.ok(event.prevented && event.stopped, `j did not walk after ${behavior}`);
+    assert.equal(bar.controller.userSelectionBehavior, "arrow", "j did not mark an arrow selection, as Firefox's own arrow key does");
+    assert.ok(walk.browser.press("k").prevented, `k did not walk after ${behavior}`);
+    for (const key of ["h", "l", "x", "J"]) assert.equal(walk.browser.press(key).prevented, false, `${key} was taken from the address bar`);
+    for (const patch of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }, { isTrusted: false }]) assert.equal(walk.browser.press("j", patch).prevented, false, JSON.stringify(patch));
+  }
+  for (const behavior of [undefined, "none", "mouse"]) {
+    bar.controller.userSelectionBehavior = behavior as string;
+    assert.equal(walk.browser.press("j").prevented, false, `j was taken with userSelectionBehavior ${behavior}`);
+  }
+  walk.run_timers();
+  assert.deepEqual(selections, ["down 1", "up 1", "down 1", "up 1"]);
+  assert.deepEqual(walk.typed, [], "an arrow key was typed into the address bar");
+  bar.view.isOpen = false;
+  bar.controller.userSelectionBehavior = "tab";
+  assert.equal(walk.browser.press("j").prevented, false, "j was taken with the results closed");
+  assert.equal(selections.length, 4);
+});
+
+test("the new search bar's results walk as the address bar's do, a menu over the bar keeps its keys, and the gates hold", () => {
+  const walk = setup();
+  const { bar, selections } = results_bar(walk, "tab");
+  walk.browser.elements.set("searchbar-new", { localName: "moz-searchbar", ...bar });
+  assert.ok(walk.browser.press("j").prevented, "j did not walk the search bar's results");
+  const menu = popup("menupopup", "menu_FilePopup");
+  walk.browser.show(menu);
+  assert.ok(walk.browser.press("j").prevented);
+  walk.run_timers();
+  assert.deepEqual(selections, ["down 1"]);
+  assert.deepEqual(walk.typed.map(({ key }) => key), ["ArrowDown"], "j under the menu did not walk the menu");
+  const gated = setup({ pref: false });
+  address_bar(gated, "tab");
+  assert.equal(gated.browser.press("j").prevented, false, "j walked with the pref off");
+});
+
+test("a select popup walks whatever its ignorekeys says, except true, in the walk and in the core's field check", () => {
+  for (const value of ["false", "shortcuts", ""]) {
+    const walk = setup();
+    walk.browser.focus(walk.tab.browser as Node);
+    const select_popup = popup("menupopup", "ContentSelectDropdownPopup", { ignorekeys: value });
+    walk.browser.show(select_popup);
+    assert.ok(walk.browser.press("j").prevented, `a select popup with ignorekeys="${value}" did not walk`);
+    walk.browser.focus({ localName: "input", type: "text" });
+    assert.ok(walk.browser.press("k").prevented, `a field under a menu with ignorekeys="${value}" kept its letter`);
+    walk.run_timers();
+    assert.deepEqual(walk.typed.map(({ key }) => key), ["ArrowDown", "ArrowUp"], `ignorekeys="${value}"`);
+  }
+  const walk = setup();
+  walk.browser.show(popup("menupopup", "", { ignorekeys: "true" }));
+  walk.browser.focus({ localName: "input", type: "text" });
+  assert.equal(walk.browser.press("j").prevented, false);
+});
