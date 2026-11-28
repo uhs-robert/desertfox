@@ -116,6 +116,42 @@ export async function run_cases(context) {
     await close_selected_tab();
   });
 
+  // A mouse press on the input, so the page gets the click and Firefox opens the menu from the mouse.
+  const right_click_field = async () => {
+    const [x, y] = await steps.in_selected_page(`(win) => { const box = win.document.getElementById("field").getBoundingClientRect(); return [box.left + 10, box.top + 5]; }`);
+    await chrome(`(async () => {
+      const w = ${W};
+      const browser = w.gBrowser.selectedBrowser;
+      const box = browser.getBoundingClientRect();
+      w.synthesizeMouseEvent("mousedown", box.left + ${x}, box.top + ${y}, { button: 2, buttons: 2, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });
+      w.synthesizeMouseEvent("contextmenu", box.left + ${x}, box.top + ${y}, { button: 2, buttons: 0, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false });
+    })()`);
+  };
+
+  await walk_case("a context menu opened over a focused text input of a page is walked by j and k, and the input gets no letter", async () => {
+    await home("pw_field_menu");
+    await focus_page();
+    await steps.in_selected_page(`(win) => { const field = win.document.createElement("input"); field.id = "field"; field.type = "text"; field.value = "helo wrld"; win.document.body.prepend(field); field.focus(); return true; }`);
+    await poll_until("the input to hold the focus", () => chrome(`(async () => ${W}.windowUtils.IMEStatus !== Components.interfaces.nsIDOMWindowUtils.IME_STATUS_DISABLED)()`));
+    await right_click_field();
+    await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
+    await sleep(300);
+    const seen = [];
+    for (let step = 0; step < 3; step++) {
+      await press_keys("j");
+      await sleep(150);
+      seen.push((await menu_item("#contentAreaContextMenu")).active);
+    }
+    expect(seen[0] !== null && seen[0] !== seen[1] && seen[1] !== seen[2], `j did not move through the context menu over a field: ${seen.join(", ")}`);
+    await press_keys("k");
+    await sleep(150);
+    expect((await menu_item("#contentAreaContextMenu")).active === seen[1], `k did not move back to ${seen[1]}`);
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
+    const typed = await steps.in_selected_page(`(win) => win.document.getElementById("field").value`);
+    expect(typed === "helo wrld", `the input took ${JSON.stringify(typed)} while the menu was open`);
+  });
+
   await walk_case("in a menu bar menu j moves and l opens a submenu that h closes", async () => {
     await home("pw_menubar");
     await focus_page();
