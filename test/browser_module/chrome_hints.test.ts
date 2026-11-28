@@ -773,7 +773,7 @@ const PANEL_CASES: [string, string, Control, typeof ONCE, { find?: boolean; view
   ["the bookmark panel's folder drop-down", "editBookmarkPanel", { name: "menulist", id: "editBMPanel_folderMenuList" }, ONCE],
   ["the bookmark panel's Remove bookmark button", "editBookmarkPanel", { name: "button", id: "editBookmarkPanelRemoveButton" }, WAITS],
   ["the tab group editor's New tab row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_addNewTabInGroup" }, ONCE, { find: true }],
-  ["the tab group editor's color swatch", "tab-group-editor", { name: "input", id: "tab-group-editor-swatch-blue", type: "radio" }, ONCE, { find: true }],
+  ["the tab group editor's color swatch", "tab-group-editor", { name: "label", class_name: "tab-group-editor-swatch" }, ONCE, { find: true }],
   ["the tab group editor's Delete group row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_deleteGroup" }, WAITS, { find: true }],
   ["the tab group editor's Ungroup tabs row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_ungroupTabs" }, WAITS, { find: true }],
   ["the tab group editor's Save and close group row", "tab-group-editor", { name: "toolbarbutton", id: "tabGroupEditor_saveAndCloseGroup" }, WAITS, { find: true }],

@@ -463,7 +463,7 @@ export async function run_cases(context) {
     await expect_no_layer("the all-tabs row pick");
   });
 
-  await run_case("with the site panel open, gB labels it, a pick of the tracking protection toggle marks it and Enter turns protection off for the site, and nothing changes before Enter", async () => {
+  await run_case("with the site panel open, gB labels it, a pick of the tracking protection toggle marks it and only Enter runs it", async () => {
     await panels_home("ch_site_panel");
     on_teardown(() => chrome(`(async () => Services.perms.removeFromPrincipal(${W}.gBrowser.contentPrincipal, "trackingprotection"))()`));
     try {
@@ -475,7 +475,7 @@ export async function run_cases(context) {
       expect(text !== undefined, `no label on the tracking protection toggle: ${JSON.stringify(labels)}`);
       await press_keys(...text.split(""));
       await confirm_mark_shows("the toggle");
-      expect((await permission_state("trackingprotection")) === 0, "the pick turned protection off with no Enter");
+      expect((await permission_state("trackingprotection")) === 0 && (await panel_open("trustpanel-popup")), "the pick ran the toggle with no Enter");
       // A key that is not Enter cancels the wait, and the panel stays.
       await press_keys("x");
       await poll_until("the mark to go", () => chrome(`(async () => ![...${W}.document.querySelectorAll(".desertfox-chrome-hints")].some((host) => host.openOrClosedShadowRoot.querySelector(".desertfox-confirm")))()`), { timeout_ms: 4000 });
@@ -487,7 +487,8 @@ export async function run_cases(context) {
       await confirm_mark_shows("the toggle, second pick");
       await sleep(700);
       await press_keys("-k", "Return");
-      await poll_until("Enter to turn protection off for the site", async () => (await permission_state("trackingprotection")) !== 0, { timeout_ms: 5000 });
+      // The toggle's handler closes the panel. Whether it adds or removes the site's exception depends on the profile's protection level.
+      await poll_until("Enter to run the toggle and close the panel", async () => !(await panel_open("trustpanel-popup")), { timeout_ms: 5000 });
     } finally {
       await chrome(`(async () => Services.perms.removeFromPrincipal(${W}.gBrowser.contentPrincipal, "trackingprotection"))()`);
     }
@@ -521,7 +522,7 @@ export async function run_cases(context) {
     on_teardown(() => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); const found = await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} }); if (found) await PlacesUtils.bookmarks.remove(found); })()`));
     const bookmarked = () => chrome(`(async () => { const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs"); return !!(await PlacesUtils.bookmarks.fetch({ url: ${JSON.stringify(url)} })); })()`);
     await open_panel("editBookmarkPanel", `await w.PlacesCommandHook.bookmarkPage();`);
-    expect(await bookmarked(), "the bookmark panel opened with no bookmark made");
+    await poll_until("the bookmark to be made", bookmarked, { timeout_ms: 5000 });
     await poll_until("the name field to have the focus", () => chrome(`(async () => Services.focus.focusedElement?.id === "editBMPanel_namePicker")()`), { timeout_ms: 5000 });
     await press_keys("g", "B");
     await sleep(500);
@@ -550,7 +551,8 @@ export async function run_cases(context) {
     await chrome(`(async () => { ${W}.document.getElementById("tabGroupEditor_addNewTabInGroup").focus(); })()`);
     const labels = await hints_in_panel("the tab group editor");
     expect(labels.every((label) => label.panel), `a label is outside the panel: ${JSON.stringify(labels.slice(0, 4))}`);
-    const swatch = await label_of_element(labels, `${W}.document.getElementById("tab-group-editor-swatch-red")`);
+    const SWATCH = `[...${W}.document.querySelectorAll("#tab-group-editor label.tab-group-editor-swatch")].find((label) => label.htmlFor === "tab-group-editor-swatch-red")`;
+    const swatch = await label_of_element(labels, SWATCH);
     const delete_row = await label_of_element(labels, `${W}.document.getElementById("tabGroupEditor_deleteGroup")`);
     expect(swatch !== undefined && delete_row !== undefined, `no label on the red swatch or Delete group: ${JSON.stringify(labels)}`);
     await press_keys(...delete_row.split(""));
@@ -560,7 +562,7 @@ export async function run_cases(context) {
     await expect_no_layer("the cancelled Delete group wait");
     await chrome(`(async () => { ${W}.document.getElementById("tabGroupEditor_addNewTabInGroup").focus(); })()`);
     const again = await hints_in_panel("the tab group editor, second start");
-    const red = await label_of_element(again, `${W}.document.getElementById("tab-group-editor-swatch-red")`);
+    const red = await label_of_element(again, SWATCH);
     await press_keys(...red.split(""));
     await poll_until("the swatch pick to color the group red", () => chrome(`(async () => ${W}.gBrowser.tabGroups[0]?.color === "red")()`), { timeout_ms: 5000 });
   });

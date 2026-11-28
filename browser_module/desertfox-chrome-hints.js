@@ -127,7 +127,7 @@
     }
     // The bookmark panel's Remove bookmark button waits. Its Done button, folder and tag expanders, New Folder button and the show-for-new-bookmarks checkbox change nothing that is lost.
     const BOOKMARK_PANEL_AT_ONCE = new Set(["editBookmarkPanelDoneButton", "editBMPanel_foldersExpander", "editBMPanel_tagsSelectorExpander", "editBMPanel_newFolderButton", "editBookmarkPanel_showForNewBookmarks"]);
-    // The tab group editor's Delete group, Ungroup tabs and Save and close group wait. The rest only add a tab, move the group, copy its links or pick a color.
+    // The tab group editor's Delete group, Ungroup tabs and Save and close group wait. The rest only add a tab, move the group, copy its links or pick a color. A swatch's radio input is hidden, so its label is the target.
     const TAB_GROUP_AT_ONCE = new Set(["tabGroupEditor_addNewTabInGroup", "tabGroupEditor_moveGroupToNewWindow", "tabGroupEditor_copyAllLinks", "tab-group-editor-button-cancel", "tab-group-editor-button-create", "tab-group-cancel-suggestions-button", "tab-group-suggestions-load-cancel"]);
 
     // The panels whose rows get labels. Labels go inside the panel's own DOM, because a popup is a surface of its own that a layer of the window does not cover.
@@ -148,7 +148,7 @@
       { id: "permission-popup", take: "toolbarbutton, button, menulist", at_once: (element) => element.localName === "menulist" },
       // The panel opens with the name field focused, so a start waits until the user leaves the field.
       { id: "editBookmarkPanel", take: "button, toolbarbutton, menulist, checkbox", at_once: (element) => element.localName === "menulist" || BOOKMARK_PANEL_AT_ONCE.has(element.id) },
-      { id: "tab-group-editor", find: (doc) => doc.querySelectorAll("#tab-group-editor > panel.tab-group-editor-panel")[0], take: "toolbarbutton, moz-button, button, input[type=radio]", at_once: (element) => element.type === "radio" || TAB_GROUP_AT_ONCE.has(element.id) },
+      { id: "tab-group-editor", find: (doc) => doc.querySelectorAll("#tab-group-editor > panel.tab-group-editor-panel")[0], take: "toolbarbutton, moz-button, button, label.tab-group-editor-swatch", at_once: (element) => has_class(element, "tab-group-editor-swatch") || TAB_GROUP_AT_ONCE.has(element.id) },
       // The all-tabs panel is one view of Firefox's shared widget panel, which other views use too.
       { id: "customizationui-widget-panel", take: "toolbarbutton, button", view_ok: (view) => view.id.startsWith("allTabsMenu-") },
     ];
