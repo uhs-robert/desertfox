@@ -321,7 +321,7 @@ A command that reads the `@selection` source (the command line prefill, yank, se
 
 ## Links on locked pages
 
-Status: built for parent-process about: pages, and for restricted hosts, start pages and error pages. The PDF viewer and Reader View with `browser_module_pages` off follow. With the setting on (the default) they, view-source and the JSON viewer run the page code, so `yL` and `yl` already work there. The module side is `desertfox-page-links.js`, with a `links` message in the frame script of `desertfox-content-hints.js`. The extension side is `make_copy_page_links_handler` in `src/commands/copy.ts` and `src/shared/browser_module_page_links.ts`.
+Status: built for parent-process about: pages, and for restricted hosts, start pages and error pages. The PDF viewer and Reader View with `browser_module_pages` off follow. With the setting on (the default) the PDF viewer, Reader View, view-source and the JSON viewer run the page code, so `yL` and `yl` already work there. The module side is `desertfox-page-links.js`, with a `links` message in the frame script of `desertfox-content-hints.js`. The extension side is `make_copy_page_links_handler` in `src/commands/copy.ts` and `src/shared/browser_module_page_links.ts`.
 
 `yL` and `yl` read the links of a page, which a page with no DesertFox page code cannot give the background. The extension asks the module, as for the selection.
 
