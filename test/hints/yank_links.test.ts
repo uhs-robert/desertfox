@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { YankDeps } from "../../src/content/hints/yank_links.ts";
 import type { Found } from "../../src/content/lib/candidates.ts";
-import { format_links, label_of, links_of, MAX_YANKED_LINKS, web_address, yank_links } from "../../src/content/hints/yank_links.ts";
+import { format_links, label_of, links_of, web_address, yank_links } from "../../src/content/hints/yank_links.ts";
+import { MAX_YANKED_LINKS } from "../../src/shared/copy/link_list.ts";
 
 const PAGE = "https://a.com/post";
 

@@ -64,6 +64,7 @@ The detail of the long entries is in the "Shared files for ..." sections of thes
 - `storage_watch.ts`: `watch_stored`, `touches_settings` and `follow_settings`: how pages follow `storage.local` and redraw from the current settings.
 - `permission_grant.ts`: the optional permissions a Help panel grants, the manifest permissions behind each, the `#grant/<permission>` hash and the refusal hint.
 - `browser_module_protocol.ts`: the browser module channel: key names, version, fixed command list, message kinds, locked page routes, snapshots, the locked-page key tree and their validators.
+- `browser_module_page_links.ts`: the caps and the check of the `page_links.read` reply, the one reply that carries addresses. The module keeps the same caps.
 - `browser_module_scope.ts`: which keys work on locked pages: the derived command set, the pruned tree for the module and the check of a `run` request.
 - `firefox_pages.ts`: the page list of `:firefox`: names, addresses, which pages the browser module takes, and the match of typed text to a page.
 - `native_host.ts`: the host name, the `nativeMessaging` permission, `host_channel`, `install_hashes_of` and the install commands the Help panel shows.
