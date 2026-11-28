@@ -47,8 +47,8 @@ export const reach_bar_toasts = (route: BarToasts): void => {
 };
 
 // A private tab's text reaches the bar only where the extension may run in private windows, as the module's own bar needs.
-// The bar draws only the selected tab, and fullscreen hides it. Customize mode is not seen here and keeps the notice off (see the design doc).
-export const bar_shows_tab = (tab: { active?: boolean | undefined }, window_state: string | undefined): boolean => tab.active === true && window_state !== "fullscreen";
+// The bar draws only the selected tab, and fullscreen hides it. A minimized window shows nothing either. Customize mode is not seen here and keeps the notice off (see the design doc).
+export const bar_shows_tab = (tab: { active?: boolean | undefined }, window_state: string | undefined): boolean => tab.active === true && window_state !== "fullscreen" && window_state !== "minimized";
 
 async function show_in_bar(tab_id: number, text: string, kind: ToastKind): Promise<boolean> {
   return refused_as(show_in_bar_now(tab_id, text, kind), false);

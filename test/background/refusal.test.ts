@@ -68,5 +68,6 @@ test("the bar shows a message only for the selected tab of a window that is not 
   assert.equal(bar_shows_tab({ active: true }, "normal"), true);
   assert.equal(bar_shows_tab({ active: false }, "normal"), false);
   assert.equal(bar_shows_tab({ active: true }, "fullscreen"), false);
+  assert.equal(bar_shows_tab({ active: true }, "minimized"), false);
   assert.equal(bar_shows_tab({}, undefined), false);
 });

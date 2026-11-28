@@ -396,10 +396,10 @@ test("each window listens on its own, and the frame script loads once", () => {
   assert.equal(scripts(), 1);
 });
 
-test("the hello keeps a field the core adds, and the bar adds only bar", () => {
+test("the hello keeps a field the core adds, and the bar adds only bar and bar_message", () => {
   const fixture = started();
   fixture.firefox.extension_writes("desertfox_browser_module_hello", { v: 1, module_version: "1.0.0", later_field: "x" });
-  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", later_field: "x", bar: true });
+  assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", later_field: "x", bar: true, bar_message: true });
   fixture.firefox.set_named_pref("desertfox.browser_module.statusbar", false);
   assert.deepEqual(fixture.firefox.hello(), { v: 1, module_version: "1.0.0", later_field: "x" });
 });

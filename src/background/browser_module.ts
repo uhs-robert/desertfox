@@ -452,6 +452,8 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     const state = await read_state();
     // No state yet: a full sync is on its way or the setting just turned off.
     if (state === undefined) return;
+    // A tab with no entry has nothing to clear, so a close need not rewrite the whole state.
+    if (record === undefined && !(tab_id in state.tabs)) return void (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
     const tabs = { ...state.tabs };
     // A tab that closed, or whose new page took over, has nothing half-typed any more.
     if (record === undefined) (bars.delete(tab_id), toasts.delete(tab_id), child_keys.delete(tab_id), frame_keys.delete(tab_id), loading.delete(tab_id));
