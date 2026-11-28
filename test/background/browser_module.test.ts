@@ -1032,3 +1032,16 @@ test("a tab's visual mode goes when the tab closes, and when the module's hello 
   await world.module.sync();
   assert.equal("8" in state_of(world.data).tabs, false, "a module that restarted without the feature shows no stale mode");
 });
+
+test("a fresh record keeps a child frame's own mode, and takes the module's mode only over normal", async () => {
+  const world = setup({ kinds: VISUAL_KINDS });
+  await world.module.sync();
+  await raise_visual(world);
+  await world.module.tab_changed("5", { focused_child: { frame_id: 1, mode: "visual" } });
+  assert.equal(state_of(world.data).tabs["5"]!.mode, "visual", "a non-live record in visual mode keeps its label");
+  await deliver(world, [visual_report("v1", 6, "caret")]);
+  await world.module.tab_changed("6", { awaiting_commit: true });
+  assert.equal(state_of(world.data).tabs["6"]!.mode, "caret", "a loading tab with no mode of its own keeps the module's");
+  await deliver(world, [visual_report("v2", 6, "normal")]);
+  assert.equal(state_of(world.data).tabs["6"]!.mode, "normal", "the state entry's stale mode ends with the report");
+});
