@@ -299,7 +299,7 @@ Lifecycle:
 
 - The module attaches a page only when the kill switch pref, `browser_module` and `browser_module_pages` are on, the snapshots are present with the protocol version (`BROWSER_MODULE_PROTOCOL_VERSION`), the tab is not private (unless DesertFox has private access), and chrome reads the page kind as the PDF viewer or Reader View.
 - A pagehide settles every open call and push with an error and sends `page_gone`. A pagehide of a page that goes into the back-forward cache keeps the sandbox, and the page attaches again under a new id when it returns. Any other pagehide destroys the sandbox. Turning either setting off, the kill switch, a version mismatch or a failed start does the same and takes the page code out. Tab close clears the tab's lock.
-- The setting is off by default and works only with `browser_module` on. While it is off, a hint key on these pages shows a notice that names it (see [Keys on locked pages](#keys-on-locked-pages)).
+- The setting is on by default and works only with `browser_module` on. While it is off, such as after `:set browser_module_pages false`, a hint key on these pages shows a notice that names it (see [Keys on locked pages](#keys-on-locked-pages)).
 - A snapshot part over its cap is removed, and the background logs one console warning per part per session with its size and the cap. [privacy.md](../privacy.md) states what it writes and relays.
 
 ## Safety

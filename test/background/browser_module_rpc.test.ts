@@ -263,7 +263,7 @@ test("the setting reads both switches from the stored config status", async () =
   const of = (settings: unknown) => pages_setting_on({ get: async (key: string) => ({ [key]: { settings } }) } as never);
   assert.equal(await of({ browser_module: true, browser_module_pages: true }), true);
   assert.equal(await of({ browser_module: false, browser_module_pages: true }), false, "needs the browser module setting");
-  assert.equal(await of({ browser_module: true }), false, "off by default");
+  assert.equal(await of({ browser_module: true }), false, "a missing key is a malformed status, so it counts as off");
   assert.equal(await of({ browser_module: true, browser_module_pages: "yes" }), false);
   assert.equal(await pages_setting_on({ get: async () => ({}) } as never), false);
 });
