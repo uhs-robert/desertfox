@@ -70,13 +70,14 @@ export function make_tab_visual_handler(deps: TabVisualDeps) {
     await deps.highlight(window_id, highlight_indexes(active.index, range_between(order, active.id, cursor)));
   };
 
-  // Always the current active tab, so ending can never switch tabs. A mouse selection with no record stays.
+  // The reset only runs while the active tab is still the anchor. A key that switches tabs right after the leave step must not be undone by a late reset, and Firefox clears the selection itself on a plain switch. The active tab is read last, just before the highlight. A mouse selection with no record stays.
   const end = async (window_id: number) => {
-    if (!(await deps.read_record(window_id))) return;
+    const record = await deps.read_record(window_id);
+    if (!record) return;
     await deps.remove_record(window_id);
     if ((await deps.highlighted_count(window_id)) < 2) return;
     const active = (await deps.tabs_in_window(window_id)).find((tab) => tab.active);
-    if (active) await deps.highlight(window_id, [active.index]);
+    if (active?.id === record.anchor) await deps.highlight(window_id, [active.index]);
   };
 
   return {

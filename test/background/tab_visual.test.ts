@@ -102,6 +102,13 @@ test("end clears the selection to the current active tab and drops the record", 
   assert.equal(record(), undefined);
 });
 
+test("end leaves the selection alone when the active tab is no longer the anchor", async () => {
+  const { handler, log, record } = make(five(4), [], { anchor: 3, cursor: 5 });
+  await run(handler, "end");
+  assert.deepEqual(log, []);
+  assert.equal(record(), undefined);
+});
+
 test("end with no record leaves a mouse selection alone, and with one tab selected only drops the record", async () => {
   const none = make(five());
   await run(none.handler, "end");

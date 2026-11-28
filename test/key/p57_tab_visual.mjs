@@ -84,9 +84,9 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await press_keys("kk");
     await expect_highlighted([ids.at(-5), anchor], "crossing the anchor moves the range to the other side");
     await press_keys("gg");
-    expect((await highlighted_ids()).includes(ids[0]), "gg reaches the first tab");
+    await poll_until("gg reaches the first tab", async () => (await highlighted_ids()).includes(ids[0]));
     await press_keys("G");
-    expect((await highlighted_ids()).includes(ids.at(-1)), "G reaches the last tab");
+    await poll_until("G reaches the last tab", async () => (await highlighted_ids()).includes(ids.at(-1)));
     expect((await active_id()) === anchor, "the active tab changed");
     await press_keys("-k", "Escape");
     await expect_badge("NORMAL");
@@ -132,6 +132,20 @@ export async function run_cases({ rdp, extension_id, run_case, setup, press_keys
     await press_keys("j");
     await press_keys("r");
     for (const id of wanted) await poll_until(`tab ${id} reloaded`, async () => (await background(`browser.tabs.executeScript(${id}, { code: "document.documentElement.dataset.p57 ?? 'none'" }).then((result) => result[0])`)) === "none");
+    await settle_focus();
+    await expect_badge("NORMAL");
+  });
+
+  await run_case("J inside the range ends it and lands on the next tab, which the end does not undo", async () => {
+    const anchor = ids.at(-4);
+    await activate(anchor);
+    await press_keys("gv");
+    await expect_badge("TAB VISUAL");
+    await press_keys("j");
+    await press_keys("J");
+    await poll_until("the next tab active", async () => (await active_id()) === ids.at(-3));
+    await sleep(500);
+    expect((await active_id()) === ids.at(-3), "the active tab went back");
     await settle_focus();
     await expect_badge("NORMAL");
   });

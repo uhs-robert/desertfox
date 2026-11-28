@@ -316,7 +316,7 @@
     // BUNDLE_NAMES copies src/shared/bundles.ts, and test/browser_module/locked_pages.test.ts keeps it equal.
     const SHIM_FILE = "locked_shim.js";
     const CONTENT_FILE = "content.js";
-    const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "editor", "site_actions", "grab", "item", "item_act", "tree", "next_page"];
+    const BUNDLE_NAMES = ["hints", "caret", "whichkey", "cmdline", "ui", "page", "text", "editor", "site_actions", "grab", "item", "item_act", "tree", "next_page", "tab_visual"];
     const SNAPSHOT_PARTS = ["keymap", "config", "theme", "which_key"];
     const BASE_URL = /^moz-extension:\/\/[0-9a-f-]{36}\/$/;
     const WENT_AWAY = "the page went away";
