@@ -174,12 +174,12 @@ bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | `wh` | `hint --window` | Click element in new window |  |
 | `wu` | `window.undo_close` | Reopen closed window | yes |
 | `U` | `window.undo_close` | Reopen closed window | yes |
-| `yy` | `copy` | Copy URL |  |
-| `yc` | `copy --canonical` | Copy URL |  |
-| `ym` | `copy --markdown` | Copy URL |  |
-| `yo` | `copy --org` | Copy URL |  |
-| `ys` | `copy --short` | Copy URL |  |
-| `yt` | `copy --title` | Copy URL |  |
+| `yy` | `copy` | Copy URL | yes |
+| `yc` | `copy --canonical` | Copy URL | yes |
+| `ym` | `copy --markdown` | Copy URL | yes |
+| `yo` | `copy --org` | Copy URL | yes |
+| `ys` | `copy --short` | Copy URL | yes |
+| `yt` | `copy --title` | Copy URL | yes |
 | `yL` | `copylinks` | Copy page links |  |
 | `yl` | `copylinks --viewport` | Copy links in view |  |
 | `yT` | `copytabs` | Copy tab links | yes |

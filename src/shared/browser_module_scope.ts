@@ -27,8 +27,16 @@ export type CheckCommandArgs = (id: string, args: Record<string, unknown> | unde
 // A guard asks about the page's focus or content, which a locked page cannot answer.
 const has_guard = (leaf: TreeLeaf): boolean => leaf.when_focus !== undefined || leaf.when_present !== undefined || leaf.otherwise !== undefined || leaf.otherwise_page !== undefined;
 
-// Every step is a command of the set, so the router runs the whole leaf with no page. A step that prompts opens the address bar (`address_bar.open`), which needs no page either.
-export const forwards_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => !has_guard(leaf) && leaf.steps.length > 0 && leaf.steps.every((step) => step.leave !== true && step.runs_in === "background" && allowed.has(step.invocation.id));
+// A content command with a background command of the same params that does the same from what the browser lists of the tab. On a locked page the leaf runs the variant, so the keymap binds one command and the page code runs where it exists.
+// `copy.page` cannot read the page's canonical or short link, so those two formats give the address.
+export const LOCKED_VARIANTS: Readonly<Record<string, string>> = { "copy.url": "copy.page" };
+
+// Every step is a command of the set or has a variant in it, so the router runs the whole leaf with no page. A step that prompts opens the address bar (`address_bar.open`), which needs no page either.
+const runs_without_page = (step: LeafStep, allowed: ReadonlySet<string>): boolean => {
+  const variant = LOCKED_VARIANTS[step.invocation.id];
+  return variant !== undefined ? allowed.has(variant) : step.runs_in === "background" && allowed.has(step.invocation.id);
+};
+export const forwards_leaf = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => !has_guard(leaf) && leaf.steps.length > 0 && leaf.steps.every((step) => step.leave !== true && runs_without_page(step, allowed));
 
 // The bare command line key (`:`): the background opens the line over the locked page as a panel, else the address bar (`background/cmdline_panel.ts`). A line with typed text is left out, because its commands mostly need a page.
 export const opens_line_leaf = (leaf: TreeLeaf): boolean => {
@@ -97,8 +105,13 @@ export function matcher_keymap_of(tree: ScopeTree): CompiledKeymap {
 }
 
 // The steps of a leaf with the typed count, as the content script sends them (`counted_invocations` in content/run_content.ts). The router applies each step's count rule.
+// For a locked page each step names its variant, if it has one.
 export const counted_steps = (steps: readonly LeafStep[], count: number | undefined): BoundInvocation[] =>
-  steps.map(({ invocation, count_rule }) => (count === undefined || count_rule === "ignore" ? invocation : { ...invocation, count }));
+  steps.map(({ invocation, count_rule }) => {
+    const counted = count === undefined || count_rule === "ignore" ? invocation : { ...invocation, count };
+    const variant = LOCKED_VARIANTS[counted.id];
+    return variant === undefined ? counted : { ...counted, id: variant };
+  });
 
 // One normalized key token, as the protocol's key rows take it.
 const KEY_TOKEN = /^[^\s\p{Cc}\p{Cf}]{1,24}$/u;
