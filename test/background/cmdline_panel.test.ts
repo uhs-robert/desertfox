@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_cmdline_panel, PANEL_FRAME_ID } from "../../src/background/cmdline_panel.ts";
+import { create_cmdline_panel, create_devtools_cmdline_handlers, PANEL_FRAME_ID } from "../../src/background/cmdline_panel.ts";
 import type { CmdlinePanelDeps, PanelTab } from "../../src/background/cmdline_panel.ts";
 import { CMDLINE_PANEL_STORAGE_KEY } from "../../src/shared/config/storage_keys.ts";
 import type { CmdlineOpened } from "../../src/shared/messages/content.ts";
@@ -146,4 +146,26 @@ test("the record goes when the line ends, its tab closes or loads, another tab o
     await end(panel);
     assert.ok(await panel.asker_of(PANEL), what);
   }
+});
+
+test("the DevTools ask opens the line over the tab it names, refuses with a notice when the line does not open, and refuses when the module could not name a tab", async () => {
+  const opened: number[] = [];
+  const refusals: [number | undefined, string][] = [];
+  let line_opens = true;
+  const handlers = create_devtools_cmdline_handlers({
+    open: async (tab_id) => (opened.push(tab_id), line_opens),
+    refuse: async (tab_id, message) => void refusals.push([tab_id, message]),
+  });
+  const ask = handlers["devtools_cmdline.ask"];
+  await ask({ tab_id: 4 });
+  assert.deepEqual(opened, [4]);
+  assert.deepEqual(refusals, []);
+  line_opens = false;
+  await ask({ tab_id: 5 });
+  assert.deepEqual(refusals, [[5, "The command line did not open over DevTools"]]);
+  await ask({});
+  assert.deepEqual(opened, [4, 5], "no tab, no panel");
+  assert.deepEqual(refusals.at(-1), [undefined, "The command line does not open from a DevTools window of its own"]);
+  await ask({ tab_id: 1.5 });
+  assert.deepEqual(opened, [4, 5]);
 });

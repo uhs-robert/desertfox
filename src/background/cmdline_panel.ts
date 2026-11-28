@@ -124,3 +124,21 @@ export function create_cmdline_panel(deps: CmdlinePanelDeps) {
 }
 
 export type CmdlinePanel = ReturnType<typeof create_cmdline_panel>;
+
+export type DevtoolsCmdlineDeps = {
+  open: (tab_id: number) => Promise<boolean>;
+  // The notice for a refusal. No tab id means the tab in front.
+  refuse: (tab_id: number | undefined, message: string) => Promise<unknown>;
+};
+
+// The `:` key in DevTools (docked, in a window of its own or in a toolbox tab). The module names the tab the toolbox inspects, as chrome read it, and the line acts on that tab, as a line of any panel does.
+// A reply is the module's cue to stop waiting. A refusal is a notice and no throw, since the key is already taken.
+export function create_devtools_cmdline_handlers(deps: DevtoolsCmdlineDeps) {
+  return {
+    "devtools_cmdline.ask": async (args: ModuleArgs): Promise<void> => {
+      const tab_id = Number.isInteger(args.tab_id) ? (args.tab_id as number) : undefined;
+      if (tab_id === undefined) return void (await deps.refuse(undefined, "The command line does not open from a DevTools window of its own"));
+      if (!(await deps.open(tab_id))) await deps.refuse(tab_id, "The command line did not open over DevTools");
+    },
+  };
+}

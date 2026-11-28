@@ -71,7 +71,7 @@ import type { CompiledKeymap } from "../shared/prefix_tree.ts";
 import { has_content_script, reach_bar_toasts, reach_locked_tabs, send_to_tab, show_toast_on_tab } from "./browser_deps.ts";
 import { create_browser_module_rpc, pages_setting_on } from "./browser_module_rpc.ts";
 import { create_module_run } from "./browser_module_run.ts";
-import { create_cmdline_panel } from "./cmdline_panel.ts";
+import { create_cmdline_panel, create_devtools_cmdline_handlers } from "./cmdline_panel.ts";
 import { locked_page_command_ids } from "../shared/browser_module_scope.ts";
 import { list_keys } from "./list_keys.ts";
 import { THEME_STORAGE_KEY } from "../shared/theme/apply.ts";
@@ -368,7 +368,7 @@ const browser_module = create_browser_module({
   handlers: { ...browser_module_rpc.handlers, run: create_module_run({ read_keymap: () => stored_keymap(browser.storage.local), locked_commands, run: router.run, show_refusal: router_deps.show_refusal, open_line: async () => {
     const tab = await router_deps.active_tab();
     if (tab) await router_deps.open_cmdline(tab.tab_id, 0, "");
-  }, active_url: async () => (await router_deps.active_tab())?.url, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers },
+  }, active_url: async () => (await router_deps.active_tab())?.url, pages_on: () => pages_setting_on(browser.storage.local) }), ...chrome_hints.handlers, ...create_devtools_cmdline_handlers({ open: (tab_id) => cmdline_panel.open(tab_id, ""), refuse: async (tab_id, message) => router_deps.show_refusal(tab_id ?? (await router_deps.active_tab())?.tab_id, { id: "devtools.cmdline", message }) }) },
   on_reply: (reply) => {
     browser_module_rpc.push_answered(reply);
     browser_module_call.hear(reply);

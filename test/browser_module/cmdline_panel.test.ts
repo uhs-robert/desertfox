@@ -50,6 +50,8 @@ function panel_world({ private_window = false, private_access = false, enabled =
   const tab_a = { linkedBrowser: opener, closing: false };
   const tab_b = { linkedBrowser: { localName: "browser" }, closing: false };
   const emitted: unknown[] = [];
+  // The element each panel was opened or moved against.
+  const anchors: unknown[] = [];
   firefox.module_exports = {
     ExtensionParent: {
       GlobalManager: { getExtension: (id: string) => (id === extension.id ? extension : undefined) },
@@ -78,7 +80,8 @@ function panel_world({ private_window = false, private_access = false, enabled =
       const element = fake_element(name, log);
       if (name === "panel") {
         Object.assign(element, {
-          openPopup: () => {
+          openPopup: (anchor: unknown) => {
+            anchors.push(anchor);
             element.state = "open";
             element.fire("popupshown");
           },
@@ -86,7 +89,7 @@ function panel_world({ private_window = false, private_access = false, enabled =
             element.state = "closed";
             element.fire("popuphidden");
           },
-          moveToAnchor: (_anchor: unknown, _position: string, _x: number, y: number) => log.push(`move to ${y}`),
+          moveToAnchor: (anchor: unknown, _position: string, _x: number, y: number) => (anchors.push(anchor), log.push(`move to ${y}`)),
         });
       } else {
         const resize_listeners: ((message: { data: unknown }) => void)[] = [];
@@ -121,7 +124,7 @@ function panel_world({ private_window = false, private_access = false, enabled =
   }
   const panel = () => created.find((element) => element.localName === "panel");
   const browser = () => created.find((element) => element.localName === "browser") as (ReturnType<typeof fake_element> & { resized(height: unknown): void }) | undefined;
-  return { firefox, extension, ask, log, loaded, messages, emitted, panel, browser, tab_container, select_b: () => void (selected = tab_b), created, opener, other_browser: tab_b.linkedBrowser, location_change, progress_listeners };
+  return { firefox, extension, window, tab_a, tab_b, anchors, popups, ask, log, loaded, messages, emitted, panel, browser, tab_container, select_b: () => void (selected = tab_b), created, opener, other_browser: tab_b.linkedBrowser, location_change, progress_listeners };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -207,4 +210,56 @@ test("a page that failed to load once refuses later panels, so the extension ope
   await settle();
   assert.equal(world.panel()!.state, "closed");
   assert.deepEqual(await world.ask({ tab_id: 7 }), { ok: false, error: "The command line page did not load in this session" });
+});
+
+// ---- Over DevTools: a docked toolbox, a toolbox in a tab and a DevTools window.
+const INSPECTED_BROWSER_ID = 66;
+const toolbox_address = (id = INSPECTED_BROWSER_ID) => `about:devtools-toolbox?type=tab&id=${id}`;
+
+// The browser window lists both tabs and tab A is the one the toolbox inspects.
+function devtools_world() {
+  const world = panel_world();
+  const win = world.window.win as unknown as Record<string, unknown> & { gBrowser: Record<string, unknown>; document: Record<string, unknown> };
+  (world.tab_a.linkedBrowser as Record<string, unknown>).browsingContext = { browserId: INSPECTED_BROWSER_ID };
+  win.gBrowser.tabs = [world.tab_a, world.tab_b];
+  const container = { name: "browser container", querySelector: (selector: string) => (selector === ".devtools-toolbox-iframe" && container.docked ? {} : null), docked: false, getBoundingClientRect: () => ({ width: 800, height: 700 }) };
+  win.gBrowser.getBrowserContainer = () => container;
+  (world.firefox.Services.wm as { getEnumerator: (type: string | null) => unknown[] }).getEnumerator = (type) => (type === "navigator:browser" ? [win] : []);
+  return { ...world, win, container };
+}
+
+test("a docked toolbox anchors the panel to the tab's whole browser container, and Escape gives the focus back to the element that had it", async () => {
+  const world = devtools_world();
+  world.container.docked = true;
+  const focused = { isConnected: true, ownerDocument: { documentURI: "chrome://devtools/content/webconsole/index.html", defaultView: { focus: () => world.log.push("focus DevTools view") } }, focus: () => world.log.push("focus DevTools element") };
+  world.win.document.commandDispatcher = { focusedElement: focused };
+  assert.deepEqual(await world.ask({ tab_id: 7 }), OPENED);
+  assert.equal(world.anchors[0], world.container, "anchored to the container, below the toolbox");
+  world.browser()!.fire("DOMWindowClose");
+  assert.deepEqual(world.log.slice(-2), ["focus DevTools view", "focus DevTools element"]);
+  assert.equal(world.log.includes("focus opener"), false, "not the page");
+});
+
+test("a page with no toolbox keeps its own anchor and its focus return", async () => {
+  const world = devtools_world();
+  await world.ask({ tab_id: 7 });
+  assert.equal(world.anchors[0], world.opener);
+  world.browser()!.fire("DOMWindowClose");
+  assert.equal(world.log.at(-1), "focus opener");
+});
+
+test("a toolbox in a tab: the line opens in that browser window for the inspected tab, though the toolbox tab is the selected one", async () => {
+  const world = devtools_world();
+  world.select_b();
+  (world.tab_b.linkedBrowser as Record<string, unknown>).currentURI = { spec: toolbox_address() };
+  assert.deepEqual(await world.ask({ tab_id: 7 }), OPENED);
+  assert.equal(world.anchors[0], world.container);
+  // Another tab than the inspected one is still refused.
+  const other = devtools_world();
+  other.select_b();
+  (other.tab_b.linkedBrowser as Record<string, unknown>).currentURI = { spec: toolbox_address(1) };
+  assert.deepEqual(await other.ask({ tab_id: 7 }), { ok: false, error: "The tab that asked is no longer selected" });
+  const plain_tab = devtools_world();
+  plain_tab.select_b();
+  assert.equal((await plain_tab.ask({ tab_id: 7 })).ok, false);
 });

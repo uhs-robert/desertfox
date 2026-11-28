@@ -352,7 +352,7 @@ export async function run_cases(context) {
     // Teardowns run at the piece's end, and the cases after this one need the hint key back.
     try {
       await set_session_value(HELLO_KEY, Object.fromEntries(Object.entries(own_hello).filter(([name]) => name !== "devtools_hints")));
-      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhlv/nNgJK", { timeout_ms: 5000 });
+      await poll_until("the extension to push the table without the hint key", async () => (await last_table()) === "jkhlv/nNgJK:", { timeout_ms: 5000 });
       await open_tab(TREE_PAGE);
       await show_tool("inspector");
       await markup_on_section();
@@ -364,7 +364,7 @@ export async function run_cases(context) {
       await moves("l", markup_state, ["section", true], "the tree keys stay: l expands");
     } finally {
       await set_session_value(HELLO_KEY, own_hello);
-      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlfv/nNgJK", { timeout_ms: 5000 });
+      await poll_until("the hint key to come back with the module's own hello", async () => (await last_table()) === "jkhlfv/nNgJK:", { timeout_ms: 5000 });
     }
   });
 
@@ -501,6 +501,76 @@ export async function run_cases(context) {
       // The window has no tab browser, so J acts on the newest browser window, which then selects another tab. K comes back before the next step reads the toolbox through the selected tab.
       await switches_one("J in a DevTools window");
       await switches_one("K in a DevTools window", ["K"]);
+    });
+  });
+  // ---- The command line key.
+
+  // The command line panel of whichever window holds it, with the window's type.
+  const panel_now = () =>
+    chrome(`(async () => {
+      for (const w of Services.wm.getEnumerator(null)) {
+        const panel = w.document.getElementById("desertfox-cmdline-panel");
+        if (!panel) continue;
+        const rect = panel.getOuterScreenRect();
+        const own = w.document.documentElement.getAttribute("windowtype");
+        return { state: panel.state, window: own, url: panel.querySelector("browser")?.currentURI?.spec ?? null, bottom: rect.y + rect.height, scale: w.devicePixelRatio, window_bottom: (w.mozInnerScreenY + w.innerHeight) * w.devicePixelRatio, page_bottom: (w.mozInnerScreenY + w.gBrowser.selectedBrowser.getBoundingClientRect().bottom) * w.devicePixelRatio, focused: Services.focus.focusedElement === panel.querySelector("browser") };
+      }
+      return null;
+    })()`);
+  const panel_closed = (what) => poll_until(`${what} to close the command line panel`, async () => (await panel_now()) === null, { timeout_ms: 5000 });
+  const marked_markup_element = () => chrome(`(async () => { ${TOOLBOX} const doc = tb.getPanel("inspector").markup.doc; Services.desertfox_key_test_focus = doc.activeElement; return !!doc.activeElement; })()`);
+  const markup_element_has_focus = () => chrome(`(async () => { ${TOOLBOX} const doc = tb.getPanel("inspector").markup.doc; return !!Services.desertfox_key_test_focus && doc.activeElement === Services.desertfox_key_test_focus && Services.focus.focusedWindow === doc.defaultView; })()`);
+  async function colon_opens_line(where, window_type) {
+    expect(await marked_markup_element(), `${where}: no markup element holds the focus`);
+    on_teardown(() => chrome(`(async () => { delete Services.desertfox_key_test_focus; for (const w of Services.wm.getEnumerator(null)) w.document.getElementById("desertfox-cmdline-panel")?.hidePopup?.(); })()`));
+    await press_keys(":");
+    await poll_until(`${where}: : to open the command line panel`, async () => {
+      const shown = await panel_now();
+      return shown?.state === "open" && /\/cmdline\.html\?panel=[0-9a-f-]{36}$/.test(shown.url ?? "") && shown.focused;
+    }, { timeout_ms: 8000 }).catch(async (error) => {
+      const asked = ((await session_value("desertfox_browser_module_from_module")) ?? []).filter((message) => /devtools_cmdline|cmdline_panel/.test(message.kind ?? "") || "reply_to" in message).slice(-4);
+            throw new Error(`${error.message} (panel ${JSON.stringify(await panel_now())}, messages ${JSON.stringify(asked)}, module ${JSON.stringify((await module_status())?.errors)})`);
+    });
+    const shown = await panel_now();
+    expect(shown.window === window_type, `${where}: the panel is in a window of type ${shown.window}, not ${window_type}`);
+    // The panel sits below the page area, over the docked toolbox, and near the window's bottom (the module's status bar takes a strip there).
+    expect(shown.bottom > shown.page_bottom + 20 * shown.scale && shown.window_bottom - shown.bottom <= 40 * shown.scale, `${where}: the panel ends at ${shown.bottom}, the page at ${shown.page_bottom}, the window at ${shown.window_bottom}`);
+    await press_keys("-k", "Escape");
+    await panel_closed(`${where}: Escape`);
+    await poll_until(`${where}: the focus to return to the element that had it`, markup_element_has_focus, { timeout_ms: 3000 });
+  }
+
+  await run_case(": opens the command line over the inspected tab in a docked toolbox, Escape returns the focus to the markup, and : types in the console input", async () => {
+    await home("bm_dt_cmdline");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    await markup_on_section();
+    await focus_in_devtools();
+    await colon_opens_line("docked", "navigator:browser");
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to open the split console", () => chrome(`(async () => { ${TOOLBOX} return tb.splitConsole === true && !!tb.getPanel("webconsole")?.hud; })()`), { timeout_ms: 5000 });
+    const console_text = () => chrome(`(async () => { ${TOOLBOX} return tb.getPanel("webconsole").hud.ui.outputNode.ownerDocument.querySelector(".jsterm-input-container")?.textContent ?? null; })()`);
+    await chrome(`(async () => { ${TOOLBOX} const hud = tb.getPanel("webconsole").hud; hud.ui.outputNode.ownerDocument.defaultView.focus(); hud.ui.jsterm.focus(); })()`);
+    await press_keys(":");
+    await poll_until(": to type into the console input", async () => (await console_text())?.includes(":"), { timeout_ms: 3000 });
+    await sleep(NO_EFFECT_MS);
+    expect((await panel_now()) === null, ": in the console input opened the command line");
+    await chrome(`(async () => { ${TOOLBOX} await tb.closeSplitConsole(); })()`);
+  });
+
+  await run_case(": in a DevTools window of its own opens no line and asks the extension for a notice, since nothing there names the inspected tab", async () => {
+    await home("bm_dt_cmdline_window");
+    await open_tab(TREE_PAGE);
+    await show_tool("inspector");
+    await in_devtools_window(async () => {
+      const asks_before = (((await session_value("desertfox_browser_module_from_module")) ?? []).filter((message) => message.kind === "devtools_cmdline.ask")).length;
+      await press_keys(":");
+      await poll_until("the ask without a tab to reach the extension", async () => {
+        const asks = ((await session_value("desertfox_browser_module_from_module")) ?? []).filter((message) => message.kind === "devtools_cmdline.ask");
+        return asks.length === asks_before + 1 && asks.at(-1).args.tab_id === undefined;
+      }, { timeout_ms: 5000 });
+      await sleep(NO_EFFECT_MS);
+      expect((await panel_now()) === null, ": in a DevTools window opened the command line");
     });
   });
 }

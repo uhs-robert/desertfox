@@ -3,6 +3,7 @@
 // The `hints.start` action asks the extension for hints (`devtools_hints.ask`). The hints work as chrome hints do: this file collects targets from a fixed table and sends only ids and boxes, the extension makes the labels and names the pick, and this file draws them and runs one fixed action per target.
 // The `visual.start` action starts visual mode in the focused text area. Its keys come in a second table (`devtools.visual_keys`), each a fixed op that moves the end of the selection or copies it. The copy stays in this process.
 // The `tool.prefix` action holds a `g` for a second key of this file's own: `t` and `T` send the toolbox's Ctrl+] and Ctrl+[ chords, so DevTools selects its next and previous tool. The `tab.` actions run the module's own tab switch, so J and K switch browser tabs from DevTools.
+// The `cmdline.open` action (`:`) asks the extension for the command line panel (`devtools_cmdline.ask`) over the tab that the toolbox inspects, docked or in a toolbox tab. A DevTools window of its own maps to no tab, so it gets a notice. The panel file draws it.
 // The `search.` actions focus the Inspector's search box and press its match buttons. Escape in that box and a double Escape in the console input are fixed keys of this file, as Escape in the hints and the mode is.
 // No DesertFox page code runs in DevTools: every DevTools document has the system principal, so code there runs as the browser. This file reads no DevTools internals either, only the focused element and the elements of its fixed table.
 // The core decides that the focus is in DevTools and that the module may act. This file passes a key it has no row for, a key with a modifier, a key typed in an editable field (the console input, the markup view's inline editors) and a key for a frame of another process, so DevTools keeps those.
@@ -115,6 +116,7 @@
     const search = define_search(core);
     const prefix_hold = define_prefix_hold(core);
     const tools = define_tool_keys(core, prefix_hold);
+    const cmdline = define_cmdline(core);
     const console_escape = define_console_escape(core);
     // A reloaded or older DesertFox gets a new hello. The tables, the hints and the mode of the one before go, so only a DesertFox that pushes its own table gets these keys.
     core.on_hello(() => {
@@ -135,7 +137,7 @@
 
     // The core checked the rows against the protocol. A push may come twice, and the newest table wins.
     core.register_kind("devtools.keys", ({ keys }) => {
-      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START || search.ACTIONS.has(action) || tools.ACTIONS.has(action)).map(({ key, action }) => [key, action]));
+      actions = new Map(keys.filter(({ action }) => Object.hasOwn(ARROWS, action) || action === HINTS_START || action === VISUAL_START || search.ACTIONS.has(action) || tools.ACTIONS.has(action) || cmdline.ACTIONS.has(action)).map(({ key, action }) => [key, action]));
       return { ok: true };
     });
 
@@ -160,6 +162,7 @@
       if (action === HINTS_START) return hints.ask(win);
       if (search.ACTIONS.has(action)) return search.run(action, target);
       if (tools.ACTIONS.has(action)) return tools.start(action, win, target);
+      if (cmdline.ACTIONS.has(action)) return cmdline.start(win, target);
       // Chrome code makes this arrow, so Gecko marks it trusted, and it reaches the core's listener again. No row takes an arrow there, so it moves the tree once.
       const { key, keyCode } = ARROWS[action];
       const view = target.ownerDocument.defaultView;
@@ -244,6 +247,53 @@
 
     // Said last, so the extension sends these rows only to a module that runs them.
     core.set_hello_flag("devtools_tools", true);
+
+    return { ACTIONS, start };
+  }
+
+  // ---- The command line key.
+  // `:` in DevTools outside a field. The extension gets the tab the toolbox inspects, which this file finds without reading DevTools internals:
+  // a docked toolbox sits in the browser container of the tab it inspects, and a toolbox opened as a tab names the tab in its address (`about:devtools-toolbox?type=tab&id=<browser id>`).
+  // A DevTools window of its own has neither (measured: its address has no query and its frame is in a window with no tab list), so it maps to no tab. The ask then goes without one, and the extension refuses with a notice.
+  function define_cmdline(core) {
+    const ACTIONS = new Set(["cmdline.open"]);
+    const TYPE_TAB = /^about:devtools-toolbox\?(?:[^#]*&)?type=tab(?:&|#|$)/;
+    const BROWSER_ID = /^about:devtools-toolbox\?(?:[^#]*&)?id=(\d{1,15})(?:&|#|$)/;
+    const browser_windows = () => [...Services.wm.getEnumerator("navigator:browser")];
+
+    // The tab and its window for a toolbox document, or undefined.
+    function inspected_tab(toolbox) {
+      const address = String(toolbox?.documentURI);
+      const id = TYPE_TAB.test(address) ? BROWSER_ID.exec(address)?.[1] : undefined;
+      if (id !== undefined) {
+        for (const win of browser_windows()) {
+          for (const tab of win.gBrowser?.tabs ?? []) {
+            const browser = tab.linkedBrowser;
+            if ((browser?.browsingContext?.browserId ?? browser?.browserId) === Number(id)) return { win, tab };
+          }
+        }
+        return undefined;
+      }
+      const frame = frame_of(toolbox);
+      if (!frame?.classList?.contains("devtools-toolbox-iframe")) return undefined;
+      const win = frame.ownerDocument?.defaultView;
+      const gBrowser = win?.gBrowser;
+      for (const tab of gBrowser?.tabs ?? []) if (gBrowser.getBrowserContainer?.(tab.linkedBrowser)?.contains(frame)) return { win, tab };
+      return undefined;
+    }
+
+    // The target is no field or frame here: the claim checked that before it called this.
+    function start(win, target) {
+      const found = inspected_tab(toolbox_of(target));
+      const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
+      const tab_id = found && core.may_act(found.win) ? ExtensionParent.apiManager.global.tabTracker.getId(found.tab) : -1;
+      const sent = core.send("devtools_cmdline.ask", tab_id >= 0 ? { tab_id } : {});
+      if (!sent.ok) core.log_once(`devtools_cmdline.ask was not sent: ${sent.problem}`);
+      return sent.ok;
+    }
+
+    // Said last, so the extension sends the row only to a module that runs it.
+    core.set_hello_flag("devtools_cmdline", true);
 
     return { ACTIONS, start };
   }

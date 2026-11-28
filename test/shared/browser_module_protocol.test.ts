@@ -141,7 +141,7 @@ const KINDS = { push: { args: { n: "int" as const }, reply: false }, ask: { args
 const msg = (patch: Record<string, unknown>) => ({ v: V, id: "m1", kind: "ask", args: { axis: "x" }, ...patch });
 
 test("each direction lists only its own kinds, so any other request is refused", () => {
-  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "page_hints.want"]);
+  assert.deepEqual(Object.keys(MODULE_TO_EXTENSION_KINDS), ["page_call", "page_gone", "run", "chrome_hints.targets", "chrome_hints.key", "chrome_hints.end", "chrome_hints.want", "devtools_hints.ask", "devtools_cmdline.ask", "page_hints.want"]);
   assert.deepEqual(Object.keys(EXTENSION_TO_MODULE_KINDS), ["page_push", "pane.split_new_tab", "pane.split_next_tab", "pane.unsplit", "pane.close_both", "pane.resize", "pane.focus_region", "pane.focus_direction", "pane.equalize", "pane.move", "address_bar.open", "cmdline_panel.open", "chrome_hints.collect", "chrome_hints.collect_here", "chrome_hints.draw", "chrome_hints.pick", "chrome_hints.clear", "page_hints.collect", "devtools.keys", "devtools_hints.collect", "devtools_hints.draw", "devtools_hints.pick", "devtools_hints.clear", "devtools.visual_keys", "firefox_page.open", "selection.read"]);
   assert.ok(MODULE_TO_EXTENSION_KINDS["page_call"]!.reply && EXTENSION_TO_MODULE_KINDS["page_push"]!.reply, "both answer in the reply");
   assert.equal(MODULE_TO_EXTENSION_KINDS["page_gone"]!.reply, false, "chrome's word that a document went away is a push");
@@ -462,6 +462,23 @@ test("the tool and tab rows are behind devtools_tools, so a module that knows th
   const search_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true };
   assert.ok(table_for(search_hello).every(({ action }) => with_search_only.includes(action)));
   assert.equal(table_for({ ...search_hello, devtools_tools: true }).every(({ action }) => with_search_only.includes(action)), false, "the reason for the flag");
+});
+
+test("the : row is behind devtools_cmdline, and the ask takes a tab id or none", () => {
+  assert.deepEqual(DEVTOOLS_FLAGGED_KEYS.find(({ flag }) => flag === "devtools_cmdline")!.keys, [{ key: ":", action: "cmdline.open" }]);
+  assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_cmdline: true }), { ok: true, value: { v: V, module_version: "1", devtools_cmdline: true } });
+  for (const flag of [false, "true", 1]) assert.deepEqual(validate_module_hello({ v: V, module_version: "1", devtools_cmdline: flag }), { ok: true, value: { v: V, module_version: "1" } });
+  const table_for = (hello: Record<string, unknown>) => [...DEVTOOLS_TREE_KEYS, ...DEVTOOLS_FLAGGED_KEYS.flatMap(({ flag, keys }) => (hello[flag] === true ? keys : []))];
+  const tools_hello = { devtools_hints: true, devtools_visual: true, devtools_search: true, devtools_tools: true };
+  assert.equal(table_for(tools_hello).some(({ action }) => action === "cmdline.open"), false, "a module without the flag gets no row it would refuse the table for");
+  assert.ok(table_for({ ...tools_hello, devtools_cmdline: true }).length <= MAX_DEVTOOLS_KEY_ROWS);
+  assert.ok(validate_message({ v: V, id: "c1", kind: "devtools.keys", args: { keys: table_for({ ...tools_hello, devtools_cmdline: true }) } }, EXTENSION_TO_MODULE_KINDS).ok);
+  assert.deepEqual(MODULE_TO_EXTENSION_KINDS["devtools_cmdline.ask"], { args: { tab_id: "optional_int" }, reply: true, max_bytes: 256 });
+  const ask = (args: unknown) => validate_message({ v: V, id: "a1", kind: "devtools_cmdline.ask", args, sent_at: Date.now() }, MODULE_TO_EXTENSION_KINDS).ok;
+  assert.ok(ask({ tab_id: 3 }));
+  assert.ok(ask({}));
+  assert.equal(ask({ tab_id: "3" }), false);
+  assert.equal(ask({ tab_id: 3.5 }), false);
 });
 
 test("the DevTools hint rows match the chrome hint rows they stand beside, and the ask is a small call with a reply, as chrome_hints.want is", () => {
