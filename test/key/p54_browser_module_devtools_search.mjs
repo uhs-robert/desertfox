@@ -1,6 +1,7 @@
-// The browser module's Inspector search keys, with the private Firefox.
+// The browser module's Inspector search keys and the console's double Escape, with the private Firefox.
 // Search: `/` focuses the Search HTML box, `n` and `N` press DevTools' own match buttons, in the box's place and after it lost the focus, and Escape in the box keeps its text and selects the node of before `/` again.
 // Also each way the kept node goes: a click that focused the box, the box losing the focus, the node gone from the page, the page reloaded and the module pref turned off and on.
+// Console: Escape never reaches CodeMirror's Vim keymap in the console input, one Escape stays the console's, and two close together move the focus to the console output.
 import { module_steps } from "./browser_module_steps.mjs";
 
 export const areas = ["tabs", "keys"];
@@ -12,6 +13,7 @@ const INSPECTOR = `${TOOLBOX} const inspector = tb.getPanel("inspector"); const 
 // A trusted mouse press on an element's middle, as a user's click, so the focus moves through every frame on the way.
 const CLICK = `const click = (element) => { const r = element.getBoundingClientRect(); const view = element.ownerDocument.defaultView; for (const [type, buttons] of [["mousedown", 1], ["mouseup", 0]]) view.synthesizeMouseEvent(type, r.left + Math.min(r.width / 2, 40), r.top + r.height / 2, { button: 0, buttons, clickCount: 1, modifiers: 0 }, { isDOMEventSynthesized: false, isWidgetEventSynthesized: false }); };`;
 const PAGE = `data:text/html,${encodeURIComponent("<!doctype html><title>search</title><main><section id='sec'><p>one</p></section><p class='hit' id='h1'>a</p><p class='hit' id='h2'>b</p></main>")}`;
+const VIM_PREF = "devtools.editor.keymap";
 
 export async function run_cases(context) {
   const { run_case, setup, expect, poll_until, press_keys, on_teardown, sleep } = context;
@@ -193,5 +195,68 @@ export async function run_cases(context) {
     await press_keys("-k", "Escape");
     await wait_for("Escape selects the node of before /", selected, "sec");
     await wait_for("Escape focuses the markup view", in_markup, true);
+  });
+
+  // ---- The console's double Escape.
+  const console_text = () => chrome(`(async () => { ${TOOLBOX} return tb.getPanel("webconsole").hud.ui.jsterm._getValue(); })()`);
+  async function open_console(id, { vim = false } = {}) {
+    if (vim) {
+      on_teardown(() => chrome(`(async () => { Services.prefs.clearUserPref(${JSON.stringify(VIM_PREF)}); })()`));
+      await chrome(`(async () => { Services.prefs.setStringPref(${JSON.stringify(VIM_PREF)}, "vim"); })()`);
+    }
+    await home(`bm_dtc_${id}`);
+    await open_tab(PAGE);
+    await show_tool("webconsole");
+    await chrome(`(async () => { ${TOOLBOX} const hud = tb.getPanel("webconsole").hud; hud.ui.outputNode.ownerDocument.defaultView.focus(); hud.ui.jsterm.focus(); })()`);
+    await wait_for("the focus in the console input", async () => (await focused()).in_console_input, true);
+  }
+
+  await run_case("console with the Vim keymap: Escape never reaches Vim in the input, Ctrl+C still leaves insert mode, and a double Escape moves the focus out", async () => {
+    await open_console("vim", { vim: true });
+    await press_keys("i", "a", "b", "-k", "Escape", "x");
+    // With Escape at Vim, x in normal mode would delete the b.
+    await wait_for("the input after i a b Escape x", console_text, "abx");
+    await press_keys("-M", "ctrl", "c", "-m", "ctrl", "x");
+    await wait_for("x after Ctrl+C deletes in normal mode", console_text, "ab");
+    expect((await focused()).in_console_input, `a single Escape or Ctrl+C moved the focus: ${await where()}`);
+    await press_keys("-k", "Escape", "-k", "Escape");
+    await wait_for("a double Escape leaves the input", async () => (await focused()).in_console_input, false);
+    expect((await focused()).url === "index.html", `the focus left the console: ${await where()}`);
+    expect((await console_text()) === "ab", `the double Escape changed the input to ${JSON.stringify(await console_text())}`);
+    await expect_no_errors("the console with Vim");
+  });
+
+  await run_case("console: one Escape keeps the focus in the input, two close together move it to the console output, two far apart do not", async () => {
+    await open_console("plain");
+    // The first key typed in this case went missing in three runs on Firefox 161 (the module takes no letter in the input), so the check compares the text before and after the Escapes.
+    await press_keys("a", "1", "b");
+    await poll_until("b to type in the input", async () => (await console_text()).endsWith("b"), { timeout_ms: 3000 });
+    const typed = await console_text();
+    await press_keys("-k", "Escape");
+    await sleep(500);
+    expect((await focused()).in_console_input, `one Escape moved the focus: ${await where()}`);
+    expect((await console_text()) === typed, `one Escape changed the input to ${JSON.stringify(await console_text())}`);
+    await press_keys("-k", "Escape");
+    await sleep(500);
+    expect((await focused()).in_console_input, `two Escapes 500 ms apart moved the focus: ${await where()}`);
+    expect((await console_text()) === typed, `two Escapes 500 ms apart changed the input to ${JSON.stringify(await console_text())}`);
+    await press_keys("-k", "Escape", "-k", "Escape");
+    await wait_for("a double Escape leaves the input", async () => (await focused()).in_console_input, false);
+    expect((await focused()).url === "index.html", `the focus left the console: ${await where()}`);
+    expect((await console_text()) === typed, `the double Escape changed the input to ${JSON.stringify(await console_text())}`);
+  });
+
+  await run_case("console: a tool switch between the two Escapes starts over, and the split console under the Inspector keeps its Escape", async () => {
+    await open_console("switch");
+    await press_keys("-k", "Escape");
+    await chrome(`(async () => { ${TOOLBOX} await tb.selectTool("inspector"); await tb.selectTool("webconsole"); const hud = tb.getPanel("webconsole").hud; hud.ui.outputNode.ownerDocument.defaultView.focus(); hud.ui.jsterm.focus(); })()`);
+    await press_keys("-k", "Escape");
+    await sleep(500);
+    expect((await focused()).in_console_input, `an Escape before and after a tool switch moved the focus: ${await where()}`);
+    await chrome(`(async () => { ${TOOLBOX} await tb.selectTool("inspector"); await tb.openSplitConsole(); const hud = tb.getPanel("webconsole").hud; hud.ui.outputNode.ownerDocument.defaultView.focus(); hud.ui.jsterm.focus(); })()`);
+    await wait_for("the focus in the split console input", async () => (await focused()).in_console_input, true);
+    await press_keys("-k", "Escape");
+    await wait_for("Escape closes the split console", split_open, false);
+    await expect_no_errors("the tool switch");
   });
 }

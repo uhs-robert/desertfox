@@ -1,5 +1,5 @@
-// The Inspector search keys, the module's half (browser_module/desertfox-devtools.js), against a small stand-in for a docked toolbox.
-// It drives each rule and each way the kept markup line goes: a click, a blur, a node gone, an unload, a new hello, the pref off and a shut down.
+// The Inspector search keys and the console's double Escape, the module's half (browser_module/desertfox-devtools.js), against a small stand-in for a docked toolbox.
+// It drives each owner rule and each way the kept markup line or the first Escape goes: a click, a blur, a node gone, an unload, a tool switch, a new hello, the pref off and a shut down.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as protocol from "../../src/shared/browser_module_protocol.ts";
@@ -277,3 +277,84 @@ test("Escape in the box stays DevTools' while the suggestion popup shows, with a
   assert.equal(older.press("Escape", older.dom.box), false, "Escape without the search rows");
 });
 
+// ---- The console's double Escape.
+
+async function in_console(table: unknown = TABLE) {
+  const fixture = started({ table });
+  await settle();
+  fixture.dom.select_tool("webconsole");
+  fixture.dom.webconsole.focus_on(fixture.dom.input);
+  return fixture;
+}
+
+test("two Escapes in the console input 400 ms apart or less move the focus out of it, and one Escape or two far apart go on", async () => {
+  const { dom, press } = await in_console();
+  assert.equal(press("Escape", dom.input), false, "the first Escape");
+  assert.equal(press("Escape", dom.input, { after_ms: 401 }), false, "401 ms later");
+  assert.equal(dom.webconsole.activeElement, dom.input);
+  assert.equal(press("Escape", dom.input, { after_ms: 400 }), true, "400 ms later");
+  assert.equal(dom.webconsole.activeElement, null, "the input let the focus go");
+  assert.equal(dom.webconsole.view.focused, 1, "the console document keeps it");
+  // The taken Escape starts nothing: a third close one goes on.
+  dom.webconsole.focus_on(dom.input);
+  assert.equal(press("Escape", dom.input, { after_ms: 100 }), false);
+});
+
+test("a key, the input's blur, the console's unload or a new hello between the two Escapes starts over, and a modifier alone does not", async () => {
+  const between = {
+    key: ({ dom, press }: ReturnType<typeof started>) => press("a", dom.input, { after_ms: 10 }),
+    blur: ({ dom }: ReturnType<typeof started>) => {
+      dom.webconsole.focus_on(null);
+      dom.webconsole.focus_on(dom.input);
+    },
+    unload: ({ dom }: ReturnType<typeof started>) => dom.webconsole.view.fire("pagehide"),
+    hello: ({ firefox, push }: ReturnType<typeof started>) => {
+      firefox.start_extension();
+      firefox.write_state(STATE);
+      push(TABLE);
+    },
+  };
+  for (const [name, step] of Object.entries(between)) {
+    const fixture = await in_console();
+    assert.equal(fixture.press("Escape", fixture.dom.input), false);
+    step(fixture);
+    await settle();
+    assert.equal(fixture.press("Escape", fixture.dom.input, { after_ms: 50 }), false, name);
+    assert.equal(fixture.dom.input.listener_total(), 1, `${name}: only the newest first Escape listens`);
+  }
+  const { dom, press } = await in_console();
+  press("Escape", dom.input);
+  press("Shift", dom.input, { after_ms: 10 });
+  assert.equal(press("Escape", dom.input, { after_ms: 10 }), true, "Shift alone between");
+});
+
+test("the double Escape is the Console tool's only: not in the split console, with the popup open, in a Vim prompt, with a modifier, held down, or without a table", async () => {
+  const cases = {
+    split: (fixture: ReturnType<typeof started>) => fixture.dom.select_tool("inspector"),
+    popup: (fixture: ReturnType<typeof started>) => fixture.dom.show_popup(true),
+  };
+  for (const [name, step] of Object.entries(cases)) {
+    const { dom, press, ...rest } = await in_console();
+    step({ dom, press, ...rest });
+    press("Escape", dom.input);
+    assert.equal(press("Escape", dom.input, { after_ms: 50 }), false, name);
+  }
+  const { dom, press } = await in_console();
+  press("Escape", dom.prompt);
+  assert.equal(press("Escape", dom.prompt, { after_ms: 50 }), false, "a Vim prompt");
+  press("Escape", dom.input, { ctrlKey: true });
+  assert.equal(press("Escape", dom.input, { after_ms: 50, ctrlKey: true }), false, "Ctrl");
+  press("Escape", dom.input);
+  assert.equal(press("Escape", dom.input, { after_ms: 30, repeat: true }), false, "a held Escape");
+  const bare = await in_console(null);
+  bare.press("Escape", bare.dom.input);
+  assert.equal(bare.press("Escape", bare.dom.input, { after_ms: 50 }), false, "no table pushed");
+});
+
+test("a shut down between the two Escapes drops the first one's listeners", async () => {
+  const { dom, press, firefox } = await in_console();
+  press("Escape", dom.input);
+  assert.equal(dom.input.listener_total() + dom.webconsole.view.listener_total(), 2);
+  (firefox.Services.desertfox_browser_module as { shut_down(): void }).shut_down();
+  assert.equal(dom.input.listener_total() + dom.webconsole.view.listener_total(), 0);
+});

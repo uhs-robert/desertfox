@@ -1,8 +1,8 @@
-// DesertFox browser module, the DevTools feature: tree keys, hints, visual mode, and the Inspector search keys in docked DevTools and in DevTools windows. See docs/design/browser_module.md.
+// DesertFox browser module, the DevTools feature: tree keys, hints, visual mode, the Inspector search keys and the console's double Escape in docked DevTools and in DevTools windows. See docs/design/browser_module.md.
 // The extension pushes the key table (`devtools.keys`), a one-character key and a fixed action per row. Each tree action becomes an arrow key on the focused DevTools element, so a DevTools tree (the Inspector markup, the Debugger sources, Storage, Network rows) moves, expands and collapses as its own arrows make it.
 // The `hints.start` action asks the extension for hints (`devtools_hints.ask`). The hints work as chrome hints do: this file collects targets from a fixed table and sends only ids and boxes, the extension makes the labels and names the pick, and this file draws them and runs one fixed action per target.
 // The `visual.start` action starts visual mode in the focused text area. Its keys come in a second table (`devtools.visual_keys`), each a fixed op that moves the end of the selection or copies it. The copy stays in this process.
-// The `search.` actions focus the Inspector's search box and press its match buttons. Escape in that box is a fixed key of this file, as Escape in the hints and the mode is.
+// The `search.` actions focus the Inspector's search box and press its match buttons. Escape in that box and a double Escape in the console input are fixed keys of this file, as Escape in the hints and the mode is.
 // No DesertFox page code runs in DevTools: every DevTools document has the system principal, so code there runs as the browser. This file reads no DevTools internals either, only the focused element and the elements of its fixed table.
 // The core decides that the focus is in DevTools and that the module may act. This file passes a key it has no row for, a key with a modifier, a key typed in an editable field (the console input, the markup view's inline editors) and a key for a frame of another process, so DevTools keeps those.
 
@@ -110,12 +110,14 @@
     const hints = define_hints(core);
     const visual = define_visual(core, in_editable);
     const search = define_search(core);
+    const console_escape = define_console_escape(core);
     // A reloaded or older DesertFox gets a new hello. The tables, the hints and the mode of the one before go, so only a DesertFox that pushes its own table gets these keys.
     core.on_hello(() => {
       actions = new Map();
       hints.end();
       visual.forget();
       search.forget();
+      console_escape.forget();
     });
     // The pref has its own observer in each feature. The consent setting and the toolbar switch reach the module only through the state, and then no key comes to end the hints or the mode.
     core.watch_session([MODULE_STATE_KEY], (_key, state) => {
@@ -136,7 +138,8 @@
       const taken_by_visual = visual.answer_key(win, event, token);
       if (taken_by_visual !== undefined) return taken_by_visual;
       const target = event.originalTarget ?? event.target;
-      // Escape is no row, since a row is one character. The search box's Escape belongs to the search rows, and runs before the field check, as it starts in a field.
+      // Escape is no row, since a row is one character. Each Escape below belongs to a feature the pushed table turned on, and runs before the field check, as both start in a field.
+      if (console_escape.answer_key(event, target, actions.size > 0)) return true;
       if (search.answer_escape(event, target, [...actions.values()].some((action) => search.ACTIONS.has(action)))) return true;
       if (event.ctrlKey || event.altKey || event.metaKey) return false;
       const action = actions.get(token);
@@ -245,6 +248,59 @@
     core.set_hello_flag("devtools_search", true);
 
     return { ACTIONS, run, answer_escape, forget };
+  }
+
+  // ---- A double Escape in the console input.
+  // Two Escapes in the console input, close together, move the focus to the console output, so the DevTools keys work again. A single Escape goes on to the console as before.
+  // The console's editor maps Escape to nothing, so CodeMirror's Vim keymap never gets it there (measured on Firefox 161), and the first Escape costs Vim nothing.
+  // Only in the Console tool: under another tool the split console closes on Escape. Not while the console's suggestion popup shows, which Escape hides, nor in a Vim prompt, which ends on Escape.
+  function define_console_escape(core) {
+    const CONSOLE_URL = "chrome://devtools/content/webconsole/index.html";
+    const DOUBLE_MS = 400;
+    const CONSOLE_TAB = "#toolbox-tab-webconsole";
+    const OPEN_POPUP = ".tooltip-visible .devtools-autocomplete-popup";
+
+    // The first Escape: where and when. It ends on any other key, the input's blur and the console's unload, so the toolbox closing or switching tools between the two Escapes starts over.
+    let first = null;
+
+    function forget() {
+      const ended = first;
+      if (!ended) return;
+      first = null;
+      undo_all(ended);
+    }
+
+    // True when `target` is the console input of the Console tool, where an Escape may count.
+    function counts_in_console(target) {
+      const doc = target?.ownerDocument;
+      if (!String(doc?.documentURI).startsWith(CONSOLE_URL) || typeof target.closest !== "function") return false;
+      if (!target.closest(".CodeMirror")?.closest(".jsterm-input-container") || target.closest(".CodeMirror-dialog")) return false;
+      const toolbox = toolbox_of(target);
+      return !!toolbox?.querySelector(CONSOLE_TAB)?.classList.contains("selected") && !toolbox.querySelector(OPEN_POPUP);
+    }
+
+    // Each key in DevTools passes here: true to take it. Only the second Escape is taken.
+    function answer_key(event, target, on) {
+      if (MODIFIER_KEYS.has(event.key)) return false;
+      const before = first;
+      forget();
+      const plain_escape = event.key === "Escape" && !(event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.repeat);
+      if (!on || !plain_escape || !counts_in_console(target)) return false;
+      const gap = event.timeStamp - (before?.at ?? -Infinity);
+      if (before?.target === target && gap >= 0 && gap <= DOUBLE_MS) {
+        // The console output takes no focus itself, so the input lets the focus go and the console document keeps it. The hints' `focus` step is skipped on purpose: it focuses the output's first focusable child, which can scroll a long console to its top.
+        target.ownerDocument.defaultView.focus();
+        target.blur();
+        return true;
+      }
+      first = { target, at: event.timeStamp, undo: [] };
+      listen(first, target, "blur", forget);
+      listen(first, target.ownerDocument.defaultView, "pagehide", forget);
+      return false;
+    }
+
+    core.on_shut_down(forget);
+    return { answer_key, forget };
   }
 
   // ---- Hints over DevTools.
