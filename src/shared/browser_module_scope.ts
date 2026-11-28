@@ -65,7 +65,7 @@ export function native_leaf(leaf: TreeLeaf, check_args: CheckCommandArgs): Nativ
 // A leaf that starts hints, which run only in DesertFox's page code.
 export const is_hint_leaf = (leaf: TreeLeaf): boolean => leaf.steps.some((step) => step.invocation.id === "hint.run");
 
-// A forward leaf after which the line opens: the bare `:`, or a key whose command prompts for a value (`o`).
+// A forward leaf after which the line opens: a line key (`:`, `tM`), or a key whose command prompts for a value (`o`).
 const prompts_or_opens_line = (leaf: TreeLeaf, allowed: ReadonlySet<string>): boolean => opens_line_leaf(leaf, allowed) || leaf.steps.some((step) => step.invocation.prompt !== undefined);
 
 type Pruning = { allowed: ReadonlySet<string>; check_args: CheckCommandArgs; line_keys: string[]; hint_keys: string[] };
