@@ -1,7 +1,8 @@
 // DesertFox browser module, the content hints route: hints on pages in a content process that no content script reaches, the hosts of Firefox's restricted list (extensions.webextensions.restrictedDomains) and Firefox's start pages (about:privatebrowsing, about:home, about:newtab in the privilegedabout process) and its error pages (about:neterror, about:certerror, about:httpsonlyerror, about:blocked in a web process).
 // Chrome hints (desertfox-chrome-hints.js) run the session there as on its own pages: the start token, the spelled label, the window layer, the Enter of a grant and the key hold. This file lends them the page rule and the transport through the core's `share_content_pages`.
 //
-// The trust rule: the frame script below collects the page's targets and keeps them in its own map. It sends chrome only an id, a box and a flag mask per target, and for a link action one link address.
+// The trust rule: the frame script below collects the page's targets and keeps them in its own map. It sends chrome only an id, a box, a flag mask and a short text per target, and for a link action one link address.
+// The text is what text mode (`/`) matches: the target's shown text or name, cut and stripped of control and format characters, and never a field's own text.
 // Chrome draws the labels in its own layer, clipped to the tab's content area, and never clicks. Every click and focus runs in the frame script on an element it collected, after it checks the element again.
 // A target that waits for Enter runs only with `confirmed: true`, which chrome hints send only from the user's own Enter.
 //
@@ -189,7 +190,8 @@
     });
 
     // The frame script's rows as targets in the window's own pixels, each clipped to the tab's content area. One bad row drops the whole reply. A row whose center falls outside the area is left out.
-    function mapped_targets(win, browser, { dpr, rows }) {
+    // `texts` sits beside the rows, one text or null each. Chrome hints clean each text again. A list that does not fit the rows leaves every target without a text.
+    function mapped_targets(win, browser, { dpr, rows, texts }) {
       if (!Array.isArray(rows) || rows.length > MAX_TARGETS || typeof dpr !== "number" || !(dpr > 0 && dpr <= MAX_PIXEL_RATIO)) return undefined;
       const area = browser.getBoundingClientRect();
       const scale = dpr / (win.devicePixelRatio || 1);
@@ -198,7 +200,8 @@
       const max_height = area.height / scale + 1;
       const seen = new Set();
       const targets = [];
-      for (const row of rows) {
+      const texts_fit = Array.isArray(texts) && texts.length === rows.length;
+      for (const [index, row] of rows.entries()) {
         if (!Array.isArray(row) || row.length !== 6 || !row.every(Number.isFinite)) return undefined;
         const [id, left, top, width, height, flags] = row;
         if (!Number.isSafeInteger(id) || seen.has(id) || !Number.isInteger(flags) || flags < 0 || flags > ALL_BITS) return undefined;
@@ -211,7 +214,8 @@
         const clipped_left = Math.max(box.left, area.left);
         const clipped_top = Math.max(box.top, area.top);
         const clipped = { left: clipped_left, top: clipped_top, width: Math.min(box.left + box.width, area.left + area.width) - clipped_left, height: Math.min(box.top + box.height, area.top + area.height) - clipped_top };
-        targets.push({ remote_id: id, box: clipped, grants: (flags & GRANTS_BIT) !== 0, place: "window" });
+        const text = texts_fit && typeof texts[index] === "string" ? texts[index] : undefined;
+        targets.push({ remote_id: id, box: clipped, grants: (flags & GRANTS_BIT) !== 0, place: "window", text });
       }
       return targets;
     }
@@ -279,11 +283,18 @@
       return { targets, remote: remote_session(browser, inner, req) };
     }
 
-    // The links of the tab's page as raw [address, text] pairs, for the page links feature, which caps and checks them again. A page the route never labels gives an error the user reads.
+    // The PDF viewer and Reader View run no hint row, so the route never labels them. The links read asks the frame script of such a tab anyway, and the frame script checks the principal itself.
+    function viewer_kind(browser) {
+      if (String(browser.currentURI?.spec ?? "").startsWith("about:reader?")) return "reader";
+      return browser.documentContentType === "application/pdf" ? "pdf" : undefined;
+    }
+
+    // The links of the tab's page as raw [address, text] pairs, for the page links feature, which caps and checks them again. A page the route never labels, and that is no PDF or Reader View page, gives an error the user reads.
     async function links(browser, scope) {
-      if (labels(browser) === undefined) return { ok: false, error: LINKS_NOT_HERE };
+      const kind = viewer_kind(browser) ?? labels(browser);
+      if (kind === undefined) return { ok: false, error: LINKS_NOT_HERE };
       const inner = browser.innerWindowID;
-      const { reply } = ask(browser, inner, "links", { kind: labels(browser), scope }, "linked");
+      const { reply } = ask(browser, inner, "links", { kind, scope }, "linked");
       const data = await reply;
       if (data?.error === "not_here") return { ok: false, error: LINKS_NOT_HERE };
       if (!data || data.error !== undefined || !Array.isArray(data.pairs) || browser.innerWindowID !== inner) return { ok: false, error: PAGE_CHANGED };
@@ -318,6 +329,9 @@
     const CANDIDATES = "a, area, button, input, select, textarea, summary, [role], [contenteditable]";
     const ROLES = new Set(["button", "link", "checkbox", "switch", "menuitem", "menuitemcheckbox", "menuitemradio", "radio", "tab", "option", "combobox", "textbox"]);
     const TEXT_INPUT = /^(?:text|search|email|url|tel|number|date|datetime-local|month|week|time)$/;
+    // CHROME_HINT_TEXT_CHARS of the protocol, and a bound on all the texts of a reply, so the reply stays under chrome's MAX_REPLY_BYTES: a UTF-16 unit takes at most 3 bytes of UTF-8, so these take at most 24 KB.
+    const MAX_TEXT_CHARS = 64;
+    const MAX_TEXTS_CHARS = 8192;
     const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
     const module_on = () => {
@@ -391,6 +405,18 @@
       // Only a plain link acts at once. Try Again, Go Back, Advanced, Accept the Risk and Continue to HTTP Site all wait for Enter.
       error_page: { matches: error_page, acts_at_once: plain_link },
     };
+
+    // The text text mode matches, as chrome hints read it in their own process: the shown text, else the name. A field's own text is what the user typed, so a field has only its name.
+    function text_of(element) {
+      const named = [element.getAttribute("aria-label"), element.getAttribute("title"), element.getAttribute("placeholder")];
+      const own = text_field(element) ? [] : [element.innerText ?? element.textContent, ["button", "submit", "reset"].includes(element.type) ? element.value : undefined];
+      for (const raw of [...own, ...named]) {
+        if (typeof raw !== "string") continue;
+        const text = [...raw.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim()].slice(0, MAX_TEXT_CHARS).join("").trim();
+        if (text !== "") return text;
+      }
+      return null;
+    }
 
     const flags_of = (element, page) => (page.acts_at_once(element) ? 0 : GRANTS_BIT) | (text_field(element) ? FIELD_BIT : 0) | (plain_link(element) ? LINK_BIT : 0);
     // What a target must still be at its pick.
@@ -479,15 +505,20 @@
       end_session();
       const targets = new Map();
       const rows = [];
+      const texts = [];
+      let text_chars = 0;
       for (const target of found) {
         const id = next_id++;
         targets.set(id, target);
         const { shown } = target;
         rows.push([id, shown.left, shown.top, shown.width, shown.height, target.flags]);
+        const text = text_of(target.element);
+        text_chars += text?.length ?? 0;
+        texts.push(text_chars <= MAX_TEXTS_CHARS ? text : null);
       }
       session = { req, inner, action, page, targets, url: content.location.href, timer: setTimeout(() => on_gone_event({ type: "idle" }), IDLE_MS) };
       for (const type of GONE_EVENTS) addEventListener(type, on_gone_event, true);
-      return rows;
+      return { rows, texts };
     }
 
     addMessageListener(MESSAGE_PREFIX + "collect", ({ data }) => {
@@ -506,7 +537,7 @@
         if (deep_all(doc, "input").some((element) => element.type === "password")) return reply({ error: "login_form" });
         const found = collect_targets(win, doc, typeof action === "string" ? action : "follow", page);
         if (found.length === 0) return reply({ error: "nothing" });
-        reply({ dpr: win.devicePixelRatio, rows: begin_session(req, inner, action, page, found) });
+        reply({ dpr: win.devicePixelRatio, ...begin_session(req, inner, action, page, found) });
       } catch (_) {
         end_session();
         reply({ error: "changed" });
@@ -551,11 +582,16 @@
     const LINK_ADDRESS = /^(?:https?|ftp|file):\S*$/i;
     const link_label = (element) => [...String(element.innerText || element.getAttribute("aria-label") || element.getAttribute("title") || "").replace(/\s+/g, " ").trim()].slice(0, MAX_LINK_TEXT_CHARS).join("");
     const without_fragment = (address) => String(address).split("#")[0];
-    function page_links(win, doc, link_scope) {
+    // Pages whose links are read but whose controls hints never touch (page code is off there). The PDF viewer's links are the annotation layer of the pages it has drawn, and its toolbar and dialogs hold none that count.
+    const LINK_PAGES = {
+      pdf: { selector: ".annotationLayer a[href]", matches: (doc) => !doc.nodePrincipal?.isSystemPrincipal && !doc.nodePrincipal?.addonId && doc.nodePrincipal?.spec.startsWith("resource://pdf.js/") },
+      reader: { selector: "a[href]", matches: (doc) => !doc.nodePrincipal?.isSystemPrincipal && !doc.nodePrincipal?.addonId && doc.nodePrincipal?.spec.startsWith("about:reader?") && doc.documentURI.startsWith("about:reader?") },
+    };
+    function page_links(win, doc, link_scope, selector = "a[href]") {
       const pairs = [];
       const seen = new Set();
       let bytes = 2;
-      for (const element of deep_all(doc, "a[href]")) {
+      for (const element of deep_all(doc, selector)) {
         const address = String(element.href ?? "");
         if (address.length > MAX_LINK_ADDRESS_CHARS || !LINK_ADDRESS.test(address) || seen.has(address)) continue;
         if (address.includes("#") && without_fragment(address) === without_fragment(doc.URL)) continue;
@@ -582,9 +618,10 @@
         const win = content;
         const doc = win?.document;
         if (!module_on() || inner_of(win) !== inner || (link_scope !== "page" && link_scope !== "viewport")) return reply({ error: "changed" });
-        const page = typeof kind === "string" && Object.hasOwn(CONTENT_PAGES, kind) ? CONTENT_PAGES[kind] : undefined;
+        const pages = typeof kind === "string" ? [CONTENT_PAGES, LINK_PAGES].find((table) => Object.hasOwn(table, kind)) : undefined;
+        const page = pages?.[kind];
         if (!page || !page.matches(doc)) return reply({ error: "not_here" });
-        reply({ pairs: page_links(win, doc, link_scope) });
+        reply({ pairs: page_links(win, doc, link_scope, page.selector) });
       } catch (_) {
         reply({ error: "changed" });
       }
