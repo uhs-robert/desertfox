@@ -26,8 +26,8 @@
     // A resize step, as a share of the panel area. pane.resize in src/commands/tab_split.ts says the same.
     const STEP_SHARE = 0.05;
     const DOCKED_HOSTS = ["bottom", "left", "right"];
-    // DevTools' switchHost settles on its own "host-changed" event, which never comes when the move fails inside DevTools. The extension stops waiting at 2 s.
-    const SWITCH_HOST_WAIT_MS = 1500;
+    // DevTools' switchHost settles on its own "host-changed" event, which never comes when the move fails inside DevTools. The extension stops waiting at 2 s, so this answers first.
+    const SWITCH_HOST_WAIT_MS = 1800;
 
     const NOT_SUPPORTED = "Not supported in this Firefox version";
     const refuse = (error) => ({ ok: false, error });
@@ -321,21 +321,8 @@
     function focus_place({ win, tab }) {
       if (!has_function(core, "focused_element")) return { problem: NOT_SUPPORTED };
       const element = core.focused_element(win);
-      if (in_toolbox_frame(win, element)) return docked_toolbox(tab);
+      if (has_function(core, "toolbox_place") && core.toolbox_place(win, element) === "docked") return docked_toolbox(tab);
       return in_sidebar(win, element) ? { sidebar: true } : {};
-    }
-
-    // The core's DevTools key guard reads it the same way: a document under the frame that DevTools docks in a tab.
-    function in_toolbox_frame(win, element) {
-      let doc = element?.ownerDocument;
-      for (let depth = 0; doc && doc !== win.document && depth < 8; depth++) {
-        // frameElement is null across the <browser> that holds a docked toolbox, so its embedder names that frame.
-        const frame = doc.defaultView?.frameElement ?? doc.defaultView?.browsingContext?.embedderElement;
-        if (!frame) return false;
-        if (frame.classList?.contains("devtools-toolbox-iframe")) return true;
-        doc = frame.ownerDocument;
-      }
-      return false;
     }
 
     // The sidebar panel's document, the launcher (its buttons sit in a shadow root) or the vertical tab strip.
@@ -350,22 +337,37 @@
       return false;
     }
 
+    // The windows whose toolbox has a switchHost still running. It leaves the set when that call settles, even after the cap gave its answer, so a second move never overlaps a switch in flight.
+    const moving = new WeakSet();
+
     // DevTools gives the focus back to its tool once the host changed.
     async function redock(win, toolbox, direction) {
       const host = direction === "down" ? "bottom" : direction;
+      if (moving.has(win)) return refuse("DevTools is still moving");
       if (toolbox.hostType === host) return refuse(`DevTools is already docked ${SIDE_WORDS[direction]}`);
       if (!has_function(toolbox, "switchHost") || !has_function(win, "setTimeout")) return refuse(NOT_SUPPORTED);
+      moving.add(win);
+      const switched = (async () => {
+        try {
+          await toolbox.switchHost(host);
+          return {};
+        } catch (error) {
+          return { error };
+        } finally {
+          moving.delete(win);
+        }
+      })();
       let timer;
-      try {
-        const gave_up = new Promise((resolve) => (timer = win.setTimeout(() => resolve("gave up"), SWITCH_HOST_WAIT_MS)));
-        if ((await Promise.race([toolbox.switchHost(host), gave_up])) === "gave up") return refuse("DevTools did not finish moving");
-      } catch (error) {
-        core.log_once(`DevTools refused to dock ${host}: ${error}`);
+      const gave_up = new Promise((resolve) => (timer = win.setTimeout(() => resolve({ gave_up: true }), SWITCH_HOST_WAIT_MS)));
+      const outcome = await Promise.race([switched, gave_up]);
+      win.clearTimeout?.(timer);
+      if (outcome.error) {
+        core.log_once(`DevTools refused to dock ${host}: ${outcome.error}`);
         return refuse(`DevTools could not dock ${SIDE_WORDS[direction]}`);
-      } finally {
-        win.clearTimeout?.(timer);
       }
-      return toolbox.hostType === host ? done() : refuse(`DevTools could not dock ${SIDE_WORDS[direction]}`);
+      // After the cap the switch may still land, so the host decides, read now.
+      if (toolbox.hostType === host) return done();
+      return refuse(outcome.gave_up ? "DevTools did not finish moving" : `DevTools could not dock ${SIDE_WORDS[direction]}`);
     }
 
     // reversePosition flips the global pref `sidebar.position_start`, so every window's sidebar moves. Only a focus in the sidebar reaches it.

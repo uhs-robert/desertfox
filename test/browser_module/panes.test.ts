@@ -664,14 +664,71 @@ test("pane.move in DevTools reports a switchHost that throws, rejects, never set
   world.toolbox.switchHost = () => null;
   assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("DevTools could not dock on the right"));
   world.toolbox.switchHost = () => new Promise(() => undefined);
-  const pending = world.ask("pane.move", { direction: "left" });
-  for (let turn = 0; turn < 3; turn++) await new Promise((resolve) => setImmediate(resolve));
-  world.window.run_timers();
-  assert.deepEqual(await pending, refused("DevTools did not finish moving"));
   world.toolbox.switchHost = undefined;
   assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused(NOT_SUPPORTED));
   assert.equal(world.toolbox.hostType, "bottom");
   assert.deepEqual(plain(world.firefox.errors).filter((line) => line.includes("dock")), ["DesertFox browser module: DevTools refused to dock left: Error: no host", "DesertFox browser module: DevTools refused to dock left: Error: host gone"]);
+});
+
+const next_turns = async () => {
+  for (let turn = 0; turn < 3; turn++) await new Promise((resolve) => setImmediate(resolve));
+};
+
+test("pane.move in DevTools refuses a second move while the first runs, and runs again once it settled", async () => {
+  const world = pane_world();
+  world.focus_on("devtools");
+  let settle: () => void = () => undefined;
+  let switches = 0;
+  world.toolbox.switchHost = (host: string) => {
+    switches++;
+    return new Promise<void>((resolve) => {
+      settle = () => {
+        world.toolbox.hostType = host;
+        resolve();
+      };
+    });
+  };
+  const first = world.ask("pane.move", { direction: "left" });
+  await new Promise((resolve) => setImmediate(resolve));
+  const second = world.ask("pane.move", { direction: "right" });
+  await new Promise((resolve) => setImmediate(resolve));
+  settle();
+  assert.deepEqual(await first, OK);
+  assert.deepEqual(await second, refused("DevTools is still moving"));
+  assert.equal(switches, 1);
+  world.toolbox.switchHost = async (host: string) => void (world.toolbox.hostType = host);
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), OK);
+});
+
+test("pane.move in DevTools answers done for a switch that lands after the cap and keeps refusing until it settles", async () => {
+  const world = pane_world();
+  world.focus_on("devtools");
+  let settle: () => void = () => undefined;
+  world.toolbox.switchHost = (host: string) =>
+    new Promise<void>((resolve) => {
+      settle = () => {
+        world.toolbox.hostType = host;
+        resolve();
+      };
+    });
+  const capped = world.ask("pane.move", { direction: "left" });
+  await next_turns();
+  world.window.run_timers();
+  assert.deepEqual(await capped, refused("DevTools did not finish moving"));
+  assert.deepEqual(await world.ask("pane.move", { direction: "right" }), refused("DevTools is still moving"));
+  settle();
+  await next_turns();
+  assert.deepEqual(await world.ask("pane.move", { direction: "left" }), refused("DevTools is already docked on the left"));
+  // A switch that lands in the turn the cap fires counts as moved, with no false "did not finish".
+  world.toolbox.hostType = "bottom";
+  world.toolbox.switchHost = (host: string) =>
+    new Promise<void>(() => {
+      world.toolbox.hostType = host;
+    });
+  const landed = world.ask("pane.move", { direction: "right" });
+  await next_turns();
+  world.window.run_timers();
+  assert.deepEqual(await landed, OK);
 });
 
 test("pane.move with the focus in a DevTools frame that is not docked here gives the DevTools refusal", async () => {

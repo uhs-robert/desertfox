@@ -48,6 +48,7 @@
 //   is_field(element)          In the sandbox: whether `element` is a text field, the rule the core's own key gate uses.
 //   deep_active(doc)           In the sandbox: the element with the focus in `doc`, followed into shadow roots.
 //   focused_element(win)       In the sandbox: the element with the focus in `win`, followed into shadow roots and frames of this process.
+//   toolbox_place(win, element)  In the sandbox: where `element` sits in DevTools short of a window of its own: "docked" (under the toolbox frame of a tab), "tab" (a toolbox opened as a tab) or undefined.
 //   blur_field(context)        In the sandbox: drop the focus from the text field a key of `context` (as the taker gets it) was typed in, as a plain Escape does. Returns whether a field was blurred: false for design mode, a field in an iframe of a remote page and a subdialog, which keep their Escape.
 //   send_escape(context)       In the sandbox: send the page an Escape keydown and keyup, from the focused element, as `page.send_key` does. They are trusted on a system page, so `on_key` skips them while the module sends. Returns whether it was sent.
 //   ime_in_field(win)          In the sandbox: whether the window's input state says a text field has the focus, which covers a field in a page of another process.
@@ -468,19 +469,23 @@
       }
     }
 
-    // The focus is in DevTools: a window of its own, a document under the toolbox frame that DevTools docks in a tab, or a toolbox opened as a tab (its document or a panel under it).
-    function key_in_devtools(win, target) {
-      if (win.document.documentElement?.getAttribute("windowtype") === DEVTOOLS_WINDOW_TYPE) return true;
+    // Where `target` sits in DevTools, short of a window of its own: "docked" under the toolbox frame that DevTools docks in a tab, "tab" in a toolbox opened as a tab (its document or a panel under it), else undefined.
+    function toolbox_place(win, target) {
       let doc = target?.ownerDocument;
       for (let depth = 0; doc && doc !== win.document && depth < 8; depth++) {
-        if (is_toolbox_document(doc)) return true;
+        if (is_toolbox_document(doc)) return "tab";
         // frameElement is null across the <browser> that holds a docked toolbox, so its embedder names that frame.
         const frame = doc.defaultView?.frameElement ?? doc.defaultView?.browsingContext?.embedderElement;
-        if (!frame) return false;
-        if (frame.classList?.contains("devtools-toolbox-iframe")) return true;
+        if (!frame) return undefined;
+        if (frame.classList?.contains("devtools-toolbox-iframe")) return "docked";
         doc = frame.ownerDocument;
       }
-      return false;
+      return undefined;
+    }
+
+    // The focus is in DevTools: a window of its own, or a place `toolbox_place` names.
+    function key_in_devtools(win, target) {
+      return win.document.documentElement?.getAttribute("windowtype") === DEVTOOLS_WINDOW_TYPE || toolbox_place(win, target) !== undefined;
     }
 
     // The DevTools guard. No key row is ever taken there. Only the feature that claimed DevTools keys sees the key.
@@ -1256,6 +1261,7 @@
       is_field,
       deep_active,
       focused_element,
+      toolbox_place,
       ime_in_field,
       blur_field: (context) => {
         const page = page_of_context(context);
