@@ -438,25 +438,16 @@ export function start_server() {
       return response.end(page(`arrow_widgets ${id}`, widgets + tall_filler + script));
     }
     if (url.pathname === "/dropdown_widgets") {
-      // An ARIA combobox (an expanded text input that owns a listbox) and a bare listbox whose options take the focus. Each page script moves its own cursor on a keydown ArrowDown or ArrowUp, and `active` in a data attribute names the option it landed on.
-      const widgets = '<input id="combo" type="text" role="combobox" aria-expanded="true" aria-controls="combo_list" aria-activedescendant="c1"><div id="combo_list" role="listbox"><div id="c1" role="option">one</div><div id="c2" role="option">two</div><div id="c3" role="option">three</div></div><div id="menu" role="menu"><div id="m1" role="menuitem" tabindex="0">first</div><div id="m2" role="menuitem" tabindex="-1">second</div><div id="m3" role="menuitem" tabindex="-1">third</div></div>';
+      // A menu whose items take the focus. Its script moves the focus on a keydown ArrowDown or ArrowUp, and `active` in a data attribute names the item it landed on.
+      const widgets = '<div id="menu" role="menu"><div id="m1" role="menuitem" tabindex="0">first</div><div id="m2" role="menuitem" tabindex="-1">second</div><div id="m3" role="menuitem" tabindex="-1">third</div></div>';
       const script = `<script>
         const dropdown_root = document.documentElement;
         dropdown_root.dataset.active = "";
-        const step = (event) => (event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0);
-        document.getElementById("combo").addEventListener("keydown", (event) => {
-          const options = [...document.querySelectorAll("#combo_list [role=option]")];
-          const at = options.findIndex((option) => option.id === event.target.getAttribute("aria-activedescendant"));
-          if (!step(event)) return;
-          const next = options[Math.max(0, Math.min(options.length - 1, at + step(event)))];
-          event.target.setAttribute("aria-activedescendant", next.id);
-          dropdown_root.dataset.active = next.id;
-        });
         document.getElementById("menu").addEventListener("keydown", (event) => {
+          const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+          if (!step) return;
           const items = [...document.querySelectorAll("#menu [role=menuitem]")];
-          const at = items.indexOf(document.activeElement);
-          if (!step(event)) return;
-          const next = items[Math.max(0, Math.min(items.length - 1, at + step(event)))];
+          const next = items[Math.max(0, Math.min(items.length - 1, items.indexOf(document.activeElement) + step))];
           next.focus();
           dropdown_root.dataset.active = next.id;
         });

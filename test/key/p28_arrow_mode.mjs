@@ -97,7 +97,10 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await expect_badge("NORMAL");
     await sleep(300);
     expect((await dataset("escapes")) === "1", `the page saw ${await dataset("escapes")} Escape keydowns`);
-    // The badge above says the mode is off. The listbox keeps the focus, and j on a focused listbox sends an arrow in normal mode too, so the arrows no longer tell the two apart.
+    // The listbox keeps the focus. j on it sends an arrow in normal mode too, so l tells the modes apart: it sends ArrowRight in arrow mode and scrolls in normal mode.
+    await press_keys("l");
+    await sleep(200);
+    expect((await dataset("keys")) === "", "l sent an arrow after the mode ended");
   });
 
   await run_case("a mouse press and a key DesertFox does not cancel leave the mode on", async () => {
@@ -158,7 +161,10 @@ export async function run_cases({ run_case, open_page, press_keys, in_active_tab
     await expect_badge("ARROW");
     await open_page("arrow_widgets", "arrow_nav_b", { new_tab: false });
     await expect_badge("NORMAL");
-    // Same as the Escape case: j on a focused listbox sends an arrow with the mode off, so the badge is the check.
+    await focus("list");
+    await press_keys("l");
+    await sleep(200);
+    expect((await dataset("keys")) === "", "the old mode sent an arrow on the new page");
   });
 
   await run_case("switching tabs and back keeps the mode: the badge says ARROW and j still sends an arrow", async () => {

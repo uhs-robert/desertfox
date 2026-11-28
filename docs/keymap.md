@@ -22,7 +22,7 @@ A note "(prompts)" means the binding sets a `prompt` for a param, so the command
 
 <!-- BEGIN generated -->
 
-bound: 536 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 7, ignore 1, browser 4)
+bound: 534 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, hint 8, cmdline 19, caret 36, visual 44, visual_line 45, insert 5, ignore 1, browser 4)
 
 ### normal
 
@@ -30,8 +30,8 @@ bound: 536 (normal 281, media 26, item 26, item_visual 18, grab 11, sidebar 10, 
 | --- | --- | --- | --- |
 | `h` | `scroll.pixels --dx=-50` | Scroll left | yes |
 | `l` | `scroll.pixels --dx=50` | Scroll right | yes |
-| `j` | `page.send_key --key=ArrowDown --key_code=40` | Scroll down |  |
-| `k` | `page.send_key --key=ArrowUp --key_code=38` | Scroll up |  |
+| `j` | `scroll 10` (while a list item holds the focus: `page.send_key --key=ArrowDown --key_code=40`) | Scroll down | yes |
+| `k` | `scroll -10` (while a list item holds the focus: `page.send_key --key=ArrowUp --key_code=38`) | Scroll up | yes |
 | `gg` | `scroll.to 0` | Scroll to top | yes |
 | `G` | `scroll.to 100` | Scroll to bottom | yes |
 | `$` | `scroll.to --x 100` | Scroll to right edge | yes |
@@ -404,10 +404,10 @@ Every key of normal mode that this table does not bind also works here: it runs 
 | `V` | `mode item_visual ; page.item --current --extend` | Select a range of items |
 | `j` | `page.item --down --hover` | Next item, or scroll down |
 | `k` | `page.item --up --hover` | Previous item, or scroll up |
-| `h` | `tree --left --aria` | Fold, else parent in a tree, else the item to the left |
-| `l` | `tree --child --aria` | First child in a tree or open it, else the item to the right |
-| `}` | `tree --next --aria` | Next sibling in a tree, else the next section |
-| `{` | `tree --prev --aria` | Previous sibling in a tree, else the previous section |
+| `h` | `page.item --left --hover` (while a list item holds the focus: `tree --left --aria`) | Fold, else parent in a tree, else the item to the left |
+| `l` | `page.item --right --hover` (while a list item holds the focus: `tree --child --aria`) | First child in a tree or open it, else the item to the right |
+| `}` | `page.item --next-section --hover` (while a list item holds the focus: `tree --next --aria`) | Next sibling in a tree, else the next section |
+| `{` | `page.item --prev-section --hover` (while a list item holds the focus: `tree --prev --aria`) | Previous sibling in a tree, else the previous section |
 | `gg` | `page.item --first --hover` | First item, or scroll to top |
 | `G` | `page.item --last --hover` | Last item, or scroll to bottom |
 
@@ -655,8 +655,6 @@ Every key of item mode that this table does not bind also works here: it switche
 | `<C-r>` | `register.paste` | Paste register |
 | `<C-o>` | `text.edit_external` | Edit the field in the external editor |
 | `<A-Escape>` | `page.send_key --key=Escape --key_code=27` | Send Escape to the page |
-| `<C-j>` | `page.send_key --key=ArrowDown --key_code=40` | Next suggestion |
-| `<C-k>` | `page.send_key --key=ArrowUp --key_code=38` | Previous suggestion |
 
 ### ignore
 

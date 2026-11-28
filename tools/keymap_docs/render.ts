@@ -15,17 +15,22 @@ type Row = { key: string; command: string; label: string; locked?: boolean };
 // Whether a normal-mode key works on a locked page through the browser module. The generator derives it from the same pruned tree the module gets.
 export type LockedKeys = (key: string) => boolean;
 
+const printed = (step: BoundInvocation, registry: Lookup): string => {
+  const command = registry.get(step.id);
+  return command ? print_command(command, step.args ?? {}, { flags: "long" }) : step.id;
+};
+
 function bound_row(key: string, binding: KeyBinding, registry: Lookup): Row {
   const steps: BoundInvocation[] = [binding].flat();
-  const texts = steps.map((step) => {
-    const command = registry.get(step.id);
-    return command ? print_command(command, step.args ?? {}, { flags: "long" }) : step.id;
-  });
   const first = steps[0]!;
+  // A guarded default key reads as the step it falls back to, with its guarded step in a note.
+  const guarded = first.when_present !== undefined && first.fallback !== undefined;
+  const texts = (guarded ? [first.fallback!] : steps).map((step) => printed(step, registry));
   const prompts = steps.some((step) => step.prompt) ? " (prompts)" : "";
+  const guard_note = guarded ? ` (while a list item holds the focus: ${code(printed(first, registry))})` : "";
   return {
     key,
-    command: `${code(texts.join(" ; "))}${prompts}`,
+    command: `${code(texts.join(" ; "))}${prompts}${guard_note}`,
     label: first.label ?? registry.get(first.id)?.label ?? "",
   };
 }

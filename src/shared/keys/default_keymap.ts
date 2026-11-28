@@ -483,8 +483,6 @@ const BASE_SECTIONS: KeymapConfig = {
     "<C-r>": { id: "register.paste", label: "Paste register" },
     "<C-o>": { id: "text.edit_external", label: "Edit the field in the external editor" },
     "<A-Escape>": { id: "page.send_key", args: { key: "Escape", key_code: 27 }, label: "Send Escape to the page" },
-    "<C-j>": { id: "page.send_key", args: { key: "ArrowDown", key_code: 40 }, label: "Next suggestion" },
-    "<C-k>": { id: "page.send_key", args: { key: "ArrowUp", key_code: 38 }, label: "Previous suggestion" },
   },
   ignore: {
     "<S-Escape>": { id: "mode.set", args: { mode: "normal" } },
