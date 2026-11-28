@@ -5,7 +5,7 @@
 
 import { create_matcher, event_to_token } from "../shared/keys/index.ts";
 import { COMPILED_KEYMAP_STORAGE_KEY } from "../shared/prefix_tree.ts";
-import type { CompiledKeymap } from "../shared/prefix_tree.ts";
+import type { CompiledKeymap, TreeLeaf } from "../shared/prefix_tree.ts";
 import { check_args_shape } from "../shared/registry/check_shape.ts";
 import { parse_command_line } from "../shared/registry/command_line.ts";
 import type { CmdlineOpened, PanelCmdlineOpened, CompleteItemsAnswer, ContentToBackground, HeadingItem, TabRowsActionAnswer, TabModelMessage, TabModelRequest } from "../shared/messages/index.ts";
@@ -337,6 +337,14 @@ function start_line(start: Start, opened: CmdlineOpened, keymap: CompiledKeymap 
   const press = (token: string): boolean => {
     if (late_keys) {
       late_keys.push(token);
+      return true;
+    }
+    // The one-shot normal prefix closes the line and drops its text, and the keys held for rows too, which came before it. It goes back to the page ahead of the keys after it, and the page's key flow runs them on the tab.
+    if ((keymap?.modes.browser?.children[token] as TreeLeaf | undefined)?.any_mode) {
+      held = [];
+      close_sources();
+      end_line({ kind: "close" });
+      late_keys!.unshift(token);
       return true;
     }
     if (held.length > 0 && waits_behind_held(token)) {

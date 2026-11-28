@@ -54,7 +54,7 @@ function refresh_mode_indicator(): void {
   const pass_next_armed = !focused_frame_mode && page_mode.is_pass_next_armed_();
   // A subframe that holds the focus in normal mode shows FRAME, so the user sees the keys act there.
   const site_label = focused_frame_mode ? "FRAME" : site_mode.modes_?.[site_mode.name_ ?? ""]?.label;
-  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.get_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
+  show_mode_label(bar_on ? undefined : badge_state(focused_frame_mode ?? page_mode.key_mode_(), pass_next_armed, mode_indicator, recording, site_label, visual_counts[focused_frame]));
   bar_flags = { ...(pass_next_armed && { pass: true as const }), ...(site_label && { site: site_label }) };
   report_bar();
 }
@@ -106,12 +106,15 @@ let escape_to_page = false;
 
 const key_flow = create_key_flow({
   on_prefix_: follow_prefix,
-  get_mode_: page_mode.get_mode_,
+  get_mode_: page_mode.key_mode_,
   take_pass_next_: page_mode.take_pass_next_,
+  take_once_: page_mode.take_once_,
   run_leaf_: (bound_leaf, count, repeat) => {
     const leaf = leaf_for_page(bound_leaf, document.activeElement, document.body, document);
     // No leaf runs when every guard fails and nothing is left to fall back to: the page keeps the key.
     if (!leaf) return true;
+    // Before the leaf runs, which can change the mode and the focus. The page bundle takes the frame back to this mode once a mode the leaf opens ends.
+    if (page_mode.is_once_armed_()) void bundles.run_command_("once.start", "page", { mode_: page_mode.get_mode_(), focused_: deepest_focused_element() }, "", false);
     // A register paste joins the open insert session, so it must not end it.
     if (leaf.steps[0]?.invocation.id !== "register.paste") flush_typed_text();
     const run = () => run_leaf(leaf, count, repeat, send_to_background, page_mode.get_mode_, run_content_steps, show_toast);
@@ -123,7 +126,8 @@ const key_flow = create_key_flow({
     page_mode.escape();
     blur_focused_element();
   },
-  in_editable_field_: () => is_editable_element(deepest_focused_element()),
+  // The one-shot normal prefix reads the keys as normal ones, in a field too.
+  in_editable_field_: () => !page_mode.is_once_armed_() && is_editable_element(deepest_focused_element()),
   user_input_seen_: () => user_input_seen,
   blur_window_open_: () => Date.now() < blur_ends_ms,
   escape_to_page_: () => escape_to_page,
@@ -499,7 +503,12 @@ function start(): void {
     document,
   );
 
-  page_mode.listen_display_(refresh_mode_indicator);
+  page_mode.listen_display_(() => {
+    refresh_mode_indicator();
+    // The which-key panel lists the normal keys as soon as the one-shot normal prefix is armed.
+    // Past `follow_prefix`, which drops a prefix with no keys (a bare count): the root with no keys lists the first keys.
+    if (page_mode.is_once_armed_()) follow_which_key(bundles, { mode: "normal", typed_: [] }, true, which_key_delay_ms);
+  });
 
   const ask_keymap = create_keymap_asks(read_page_keymap, install_matcher);
 

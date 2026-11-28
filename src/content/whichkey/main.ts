@@ -59,6 +59,8 @@ if (!page.desertfox_whichkey_ready) {
   page.desertfox_host.register_handler_("whichkey", (args) => {
     ({ delay_ms, skip } = args);
     follow_prefix(args.prefix, args.at_once);
+    // A prefix with no keys is the root, which the one-shot normal prefix shows at once. The timer lists only typed keys.
+    if (delay_ms && args.prefix?.typed_.length === 0) void session.show_manual_(args.prefix.mode).catch(warn_and_go("whichkey.root"));
   });
   // Not commands: only the background relays them, from a subframe's bundle.
   page.desertfox_host.register_handler_("whichkey.draw", relayed.draw_);
