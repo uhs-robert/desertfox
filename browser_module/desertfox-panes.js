@@ -180,8 +180,8 @@
       return done();
     }
 
-    // Focus whatever the sidebar shows, in this order: the open panel, the vertical tab strip, the launcher buttons. Only a sidebar that shows nothing opens, on the panel it showed last.
-    async function focus_sidebar() {
+    // Focus whatever the sidebar shows, in this order: the open panel, the vertical tab strip, the launcher buttons. Only a sidebar that shows nothing opens, on the panel it showed last, and a directional move (`may_open` false) never opens it.
+    async function focus_sidebar({ may_open = true } = {}) {
       const where = focused_window();
       if (where.problem) return refuse(where.problem);
       const { win } = where;
@@ -193,7 +193,7 @@
         // A false answer means the buttons did not take the focus, so a panel opens instead.
         if (has_function(sidebar.sidebarMain, "focusButtonGroup") && sidebar.sidebarMain.focusButtonGroup() === true) return done();
       }
-      return open_last_panel(win, sidebar);
+      return may_open ? open_last_panel(win, sidebar) : refuse("The sidebar is closed");
     }
 
     function focus_panel(sidebar) {
@@ -274,10 +274,8 @@
       const sidebar_side = sidebar_side_of(win);
       if (sidebar_side === undefined) return refuse(NOT_SUPPORTED);
       if (sidebar_side !== direction) return refuse(`Nothing to focus on the ${direction}`);
-      // A sidebar that shows nothing is closed here: a move never opens it, ES does.
-      const sidebar = win.SidebarController;
-      if (typeof sidebar?.isOpen !== "boolean") return refuse(NOT_SUPPORTED);
-      return sidebar.isOpen || sidebar.launcherVisible === true ? focus_sidebar() : refuse("The sidebar is closed");
+      // A move never opens the sidebar, ES does.
+      return focus_sidebar({ may_open: false });
     }
 
     // The panes by where they show, so a right-to-left window needs no special case.

@@ -507,6 +507,29 @@ test("pane.focus_direction refuses a closed sidebar and opens nothing, but reach
   assert.deepEqual(world.calls, ["focus tab a"]);
 });
 
+test("pane.focus_direction never opens a panel, even when the launcher buttons refuse the focus or cannot take it", async () => {
+  const world = pane_world();
+  world.shim.initialized = false;
+  world.sidebar.launcherVisible = true;
+  world.sidebar.buttons_take_focus = false;
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), refused("The sidebar is closed"));
+  world.sidebar.sidebarMain = undefined as never;
+  assert.deepEqual(await world.ask("pane.focus_direction", { direction: "left" }), refused("The sidebar is closed"));
+  assert.deepEqual(world.calls, ["focus buttons"]);
+});
+
+test("pane.focus_region sidebar refuses a strip it cannot focus", async () => {
+  const world = pane_world();
+  world.sidebar.launcherVisible = true;
+  world.strip.verticalMode = true;
+  delete world.tab(0).focus;
+  assert.deepEqual(await world.ask("pane.focus_region", { region: "sidebar" }), refused(NOT_SUPPORTED));
+  world.tab(0).focus = () => world.calls.push("focus tab a");
+  delete (world.strip as Record<string, unknown>).ariaFocusedItem;
+  assert.deepEqual(await world.ask("pane.focus_region", { region: "sidebar" }), refused(NOT_SUPPORTED));
+  assert.deepEqual(world.calls, []);
+});
+
 test("pane.focus_direction finds the sidebar's side from its start or end place and the window's direction", async () => {
   const world = pane_world();
   world.shim.initialized = false;
