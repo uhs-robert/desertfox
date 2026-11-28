@@ -68,6 +68,9 @@ function world({ saved = undefined as string | undefined, caret = undefined as b
   return { firefox, window, a, b, core, shown, run, reported };
 }
 
+// An Escape typed in the page, as Firefox hands it to the window: its target sits in the page's document.
+const page_escape = (shown: { element: unknown }, patch: Record<string, unknown> = {}) => key_event("Escape", { target: shown.element, originalTarget: shown.element, ...patch } as never);
+
 const settled = (w: ReturnType<typeof world>) => assert.equal(w.firefox.read_pref(SAVED), undefined, "the saved copy is gone");
 
 test("the module says visual_mode in its hello", () => {
@@ -80,7 +83,7 @@ test("caret mode turns caret browsing on, reports CARET and Escape gives the pre
   assert.equal(w.run("mode.caret"), true);
   assert.equal(w.firefox.read_pref(CARET), true);
   assert.deepEqual(w.reported(), ["caret"]);
-  const escape = w.window.press(key_event("Escape"));
+  const escape = w.window.press(page_escape(w.shown));
   assert.ok(escape.prevented && escape.stopped);
   assert.equal(w.firefox.read_pref(CARET), undefined);
   settled(w);
@@ -92,7 +95,7 @@ test("the user's own value comes back, true or false, and an unset pref goes bac
     const w = world({ caret: original });
     w.run("mode.caret");
     assert.equal(w.firefox.read_pref(SAVED), String(original));
-    w.window.press(key_event("Escape"));
+    w.window.press(page_escape(w.shown));
     assert.equal(w.firefox.read_pref(CARET), original);
     settled(w);
   }
@@ -107,7 +110,7 @@ test("visual mode extends Firefox's selection, and line mode takes the line", ()
   line.run("mode.visual", { line: 1 });
   assert.deepEqual(line.shown.selection.calls, ["collapse", "move backward lineboundary", "extend forward lineboundary"]);
   assert.deepEqual(line.reported(), ["visual_line"]);
-  line.window.press(key_event("Escape"));
+  line.window.press(page_escape(line.shown));
   assert.equal(line.shown.selection.isCollapsed, true);
 });
 
@@ -132,7 +135,7 @@ test("a second press of the same mode changes nothing, and another mode replaces
   w.run("mode.visual");
   assert.deepEqual(w.reported(), ["caret", "visual"]);
   assert.equal(w.firefox.read_pref(CARET), true);
-  w.window.press(key_event("Escape"));
+  w.window.press(page_escape(w.shown));
   assert.equal(w.firefox.read_pref(CARET), undefined);
 });
 
@@ -174,7 +177,7 @@ test("an error in the mode's own code ends the mode and gives the pref back", ()
   assert.ok(w.firefox.errors.length >= 0);
   assert.deepEqual(w.reported().at(-1), "normal");
   assert.equal(w.window.listener_count("keydown") > 0, true);
-  const escape = w.window.press(key_event("Escape"));
+  const escape = w.window.press(page_escape(w.shown));
   assert.equal(escape.prevented, false, "no mode holds Escape any more");
 });
 
@@ -188,9 +191,9 @@ test("two windows share the pref: it comes back when the last one leaves", () =>
   Object.assign(c.browser, { currentURI: { scheme: "about" }, contentWindow: { document: shown.document } });
   w.run("mode.caret");
   w.core.run_command("mode.caret", {}, { window: second.win, browser: c.browser, tab: c.tab });
-  w.window.press(key_event("Escape"));
+  w.window.press(page_escape(w.shown));
   assert.equal(w.firefox.read_pref(CARET), true);
-  second.press(key_event("Escape"));
+  second.press(page_escape(shown));
   assert.equal(w.firefox.read_pref(CARET), false);
   settled(w);
 });
@@ -229,10 +232,10 @@ test("the mode starts only where the module may act, on a parent-process about: 
 test("an Escape that something else used leaves the mode, and a modified one too", () => {
   const w = world();
   w.run("mode.caret");
-  w.window.press(key_event("Escape", { defaultPrevented: true }));
-  w.window.press(key_event("Escape", { shiftKey: true }));
+  w.window.press(page_escape(w.shown, { defaultPrevented: true }));
+  w.window.press(page_escape(w.shown, { shiftKey: true }));
   assert.equal(w.firefox.read_pref(CARET), true);
-  w.window.press(key_event("Escape"));
+  w.window.press(page_escape(w.shown));
   assert.equal(w.firefox.read_pref(CARET), undefined);
 });
 
@@ -241,4 +244,53 @@ test("arguments that do not fit the command are refused", () => {
   assert.equal(w.run("mode.visual", { line: "x" }), false);
   assert.equal(w.run("mode.visual", { line: 1.5 }), false);
   assert.equal(w.firefox.read_pref(CARET), undefined);
+});
+
+test("an Escape from outside the mode's page keeps Firefox's own: the address bar, a subdialog and DevTools", () => {
+  const w = world();
+  w.run("mode.caret");
+  const outside = [{ ownerDocument: w.window.win.document }, { ownerDocument: page().document }, undefined];
+  for (const target of outside) {
+    const event = w.window.press(key_event("Escape", { target, originalTarget: target } as never));
+    assert.equal(event.prevented || event.stopped, false);
+    assert.equal(w.firefox.read_pref(CARET), true, "the mode stays");
+  }
+  const from_browser = w.window.press(key_event("Escape", { target: w.a.browser, originalTarget: w.a.browser } as never));
+  assert.ok(from_browser.prevented);
+  assert.equal(w.firefox.read_pref(CARET), undefined);
+});
+
+test("the window losing the focus ends the mode, so other windows get no caret browsing", () => {
+  const w = world({ caret: false });
+  w.run("mode.caret");
+  w.window.fire("deactivate");
+  assert.equal(w.firefox.read_pref(CARET), false);
+  settled(w);
+  assert.deepEqual(w.reported(), ["caret", "normal"]);
+});
+
+test("a user who turns caret browsing off while a mode holds it keeps their value, and the mode ends", () => {
+  const w = world({ caret: true });
+  w.run("mode.caret");
+  w.firefox.set_named_pref(CARET, false);
+  assert.equal(w.firefox.read_pref(CARET), false, "the exit does not write the saved value back");
+  settled(w);
+  assert.deepEqual(w.reported(), ["caret", "normal"]);
+  const after = w.window.press(page_escape(w.shown));
+  assert.equal(after.prevented, false, "no mode holds Escape any more");
+  const other = world();
+  other.run("mode.caret");
+  other.firefox.set_named_pref("some.other.pref", true);
+  assert.equal(other.firefox.read_pref(CARET), true, "another pref changing ends nothing");
+  assert.deepEqual(other.reported(), ["caret"]);
+});
+
+test("a new hello from DesertFox ends the mode, and the DevTools feature that also watches the state is loaded beside it", () => {
+  const w = world({ caret: false });
+  const core = w.core as unknown as { status(): { features: string[] } };
+  assert.ok(core.status().features.includes("desertfox-devtools.js"), "the first watcher of the state key is DevTools'");
+  w.run("mode.caret");
+  w.firefox.start_extension();
+  assert.equal(w.firefox.read_pref(CARET), false);
+  settled(w);
 });

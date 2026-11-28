@@ -44,6 +44,7 @@ import {
   MODULE_TO_EXTENSION_KINDS,
   validate_message,
   validate_message_list,
+  VISUAL_REPORT_MODES,
   validate_module_state,
   validate_scope_tree,
   ROOT_LIST_COMMAND_ID,
@@ -328,12 +329,13 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     return toasts.get(id);
   };
   // A load hides the page's own fields but not the toast, which the page never reported.
-  const tab_with_bar = (id: string, tab: TabState | undefined): TabState => {
+  const tab_with_bar = (id: string, tab: TabState | undefined, entry = true): TabState => {
     const toast = live_toast(id);
     const held = visual_modes.get(id);
-    // A page with DesertFox's own script shows the mode it reports. A tab with none and a caret or visual mode in its entry holds the module's mode from an earlier write, which `held` replaces or ends.
+    // A page with DesertFox's own script shows the mode it reports. A state entry of a tab with none holds the module's mode from an earlier write, which `held` replaces or ends. A fresh record keeps its own mode, a child frame's included, and takes `held` only over normal.
     const written = tab?.mode ?? "normal";
-    const mode = tab?.live !== true && (written === "normal" || written === "caret" || written === "visual" || written === "visual_line") ? (held ?? "normal") : written;
+    const overridable = (VISUAL_REPORT_MODES as readonly string[]).includes(written);
+    const mode = tab?.live === true || !overridable ? written : entry ? (held ?? "normal") : written === "normal" ? (held ?? "normal") : written;
     const base = { mode, live: tab?.live ?? false, ...(toast && { toast }) };
     if (loading.has(id)) return base;
     const { pending: _, count: __, ...top } = bars.get(id) ?? {};
@@ -343,7 +345,7 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const tab_of_record = (id: string, record: TabModeRecord): TabState => {
     if (record.awaiting_commit) loading.add(id);
     else loading.delete(id);
-    return tab_with_bar(id, tab_state_of(record));
+    return tab_with_bar(id, tab_state_of(record), false);
   };
 
   const kinds = deps.kinds ?? { from_module: MODULE_TO_EXTENSION_KINDS, from_extension: EXTENSION_TO_MODULE_KINDS };
@@ -369,9 +371,9 @@ export function create_browser_module(deps: BrowserModuleDeps) {
   const report_visual_mode = async (args: ModuleArgs): Promise<void> => {
     const id = String(args.tab_id);
     const mode = args.mode;
-    if (!hello_visual || !Number.isInteger(args.tab_id) || (mode !== "normal" && mode !== "caret" && mode !== "visual" && mode !== "visual_line")) return;
+    if (!hello_visual || !Number.isInteger(args.tab_id) || !(VISUAL_REPORT_MODES as readonly unknown[]).includes(mode)) return;
     if (mode === "normal") visual_modes.delete(id);
-    else if (visual_modes.has(id) || visual_modes.size < MAX_STATE_TABS) visual_modes.set(id, mode);
+    else if (visual_modes.has(id) || visual_modes.size < MAX_STATE_TABS) visual_modes.set(id, mode as Mode);
     else return;
     await enqueue(async () => {
       const state = await read_state();
@@ -381,11 +383,13 @@ export function create_browser_module(deps: BrowserModuleDeps) {
     });
   };
 
+  const handlers: BrowserModuleDeps["handlers"] = { ...deps.handlers, "visual.report": report_visual_mode };
+
   const run_request = async (request: ModuleRequest): Promise<ModuleReply | undefined> => {
     const row = kinds.from_module[request.kind]!;
     const reply = (ok: boolean, error?: string, value?: string): ModuleReply | undefined =>
       row.reply ? { v: BROWSER_MODULE_PROTOCOL_VERSION, reply_to: request.id, ok, ...(error === undefined ? {} : { error }), ...(typeof value === "string" ? { value } : {}) } : undefined;
-    const handler = request.kind === "visual.report" ? report_visual_mode : deps.handlers[request.kind];
+    const handler = handlers[request.kind];
     if (handler === undefined) return reply(false, "no handler for this kind");
     try {
       const answered = reply(true, undefined, (await handler(request.args)) ?? undefined);

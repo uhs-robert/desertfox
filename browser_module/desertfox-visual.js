@@ -38,24 +38,38 @@
     // ---- The caret-browsing pref. Windows hold it together: the first takes and saves it, the last gives it back.
 
     const holders = new Set();
+    // True while this file writes the prefs, so its own change does not look like the user's.
+    let writing = false;
+    const writes = (write) => {
+      writing = true;
+      try {
+        write();
+      } finally {
+        writing = false;
+      }
+    };
 
     function restore_saved_pref() {
       const saved = Services.prefs.getStringPref(SAVED_PREF, "");
       if (saved === "") return;
-      try {
-        if (saved === "unset") Services.prefs.clearUserPref(CARET_PREF);
-        else Services.prefs.setBoolPref(CARET_PREF, saved === "true");
-      } finally {
-        Services.prefs.clearUserPref(SAVED_PREF);
-      }
+      writes(() => {
+        try {
+          if (saved === "unset") Services.prefs.clearUserPref(CARET_PREF);
+          else Services.prefs.setBoolPref(CARET_PREF, saved === "true");
+        } finally {
+          Services.prefs.clearUserPref(SAVED_PREF);
+        }
+      });
     }
 
     function take_caret_pref(win) {
       if (holders.size === 0) {
         const was_set = Services.prefs.prefHasUserValue(CARET_PREF);
         // Saved first: a crash after the next line still leaves the way back.
-        Services.prefs.setStringPref(SAVED_PREF, was_set ? String(Services.prefs.getBoolPref(CARET_PREF, false)) : "unset");
-        Services.prefs.setBoolPref(CARET_PREF, true);
+        writes(() => {
+          Services.prefs.setStringPref(SAVED_PREF, was_set ? String(Services.prefs.getBoolPref(CARET_PREF, false)) : "unset");
+          Services.prefs.setBoolPref(CARET_PREF, true);
+        });
       }
       holders.add(win);
     }
@@ -176,8 +190,15 @@
     }
 
     // Escape ends the mode and goes no further. A key the core or the page already used, such as an Escape that left a field, leaves the mode as it is.
+    // The key came from the mode's own page: its document, or the tab's <browser> when no document has the focus. The address bar, the find bar, DevTools, a subdialog and a menu keep their own Escape.
+    const from_page = (record, event) => {
+      const target = event.originalTarget ?? event.target;
+      return target === record.browser || target?.ownerDocument === record.doc || target?.ownerDocument === record.top_doc;
+    };
+
     function on_key(win, event) {
-      if (event.key !== "Escape" || event.defaultPrevented || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+      const record = modes.get(win);
+      if (!record || !from_page(record, event) || event.key !== "Escape" || event.defaultPrevented || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
       event.preventDefault();
       event.stopPropagation();
       leave(win, { drop_selection: true });
@@ -196,7 +217,7 @@
       // A key typed into a field is the field's.
       if (!given && core.is_field(element)) return;
       leave(win, { quiet: true });
-      const record = { win, browser, tab, mode, doc, undo: [] };
+      const record = { win, browser, tab, mode, doc, top_doc, undo: [] };
       modes.set(win, record);
       try {
         take_caret_pref(win);
@@ -210,6 +231,8 @@
           }
         }, true);
         listen(record, win, "unload", end);
+        // The pref is global, so a mode left on in a window in the back would turn caret browsing on in every other window.
+        listen(record, win, "deactivate", end);
         listen(record, win.gBrowser.tabContainer, "TabSelect", end);
         listen(record, top_doc.defaultView, "pagehide", end);
         if (doc !== top_doc) listen(record, doc.defaultView, "pagehide", end);
@@ -243,9 +266,18 @@
       if (!Services.prefs.getBoolPref(ENABLED_PREF, false)) leave_all();
     };
     Services.prefs.addObserver(ENABLED_PREF, on_pref);
+    // The user (about:config, F7) turned caret browsing off while a mode held it. The mode ends, and their value stays as it is.
+    const on_caret_pref = () => {
+      if (writing || holders.size === 0 || Services.prefs.getBoolPref(CARET_PREF, false) === true) return;
+      holders.clear();
+      writes(() => Services.prefs.clearUserPref(SAVED_PREF));
+      leave_all();
+    };
+    Services.prefs.addObserver(CARET_PREF, on_caret_pref);
     core.on_shut_down(() => {
       leave_all();
       Services.prefs.removeObserver(ENABLED_PREF, on_pref);
+      Services.prefs.removeObserver(CARET_PREF, on_caret_pref);
     });
     // Said last, so the extension sends the mode leaves only to a module that runs them.
     core.set_hello_flag("visual_mode", true);
