@@ -48,8 +48,8 @@ function page_message_of(text: string): Record<string, unknown> | undefined {
   return locked_route_of(type) === "background" ? (message as Record<string, unknown>) : undefined;
 }
 
-// The pages the module may run DesertFox's page code in: Reader View, view-source: of a web or file page, and the PDF viewer and the JSON viewer, whose tabs show the document's own address. Never another about: page, whose principal is the system principal, and never an extension page or its source.
-export const runs_page_code = (address: string): boolean => address.startsWith("about:reader?") || /^(?:view-source:)?(?:https?|file):/.test(address);
+// The pages the module may run DesertFox's page code in: Reader View, view-source: of a web or file page, a blob: that a web page made, and the PDF viewer and the JSON viewer, whose tabs show the document's own address. Never another about: page, whose principal is the system principal, and never an extension page or its source.
+export const runs_page_code = (address: string): boolean => address.startsWith("about:reader?") || /^(?:view-source:|blob:)?(?:https?|file):/.test(address);
 
 const answer_text = (answer: PageAnswer): string => {
   try {

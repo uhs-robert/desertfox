@@ -364,4 +364,18 @@ test("two about: rules do not warn about each other's binds, and the Site Rules 
   assert.deepEqual(site_rules_view(compiled, "about:config#x").rows.map((row) => row.site), ["about:config"]);
   assert.deepEqual(site_rules_view(compiled, "about:addons").rows, []);
   assert.deepEqual(site_rules_view(compiled, "https://a.test/").rows, []);
+
+test("the guarded default j and k stay on locked pages as their scroll fallback", () => {
+  for (const [key, count] of [["j", 10], ["k", -10]] as const) {
+    const node = node_at(DEFAULT_TREE, [key]);
+    assert.deepEqual(node && typeof node === "object" && "native" in node ? [node.native, (node.args as { count?: number }).count] : node, ["scroll.lines", count], key);
+  }
+});
+
+test("the list guard fallback and the copy.url variant reach an about: page's tree through the same leaf pass", () => {
+  const entry = tree_of_site([{ site: "about:config", pass: "H" }], "about:config")!;
+  for (const keys of [["j"], ["k"], ["y", "y"]]) {
+    assert.notEqual(node_at(DEFAULT_TREE, keys), undefined, keys.join(""));
+    assert.deepEqual(node_at(entry.tree, keys), node_at(DEFAULT_TREE, keys), keys.join(""));
+  }
 });
