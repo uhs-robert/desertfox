@@ -9,7 +9,7 @@ const PAGE_INFO = `Services.wm.getMostRecentWindow("Browser:page-info")`;
 const wait = (ms) => `await new Promise((resolve) => setTimeout(resolve, ${ms}));`;
 
 export async function run_cases(context) {
-  const { run_case, setup, expect, poll_until, press_keys, sleep } = context;
+  const { run_case, setup, expect, poll_until, press_keys, sleep, open_page, on_teardown, run_line } = context;
   const steps = module_steps(context);
   const { chrome, set_pref, open_tab, focus_page, close_selected_tab, home, page_scroll } = steps;
 
@@ -200,6 +200,45 @@ export async function run_cases(context) {
   await field_menu_case("an input in a same-origin frame", { frame: "same" });
   await field_menu_case("an input in a cross-origin frame", { frame: "cross" });
   await field_menu_case("an input of a page whose own handler stops j and k", { page_handler: true });
+
+  // With the module on, the browser bar shows the mode and the page has no corner badge.
+  const bar_mode = () => chrome(`(async () => { const bar = ${W}.document.getElementById("desertfox-statusbar"); return bar?.hasAttribute("data-on") ? bar.querySelector(".dfx-left").children[0]?.textContent ?? null : null; })()`);
+
+  await walk_case("a context menu over a field in INSERT mode is walked by j and k and the field keeps its value", async () => {
+    await home("pw_insert_bar");
+    // The bar is set before a field has the focus, since the command line does not open from a field.
+    on_teardown(() => run_line(":unset browser_bar"));
+    await run_line(":set browser_bar true");
+    await poll_until("the bar to show NORMAL", async () => (await bar_mode()) === "NORMAL");
+    await open_page("field", "pw_insert_static", { new_tab: false });
+    await sleep(1500);
+    const [x, y] = await steps.in_selected_page(`(win) => { const box = win.document.getElementById("field").getBoundingClientRect(); return [box.left + 10, box.top + box.height / 2]; }`);
+    FIELD_POINT[0] = x;
+    FIELD_POINT[1] = y;
+    await click_field();
+    await poll_until("the bar to show INSERT", async () => (await bar_mode()) === "INSERT");
+    const before = await steps.in_selected_page(`(win) => win.document.getElementById("field").value`);
+    await right_click_field();
+    await poll_until("the context menu to open", async () => (await menu_item("#contentAreaContextMenu")).state === "open");
+    await sleep(300);
+    const seen = [];
+    for (let step = 0; step < 3; step++) {
+      await press_keys("j");
+      await sleep(150);
+      seen.push((await menu_item("#contentAreaContextMenu")).active);
+    }
+    expect(seen[0] !== null && seen[0] !== seen[1] && seen[1] !== seen[2], `j did not move through the context menu in INSERT mode: ${seen.join(", ")}`);
+    await press_keys("k");
+    await sleep(150);
+    expect((await menu_item("#contentAreaContextMenu")).active === seen[1], `k did not move back to ${seen[1]}`);
+    await press_keys("-k", "Escape");
+    await poll_until("Escape to close the context menu", async () => (await menu_item("#contentAreaContextMenu")).state === "closed");
+    const after = await steps.in_selected_page(`(win) => win.document.getElementById("field").value`);
+    expect(after === before, `the field changed from ${JSON.stringify(before)} to ${JSON.stringify(after)}`);
+    // Leave the field so the cleanup can open the command line.
+    await focus_page();
+    await run_line(":unset browser_bar");
+  });
 
   await walk_case("in a menu bar menu j moves and l opens a submenu that h closes", async () => {
     await home("pw_menubar");
