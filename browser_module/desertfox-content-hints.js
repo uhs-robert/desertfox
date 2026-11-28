@@ -297,7 +297,7 @@
       open_sessions.clear();
     });
 
-    core.share_content_pages({ labels, refuses, collect, links });
+    core.share_content_pages({ labels, refuses, collect, links, excluded_host });
     core.add_frame_script(content_hints_frame_script);
   }
 

@@ -126,7 +126,7 @@ function define(core) {
     let text = tree_texts.get(tree);
     if (text === undefined) {
       const checked = validate_scope_tree(tree);
-      text = checked.ok ? JSON.stringify(tree) : "";
+      text = checked.ok ? JSON.stringify(checked.value) : "";
       if (!checked.ok) core.log_once(`the key tree was refused: ${checked.problem}`);
       tree_texts.set(tree, text);
     }

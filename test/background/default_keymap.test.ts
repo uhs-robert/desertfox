@@ -108,7 +108,7 @@ test("visual item mode: v enters it from item mode and v or Escape leaves it", (
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.v, { id: "mode.set", args: { mode: "item" }, label: "End the selection" });
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.V, DEFAULT_KEYMAP.item_visual?.v, "V ends the selection as v does");
   assert.deepEqual(DEFAULT_KEYMAP.item_visual?.["<Escape>"], { id: "mode.escape" });
-  assert.deepEqual(DEFAULT_KEYMAP.mode_parents, { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true } });
+  assert.deepEqual(DEFAULT_KEYMAP.mode_parents, { item: { parent: "normal" }, media: { parent: "normal" }, item_visual: { parent: "item", leave: true }, tab_visual: { parent: "normal", leave: true } });
 });
 
 test("visual item mode takes the other item keys, each after a step back to item mode", () => {
